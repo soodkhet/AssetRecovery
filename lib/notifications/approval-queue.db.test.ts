@@ -163,6 +163,7 @@ beforeAll(async () => {
 async function cleanup(): Promise<void> {
   const tx = db()
   await tx.$executeRawUnsafe(`DELETE FROM notifications WHERE organization_id = '${ORG_ID}'`)
+  await tx.$executeRawUnsafe(`DELETE FROM notification_outbox WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM expenses WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM advances WHERE organization_id = '${ORG_ID}'`)
 }

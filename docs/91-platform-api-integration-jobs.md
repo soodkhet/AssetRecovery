@@ -21,6 +21,7 @@
 | v2.7 | 05/10/2569 | **มติ PO 05/10/2569 (U65)** — เพิ่ม §14.2 ทางลัด dev ส่ง/ล็อกงวดด้วยวันที่จำลอง (`POST /api/dev/accounting-periods/{id}/send` · `/lock`) แบบเดียวกับ asOf ของ `advance_overdue` (O10): production = 404 ก่อนชั้นสิทธิ์ · สิทธิ์ชุดเดียวกับ route จริง · วันจำลองใช้กับยามสิ้นเดือน (`30` §6.2a) + Readiness เท่านั้น · audit ติด `[จำลองวันที่ DD/MM/YYYY]` · route จริงไม่รับเวลาจากผู้เรียก |
 | v2.8 | 06/10/2569 | **มติ PO 06/10/2569 (UAT U93)**: §6.1 `wht_filing_reminder` เตือนตามกำหนดยื่นที่เลื่อนวันหยุด/เสาร์-อาทิตย์แล้ว (`33` §7.2 · ปฏิทิน `13` §6.15) — ไม่มี job_type ใหม่ · การคิดกำหนดใหม่เกิดใน request ที่เพิ่ม/ลบวันหยุด (ไม่ใช่ job) |
 | v2.9 | 06/10/2569 | **มติ PO 06/10/2569 (U97 — PDPA)**: §6.1 เพิ่ม job_type **`purge_debtor_documents`** (รายวัน · idempotent · actor = system + job id) ลบไฟล์เอกสารลูกหนี้ของเคสที่จบนานกว่าระยะเก็บ (`13` §6.16 ค่าเริ่มต้น 5 ปี) — เก็บ metadata วันที่ลบ ไม่ลบข้อมูลเคส · dev trigger รับได้ (รายการ §6.1 เป็น 7 ตัว) |
+| v2.10 | 06/10/2569 | **มติ PO 06/10/2569 (U120 · DEC-015)**: เพิ่ม §6.3 **คิวแจ้งเตือนของ job** (`notification_outbox`) — job ที่เปลี่ยนสถานะแล้วแจ้งเตือนต้องเข้าคิวในทรานแซกชันเดียวกัน · ตัวส่งแยกท้าย job + ทุกรอบ cron · retry/backoff · ส่งซ้ำไม่แจ้งซ้ำ · เพิ่มเทสต์ใน §16 + ข้อตัดสินใจใน §17 |
 | v2.4 | 03/10/2569 | **เพิ่ม job_type `daily_field_allowance`** ตามมติ PO 03/10/2569 (UAT Q21 · DEC-012): ค่าน้ำมันเหมาจ่าย (`DAILY_FLAT`) + เบี้ยเลี้ยง คิดวันละครั้งต่อพนักงานต่อวันปฏิทินไทย แล้วกระจายเท่ากันทุกเคสที่เช็คอินวันนั้น — สร้างรายการเบิกหลังจบวันด้วย job รายวัน (cron รอบแรกหลังเที่ยงคืนไทย · ประมวลผลเฉพาะวันที่จบแล้ว · เก็บตกวันที่พลาด) · idempotent ต่อ (พนักงาน, วัน) ด้วย UNIQUE ของ `field_day_settlements` (`02` v4.12) · §14.1 dev trigger รับครบ 6 ตัว และรับ payload `date` (`YYYY-MM-DD` ≤ วันนี้) **เฉพาะ job นี้ผ่าน dev trigger** — cron จริงไม่รับ |
 | v2.2 | 04/07/2569 | **เติม job_type `advance_overdue` ใน §6.1** — background job auto-mark Advance ที่เลย `due_clear_date` เป็น `overdue` ถูกกำหนดไว้แล้วในไฟล์ 15 (§9.1/§10/§13/EVENT `advance.overdue`) แต่ตกหล่นจากรายการ job_type — sync comment ใน `02-database-schema-design.md` (ตาราง jobs) แล้วเช่นกัน |
 
@@ -101,6 +102,18 @@ stateDiagram-v2
 ```
 
 > ตรงกับ enum `job_status` ใน `02-database-schema-design.md` §3 (`pending`, `running`, `completed`, `failed`, `cancelled`) — `dead_letter` เป็น terminal state เชิง concept ที่ derive จาก `failed` + `retry_count >= max_retries` ไม่ใช่ enum value แยก
+
+### 6.3 คิวแจ้งเตือนของ job (Notification Outbox — มติ PO 06/10/2569 U120 · DEC-015)
+
+job ที่ **เปลี่ยนสถานะแล้วต้องแจ้งเตือน** ห้ามเขียนแจ้งเตือนหลัง commit ตรง ๆ (ขั้นแจ้งเตือนล้ม = แจ้งเตือนหายถาวร เพราะรอบหน้าไม่หยิบรายการเดิมซ้ำ):
+
+1. **เข้าคิวในทรานแซกชันเดียวกับการเปลี่ยนสถานะ** — แถว `notification_outbox` (`02` §10) · ทรานแซกชัน rollback = ไม่มีแถวคิว · กุญแจ `dedupe_key` UNIQUE ต่อองค์กร ⇒ job รันซ้ำไม่เข้าคิวซ้ำ
+2. **ตัวส่งแยก** — รันท้าย job ที่เข้าคิว และทุกรอบของ `GET /api/cron/jobs` (ต่อจากตัวกวาดคิว `fuel_distance_retry`) · จองแถวด้วย conditional update + lease 5 นาที ⇒ ตัวส่งพร้อมกันได้แถวละตัวเดียว
+3. **retry/backoff** — ส่งไม่สำเร็จ = เก็บ `last_error` + นับ `attempts` แล้วรอ 1, 2, 4 … นาที (เพดาน 60 นาที) · ครบ `max_attempts` (ค่าเริ่มต้น 8) = `failed` (เลิกลอง — ไล่ดูจาก `last_error`) · ตัวส่ง**ไม่โยน error** ⇒ job ที่ commit แล้วไม่ล้มตาม
+4. **ส่งซ้ำไม่แจ้งซ้ำ** — แถว `notifications` ใช้ id แบบ deterministic จาก `dedupeKey` ของข้อความ ⇒ ตัวส่งตายหลังเขียนแจ้งเตือนแต่ก่อนมาร์ค `sent` แล้วรอบหน้าส่งซ้ำ ก็ยังได้แถวเดียว
+5. **ตามรอยได้** — `source_job_type` + `source_job_ref` (id ของ job ที่สั่งรัน)
+
+job ที่ใช้คิวนี้: `reassign_timeout` · `advance_overdue` · `daily_field_allowance` (แจ้งผู้อนุมัติรายการที่เข้าคิว) · `fuel_distance_retry` (แจ้งผู้อนุมัติรายการที่เข้าคิว) — job ที่**ไม่เปลี่ยนสถานะ** (`wht_filing_reminder`, วันที่งวดปิดของ `daily_field_allowance`) รอบหน้าหยิบรายการเดิมซ้ำอยู่แล้ว (at-least-once + `dedupeKey`) จึงไม่ต้องผ่านคิว
 
 ## 7. Data Entities / Required Objects
 
@@ -205,6 +218,9 @@ stateDiagram-v2
 | Validation | ข้อมูลไม่ครบ | แสดง error ชัดเจน |
 | Idempotency | ยิง POST /api/jobs ด้วย idempotency_key เดิมซ้ำ | ต้องคืน job เดิม ไม่สร้าง job ใหม่ |
 | Dead letter | job fail เกิน max_retries | ต้องเข้าสถานะ dead_letter ไม่ retry ต่อเองอัตโนมัติ |
+| Outbox — ส่งล้มหลังเปลี่ยนสถานะ (§6.3) | ขั้นแจ้งเตือนล้มหลัง job มาร์คสถานะ | job ไม่ล้ม · แถวคิวยังอยู่ (`last_error`, `attempts`) · รอบส่งถัดไปส่งสำเร็จ |
+| Outbox — ส่งซ้ำ/พร้อมกัน (§6.3) | ตัวส่งหลายตัวพร้อมกัน / ส่งซ้ำหลังเขียนแจ้งเตือนแล้ว | แจ้งเตือนแถวเดียว |
+| Outbox — rollback (§6.3) | ทรานแซกชันเปลี่ยนสถานะล้ม | ไม่มีแถวคิว ไม่มีแจ้งเตือน |
 
 ---
 
@@ -216,6 +232,7 @@ stateDiagram-v2
   - โมดูลที่เกิดทีหลังเพิ่ม job_type ของตัวเองได้ตามหมายเหตุท้าย §6.1 (ปัจจุบัน: `fuel_distance_retry` — มติ PO 14/08/2569 D10 · `wht_filing_reminder` — `33` §6.2/§8 · เตือนตาม `wht_filing_summaries.filing_due_date` ที่**เลื่อนวันหยุด/เสาร์-อาทิตย์แล้ว** (มติ PO U93 — job ไม่คิดวันเอง ใช้ค่าที่เก็บ · การเพิ่ม/ลบวันหยุดคิดกำหนดของรอบ pending ใหม่ทันที ⇒ รอบเตือนถัดไปใช้วันใหม่) แต่ **dev trigger (§14.1) รับเฉพาะ 6 ตัวในตาราง §6.1**
 - **Retry มีเพดาน `max_retries`** เกินแล้วเข้า `dead_letter` ต้อง manual retry โดย Superadmin เท่านั้น (§6.2, ข้อ 12)
 - **ไฟล์ output (export/bank file) ต้อง versioned + hash เสมอ** ห้าม overwrite (ข้อ 10) — สอดคล้อง Immutable Rules ใน `02-database-schema-design.md` §13
+- **แจ้งเตือนของ job ผ่านคิว `notification_outbox`** — เข้าคิวในทรานแซกชันเดียวกับการเปลี่ยนสถานะ · ตัวส่งแยก idempotent (§6.3 · DEC-015 · มติ PO U120)
 
 ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items)
 

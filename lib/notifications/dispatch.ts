@@ -92,6 +92,10 @@ export function dispatchToResolvedUsers(
 /**
  * ส่งแบบรอผล — ใช้กับ **job** เท่านั้น (ต้องรู้ว่าเขียนแถวสำเร็จก่อนจบรอบ ไม่งั้น process ตาย
  * ระหว่าง fire-and-forget แล้วการเตือนหายไปเงียบ ๆ) · คืนจำนวนแถวที่สร้างจริง
+ *
+ * ⚠️ job ที่ **เปลี่ยนสถานะแล้ว** ต้องแจ้งเตือน ห้ามเรียกตัวนี้หลัง commit ตรง ๆ — ล้มแล้วรอบหน้าไม่หยิบซ้ำ
+ * = หายถาวร ⇒ เข้าคิว `notification_outbox` ในทรานแซกชันเดียวกันแทน (`lib/notifications/outbox.ts` · DEC-015)
+ * ตัวนี้ยังเป็นตัวส่งจริงที่คิวเรียกใช้
  */
 export async function dispatchNotificationAwaited(
   target: DispatchTarget,

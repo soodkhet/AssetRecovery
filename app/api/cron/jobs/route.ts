@@ -24,7 +24,8 @@ export const maxDuration = 300
  *     ⇒ cron ยิงซ้ำ/retry ไม่เกิดงานซ้อน)
  *  ③ หยิบงานที่ถึงคิวมาทำ (`runDueJobs()` — claim ด้วย conditional update, retry/backoff,
  *     ครบเพดานเข้า dead letter รอ Superadmin)
- *  ④ เรียกตัวกวาดคิวที่ดูแลสถานะของตัวเอง (`fuel_distance_retry` — D10)
+ *  ④ เรียกตัวกวาดคิวที่ดูแลสถานะของตัวเอง (`fuel_distance_retry` — D10) แล้วส่งคิวแจ้งเตือนของ job
+ *     (`notification_outbox` — DEC-015 · retry แถวที่ส่งไม่สำเร็จจากรอบก่อน)
  *
  * **ไม่มี session**: ผู้เรียกคือ Vercel Cron/QStash ⇒ ยืนยันตัวด้วย `CRON_SECRET` ผ่าน
  * `Authorization: Bearer ...` (Vercel ใส่ให้เองเมื่อกำหนดตัวแปรนี้) · ไม่ตั้งค่า = อนุญาตเฉพาะ

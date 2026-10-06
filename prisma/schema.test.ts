@@ -88,7 +88,8 @@ describe('schema.prisma — convention (`02` §2.1)', () => {
     // + wht_condition (มติ PO 06/10/2569 U94 ข้อ 1 — เงื่อนไขการหักบนใบ 50 ทวิ)
     // + tax_invoice_doc_kind (มติ PO 06/10/2569 U95 — ใบเสร็จรับเงิน/ใบกำกับภาษี ตอนรับเงิน)
     // + substitute_receipt_status (มติ PO 06/10/2569 U103 — ใบรับรองแทนใบเสร็จรับเงิน)
-    expect(enums.length).toBe(73)
+    // + notification_outbox_status (มติ PO 06/10/2569 U120 · DEC-015 — คิวแจ้งเตือนของ job)
+    expect(enums.length).toBe(74)
     for (const enumBlock of enums) {
       const name = enumBlock[1] ?? ''
       const map = (enumBlock[2] ?? '').match(/@@map\("([^"]+)"\)/)

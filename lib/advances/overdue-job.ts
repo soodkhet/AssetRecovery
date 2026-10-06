@@ -2,8 +2,10 @@ import { nextAdvanceStatus } from '@/lib/advances/advance'
 import { emitAudit } from '@/lib/audit/audit'
 import { bangkokBusinessDate } from '@/lib/field/expense-queries'
 import { fmtDate } from '@/lib/format/datetime'
-import { dispatchNotificationAwaited, payeeUserIds, usersWithCapability } from '@/lib/notifications/dispatch'
+import { payeeUserIds, usersWithCapability } from '@/lib/notifications/dispatch'
 import { advanceOverdueMessage } from '@/lib/notifications/messages'
+import { drainNotificationOutboxSafely, enqueueNotificationOutbox, type OutboxDrainResult } from '@/lib/notifications/outbox'
+import { outboxMessageEntries } from '@/lib/notifications/outbox-core'
 import { prisma } from '@/lib/prisma'
 
 /**
@@ -40,6 +42,8 @@ export interface AdvanceOverdueJobResult {
   marked: number
   /** เจอว่าเข้าเกณฑ์แต่มีตัวอื่นเปลี่ยนไปก่อนแล้ว */
   skipped: number
+  /** ผลการส่งคิวแจ้งเตือนท้ายรอบ (DEC-015) — `null` = ส่งไม่สำเร็จ รอบ cron ถัดไปส่งให้ */
+  notifications: OutboxDrainResult | null
 }
 
 export async function runAdvanceOverdueJob(
@@ -49,7 +53,7 @@ export async function runAdvanceOverdueJob(
   const jobId = options.jobId ?? ADVANCE_OVERDUE_JOB_TYPE
   // เที่ยงคืน UTC ของ "วันนี้" ตามเวลาไทย ⇒ `dueClearDate < today` = เลยกำหนดแล้วจริง (Rule 01)
   const today = bangkokBusinessDate(now)
-  const result: AdvanceOverdueJobResult = { marked: 0, skipped: 0 }
+  const result: AdvanceOverdueJobResult = { marked: 0, skipped: 0, notifications: null }
   const simulatedTag = options.simulated === true ? ` [จำลองวันที่ ${fmtDate(now)}]` : ''
 
   const due = await prisma.advance.findMany({
@@ -67,6 +71,16 @@ export async function runAdvanceOverdueJob(
   for (const advance of due) {
     // `23` §6.4 — ยืนยันเส้นทาง approved → overdue ผ่าน state machine เดียวกับที่ endpoint ใช้
     const status = nextAdvanceStatus('approved', 'mark_overdue')
+
+    // `90` §6.3 (mockup `notifications.html`) — ผู้ยืมต้องรีบเคลียร์ · การเงินต้องตาม
+    // หาผู้รับก่อนเปิดทรานแซกชัน (อ่านอย่างเดียว) แล้วเข้าคิว **ในทรานแซกชันเดียวกับการมาร์ค overdue**
+    // (DEC-015 · มติ PO U120) · `dedupeKey` ผูกกับรายการ ⇒ job รันทุกวันก็แจ้งครั้งเดียวต่อคน
+    const message = (audience: 'payee' | 'finance') =>
+      advanceOverdueMessage({ advanceId: advance.id, dueClearDate: advance.dueClearDate }, audience)
+    const [payeeIds, financeIds] = await Promise.all([
+      payeeUserIds(advance.organizationId, [advance.payeeId]),
+      usersWithCapability(advance.organizationId, 'approve_advance'),
+    ])
 
     const changed = await prisma.$transaction(async (tx) => {
       const claimed = await tx.advance.updateMany({
@@ -96,29 +110,31 @@ export async function runAdvanceOverdueJob(
         },
         tx,
       )
+
+      await enqueueNotificationOutbox(
+        tx,
+        [
+          ...outboxMessageEntries(advance.organizationId, payeeIds, message('payee')),
+          ...outboxMessageEntries(advance.organizationId, financeIds, message('finance')),
+        ],
+        { jobType: ADVANCE_OVERDUE_JOB_TYPE, jobRef: options.jobId ?? null },
+      )
       return true
     })
 
     if (changed) {
       result.marked += 1
-      // `90` §6.3 (mockup `notifications.html`) — ผู้ยืมต้องรีบเคลียร์ · การเงินต้องตาม
-      // `dedupeKey` ผูกกับรายการ ⇒ job รันทุกวันก็แจ้งครั้งเดียวต่อคน
-      const message = (audience: 'payee' | 'finance') =>
-        advanceOverdueMessage({ advanceId: advance.id, dueClearDate: advance.dueClearDate }, audience)
-
-      const [payeeIds, financeIds] = await Promise.all([
-        payeeUserIds(advance.organizationId, [advance.payeeId]),
-        usersWithCapability(advance.organizationId, 'approve_advance'),
-      ])
-      await dispatchNotificationAwaited({ organizationId: advance.organizationId, userIds: payeeIds }, message('payee'))
-      await dispatchNotificationAwaited(
-        { organizationId: advance.organizationId, userIds: financeIds },
-        message('finance'),
-      )
     } else {
       result.skipped += 1
     }
   }
 
+  // ส่งคิวแจ้งเตือนท้ายรอบ (เวลาจริงเสมอ — แม้ `now` เป็นวันจำลอง) · ล้มไม่ทำให้ job ล้ม
+  if (result.marked > 0) {
+    result.notifications = await drainNotificationOutboxSafely(
+      options.organizationId === undefined ? {} : { organizationId: options.organizationId },
+      ADVANCE_OVERDUE_JOB_TYPE,
+    )
+  }
   return result
 }

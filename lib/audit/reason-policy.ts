@@ -183,6 +183,8 @@ export const NON_SENSITIVE_TARGETS: readonly string[] = [
   'push_subscriptions',
   // มติ PO 05/10/2569 (UAT U9) — แคชรายงาน ค่าคำนวณใหม่ได้เสมอ (รายงานอ่านอย่างเดียว ไม่ลง audit)
   'report_cache_entries',
+  // มติ PO 06/10/2569 (U120 · DEC-015) — คิวแจ้งเตือนของ job (ตารางระบบ ไม่ใช่เงิน/สิทธิ์ · ไม่ลง audit)
+  'notification_outbox',
   'jobs',
   'files',
   'audit_logs',

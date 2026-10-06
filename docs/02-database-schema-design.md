@@ -72,6 +72,7 @@
 | v4.45 | 06/10/2569 | **มติ PO 06/10/2569 (U110/U111) — snapshot หัวกระดาษครบทุกช่อง** (migration `20261006220000_letterhead_snapshot_period_payouts`): `organizations.logo_sha256 VARCHAR(64)` (CHECK hex 64 · เขียนพร้อม `logo_url` ตอนอัปโหลด · NULL เมื่อไม่มีโลโก้) · `seller_profile_snapshot` ของ `tax_invoices`/`billing_batches` เพิ่มคีย์ `logo_sha256` (ไม่เปลี่ยนคอลัมน์) · พิมพ์ซ้ำ: snapshot NULL ⇒ ฟิลด์ชุดนี้ว่าง (ไม่ดึงค่าปัจจุบัน) · `handover_lots.letterhead_snapshot JSONB` (`{name,tax_id,address,phone,branch_code,name_en,email,website,logo_path,logo_sha256}` · เขียนใน `$transaction` ตอนยืนยันล็อต · CHECK มีได้เฉพาะ `status = 'confirmed'` และเป็น object · ล็อตเก่า NULL = ใช้ค่าปัจจุบัน · ไม่ backfill) |
 | v4.46 | 06/10/2569 | **มติ PO 06/10/2569 (U117 ข้อ 2 — ใบรับรองแทนใบเสร็จ "ออกแทนเลขที่")** (migration `20261006234500_substitute_receipt_replaces`): `substitute_receipts` + `replaces_receipt_id UUID REFERENCES substitute_receipts(id)` (ใบที่ยกเลิกซึ่งใบนี้ออกแทน · NULL = ออกครั้งแรก/ใบก่อน migration) · CHECK ห้ามอ้างตัวเอง · partial unique `uniq_substitute_receipts_replaces` (ใบที่ยกเลิก 1 ใบถูกแทนได้ครั้งเดียว) · trigger `trg_substitute_receipts_guard` เพิ่มคอลัมน์นี้ในชุดห้ามแก้หลังออกใบ |
 | v4.47 | 06/10/2569 | **มติ PO 06/10/2569 (U118)** — §3 `expense_status`: `rejected` = ปฏิเสธถาวร (terminal) เข้าได้จาก `pending_approval` / `pending_finance_approval` / `needs_revision` (ตาม `23` §6.3 v2.11) · **ไม่เปลี่ยน enum/คอลัมน์ ไม่มี migration** |
+| v4.48 | 06/10/2569 | **มติ PO 06/10/2569 (U120 · DEC-015 — คิวแจ้งเตือนของ job)** (migration `20261007000000_notification_outbox`): enum ใหม่ `notification_outbox_status` (`pending`/`sent`/`failed`) · ตารางใหม่ **`notification_outbox`** (§10) — แถวคิวแจ้งเตือนที่ job เขียนใน `$transaction` เดียวกับการเปลี่ยนสถานะ · `dedupe_key` UNIQUE ต่อองค์กร · `attempts`/`max_attempts`/`last_error`/`available_at` (backoff + lease) · `payload` JSONB (ตรวจด้วย Zod ที่ service) · `source_job_type`/`source_job_ref` ตามรอย job · ตารางระบบ ⇒ ไม่มี `created_by`/`updated_by`/`deleted_at` · FK องค์กร `ON DELETE CASCADE` |
 
 ขอบเขตเอกสารนี้: Full Production Database Schema — ทุก table, column, type, FK, index, unique constraint, enum, migration order และ seed data สรุปจาก spec ไฟล์ทั้งหมดไว้ในที่เดียว ใช้เป็น source of truth เดียวก่อนเขียน Prisma schema
 
@@ -476,6 +477,10 @@ CREATE TYPE audit_action AS ENUM (
 );
 
 CREATE TYPE job_status AS ENUM ('pending', 'running', 'completed', 'failed', 'cancelled');
+
+-- v4.48 มติ PO 06/10/2569 (U120 · DEC-015): สถานะแถวคิวแจ้งเตือนของ job
+-- pending = รอส่ง/รอ retry (available_at = เวลาที่หยิบได้) · sent = ส่งแล้ว · failed = ครบ max_attempts / payload ผิดรูป
+CREATE TYPE notification_outbox_status AS ENUM ('pending', 'sent', 'failed');
 ```
 
 ---
@@ -2318,6 +2323,34 @@ CREATE TABLE notifications (
 );
 CREATE INDEX idx_notifications_user ON notifications(user_id, read_at, created_at DESC);
 
+-- ── notification_outbox ──────────────────────────────────────
+-- คิวแจ้งเตือนของ job (v4.48 — มติ PO 06/10/2569 U120 · DEC-015 · `91` §6.3)
+-- job เขียนแถวนี้ใน $transaction เดียวกับการเปลี่ยนสถานะ (rollback = ไม่มีแถว) แล้วตัวส่งแยกหยิบไปเขียน `notifications`
+-- ตัวส่งจองแถวด้วย conditional update + lease (เลื่อน available_at) · ล้ม = last_error + attempts + backoff · ครบ max_attempts = failed
+-- ส่งซ้ำไม่แจ้งซ้ำ: payload พก dedupeKey ของข้อความ ⇒ id แถว notifications เป็น deterministic
+-- ตารางระบบ ⇒ ไม่มี created_by/updated_by/deleted_at (ผู้สร้าง = job — ตามรอยด้วย source_job_type/source_job_ref)
+CREATE TABLE notification_outbox (
+  id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID        NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  dedupe_key      TEXT        NOT NULL,                       -- กันเข้าคิวซ้ำ (job รันซ้ำ)
+  payload         JSONB       NOT NULL,                       -- {kind:'message', userId, eventCode, title, body, linkPath, dedupeKey} | {kind:'expense_approval_queue', expenseIds}
+  status          notification_outbox_status NOT NULL DEFAULT 'pending',
+  attempts        INTEGER     NOT NULL DEFAULT 0,             -- นับตอนจองแถว
+  max_attempts    INTEGER     NOT NULL DEFAULT 8,
+  last_error      TEXT,
+  available_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),         -- หยิบได้เมื่อถึงเวลานี้ (backoff/lease)
+  sent_at         TIMESTAMPTZ,
+  source_job_type TEXT        NOT NULL,                       -- job_type ที่เข้าคิว
+  source_job_ref  TEXT,                                       -- id ของ job ที่สั่งรัน (ตามรอย)
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT chk_notification_outbox_attempts CHECK (attempts >= 0 AND max_attempts > 0),
+  CONSTRAINT chk_notification_outbox_sent_at CHECK ((status = 'sent') = (sent_at IS NOT NULL))
+);
+CREATE UNIQUE INDEX uniq_notification_outbox_org_dedupe_key ON notification_outbox(organization_id, dedupe_key);
+CREATE INDEX idx_notification_outbox_status_available_at ON notification_outbox(status, available_at);
+CREATE INDEX idx_notification_outbox_org_status_available_at ON notification_outbox(organization_id, status, available_at);
+
 -- ── push_subscriptions ───────────────────────────────────────
 -- Web Push (ไม่ใช่ FCM) ของ PWA ภาคสนาม ตามไฟล์ 41 §15 (เพิ่ม 14/08/2569 มติ PO พร้อม Phase 2.9)
 -- 1 อุปกรณ์/เบราว์เซอร์ = 1 แถว · endpoint UNIQUE ⇒ subscribe ซ้ำจากเครื่องเดิม = upsert (idempotent)
@@ -2464,6 +2497,7 @@ CREATE TABLE files (
 51_tax_document_template_settings.sql
 52_notifications.sql            ← DEC-006/D3
 52b_push_subscriptions.sql       ← เพิ่ม 14/08/2569 (Phase 2.9) ต้องหลัง organizations, users
+52c_notification_outbox.sql      ← v4.48 (U120 · DEC-015) ต้องหลัง organizations
 53_bank_transaction_allocations.sql  ← A2 (มติ PO 2026-08-12)
 54_customer_wht_certificates.sql     ← A1 (มติ PO 2026-08-12)
 99_seed_data.sql

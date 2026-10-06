@@ -124,6 +124,7 @@ async function cleanupCases(): Promise<void> {
   const tx = db()
   await tx.$executeRawUnsafe(`DELETE FROM reassignment_history WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM pending_reassignments WHERE organization_id = '${ORG_ID}'`)
+  await tx.$executeRawUnsafe(`DELETE FROM notification_outbox WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM case_assignments WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM cases WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM assignment_policy_settings WHERE organization_id = '${ORG_ID}'`)
@@ -527,6 +528,22 @@ suite('Phase 2.6 — timeout job + การแข่งกับคำตอบ
       orderBy: { createdAt: 'desc' },
     })
     expect(audit?.reason).toContain('test-job-1')
+
+    // DEC-015 (มติ PO U120) — แจ้งเตือน 3 คนเข้าคิวในทรานแซกชันเดียวกับการเปลี่ยนคน แล้วส่งท้ายรอบ
+    const queued = await db().notificationOutbox.findMany({
+      where: { organizationId: ORG_ID, sourceJobRef: 'test-job-1' },
+      select: { status: true, sourceJobType: true },
+    })
+    expect(queued).toHaveLength(3)
+    expect(queued.every((row) => row.status === 'sent' && row.sourceJobType === 'reassign_timeout')).toBe(true)
+    expect(result.notifications).toMatchObject({ sent: 3, failed: 0 })
+    const notified = await db().notification.findMany({
+      where: { organizationId: ORG_ID, eventCode: 'assignment.reassignment_timeout_resolved' },
+      select: { userId: true, createdAt: true },
+      orderBy: { createdAt: 'desc' },
+      take: 3,
+    })
+    expect(new Set(notified.map((row) => row.userId))).toEqual(new Set([AGENT_A, AGENT_B, MANAGER_ID]))
   })
 
   it('timeout: reassigned_by + created_by ของแถวใหม่ = ผู้ขอเปลี่ยน ไม่ใช่ผู้มอบหมายครั้งแรก (UAT BUG-043)', async () => {
