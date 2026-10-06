@@ -35,6 +35,7 @@ interface Golden {
   payoutBatches: Record<string, { status: string; gross?: number; wht?: number; net?: number; offset?: number; transfer?: number }>
   billing: Record<string, { company: string; status: string; total: number; received?: number; customerWht?: number; bankFee?: number }>
   arTotalEndOct: number
+  bankFeeByMonth: Record<string, number>
   arByCompany: Record<string, number | string>
   taxInvoices: Record<string, { status: string; beforeVat?: number; vat?: number }>
   dailySplit: Record<string, { fuel?: number; allowance?: number } | string>
@@ -129,6 +130,13 @@ async function verifyMoney(golden: Golden): Promise<void> {
       expected['customerWht'] = exp.customerWht
     }
     check('H.5 วางบิล', key, expected, actual)
+  }
+
+  // U144/U163 — ค่าธรรมเนียมธนาคารที่ตัดส่วนต่าง รายเดือน (ตามวันที่ตัด)
+  const fees = await db.billingBatch.findMany({ where: { ...ORG, deletedAt: null, bankFeeWrittenOffSatang: { gt: 0 } }, select: { bankFeeWrittenOffSatang: true, bankFeeWrittenOffDate: true } })
+  for (const [month, expected] of Object.entries(golden.bankFeeByMonth)) {
+    const actual = fees.filter((f) => f.bankFeeWrittenOffDate?.toISOString().slice(0, 7) === month).reduce((a, f) => a + f.bankFeeWrittenOffSatang, 0)
+    check('H.5 ค่าธรรมเนียมธนาคาร', month, expected, actual)
   }
 
   const { getArAging } = await import('@/lib/revenue/queries')
