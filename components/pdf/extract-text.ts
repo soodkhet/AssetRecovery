@@ -30,12 +30,30 @@ export function extractPdfText(pdf: Uint8Array): string {
     return '�'
   }
 
+  // ฟอนต์มาตรฐานในตัว (เช่น Courier ของตัวเลขอ้างอิง/IMEI — มติ PO U100) ไม่มี ToUnicode: 1 ไบต์ = 1 อักษร (WinAnsi)
+  const simpleFonts = new Set<string>()
+  for (const ref of source.matchAll(/\/(F\d+) (\d+) 0 R/g)) {
+    const objStart = source.indexOf(`\n${ref[2] ?? ''} 0 obj`)
+    if (objStart === -1) continue
+    const body = source.slice(objStart, source.indexOf('endobj', objStart))
+    if (body.includes('/Type1') && !body.includes('/ToUnicode')) simpleFonts.add(ref[1] ?? '')
+  }
+
   let text = ''
   for (const data of streams) {
-    for (const op of data.matchAll(/(\[[^\]]*\])\s*TJ|<([0-9a-fA-F]+)>\s*Tj/g)) {
-      const hexes = op[1] !== undefined ? [...op[1].matchAll(/<([0-9a-fA-F]+)>/g)].map((m) => m[1] ?? '') : [op[2] ?? '']
+    let simple = false
+    for (const op of data.matchAll(/\/(F\d+) [\d.]+ Tf|(\[[^\]]*\])\s*TJ|<([0-9a-fA-F]+)>\s*Tj/g)) {
+      if (op[1] !== undefined) {
+        simple = simpleFonts.has(op[1])
+        continue
+      }
+      const hexes = op[2] !== undefined ? [...op[2].matchAll(/<([0-9a-fA-F]+)>/g)].map((m) => m[1] ?? '') : [op[3] ?? '']
       for (const hex of hexes) {
-        for (let i = 0; i + 4 <= hex.length; i += 4) text += glyph(parseInt(hex.slice(i, i + 4), 16))
+        if (simple) {
+          for (let i = 0; i + 2 <= hex.length; i += 2) text += String.fromCharCode(parseInt(hex.slice(i, i + 2), 16))
+        } else {
+          for (let i = 0; i + 4 <= hex.length; i += 4) text += glyph(parseInt(hex.slice(i, i + 4), 16))
+        }
       }
       text += '\n'
     }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   BILLING_INVOICE_NOT_TAX_NOTE,
+  billingCustomerWhtLines,
   billingInvoicePartiesOf,
   billingPartySnapshotOf,
   buildBillingInvoiceDoc,
@@ -24,7 +25,7 @@ describe('buildBillingInvoiceDoc', () => {
   })
 
   it('เลขเอกสาร = เลขรอบวางบิล · ยอดรวมจาก snapshot รายได้ · ข้อความ "ไม่ใช่ใบกำกับภาษี"', () => {
-    expect(doc.title).toBe('ใบแจ้งหนี้/ใบวางบิล')
+    expect(doc.title).toBe('ใบแจ้งหนี้ / ใบวางบิล')
     expect(doc.documentNumber).toBe('BL-2569-007')
     expect(doc.amounts).toEqual({ totalBeforeVatSatang: 150_000, vatSatang: 10_500, totalSatang: 160_500 })
     expect(doc.totalText).toBe('1,605.00')
@@ -88,5 +89,62 @@ describe('BUG-164 — snapshot คู่ค้าของใบแจ้งห�
       buyerBranchCode: null,
     }
     expect(billingInvoicePartiesOf(empty, { seller, buyer }).buyer.name).toBe('ไฟแนนซ์ ก')
+  })
+})
+
+describe('billingCustomerWhtLines — ภาษีที่ลูกค้าหักบนใบแจ้งหนี้ (BUG-165 · มติ PO U100)', () => {
+  it('ยังไม่รับเงิน ⇒ ประมาณจากอัตราของบริษัท (ฐานก่อน VAT) + ยอดที่คาดว่าจะได้รับโอน', () => {
+    expect(
+      billingCustomerWhtLines({ amountBeforeVatSatang: 600_000, totalSatang: 642_000, recordedWhtSatang: 0, whtPct: 3 }),
+    ).toEqual({
+      whtLabel: 'หัก ภาษีเงินได้หัก ณ ที่จ่าย 3% ที่ลูกค้าจะหัก (ประมาณการ)',
+      whtText: '(180.00)',
+      expectedLabel: 'ยอดที่คาดว่าจะได้รับโอน',
+      expectedText: '6,240.00',
+    })
+  })
+
+  it('บันทึกยอดหักจริงแล้ว ⇒ ใช้ยอดจริง · บริษัทไม่หัก ⇒ null', () => {
+    expect(
+      billingCustomerWhtLines({ amountBeforeVatSatang: 600_000, totalSatang: 642_000, recordedWhtSatang: 17_500, whtPct: 3 }),
+    ).toMatchObject({ whtText: '(175.00)', expectedLabel: 'ยอดรับสุทธิ', expectedText: '6,245.00' })
+    expect(
+      billingCustomerWhtLines({ amountBeforeVatSatang: 600_000, totalSatang: 642_000, recordedWhtSatang: 0, whtPct: null }),
+    ).toBeNull()
+  })
+
+  it('เอกสาร: ไม่ส่งข้อมูลภาษีลูกค้า/บัญชี ⇒ ไม่มีแถว · ส่งบัญชี ⇒ ข้อความโอนเข้าบัญชี', () => {
+    const line = {
+      caseRef: 'C-1',
+      revenueDate: new Date('2026-10-10T00:00:00Z'),
+      grossSatang: 100_000,
+      vatSatang: 7_000,
+      totalSatang: 107_000,
+      vatRatePct: '7.00',
+    }
+    const base = {
+      batchNumber: 'BL-2569-001',
+      period: 'ตุลาคม 2569',
+      sentAt: new Date('2026-10-25T03:00:00Z'),
+      dueDate: new Date('2026-11-24T00:00:00Z'),
+      seller: { name: 'ก', taxId: '1', address: 'x', phone: null, branchCode: '00000' },
+      buyer: { name: 'ข', taxId: '2', address: 'y', phone: null, branchCode: '00000' },
+      sellerProfile: null,
+      lines: [line],
+    }
+    const plain = buildBillingInvoiceDoc(base)
+    expect(plain.customerWht).toBeNull()
+    expect(plain.paymentChannelText).toBeNull()
+    expect(plain.lines[0]?.detail).toBeNull()
+    const full = buildBillingInvoiceDoc({
+      ...base,
+      lines: [{ ...line, assetDescription: 'OPPO A78', handoverDocRef: 'DLV-2569-007' }],
+      customerWhtPct: 3,
+      receivingAccount: { bankName: 'ธนาคารกสิกรไทย', accountNumber: '123-4-56789-0', accountName: null },
+    })
+    expect(full.lines[0]?.detail).toBe('OPPO A78 · ใบส่งมอบ DLV-2569-007')
+    expect(full.paymentChannelText).toBe('โอนเข้าบัญชี ธนาคารกสิกรไทย · เลขที่บัญชี 123-4-56789-0')
+    expect(full.customerWht?.whtText).toBe('(30.00)')
+    expect(full.signers).toEqual(['ผู้วางบิล / ผู้ให้บริการ', 'ผู้รับวางบิล / ลูกค้า'])
   })
 })

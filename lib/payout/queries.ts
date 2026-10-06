@@ -19,7 +19,8 @@ import { nextDocumentNumber } from '@/lib/document-numbering/queries'
 import { summarizePayoutBatch } from '@/lib/finance/payout-calc'
 import { Prisma } from '@/lib/generated/prisma/client'
 import type { PayoutBatchSide, PayoutBatchStatus } from '@/lib/generated/prisma/enums'
-import { maskAccountNumber } from '@/lib/payees/payee'
+import { maskAccountNumber, payeeAddressLine, payeeDisplayName } from '@/lib/payees/payee'
+import { formatBranch } from '@/lib/format/branch'
 import { PayeeError } from '@/lib/payees/errors'
 import { resolveBankCode } from '@/lib/payout/bank-codes'
 import {
@@ -30,7 +31,7 @@ import {
   type PaymentFileRowInput,
 } from '@/lib/payout/bank-file-builder'
 import { PayoutError } from '@/lib/payout/errors'
-import type { PayoutDocIssuer } from '@/lib/payout/payout-doc'
+import { payslipStatsOf, type PayoutDocIssuer, type PayoutPayeeDocInfo } from '@/lib/payout/payout-doc'
 import {
   assertHasItemsToPay,
   assertPayeesVerified,
@@ -306,7 +307,7 @@ export async function getPayoutBatch(user: SessionUser, batchId: string): Promis
 export async function getPayoutDocSource(
   user: SessionUser,
   batchId: string,
-): Promise<{ batch: PayoutBatchDetailDto; issuer: PayoutDocIssuer }> {
+): Promise<{ batch: PayoutBatchDetailDto; issuer: PayoutDocIssuer; payees: Map<string, PayoutPayeeDocInfo> }> {
   const [batch, organization] = await Promise.all([
     getPayoutBatch(user, batchId),
     prisma.organization.findUniqueOrThrow({
@@ -314,7 +315,64 @@ export async function getPayoutDocSource(
       select: { name: true, address: true, taxId: true, phone: true },
     }),
   ])
-  return { batch, issuer: organization }
+  return { batch, issuer: organization, payees: await payoutPayeeDocInfo(user.organizationId, batch) }
+}
+
+/**
+ * ข้อมูลผู้รับบนใบสำคัญจ่าย/สลิป (มติ PO U100/U101) — ชื่อพร้อมคำนำหน้า · เลข 13 หลัก · ที่อยู่ (U94) · สาขา (นิติบุคคล)
+ * + สรุปเคสสำเร็จ/วันทำงาน/คืนที่พัก จากรายการเบิกในรอบ · ข้อมูลผู้รับอ่าน ณ เวลาพิมพ์ (เอกสารภายใน)
+ */
+async function payoutPayeeDocInfo(
+  organizationId: string,
+  batch: PayoutBatchDetailDto,
+): Promise<Map<string, PayoutPayeeDocInfo>> {
+  const payeeIds = [...new Set(batch.items.map((item) => item.payeeId))]
+  const expenseIds = batch.items.filter((item) => item.source === 'expense').map((item) => item.sourceId)
+  const [payees, expenses] = await Promise.all([
+    prisma.payeeProfile.findMany({
+      where: { id: { in: payeeIds }, organizationId },
+      select: {
+        id: true,
+        payeeType: true,
+        nameTitle: true,
+        nationalId: true,
+        branchCode: true,
+        addressDetail: true,
+        addressSubdistrict: true,
+        addressDistrict: true,
+        addressProvince: true,
+        addressPostalCode: true,
+        user: { select: { fullName: true } },
+      },
+    }),
+    prisma.expense.findMany({
+      where: { id: { in: expenseIds }, organizationId },
+      select: {
+        payeeId: true,
+        expenseType: true,
+        caseId: true,
+        fieldDaySettlementId: true,
+        expenseDate: true,
+        hotelNights: true,
+      },
+    }),
+  ])
+  return new Map(
+    payees.map((payee) => {
+      const isCorporate = payee.payeeType === 'corporate'
+      return [
+        payee.id,
+        {
+          displayName: payeeDisplayName({ name: payee.user.fullName, nameTitle: payee.nameTitle, payeeType: payee.payeeType }),
+          taxId: payee.nationalId,
+          isCorporate,
+          address: payeeAddressLine(payee),
+          branchLabel: isCorporate ? formatBranch(payee.branchCode) : null,
+          stats: payslipStatsOf(expenses.filter((expense) => expense.payeeId === payee.id)),
+        },
+      ]
+    }),
+  )
 }
 
 // ── POST /api/payout-batches (batch builder — `17` §9) ──────────────────────

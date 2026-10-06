@@ -1,5 +1,6 @@
 import type { SessionUser } from '@/lib/auth/types'
 import { prisma } from '@/lib/prisma'
+import { pickReceivingAccount } from '@/lib/organization/bank-account-line'
 import { parseSellerProfileSnapshot } from '@/lib/organization/profile'
 import { billingInvoicePartiesOf, type BillingInvoiceSource } from '@/lib/revenue/billing-invoice'
 import { RevenueError } from '@/lib/revenue/errors'
@@ -37,7 +38,17 @@ export async function getBillingInvoiceSource(user: SessionUser, billingBatchId:
             buyerAddress: true,
             buyerPhone: true,
             buyerBranchCode: true,
-            company: { select: { name: true, taxId: true, address: true, phone: true, branchCode: true } },
+            whtWithheldByCustomerSatang: true,
+            company: {
+              select: {
+                name: true,
+                taxId: true,
+                address: true,
+                phone: true,
+                branchCode: true,
+                whtWithheldByCustomerPct: true,
+              },
+            },
             organization: { select: { name: true, taxId: true, address: true, phone: true, branchCode: true } },
             revenues: {
               where: { deletedAt: null },
@@ -48,7 +59,19 @@ export async function getBillingInvoiceSource(user: SessionUser, billingBatchId:
                 vatSatang: true,
                 totalSatang: true,
                 vatRatePctUsed: true,
-                case: { select: { caseRef: true } },
+                case: {
+                  select: {
+                    caseRef: true,
+                    assetDescription: true,
+                    // ใบส่งมอบของเครื่องในเคส (มติ PO U100 — บรรทัดรองของรายการ) · ล็อตยืนยันแล้วก่อน
+                    assets: {
+                      where: { deletedAt: null, lotId: { not: null } },
+                      orderBy: { createdAt: 'desc' },
+                      take: 1,
+                      select: { lot: { select: { docRef: true } } },
+                    },
+                  },
+                },
               },
             },
           },
@@ -57,6 +80,14 @@ export async function getBillingInvoiceSource(user: SessionUser, billingBatchId:
   if (batch.status === 'draft') {
     throw new RevenueError('BILLING_BATCH_INVALID_STATUS', { detail: 'ใบแจ้งหนี้ออกได้หลังส่งรอบวางบิลแล้ว' })
   }
+
+  // บัญชีรับโอนของเรา (ค่าตั้งบัญชีธนาคาร — ใช้รับเงิน · บัญชีหลักก่อน) — ไม่มี ⇒ ไม่พิมพ์แถว (มติ PO U100)
+  const accounts = await prisma.bankAccount.findMany({
+    where: { organizationId: user.organizationId, deletedAt: null },
+    orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
+    select: { bankName: true, accountNumber: true, accountName: true, usage: true, isPrimary: true },
+  })
+  const receiving = pickReceivingAccount(accounts)
 
   return {
     batchNumber: batch.batchNumber,
@@ -72,6 +103,15 @@ export async function getBillingInvoiceSource(user: SessionUser, billingBatchId:
       vatSatang: revenue.vatSatang,
       totalSatang: revenue.totalSatang,
       vatRatePct: revenue.vatRatePctUsed.toString(),
+      assetDescription: revenue.case.assetDescription,
+      handoverDocRef: revenue.case.assets[0]?.lot?.docRef ?? null,
     })),
+    customerWhtPct:
+      batch.company.whtWithheldByCustomerPct === null ? null : batch.company.whtWithheldByCustomerPct.toNumber(),
+    recordedCustomerWhtSatang: batch.whtWithheldByCustomerSatang,
+    receivingAccount:
+      receiving === null
+        ? null
+        : { bankName: receiving.bankName, accountNumber: receiving.accountNumber, accountName: receiving.accountName },
   }
 }

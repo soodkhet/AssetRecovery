@@ -182,3 +182,26 @@ export function receiptInvoiceDescriptionOf(input: {
   const base = `ค่าบริการติดตามทรัพย์ รอบเดือน ${input.periodLabel.trim()} (ใบแจ้งหนี้ ${input.billingBatchNumber})`
   return input.coversRemainder ? base : `${base} — รับชำระบางส่วน`
 }
+
+/**
+ * ลำดับการรับชำระของใบในรอบวางบิลเดียวกัน (มติ PO U100 — ข้อความ "รับชำระบางส่วนครั้งที่ …")
+ * — นับเฉพาะใบ `active` ของรายการขายเดียวกัน เรียงตามเวลาที่ออก · ยอดคงค้าง = ยอดตามใบแจ้งหนี้ − ผลรวมใบถึงใบนี้ (ไม่ติดลบ)
+ * · ใบนี้ไม่ active / ไม่พบ ⇒ `null` · ใบเดียวรับครบยอด ⇒ `null` (ไม่ต้องพิมพ์ข้อความ)
+ */
+export function receiptInstallmentOf(input: {
+  invoiceId: string
+  billedTotalSatang: number
+  invoices: ReadonlyArray<{ id: string; status: 'active' | 'cancelled'; totalSatang: number; createdAt: Date }>
+}): { sequence: number; outstandingSatang: number } | null {
+  const active = input.invoices
+    .filter((invoice) => invoice.status === 'active')
+    .slice()
+    .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id))
+  const index = active.findIndex((invoice) => invoice.id === input.invoiceId)
+  if (index === -1) return null
+  const invoicedSoFar = active.slice(0, index + 1).reduce((sum, invoice) => sum + invoice.totalSatang, 0)
+  const outstandingSatang = Math.max(0, input.billedTotalSatang - invoicedSoFar)
+  const sequence = index + 1
+  if (sequence === 1 && outstandingSatang === 0) return null
+  return { sequence, outstandingSatang }
+}

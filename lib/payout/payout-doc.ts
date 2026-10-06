@@ -1,5 +1,5 @@
 import { fmtDate, fmtDateTime } from '@/lib/format/datetime'
-import { fmtCount, fmtPercent, fmtSatang } from '@/lib/format/money'
+import { fmtCount, fmtRatePct, fmtSatang } from '@/lib/format/money'
 import { summarizePayoutBatch, type PayoutBatchTotals } from '@/lib/finance/payout-calc'
 import { payoutTransferSatang } from '@/lib/finance/advance-offset-calc'
 import { advanceOffsetLineLabel } from '@/lib/advances/advance'
@@ -47,6 +47,63 @@ export interface PayoutDocIssuer {
   address: string | null
   taxId: string | null
   phone: string | null
+}
+
+/**
+ * ข้อมูลผู้รับเงินบนใบสำคัญจ่าย/สลิป (มติ PO U100/U101) — โหลดจากข้อมูลผู้รับ (U94: คำนำหน้า/ที่อยู่/สาขา)
+ * ณ เวลาพิมพ์ (เอกสารภายใน — ไม่ใช่ snapshot) + สรุปจำนวนเคส/วันทำงาน/คืนที่พักของรอบนี้
+ */
+export interface PayoutPayeeDocInfo {
+  displayName: string
+  /** เลข 13 หลัก — บุคคลธรรมดา = เลขประจำตัวประชาชน · นิติบุคคล = เลขผู้เสียภาษี */
+  taxId: string | null
+  isCorporate: boolean
+  address: string | null
+  /** นิติบุคคลเท่านั้น ("สำนักงานใหญ่"/"สาขาที่ …") */
+  branchLabel: string | null
+  stats: PayslipStats
+}
+
+export interface PayslipStats {
+  /** เคสสำเร็จ = เคสที่มีค่าคอมมิชชันในรอบนี้ (นับเคสไม่ซ้ำ) */
+  successCases: number
+  /** วันทำงานภาคสนาม = วันที่ไม่ซ้ำของแถวรายวัน (ค่าน้ำมันเหมา/เบี้ยเลี้ยง) */
+  fieldDays: number
+  /** คืนที่พัก = ผลรวมจำนวนคืนของรายการเบิกค่าที่พัก */
+  hotelNights: number
+}
+
+/** สรุปสถิติของสลิปจากรายการเบิกในรอบ (เฉพาะรายการของผู้รับคนนั้น) — pure */
+export function payslipStatsOf(
+  expenses: ReadonlyArray<{
+    expenseType: string
+    caseId: string | null
+    fieldDaySettlementId: string | null
+    expenseDate: Date
+    hotelNights: number
+  }>,
+): PayslipStats {
+  const cases = new Set<string>()
+  const days = new Set<string>()
+  let hotelNights = 0
+  for (const expense of expenses) {
+    if (expense.expenseType === 'commission' && expense.caseId !== null) cases.add(expense.caseId)
+    if (expense.fieldDaySettlementId !== null) days.add(expense.expenseDate.toISOString().slice(0, 10))
+    if (expense.expenseType === 'hotel') hotelNights += expense.hotelNights
+  }
+  return { successCases: cases.size, fieldDays: days.size, hotelNights }
+}
+
+/** ค่าเริ่มต้นเมื่อไม่มีข้อมูลผู้รับ (ข้อมูลเก่า/เทสต์) — ใช้ชื่อจาก snapshot ของรายการ */
+function fallbackPayeeInfo(group: PayoutPayeeGroup): PayoutPayeeDocInfo {
+  return {
+    displayName: group.payeeName,
+    taxId: null,
+    isCorporate: false,
+    address: null,
+    branchLabel: null,
+    stats: { successCases: 0, fieldDays: 0, hotelNights: 0 },
+  }
 }
 
 function orDash(value: string | null | undefined): string {
@@ -186,6 +243,8 @@ export interface PayoutSummaryDocRow {
   /** มติ PO U30 — ยอดโอนจริง (= net เมื่อไม่มีการหัก) + ยอดหักคืนเงินทดรอง (`null` = ไม่มี) */
   transferText: string
   offsetText: string | null
+  /** ยอดหักคืนเงินทดรองในตาราง (ไม่มี = `0.00`) */
+  offsetCellText: string
 }
 
 export interface PayoutSummaryDoc {
@@ -210,12 +269,17 @@ export interface PayoutSummaryDoc {
   totalTransferText: string
   /** `null` = ทั้งรอบไม่มีการหักคืนเงินทดรอง */
   totalOffsetText: string | null
+  totalOffsetCellText: string
+  payeeCountText: string
+  /** วันเวลาที่พิมพ์ (พ.ศ.) — มุมขวาของแถบหัวเอกสารภายใน (มติ PO U100 ข้อ 9) */
+  printedAtLabel: string
   note: string
 }
 
 export function buildPayoutSummaryDoc(
   batch: PayoutBatchDetailDto,
   issuer: PayoutDocIssuer,
+  printedAt: Date = new Date(),
 ): PayoutSummaryDoc {
   const groups = groupPayoutItemsByPayee(batch.items)
   // ยอดรวมของทั้งรอบคิดจาก "รายการทั้งหมด" ไม่ใช่ผลบวกของยอดกลุ่ม — ยามของ `22` §6.10
@@ -249,6 +313,7 @@ export function buildPayoutSummaryDoc(
       netText: fmtSatang(group.totals.netSatang),
       transferText: fmtSatang(group.transferSatang),
       offsetText: group.advanceOffsetSatang === 0 ? null : fmtSatang(group.advanceOffsetSatang),
+      offsetCellText: fmtSatang(group.advanceOffsetSatang),
     })),
     itemCountText: `${fmtCount(totals.itemCount)} รายการ`,
     totalGrossText: fmtSatang(totals.grossSatang),
@@ -256,6 +321,9 @@ export function buildPayoutSummaryDoc(
     totalNetText: fmtSatang(totals.netSatang),
     totalTransferText: fmtSatang(payoutTransferSatang(totals.netSatang, totalOffset)),
     totalOffsetText: totalOffset === 0 ? null : fmtSatang(totalOffset),
+    totalOffsetCellText: fmtSatang(totalOffset),
+    payeeCountText: `${fmtCount(groups.length)} ราย`,
+    printedAtLabel: fmtDateTime(printedAt),
     note: 'ใช้รูปแบบไฟล์ธนาคารที่ผ่านการทดสอบแล้วเท่านั้นในการตัดโอนจริง',
   }
 }
@@ -267,6 +335,13 @@ export function voucherNumberOf(items: readonly Pick<PayoutBatchItemDto, 'vouche
   return items.find((item) => item.voucherNumber !== null)?.voucherNumber ?? null
 }
 
+/** แถวรายการบนใบสำคัญจ่าย/สลิป — `detail` = บรรทัดรองสีเทา */
+export interface PayoutDocLine {
+  description: string
+  detail: string | null
+  amountText: string
+}
+
 export interface PaymentVoucherDoc {
   title: string
   titleEn: string
@@ -274,6 +349,19 @@ export interface PaymentVoucherDoc {
   issuer: PayoutDocIssuer
   voucherNo: string
   payeeName: string
+  /** ข้อมูลผู้รับในกล่อง "จ่ายให้" (มติ PO U100) */
+  payee: PayoutPayeeDocInfo
+  teamName: string
+  /** รายการรวมตามประเภทรายการเบิก (มติ PO U100) */
+  lines: readonly PayoutDocLine[]
+  /** "หัก ภาษี ณ ที่จ่าย 3%" (+ ฐานภาษีเมื่อมีรายการนอกฐาน — ค่าตั้ง U3) */
+  whtLabel: string
+  /** ยอดหักในวงเล็บ `(231.00)` · ไม่หัก = `0.00` */
+  whtDeductText: string
+  /** "โอนเข้าบัญชี …" */
+  paymentChannelText: string
+  signers: readonly string[]
+  footnote: string
   bankLine: string
   description: string
   batchName: string
@@ -300,6 +388,7 @@ function batchRef(batch: PayoutBatchDetailDto): string {
 export function buildPaymentVoucherDocs(
   batch: PayoutBatchDetailDto,
   issuer: PayoutDocIssuer,
+  payees: ReadonlyMap<string, PayoutPayeeDocInfo> = new Map(),
 ): PaymentVoucherDoc[] {
   const payDate = batch.paymentFileGeneratedAt ?? batch.createdAt
 
@@ -310,10 +399,15 @@ export function buildPaymentVoucherDocs(
     issuer,
     voucherNo: orDash(voucherNumberOf(group.items)),
     payeeName: group.payeeName,
-    bankLine:
-      group.bankName === null && group.accountNumberMasked === null
-        ? EMPTY
-        : `${orDash(group.bankName)} เลขที่บัญชี ${orDash(group.accountNumberMasked)}`,
+    payee: payees.get(group.payeeId) ?? fallbackPayeeInfo(group),
+    teamName: orDash(group.teamName),
+    lines: voucherLinesOf(group.items),
+    whtLabel: whtLineLabel(group),
+    whtDeductText: group.totals.whtSatang === 0 ? fmtSatang(0) : `(${fmtSatang(group.totals.whtSatang)})`,
+    paymentChannelText: `โอนเข้าบัญชี ${payeeBankLine(group)}`,
+    signers: ['ผู้จัดทำ', 'ผู้อนุมัติ', 'ผู้รับเงิน'],
+    footnote: 'หนังสือรับรองการหักภาษี ณ ที่จ่าย (50 ทวิ) ออกแยกต่างหาก',
+    bankLine: payeeBankLine(group),
     description: `${describeVoucherItems(group.items)} รอบ ${batch.name}`,
     batchName: batch.name,
     methodLabel: 'โอนผ่านธนาคาร (Bank Transfer)',
@@ -331,6 +425,51 @@ export function buildPaymentVoucherDocs(
   }))
 }
 
+function payeeBankLine(group: PayoutPayeeGroup): string {
+  return group.bankName === null && group.accountNumberMasked === null
+    ? EMPTY
+    : `${orDash(group.bankName)} เลขที่บัญชี ${orDash(group.accountNumberMasked)}`
+}
+
+/**
+ * ป้ายแถวหัก ณ ที่จ่าย — อัตรา snapshot + **ฐานภาษีตามที่ระบบคิดจริง** เมื่อมีรายการนอกฐาน (ค่าตั้ง U3 เช่น
+ * ค่าที่พักตามใบเสร็จนามบริษัท) · ยอดหักเป็น snapshot ของรายการ (ไม่คิดใหม่บนเอกสาร — Rule 01)
+ */
+function whtLineLabel(group: PayoutPayeeGroup): string {
+  const rate = group.whtPctSnapshot === null || group.totals.whtSatang === 0 ? '' : ` ${fmtRatePct(group.whtPctSnapshot)}`
+  const baseSatang = group.items
+    .filter((item) => item.source === 'expense' && item.whtBaseIncluded)
+    .reduce((sum, item) => sum + item.grossSatang, 0)
+  const base = group.totals.whtSatang > 0 && baseSatang !== group.totals.grossSatang ? ` (ฐานภาษี ${fmtSatang(baseSatang)})` : ''
+  return `หัก ภาษี ณ ที่จ่าย${rate}${base}`
+}
+
+/** แถวรายการของใบสำคัญจ่าย — รวมตามประเภทรายการเบิก (+ แยกรายการนอกฐานภาษี/เงินทดรองจ่าย) ลำดับตามที่พบ */
+function voucherLinesOf(items: readonly PayoutBatchItemDto[]): PayoutDocLine[] {
+  const groups = new Map<string, { description: string; note: string | null; count: number; grossSatang: number }>()
+  for (const item of items) {
+    const description = item.description.trim() === '' ? 'ค่าตอบแทน' : item.description.trim()
+    const note =
+      item.source === 'advance'
+        ? 'เงินทดรองจ่าย — ไม่หักภาษี ณ ที่จ่าย'
+        : item.whtBaseIncluded
+          ? null
+          : 'ไม่อยู่ในฐานภาษีหัก ณ ที่จ่าย'
+    const key = `${description}|${note ?? ''}`
+    const bucket = groups.get(key)
+    if (bucket === undefined) groups.set(key, { description, note, count: 1, grossSatang: item.grossSatang })
+    else {
+      bucket.count += 1
+      bucket.grossSatang += item.grossSatang
+    }
+  }
+  return [...groups.values()].map((group) => ({
+    description: group.description,
+    detail: [`${fmtCount(group.count)} รายการ`, group.note].filter((part): part is string => part !== null).join(' · '),
+    amountText: fmtSatang(group.grossSatang),
+  }))
+}
+
 /** ข้อความ "รายการ / วัตถุประสงค์" — รวมประเภทที่ไม่ซ้ำกันของคนนั้นในรอบ */
 function describeVoucherItems(items: readonly PayoutBatchItemDto[]): string {
   const labels = [...new Set(items.map((item) => item.description.trim()).filter((text) => text !== ''))]
@@ -344,6 +483,12 @@ export interface PayslipDocRow {
   amountText: string
 }
 
+/** ช่องสรุปบนสลิป (มติ PO U100) — "เคสสำเร็จ 6 เคส" ฯลฯ */
+export interface PayslipStatTile {
+  label: string
+  value: string
+}
+
 export interface PayslipDoc {
   title: string
   titleEn: string
@@ -353,7 +498,13 @@ export interface PayslipDoc {
   teamName: string
   batchName: string
   batchRef: string
+  /** เลขที่ใบสำคัญจ่ายของคนนี้ในรอบ (ชุดเดียวกับ `buildPaymentVoucherDocs`) */
+  voucherNo: string
   issuedAtLabel: string
+  stats: readonly PayslipStatTile[]
+  /** จำนวนเงินตัวอักษรของยอดโอนสุทธิ */
+  netInWords: string
+  paymentChannelText: string
   rows: readonly PayslipDocRow[]
   grossText: string
   whtLabel: string
@@ -366,19 +517,34 @@ export interface PayslipDoc {
   note: string
 }
 
-export function buildPayslipDocs(batch: PayoutBatchDetailDto, issuer: PayoutDocIssuer): PayslipDoc[] {
+export function buildPayslipDocs(
+  batch: PayoutBatchDetailDto,
+  issuer: PayoutDocIssuer,
+  payees: ReadonlyMap<string, PayoutPayeeDocInfo> = new Map(),
+): PayslipDoc[] {
   const ref = batchRef(batch)
 
-  return groupPayoutItemsByPayee(batch.items).map((group) => ({
+  return groupPayoutItemsByPayee(batch.items).map((group) => {
+    const info = payees.get(group.payeeId) ?? fallbackPayeeInfo(group)
+    return {
     title: PAYSLIP_TITLE,
-    titleEn: 'Compensation Statement',
+    titleEn: 'Payslip',
     headerNote: INTERNAL_DOC_NOTE.payslip,
     issuer,
-    payeeName: group.payeeName,
+    payeeName: info.displayName,
     teamName: orDash(group.teamName),
     batchName: batch.name,
     batchRef: ref,
+    voucherNo: orDash(voucherNumberOf(group.items)),
     issuedAtLabel: fmtDate(batch.paymentFileGeneratedAt ?? batch.createdAt),
+    stats: [
+      { label: 'เคสสำเร็จ', value: `${fmtCount(info.stats.successCases)} เคส` },
+      { label: 'วันทำงานภาคสนาม', value: `${fmtCount(info.stats.fieldDays)} วัน` },
+      { label: 'คืนที่พัก', value: `${fmtCount(info.stats.hotelNights)} คืน` },
+      { label: 'ยอดโอนสุทธิ', value: `${fmtSatang(group.transferSatang)} บาท` },
+    ],
+    netInWords: bahtInWords(group.transferSatang),
+    paymentChannelText: `โอนเข้าบัญชี ${payeeBankLine(group)}`,
     rows: group.items.map((item) => ({
       description: payslipRowLabel(item),
       amountText: fmtSatang(item.grossSatang),
@@ -387,12 +553,15 @@ export function buildPayslipDocs(batch: PayoutBatchDetailDto, issuer: PayoutDocI
     whtLabel:
       group.whtPctSnapshot === null || group.totals.whtSatang === 0
         ? 'หักภาษี ณ ที่จ่าย'
-        : `หักภาษี ณ ที่จ่าย (${fmtPercent(group.whtPctSnapshot)})`,
+        : `หักภาษี ณ ที่จ่าย (${fmtRatePct(group.whtPctSnapshot)})`,
     whtText: group.totals.whtSatang === 0 ? fmtSatang(0) : `(${fmtSatang(group.totals.whtSatang)})`,
     offsetLines: group.offsetLines.map((line) => ({ label: line.label, amountText: `(${fmtSatang(line.amountSatang)})` })),
     netText: fmtSatang(group.transferSatang),
-    note: 'หนังสือรับรองหัก ณ ที่จ่ายฉบับทางการ (50 ทวิ) ออกแยกต่างหาก',
-  }))
+    note:
+      'เอกสารนี้ออกโดยระบบ ไม่ต้องลงลายมือชื่อ · หนังสือรับรองการหักภาษี ณ ที่จ่าย (50 ทวิ) ออกแยกต่างหาก · ' +
+      'หากรายการไม่ถูกต้องโปรดติดต่อฝ่ายการเงิน',
+    }
+  })
 }
 
 /**

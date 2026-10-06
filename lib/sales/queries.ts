@@ -20,6 +20,7 @@ import {
   assertVatApplicable,
   receiptInvoiceAmounts,
   receiptInvoiceDescriptionOf,
+  receiptInstallmentOf,
   replacementNoteOf,
   TAX_INVOICE_DOC_KIND_TITLE,
 } from '@/lib/sales/receipt-invoice'
@@ -126,7 +127,14 @@ const TAX_INVOICE_SELECT = {
   cancelledAt: true,
   createdAt: true,
   replaces: { select: { invoiceNumber: true, invoiceDate: true, cancelReason: true } },
-  cashReceipt: { select: { receivedDate: true } },
+  cashReceipt: {
+    select: {
+      receivedDate: true,
+      amountSatang: true,
+      whtWithheldByCustomerSatang: true,
+      bankTransaction: { select: { bankAccount: { select: { bankName: true, accountNumber: true } } } },
+    },
+  },
   cancelledByUser: { select: { fullName: true } },
   createdByUser: { select: { fullName: true } },
 } satisfies Prisma.TaxInvoiceSelect
@@ -858,7 +866,20 @@ function activeNotesQuery(invoiceId: string) {
 /** ข้อมูลดิบของเอกสารสำหรับ PDF (`28` §6.2) — ประกอบเป็นข้อความที่ `buildTaxInvoiceDoc()` */
 export async function getTaxInvoiceDocSource(user: SessionUser, invoiceId: string): Promise<TaxInvoiceDocSource> {
   const { invoice, sales } = await findTaxInvoice(user, invoiceId)
-  return docSourceOf(invoice, { periodLabel: sales.period.periodLabel, billingBatchNumber: sales.billingBatch.batchNumber })
+  return docSourceOf(invoice, {
+    periodLabel: sales.period.periodLabel,
+    billingBatchNumber: sales.billingBatch.batchNumber,
+    billedTotalSatang: sales.totalSatang,
+    siblings: sales.taxInvoices,
+  })
+}
+
+/** ใบในรายการขายเดียวกัน — ใช้คิดลำดับการรับชำระบางส่วน (`receiptInstallmentOf()`) */
+interface SiblingInvoice {
+  id: string
+  status: TaxInvoiceRow['status']
+  totalSatang: number
+  createdAt: Date
 }
 
 /**
@@ -867,8 +888,14 @@ export async function getTaxInvoiceDocSource(user: SessionUser, invoiceId: strin
  */
 function docSourceOf(
   invoice: TaxInvoiceRow,
-  context: { periodLabel: string; billingBatchNumber: string },
+  context: {
+    periodLabel: string
+    billingBatchNumber: string
+    billedTotalSatang: number
+    siblings: readonly SiblingInvoice[]
+  },
 ): TaxInvoiceDocSource {
+  const receipt = invoice.cashReceipt
   return {
     docKind: invoice.docKind,
     invoiceNumber: invoice.invoiceNumber,
@@ -894,6 +921,27 @@ function docSourceOf(
     replacementNote: replacementNoteOf(invoice.replaces),
     billingBatchNumber: context.billingBatchNumber,
     receivedDate: invoice.cashReceipt?.receivedDate ?? null,
+    receipt:
+      receipt === null
+        ? null
+        : {
+            cashSatang: receipt.amountSatang,
+            customerWhtSatang: receipt.whtWithheldByCustomerSatang,
+            receivedDate: receipt.receivedDate,
+            bankAccount:
+              receipt.bankTransaction === null
+                ? null
+                : {
+                    bankName: receipt.bankTransaction.bankAccount.bankName,
+                    accountNumber: receipt.bankTransaction.bankAccount.accountNumber,
+                    accountName: null,
+                  },
+          },
+    installment: receiptInstallmentOf({
+      invoiceId: invoice.id,
+      billedTotalSatang: context.billedTotalSatang,
+      invoices: context.siblings,
+    }),
   }
 }
 
@@ -929,12 +977,12 @@ export async function taxInvoicesForPack(
       replacedBy: { select: { invoiceNumber: true }, take: 1 },
       salesRecord: {
         select: {
+          totalSatang: true,
           period: { select: { periodLabel: true } },
           billingBatch: { select: { period: true, batchNumber: true } },
           taxInvoices: {
-            where: { status: 'active', docKind: 'tax_invoice' },
             orderBy: { createdAt: 'asc' },
-            select: { invoiceNumber: true, createdAt: true },
+            select: { id: true, invoiceNumber: true, createdAt: true, status: true, docKind: true, totalSatang: true },
           },
         },
       },
@@ -945,13 +993,21 @@ export async function taxInvoicesForPack(
     const { salesRecord: sales, replacedBy, ...invoice } = row
     const legacyReplacement =
       row.status === 'cancelled' && row.docKind === 'tax_invoice'
-        ? sales.taxInvoices.find((other) => other.createdAt > row.createdAt && other.invoiceNumber !== row.invoiceNumber)
+        ? sales.taxInvoices.find(
+            (other) =>
+              other.status === 'active' &&
+              other.docKind === 'tax_invoice' &&
+              other.createdAt > row.createdAt &&
+              other.invoiceNumber !== row.invoiceNumber,
+          )
         : undefined
     return {
       id: row.id,
       source: docSourceOf(invoice, {
         periodLabel: sales.period.periodLabel,
         billingBatchNumber: sales.billingBatch.batchNumber,
+        billedTotalSatang: sales.totalSatang,
+        siblings: sales.taxInvoices,
       }),
       companyName: row.buyerName,
       billingRef: sales.billingBatch.period,

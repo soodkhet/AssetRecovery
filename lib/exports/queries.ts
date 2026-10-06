@@ -1345,15 +1345,17 @@ async function voucherPdfs(
         {
           suffix: 'PV-',
           render: async () => {
-            const { batch, issuer } = await load()
-            return new Uint8Array(await renderPaymentVouchers(buildPaymentVoucherDocs(batch, issuer), await letterheads.current()))
+            const { batch, issuer, payees } = await load()
+            return new Uint8Array(
+              await renderPaymentVouchers(buildPaymentVoucherDocs(batch, issuer, payees), await letterheads.current()),
+            )
           },
         },
         {
           suffix: 'SLIP-',
           render: async () => {
-            const { batch, issuer } = await load()
-            return new Uint8Array(await renderPayslips(buildPayslipDocs(batch, issuer), await letterheads.current()))
+            const { batch, issuer, payees } = await load()
+            return new Uint8Array(await renderPayslips(buildPayslipDocs(batch, issuer, payees), await letterheads.current()))
           },
         },
       ]

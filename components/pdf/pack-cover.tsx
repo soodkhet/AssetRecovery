@@ -22,7 +22,11 @@ export function PackCover({ doc, letterhead }: { doc: PackCoverDoc; letterhead: 
   return (
     <Document title={`${doc.title} ${doc.periodLabel} ${doc.versionLabel}`} author={doc.organizationName}>
       <Page size="A4" style={docStyles.page}>
-        <DocHeader letterhead={letterhead} headerNote={doc.headerNote} title={doc.title} titleEn={doc.titleEn} />
+        <DocHeader
+          letterhead={letterhead}
+          title={doc.title}
+          lines={[`งวดบัญชี: ${doc.periodLabel}`, `เวอร์ชัน: ${doc.versionLabel}`, `จัดทำเมื่อ: ${doc.generatedAtLabel}`]}
+        />
 
         <View style={docStyles.metaGrid}>
           <MetaCell label="รอบบัญชี" value={doc.periodLabel} />

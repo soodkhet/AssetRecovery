@@ -31,7 +31,7 @@ export const GET = withApiPermission<RouteContext>(
     assertPayoutDocReady(source.batch.status)
 
     const scoped = selectPayoutDocItems(source.batch, parsed.data.payeeId)
-    const pdf = await renderPayslips(buildPayslipDocs(scoped, source.issuer), await currentLetterhead(user.organizationId))
+    const pdf = await renderPayslips(buildPayslipDocs(scoped, source.issuer, source.payees), await currentLetterhead(user.organizationId))
 
     const fileName = `สลิปค่าตอบแทน ${scoped.name}.pdf`
     // ทุกการนำเอกสารออกต้อง trace ผู้สั่งได้ (Rule 03)

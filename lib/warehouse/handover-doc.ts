@@ -1,3 +1,4 @@
+import { formatBranch } from '@/lib/format/branch'
 import { fmtDate, fmtDateTime } from '@/lib/format/datetime'
 import { assetConditionLabel, HANDOVER_TYPE_LABEL } from '@/lib/warehouse/warehouse-ui'
 import type { LotDetailDto } from '@/lib/warehouse/types'
@@ -22,6 +23,8 @@ export interface HandoverParty {
   address: string | null
   taxId: string | null
   phone: string | null
+  /** รหัสสาขา 5 หลัก (มติ PO U100 — พิมพ์ต่อจากเลขผู้เสียภาษี) · ไม่ส่ง = ไม่พิมพ์สาขา */
+  branchCode?: string | null
 }
 
 export interface HandoverDocRow {
@@ -53,7 +56,7 @@ export interface HandoverDocModel {
   trackingNo: string
   note: string
   issuer: HandoverParty
-  recipient: HandoverParty & { contactPerson: string; deliveryAddr: string }
+  recipient: HandoverParty & { contactPerson: string; deliveryAddr: string; branchLabel: string | null }
   rows: readonly HandoverDocRow[]
   totalCount: number
 }
@@ -106,6 +109,8 @@ export function buildHandoverDoc(lot: LotDetailDto, issuer: HandoverParty, recip
     issuer,
     recipient: {
       ...recipient,
+      branchLabel:
+        recipient.branchCode === undefined || recipient.branchCode === null ? null : formatBranch(recipient.branchCode),
       contactPerson: orDash(lot.contactPerson),
       deliveryAddr: orDash(lot.deliveryAddr),
     },

@@ -36,7 +36,7 @@ export const GET = withApiPermission<RouteContext>(
 
     const scoped = selectPayoutDocItems(source.batch, parsed.data.payeeId)
     const pdf = await renderPaymentVouchers(
-      buildPaymentVoucherDocs(scoped, source.issuer),
+      buildPaymentVoucherDocs(scoped, source.issuer, source.payees),
       await currentLetterhead(user.organizationId),
     )
 
