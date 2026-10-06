@@ -99,6 +99,7 @@ export function settingAssumptionCurrentValues(
     customer_wht: FIXED_SYSTEM_TEXT,
     bank_fee_write_off: tolerance,
     customer_wht_bank_fee: tolerance,
+    bank_fee_full_tax_invoice: FIXED_SYSTEM_TEXT,
   }
 }
 
@@ -128,6 +129,7 @@ export const SETTING_ASSUMPTION_LOCATION: Readonly<Record<SettingAssumptionKey, 
   customer_wht: { menuId: 'settings.companies', path: '/settings/companies' },
   bank_fee_write_off: { financeTab: 'approval' },
   customer_wht_bank_fee: { financeTab: 'approval' },
+  bank_fee_full_tax_invoice: { financeTab: 'approval' },
 }
 
 export type AssumptionLinkViewer = MenuViewer & FinanceTabViewer
