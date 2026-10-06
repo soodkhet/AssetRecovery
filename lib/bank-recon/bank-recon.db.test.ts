@@ -408,6 +408,54 @@ suite('Phase 4.2 — นำเข้า statement + auto-match (`35` §6.2)', ()
     expect(await db().cashReceipt.count({ where: { organizationId: ORG_ID } })).toBe(1)
   })
 
+  it('U136 — 2 รายการเหมือนกันทุกช่องในวันเดียว = 2 แถว · นำเข้าไฟล์เดิมซ้ำยังกันได้ · ไฟล์ช่วงกว้างกว่าเติมเฉพาะที่ขาด', async () => {
+    const twin = '05/08/2569,ค่าธรรมเนียมโอน,,,25.00'
+    const first = await recon.importStatement(ctx, {
+      bankAccountId: BANK_ACCOUNT_ID,
+      fileName: 'twins.csv',
+      csv: csvOf(twin, twin),
+    })
+    expect(first.imported).toBe(2)
+    expect(first.duplicates).toBe(0)
+    const rows = await db().bankTransaction.findMany({
+      where: { organizationId: ORG_ID },
+      orderBy: { occurrenceSeq: 'asc' },
+      select: { occurrenceSeq: true, amountSatang: true },
+    })
+    expect(rows).toEqual([
+      { occurrenceSeq: 1, amountSatang: -2500 },
+      { occurrenceSeq: 2, amountSatang: -2500 },
+    ])
+
+    const again = await recon.importStatement(ctx, {
+      bankAccountId: BANK_ACCOUNT_ID,
+      fileName: 'twins.csv',
+      csv: csvOf(twin, twin),
+    })
+    expect(again.imported).toBe(0)
+    expect(again.duplicates).toBe(2)
+
+    // ไฟล์ที่ครอบช่วงวันกว้างกว่าและมีรายการเดียวกันเพิ่มอีก 1 ⇒ เติมเฉพาะก้อนที่ 3
+    const wider = await recon.importStatement(ctx, {
+      bankAccountId: BANK_ACCOUNT_ID,
+      fileName: 'wider.csv',
+      csv: csvOf('04/08/2569,ค่าธรรมเนียมรายเดือน,FEE-01,,35.00', twin, twin, twin),
+    })
+    expect(wider.imported).toBe(2)
+    expect(wider.duplicates).toBe(2)
+    expect(await db().bankTransaction.count({ where: { organizationId: ORG_ID } })).toBe(4)
+  })
+
+  it('U136 — นำเข้าไฟล์ที่มีรายการคู่แฝด **พร้อมกัน** ⇒ ได้ 2 แถวพอดี (unique index รวมลำดับ)', async () => {
+    const twin = '05/08/2569,ค่าธรรมเนียมโอน,,,25.00'
+    const csv = csvOf(twin, twin)
+    await Promise.allSettled([
+      recon.importStatement(ctx, { bankAccountId: BANK_ACCOUNT_ID, fileName: 'a.csv', csv }),
+      recon.importStatement(ctx, { bankAccountId: BANK_ACCOUNT_ID, fileName: 'a.csv', csv }),
+    ])
+    expect(await db().bankTransaction.count({ where: { organizationId: ORG_ID } })).toBe(2)
+  })
+
   it('แถวที่อ่านไม่ออกถูกข้าม + ไฟล์ที่ไม่มีแถวใช้ได้เลย ⇒ STATEMENT_FILE_INVALID', async () => {
     const result = await recon.importStatement(ctx, {
       bankAccountId: BANK_ACCOUNT_ID,
@@ -652,6 +700,95 @@ suite('Phase 4.2 — จับคู่ manual + ปิดรายการ (`3
       () => recon.resolveUnmatchedTransaction(ctx, 'not-a-uuid', { matchNote: 'x' }),
       'BANK_TRANSACTION_NOT_FOUND',
     )
+  })
+})
+
+suite('U137 — คู่ที่เสนอ (จับคู่ทางกลับ) · ยืนยัน 1 คลิก ไม่จับคู่เงียบ', () => {
+  it('statement มาก่อน → รอบวางบิลส่งทีหลัง ⇒ เสนอคู่ (ไม่จับเอง) · ยืนยันแล้วเกิดเงินรับ + audit บอกที่มา', async () => {
+    // เงินเข้ามาก่อนรอบวางบิลถูกส่ง ⇒ ตอนนำเข้าไม่มีผู้สมัคร = ค้าง unmatched
+    const imported = await recon.importStatement(ctx, {
+      bankAccountId: BANK_ACCOUNT_ID,
+      fileName: 'early.csv',
+      csv: csvOf('03/08/2569,โอนเข้าจากไฟแนนซ์ A,KBANK-TRX-777,"8,025.00",'),
+    })
+    expect(imported.autoMatched).toBe(0)
+    expect(await recon.listMatchProposals(accountant)).toEqual([])
+
+    await seedBilling(BILLING_A, 802500, { sentAt: '2026-08-01T03:00:00Z' })
+
+    const proposals = await recon.listMatchProposals(accountant)
+    expect(proposals).toHaveLength(1)
+    const [proposal] = proposals
+    expect(proposal?.target).toMatchObject({ kind: 'billing', id: BILLING_A, amountSatang: 802500 })
+    expect(proposal?.matchedAmountSatang).toBe(802500)
+    expect(proposal?.ambiguous).toBe(false)
+
+    // ยังไม่จับคู่เองจนกว่าจะยืนยัน
+    const [pending] = await transactionsOf()
+    expect(pending?.matchStatus).toBe('unmatched')
+    expect(await db().cashReceipt.count({ where: { organizationId: ORG_ID } })).toBe(0)
+
+    const { result } = await recon.matchBankTransaction(ctx, proposal?.transaction.id ?? '', {
+      targetKind: 'billing',
+      targetId: BILLING_A,
+      matchNote: null,
+      confirmRematch: false,
+      fromProposal: true,
+    })
+    expect(result?.transaction.matchStatus).toBe('manual_matched')
+    expect(await db().cashReceipt.count({ where: { organizationId: ORG_ID } })).toBe(1)
+
+    const audit = await db().auditLog.findFirstOrThrow({
+      where: { targetType: 'bank_transactions', targetId: proposal?.transaction.id ?? '', action: 'update' },
+      orderBy: { createdAt: 'desc' },
+    })
+    expect(audit.reason).toContain('ยืนยันคู่ที่ระบบเสนอ')
+    expect(await recon.listMatchProposals(accountant)).toEqual([])
+  })
+
+  it('รอบจ่ายยืนยันจ่ายสำเร็จด้วยมือแล้ว statement ตามมา ⇒ ไม่ auto-match แต่เสนอคู่ · เงินผิดช่วงวันไม่เสนอ', async () => {
+    await seedPayout(PAYOUT_A, 12000000)
+    await db().$executeRawUnsafe(`UPDATE payout_batches SET status = 'completed' WHERE id = '${PAYOUT_A}'`)
+
+    const imported = await recon.importStatement(ctx, {
+      bankAccountId: BANK_ACCOUNT_ID,
+      fileName: 'after.csv',
+      csv: csvOf(
+        '02/08/2569,จ่ายรอบ PB-2569-08-001,KBANK-TRX-002,,"120,000.00"',
+        '20/08/2569,จ่ายอื่นยอดเท่ากัน,KBANK-TRX-003,,"120,000.00"',
+      ),
+    })
+    expect(imported.autoMatched).toBe(0)
+
+    const proposals = await recon.listMatchProposals(accountant)
+    expect(proposals.map((p) => [p.target.id, p.transaction.amountSatang])).toEqual([[PAYOUT_A, -12000000]])
+    expect(proposals[0]?.target.statusLabel).not.toBe('')
+
+    await recon.matchBankTransaction(ctx, proposals[0]?.transaction.id ?? '', {
+      targetKind: 'payout',
+      targetId: PAYOUT_A,
+      matchNote: null,
+      confirmRematch: false,
+      fromProposal: true,
+    })
+    // รอบนี้มีรายการเดินบัญชีจับคู่แล้ว ⇒ ไม่ถูกเสนอซ้ำ (รายการที่ผิดช่วงวันยังค้างให้คนจัดการเอง)
+    expect(await recon.listMatchProposals(accountant)).toEqual([])
+    const payout = await db().payoutBatch.findUniqueOrThrow({ where: { id: PAYOUT_A } })
+    expect(payout.status).toBe('completed')
+  })
+
+  it('รายการเดียวเข้าได้สองรอบวางบิล ⇒ เสนอทั้งคู่แต่ติดธงให้ตรวจ (ไม่เลือกแทนคน)', async () => {
+    await recon.importStatement(ctx, {
+      bankAccountId: BANK_ACCOUNT_ID,
+      fileName: 'twin.csv',
+      csv: csvOf('03/08/2569,โอนเข้า,KBANK-TRX-900,"8,025.00",'),
+    })
+    await seedBilling(BILLING_A, 802500)
+    await seedBilling(BILLING_B, 802500)
+
+    const proposals = await recon.listMatchProposals(accountant)
+    expect(proposals).toHaveLength(2)
+    expect(proposals.every((p) => p.ambiguous)).toBe(true)
   })
 })
 

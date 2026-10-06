@@ -387,6 +387,7 @@ async function issueCertificate(
   ctx: AccountingMutationContext,
   group: SourceGroup,
   replacesId: string | null,
+  traceNote = '',
 ): Promise<CertRow> {
   const organizationId = ctx.actor.organizationId
   const source = group.anchor
@@ -468,8 +469,8 @@ async function issueCertificate(
       },
       reason:
         replacesId === null
-          ? `ออกหนังสือรับรองหัก ณ ที่จ่าย ${certificateNumber} อัตโนมัติจากรอบจ่าย "${item.payoutBatch.name}" ที่จ่ายเงินจริงแล้ว`
-          : `ออกหนังสือรับรอง ${certificateNumber} แทนฉบับที่ถูกยกเลิก`,
+          ? `ออกหนังสือรับรองหัก ณ ที่จ่าย ${certificateNumber} อัตโนมัติจากรอบจ่าย "${item.payoutBatch.name}" ที่จ่ายเงินจริงแล้ว${traceNote}`
+          : `ออกหนังสือรับรอง ${certificateNumber} แทนฉบับที่ถูกยกเลิก${traceNote}`,
       ipAddress: ctx.meta.ipAddress,
       userAgent: ctx.meta.userAgent,
     },
@@ -491,9 +492,20 @@ async function issueCertificate(
  * **จุดเสียบของไฟล์ 32** — รอบจ่ายที่ `completed` มีบัญชีค่าใช้จ่ายแล้ว ⇒ ออกใบ 50 ทวิ ให้ทุกรายการ
  * ที่มีการหักภาษีจริง (`33` §9) — idempotent เรียกซ้ำไม่สร้างซ้ำ (1 รายการ = 1 ใบที่ `active`)
  */
+export interface PayoutSyncOptions {
+  /**
+   * มติ PO U134 — ตัวกวาดทำต่อขั้นหลังรอบจ่าย `completed` ⇒ ออกเฉพาะใบที่**ยังไม่เคยออกเลย**
+   * (จุดยึดที่มีใบที่ยกเลิกแล้ว = คนตั้งใจยกเลิก ⇒ ไม่ออกใบแทนให้เอง)
+   */
+  missingOnly?: boolean
+  /** ต่อท้ายเหตุผล audit — ตามรอยกลับงานเบื้องหลังที่ทำต่อ (เช่น ` (ทำต่อโดยงานเบื้องหลัง job id …)`) */
+  traceNote?: string
+}
+
 export async function syncWhtCertificatesFromPayout(
   ctx: AccountingMutationContext,
   payoutBatchId: string,
+  options: PayoutSyncOptions = {},
 ): Promise<WhtCertificateDto[]> {
   const organizationId = ctx.actor.organizationId
   const records = await loadBatchSources(organizationId, payoutBatchId)
@@ -515,10 +527,11 @@ export async function syncWhtCertificatesFromPayout(
       issued.push(existing)
       continue
     }
+    if (existing !== null && options.missingOnly === true) continue
 
     try {
       issued.push(
-        await prisma.$transaction((tx) => issueCertificate(tx, ctx, group, existing?.id ?? null)),
+        await prisma.$transaction((tx) => issueCertificate(tx, ctx, group, existing?.id ?? null, options.traceNote ?? '')),
       )
     } catch (error) {
       // แข่งกันออกใบพร้อมกัน (รอบจ่ายเป็น `completed` ได้ 2 ทาง — ยืนยันด้วยมือกับกระทบยอดธนาคาร)

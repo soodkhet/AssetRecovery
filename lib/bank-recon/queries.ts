@@ -7,6 +7,7 @@ import {
   allowedTargetKind,
   canMoveToSuspense,
   findAutoMatch,
+  findMatchProposals,
   hasNote,
   isExactMatchAmount,
   isMatched,
@@ -33,12 +34,14 @@ import {
   parseStatementCsv,
   StatementParseError,
   statementRowKey,
+  withOccurrenceSeq,
   type StatementRow,
 } from '@/lib/bank-recon/statement'
 import type {
   BankTransactionDto,
   BankTransactionListDto,
   MatchCandidateDto,
+  MatchProposalDto,
   MatchResultDto,
   StatementImportResultDto,
   StatementImportTemplateDto,
@@ -46,14 +49,16 @@ import type {
 import { emitAudit } from '@/lib/audit/audit'
 import { SalesError } from '@/lib/sales/errors'
 import type { SessionUser } from '@/lib/auth/types'
-import { syncExpenseRecordsFromPayout } from '@/lib/expenses/queries'
 import { calculateCustomerWithheldWht } from '@/lib/finance/wht-calc'
 import { Prisma } from '@/lib/generated/prisma/client'
 import type { BankMatchStatus } from '@/lib/generated/prisma/enums'
 import { prisma } from '@/lib/prisma'
 import { PayoutError } from '@/lib/payout/errors'
+import { PAYOUT_STATUS_LABEL } from '@/lib/payout/payout'
+import { finishPayoutPostCompletionSafely } from '@/lib/payout/post-completion'
 import { syncPayoutBatchCompleted } from '@/lib/payout/queries'
 import { RevenueError } from '@/lib/revenue/errors'
+import { BILLING_STATUS_LABEL } from '@/lib/revenue/revenue-ui'
 import { applyBillingReceipt } from '@/lib/revenue/queries'
 import { SettingsError } from '@/lib/settings/errors'
 import { assertOrgWideReadable } from '@/lib/auth/scope'
@@ -74,7 +79,7 @@ import { verifyUploadedFile } from '@/lib/uploads/verify'
  *   `syncPayoutBatchCompleted()` ของ 3.4 (idempotent เช่นกัน)
  * - **`unmatched_resolved` ห้ามผูก FK** และต้องมี `match_note` เสมอ (`35` §6.4/§10) —
  *   CHECK `bank_tx_status_fk_shape` ที่ DB จะปฏิเสธซ้ำอีกชั้นถ้าโค้ดพลาด
- * - นำเข้าไฟล์เดิมซ้ำต้อง**ไม่นับเงินซ้ำ** — กันด้วย `statementRowKey()` (วัน+ยอด+รายละเอียด)
+ * - นำเข้าไฟล์เดิมซ้ำต้อง**ไม่นับเงินซ้ำ** — กันด้วย `statementRowKey()` (วัน+ยอด+รายละเอียด+ลำดับการเกิดในไฟล์ — U136)
  * - ทุก mutation ลง audit — จับคู่/เปลี่ยนการจับคู่/ปิดรายการ ใช้ `match_note` เป็นเหตุผล (`35` §13)
  * - **U40** (มติ PO 05/10/2569): เงินรับที่ลูกค้าหักภาษี ⇒ สร้างรายการ "รอ 50 ทวิ จากลูกค้า" ใน tx เดียวกับเงินรับ
  *   · เปลี่ยนการจับคู่ ⇒ ถอนรายการรอ 50 ทวิ ของเงินรับเดิมก่อนลบเงินรับ (`lib/customer-wht/queries.ts`)
@@ -364,6 +369,109 @@ export async function listMatchCandidates(
   }))
 }
 
+// ── คู่ที่เสนอ — จับคู่ทางกลับ (มติ PO 07/10/2569 U137) ─────────────────────────
+
+/** รายการเดินบัญชีที่ยังไม่จับคู่สูงสุดที่นำมาเทียบต่อครั้ง (ใหม่สุดก่อน) */
+const PROPOSAL_TRANSACTION_LIMIT = 500
+
+/**
+ * `GET /api/bank-reconciliation/match-proposals` — **คู่ที่เสนอ** ให้กดยืนยัน 1 คลิก (ไม่จับคู่เงียบ)
+ *
+ * ทางกลับของ auto-match ตอนนำเข้า: เอกสารที่เกิด/เปลี่ยนสถานะ **หลัง** statement ถูกนำเข้าแล้ว
+ * (บันทึกรอบวางบิลส่งแล้ว · รอบจ่ายยืนยันจ่ายสำเร็จด้วยมือ) จะไม่มีวันถูกจับคู่อัตโนมัติอีก ⇒ คำนวณสด
+ * ทุกครั้งที่เปิดหน้า: เอกสารที่ยังรอจับคู่ × รายการ `unmatched` ที่ยอดตรง + วันอยู่ในช่วงเกณฑ์เดิม
+ * (`findMatchProposals()` — tolerance ของบัญชีของรายการ)
+ *
+ * - รอบวางบิล: `sent` / `partially_paid` (ผู้สมัครชุดเดียวกับ auto-match)
+ * - รอบจ่าย: `file_generated` / `completed` ที่ **ยังไม่มีรายการเดินบัญชีจับคู่** · วันอ้างอิง = วันสร้างไฟล์โอน
+ * - ยืนยัน = `PATCH /transactions/:id/match` เดิม (สิทธิ์/กติกา/audit ของการจับคู่มือทุกข้อ) + `fromProposal`
+ */
+export async function listMatchProposals(user: SessionUser): Promise<MatchProposalDto[]> {
+  assertOrgWideReadable(user, 'bank-transactions')
+  const organizationId = user.organizationId
+
+  const transactions = await prisma.bankTransaction.findMany({
+    where: { organizationId, matchStatus: 'unmatched' },
+    orderBy: [{ transactionDate: 'desc' }, { id: 'asc' }],
+    take: PROPOSAL_TRANSACTION_LIMIT,
+    select: {
+      id: true,
+      transactionDate: true,
+      description: true,
+      amountSatang: true,
+      bankAccount: { select: { bankName: true, accountNumber: true, autoMatchToleranceDays: true } },
+    },
+  })
+  if (transactions.length === 0) return []
+
+  const billing = await loadCandidates(organizationId, 'billing')
+  const payoutRows = await prisma.payoutBatch.findMany({
+    where: {
+      organizationId,
+      deletedAt: null,
+      status: { in: ['file_generated', 'completed'] },
+      paymentFileGeneratedAt: { not: null },
+      bankTransactions: { none: { matchStatus: { in: ['auto_matched', 'manual_matched'] } } },
+    },
+    select: { id: true, name: true, status: true, netSatang: true, advanceOffsetSatang: true, paymentFileGeneratedAt: true },
+    orderBy: { paymentFileGeneratedAt: 'desc' },
+    take: 100,
+  })
+  const targetLabel = new Map(payoutRows.map((row) => [`payout:${row.id}`, PAYOUT_STATUS_LABEL[row.status]]))
+  const payouts: MatchCandidate[] = payoutRows.map((row) => ({
+    kind: 'payout',
+    id: row.id,
+    ref: row.name,
+    amountSatang: payoutTransferSatang(row.netSatang, row.advanceOffsetSatang),
+    altAmountSatang: null,
+    referenceDate: row.paymentFileGeneratedAt,
+  }))
+  const billingRows = await prisma.billingBatch.findMany({
+    where: { organizationId, id: { in: billing.map((candidate) => candidate.id) } },
+    select: { id: true, status: true },
+  })
+  for (const row of billingRows) targetLabel.set(`billing:${row.id}`, BILLING_STATUS_LABEL[row.status])
+
+  const byId = new Map(transactions.map((row) => [row.id, row]))
+  const proposals = findMatchProposals(
+    [...billing, ...payouts],
+    transactions.map((row) => ({
+      id: row.id,
+      amountSatang: row.amountSatang,
+      transactionDate: row.transactionDate,
+      toleranceDays: row.bankAccount.autoMatchToleranceDays,
+    })),
+  )
+
+  return proposals.flatMap((proposal) => {
+    const transaction = byId.get(proposal.transactionId)
+    const referenceDate = proposal.candidate.referenceDate
+    if (transaction === undefined || referenceDate === null) return []
+    const statusLabel = targetLabel.get(`${proposal.candidate.kind}:${proposal.candidate.id}`) ?? ''
+    return [
+      {
+        target: {
+          kind: proposal.candidate.kind,
+          id: proposal.candidate.id,
+          ref: proposal.candidate.ref,
+          amountSatang: proposal.candidate.amountSatang,
+          statusLabel,
+          referenceDate: referenceDate.toISOString(),
+        },
+        transaction: {
+          id: transaction.id,
+          transactionDate: transaction.transactionDate.toISOString(),
+          description: transaction.description,
+          amountSatang: transaction.amountSatang,
+          bankAccountLabel: bankAccountLabel(transaction.bankAccount),
+        },
+        matchedAmountSatang: proposal.matchedAmountSatang,
+        ambiguous: proposal.ambiguous,
+      },
+    ]
+  })
+}
+
 // ── ผลข้างเคียงของการจับคู่ (trigger 2 ทาง — `35` §9) ────────────────────────
 
 /** ยอดสะสมที่รับชำระแล้วของรอบวางบิลนั้น = ผลรวม Cash Receipt ทั้งหมด (ห้ามบวกเพิ่มทีละก้อน) */
@@ -410,6 +518,8 @@ async function syncBillingAfterReceipt(
 // ── นำเข้า statement ────────────────────────────────────────────────────────
 
 interface PreparedRow extends StatementRow {
+  /** มติ PO U136 — ลำดับการเกิดของคีย์ (วัน+ยอด+รายละเอียด) เดียวกันในไฟล์นี้ */
+  occurrenceSeq: number
   periodId: string
   periodLabel: string
 }
@@ -490,7 +600,7 @@ export async function importStatement(
   // งวดของแต่ละแถว — เปิดรอบให้อัตโนมัติ (idempotent) แล้วกันเขียนทับรอบที่ปิดไปแล้ว
   const periodCache = new Map<string, { id: string; label: string }>()
   const prepared: PreparedRow[] = []
-  for (const row of parsed.rows) {
+  for (const row of withOccurrenceSeq(parsed.rows)) {
     const monthKey = row.transactionDate.toISOString().slice(0, 7)
     let period = periodCache.get(monthKey)
     if (period === undefined) {
@@ -514,7 +624,7 @@ export async function importStatement(
       bankAccountId: account.id,
       transactionDate: { gte: new Date(Math.min(...dates)), lte: new Date(Math.max(...dates)) },
     },
-    select: { transactionDate: true, amountSatang: true, description: true },
+    select: { transactionDate: true, amountSatang: true, description: true, occurrenceSeq: true },
   })
   const seen = new Set(existing.map(statementRowKey))
 
@@ -543,6 +653,7 @@ export async function importStatement(
             transactionDate: row.transactionDate,
             description: row.description,
             amountSatang: row.amountSatang,
+            occurrenceSeq: row.occurrenceSeq,
             createdBy: ctx.actor.id,
           },
           select: { id: true },
@@ -560,6 +671,8 @@ export async function importStatement(
               transaction_date: row.transactionDate,
               description: row.description,
               amount_satang: row.amountSatang,
+              occurrence_seq: row.occurrenceSeq,
+              source_file_line: row.lineNumber,
               match_status: 'unmatched',
               source_file: input.fileName,
             },
@@ -646,6 +759,8 @@ interface ApplyMatchInput {
   candidate: MatchCandidate
   mode: 'auto' | 'manual'
   matchNote: string | null
+  /** มติ PO U137 — ผู้ใช้กดยืนยันคู่ที่ระบบเสนอ (ไม่ใช่เลือกเองจากรายการ) */
+  fromProposal?: boolean
 }
 
 /**
@@ -675,7 +790,9 @@ async function applyMatch(ctx: AccountingMutationContext, input: ApplyMatchInput
   const note = input.matchNote?.trim() ?? null
   const reason =
     note ??
-    `จับคู่รายการเดินบัญชีกับ ${input.candidate.ref} ${input.mode === 'auto' ? 'อัตโนมัติ' : 'โดยเจ้าหน้าที่'}`
+    (input.fromProposal === true
+      ? `ยืนยันคู่ที่ระบบเสนอ: จับคู่รายการเดินบัญชีกับ ${input.candidate.ref} โดยเจ้าหน้าที่`
+      : `จับคู่รายการเดินบัญชีกับ ${input.candidate.ref} ${input.mode === 'auto' ? 'อัตโนมัติ' : 'โดยเจ้าหน้าที่'}`)
 
   const { cashReceiptId } = await prisma.$transaction(async (tx) => {
     // มติ PO U67 — ล็อกแถวรอบจ่ายก่อนผูกรายการเดินบัญชี ⇒ แข่งกับการยกเลิกรอบได้ผู้ชนะคนเดียว
@@ -824,6 +941,7 @@ async function applyMatch(ctx: AccountingMutationContext, input: ApplyMatchInput
           match_note: note,
           matched_ref: input.candidate.ref,
           amount_satang: before.amountSatang,
+          ...(input.fromProposal === true ? { matched_via: 'proposal' } : {}),
         },
         reason,
         ipAddress: ctx.meta.ipAddress,
@@ -860,8 +978,9 @@ async function applyMatch(ctx: AccountingMutationContext, input: ApplyMatchInput
       actorId: ctx.actor.id,
       actorRole: ctx.actor.roleName,
     })
-    // จ่ายจริงแล้ว ⇒ บันทึกบัญชีค่าใช้จ่ายของรอบนั้น (`32` §6.1) — idempotent เช่นกัน
-    if (payoutStatus === 'completed') await syncExpenseRecordsFromPayout(ctx, input.candidate.id)
+    // จ่ายจริงแล้ว ⇒ บันทึกบัญชีค่าใช้จ่าย + 50 ทวิ ของรอบนั้น (`32` §6.1) — idempotent เช่นกัน
+    // ล้มหลัง commit ⇒ ไม่โยนต่อ · ตัวกวาด `payout_completion_repair` ทำต่อให้ครบ (มติ PO U134)
+    if (payoutStatus === 'completed') await finishPayoutPostCompletionSafely(ctx, input.candidate.id)
     effect = { kind: 'payout', payoutStatus }
   }
 
@@ -944,6 +1063,7 @@ export async function matchBankTransaction(
     candidate,
     mode: 'manual',
     matchNote: input.matchNote,
+    fromProposal: input.fromProposal,
   })
   return { result }
 }

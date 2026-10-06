@@ -101,6 +101,66 @@ export function findAutoMatch(
   return { matched: true, candidate: only.candidate, matchedAmountSatang: only.result.matchedAmountSatang }
 }
 
+/** รายการเดินบัญชีที่ยังไม่จับคู่ 1 แถว — เกณฑ์ช่วงวันมาจากบัญชีธนาคารของรายการนั้นเอง */
+export interface ProposalTransaction {
+  id: string
+  amountSatang: number
+  transactionDate: Date
+  toleranceDays: number
+}
+
+export interface MatchProposal {
+  candidate: MatchCandidate
+  transactionId: string
+  matchedAmountSatang: number
+  /**
+   * มีทางเลือกมากกว่าหนึ่ง (รายการนี้เข้าได้หลายเอกสาร หรือเอกสารนี้มีหลายรายการที่เข้าเกณฑ์)
+   * ⇒ ผู้ใช้ต้องเลือกเอง — ยังกดยืนยันได้ทีละคู่ แต่หน้าจอต้องเตือนให้ตรวจ
+   */
+  ambiguous: boolean
+}
+
+/**
+ * **จับคู่ทางกลับแบบเสนอ** (มติ PO 07/10/2569 U137) — เริ่มจากเอกสาร (รอบวางบิลที่รอรับเงิน / รอบจ่าย)
+ * แล้วหารายการเดินบัญชีที่ **ยังไม่จับคู่** ที่ยอดตรงเป๊ะและวันอยู่ในช่วงเดียวกับเกณฑ์ auto-match เดิม
+ * (`candidateMatches()` — เงินเกิดตั้งแต่วันเอกสารถึง +tolerance ของบัญชีนั้น)
+ *
+ * **ไม่จับคู่เอง** — คืนเป็น "คู่ที่เสนอ" ให้คนกดยืนยัน (ผ่าน endpoint จับคู่มือเดิม) · ฝั่งเงินต้องตรงชนิดเอกสาร
+ * (เงินเข้า ↔ บิล · เงินออก ↔ รอบจ่าย) · เอกสารที่ไม่มีวันอ้างอิงไม่ถูกเสนอ (ไม่เดา)
+ */
+export function findMatchProposals(
+  candidates: readonly MatchCandidate[],
+  transactions: readonly ProposalTransaction[],
+): MatchProposal[] {
+  const hits: Omit<MatchProposal, 'ambiguous'>[] = []
+  for (const candidate of candidates) {
+    for (const transaction of transactions) {
+      if (allowedTargetKind(transaction.amountSatang) !== candidate.kind) continue
+      const result = candidateMatches(candidate, {
+        amountSatang: transaction.amountSatang,
+        transactionDate: transaction.transactionDate,
+        toleranceDays: transaction.toleranceDays,
+      })
+      if (!result.matched) continue
+      hits.push({ candidate, transactionId: transaction.id, matchedAmountSatang: result.matchedAmountSatang })
+    }
+  }
+
+  const perCandidate = new Map<string, number>()
+  const perTransaction = new Map<string, number>()
+  for (const hit of hits) {
+    const candidateKey = `${hit.candidate.kind}:${hit.candidate.id}`
+    perCandidate.set(candidateKey, (perCandidate.get(candidateKey) ?? 0) + 1)
+    perTransaction.set(hit.transactionId, (perTransaction.get(hit.transactionId) ?? 0) + 1)
+  }
+  return hits.map((hit) => ({
+    ...hit,
+    ambiguous:
+      (perCandidate.get(`${hit.candidate.kind}:${hit.candidate.id}`) ?? 0) > 1 ||
+      (perTransaction.get(hit.transactionId) ?? 0) > 1,
+  }))
+}
+
 /** ชนิดปลายทางที่ฝั่งของรายการยอมให้จับคู่ได้ — เงินเข้า = บิล · เงินออก = รอบจ่าย */
 export function allowedTargetKind(amountSatang: number): MatchTargetKind {
   return transactionSide(amountSatang) === 'in' ? 'billing' : 'payout'

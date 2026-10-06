@@ -2641,6 +2641,11 @@ model PayoutBatch {
   /// · Tax Profile ที่ใช้จริงต่อรายการอยู่ที่ `payout_batch_items.tax_profile_id` (รวมกรณีมาจากค่าเริ่มต้น)
   taxProfileDefaultId            String?             @map("tax_profile_default_id") @db.Uuid
 
+  /// มติ PO U134 — เวลาที่ขั้นหลังรอบจ่าย `completed` (บันทึกจ่าย + ออก 50 ทวิ) ทำครบแล้ว
+  /// NULL บนรอบ `completed` = ยังไม่ครบ ⇒ ตัวกวาด `payout_completion_repair` ทำต่อ (partial index ใน raw SQL
+  /// `20261008031000_payout_post_completion_marker`) · เขียนด้วย raw SQL เท่านั้น (ไม่แตะ `updated_at`)
+  postCompletionSyncedAt         DateTime?           @map("post_completion_synced_at") @db.Timestamptz(6)
+
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   createdBy String    @map("created_by") @db.Uuid
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -3412,6 +3417,9 @@ model BankTransaction {
   description     String
   /// บวก = รับเงิน · ลบ = จ่ายเงิน
   amountSatang    Int             @map("amount_satang")
+  /// มติ PO U136 — ลำดับการเกิดของแถว (วัน+ยอด+รายละเอียด) เดียวกันภายในไฟล์ statement (1, 2, …)
+  /// อยู่ในคีย์กันซ้ำ `uniq_bank_tx_statement_row` (raw SQL `20261008030000_bank_tx_statement_occurrence`)
+  occurrenceSeq   Int             @default(1) @map("occurrence_seq")
   matchStatus     BankMatchStatus @default(unmatched) @map("match_status")
   matchNote       String?         @map("match_note")
 

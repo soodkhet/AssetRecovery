@@ -336,17 +336,44 @@ export function parseStatementCsv(input: StatementParseInput): StatementParseRes
 }
 
 /**
+ * ส่วนฐานของคีย์กันซ้ำ (วัน + ยอด + รายละเอียด) — ยังไม่รวมลำดับการเกิด
+ */
+export function statementRowBaseKey(row: { transactionDate: Date; amountSatang: number; description: string }): string {
+  const date = row.transactionDate.toISOString().slice(0, 10)
+  return `${date}|${row.amountSatang}|${row.description.trim().toLowerCase()}`
+}
+
+/**
  * คีย์กันนำเข้าซ้ำ (Rule 09 idempotency) — statement เดือนเดียวกันถูกอัปโหลดซ้ำได้ง่ายมาก
- * และการนับเงินเข้าซ้ำ = ยอด AR เพี้ยนทั้งรอบ ⇒ แถวที่ (วัน + ยอด + รายละเอียด) ซ้ำของบัญชีเดิม
- * ถือเป็นแถวเดิมเสมอ
+ * และการนับเงินเข้าซ้ำ = ยอด AR เพี้ยนทั้งรอบ
+ *
+ * มติ PO U136: คีย์ = (วัน + ยอด + รายละเอียด) **+ ลำดับการเกิดในไฟล์** (`occurrenceSeq`)
+ * ⇒ 2 รายการจริงที่เหมือนกันทุกช่องในวันเดียว = 2 แถว · นำเข้าไฟล์เดิมซ้ำได้ลำดับเดิม = ยังกันได้
+ * (ตรงกับ unique index `uniq_bank_tx_statement_row` เป๊ะ)
  */
 export function statementRowKey(row: {
   transactionDate: Date
   amountSatang: number
   description: string
+  occurrenceSeq: number
 }): string {
-  const date = row.transactionDate.toISOString().slice(0, 10)
-  return `${date}|${row.amountSatang}|${row.description.trim().toLowerCase()}`
+  return `${statementRowBaseKey(row)}|${row.occurrenceSeq}`
+}
+
+/**
+ * ใส่ลำดับการเกิด (1, 2, …) ให้แถวที่คีย์ฐานเหมือนกันภายในไฟล์เดียว — ตามลำดับบรรทัดในไฟล์
+ * (pure · deterministic: ไฟล์เดิม → ลำดับเดิมเสมอ)
+ */
+export function withOccurrenceSeq<T extends { transactionDate: Date; amountSatang: number; description: string }>(
+  rows: readonly T[],
+): (T & { occurrenceSeq: number })[] {
+  const counts = new Map<string, number>()
+  return rows.map((row) => {
+    const base = statementRowBaseKey(row)
+    const occurrenceSeq = (counts.get(base) ?? 0) + 1
+    counts.set(base, occurrenceSeq)
+    return { ...row, occurrenceSeq }
+  })
 }
 
 // ── ไฟล์ตัวอย่าง (แม่แบบ) — มติ PO 04/10/2569 (UAT — แม่แบบนำเข้าภาษาไทย) ─────────────

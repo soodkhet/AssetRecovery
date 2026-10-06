@@ -4,7 +4,6 @@ import type { ApiWarning } from '@/lib/api/envelope'
 import { emitAudit } from '@/lib/audit/audit'
 import type { RequestMeta } from '@/lib/auth/request-meta'
 import type { SessionUser } from '@/lib/auth/types'
-import { syncExpenseRecordsFromPayout } from '@/lib/expenses/queries'
 import { EXPENSE_TYPE_LABEL } from '@/lib/field/expense-ui'
 import { endOfBangkokDay } from '@/lib/format/datetime'
 import { calculatePayeeBatchWht, sumPayoutTaxSplit, type PayeeBatchWhtLine } from '@/lib/finance/wht-calc'
@@ -51,8 +50,12 @@ import {
   whtFallbackWarning,
 } from '@/lib/payout/payout'
 import { downloadPaymentFile, sha256Hex, uploadPaymentFile } from '@/lib/payout/payment-file-storage'
-import { dispatchNotificationAwaited, usersWithCapability } from '@/lib/notifications/dispatch'
-import { payoutBatchCompletedMessage } from '@/lib/notifications/messages'
+import { drainNotificationOutboxSafely } from '@/lib/notifications/outbox'
+import {
+  enqueuePayoutCompletedNotice,
+  finishPayoutPostCompletionSafely,
+  payoutCompletedNoticeRecipients,
+} from '@/lib/payout/post-completion'
 import type {
   PaymentFileResultDto,
   PayoutBatchDetailDto,
@@ -1332,6 +1335,9 @@ export async function completePayoutBatch(
     targetId: batchId,
   })
 
+  // ผู้รับแจ้งเตือน resolve ก่อนเปิด tx — แถวคิวเขียนใน tx เดียวกับสถานะ (มติ PO U134 · DEC-015)
+  const noticeRecipients = await payoutCompletedNoticeRecipients(user.organizationId)
+
   const updated = await prisma.$transaction(async (tx) => {
     // แข่งกับการยกเลิก (มติ PO U67) — ยืนยันจ่ายได้เฉพาะเมื่อยังเป็น `file_generated` อยู่จริง
     const claimed = await tx.payoutBatch.updateMany({
@@ -1362,13 +1368,20 @@ export async function completePayoutBatch(
       tx,
     )
 
+    await enqueuePayoutCompletedNotice(tx, {
+      organizationId: user.organizationId,
+      userIds: noticeRecipients,
+      batch: row,
+      source: 'manual',
+    })
+
     return row
   })
 
-  // จ่ายเงินจริงแล้ว ⇒ บันทึกบัญชีค่าใช้จ่าย (`32` §6.1) — idempotent เรียกซ้ำไม่สร้างซ้ำ
-  await syncExpenseRecordsFromPayout(context, batchId)
-
-  await notifyPayoutCompleted(user.organizationId, updated, 'manual')
+  // จ่ายเงินจริงแล้ว ⇒ บันทึกบัญชีค่าใช้จ่าย (`32` §6.1) + 50 ทวิ — idempotent เรียกซ้ำไม่สร้างซ้ำ
+  // ล้มหลัง commit ⇒ ไม่โยนต่อ · ตัวกวาด `payout_completion_repair` ทำต่อให้ครบ (มติ PO U134)
+  await finishPayoutPostCompletionSafely(context, batchId)
+  await drainNotificationOutboxSafely({ organizationId: user.organizationId }, 'payout_complete')
 
   return toBatchDto(updated)
 }
@@ -1396,6 +1409,7 @@ export async function syncPayoutBatchCompleted(input: {
   if (batch.status === 'completed') return batch.status
 
   const status = nextPayoutBatchStatus(batch.status, 'complete')
+  const noticeRecipients = await payoutCompletedNoticeRecipients(input.organizationId)
 
   await prisma.$transaction(async (tx) => {
     // แข่งกับการยกเลิก (มติ PO U67) — รอบที่ถูกยกเลิกไปก่อนห้ามถูกจับคู่ปิดเป็นจ่ายสำเร็จ
@@ -1428,9 +1442,15 @@ export async function syncPayoutBatchCompleted(input: {
       },
       tx,
     )
+    await enqueuePayoutCompletedNotice(tx, {
+      organizationId: input.organizationId,
+      userIds: noticeRecipients,
+      batch,
+      source: 'bank_reconciliation',
+    })
   })
 
-  await notifyPayoutCompleted(input.organizationId, batch, 'bank_reconciliation')
+  await drainNotificationOutboxSafely({ organizationId: input.organizationId }, 'payout_bank_match')
 
   return status
 }
@@ -1604,25 +1624,3 @@ export async function cancelPayoutBatch(
   return { batch: toBatchDto(await findBatch(user, batchId)), ...outcome }
 }
 
-/**
- * `90` §6.3 แถว 7 — รอบจ่ายสำเร็จต้องแจ้งผู้ดูแลรอบจ่าย (ทั้งเส้นทางกดเองและเส้นทาง sync จากธนาคาร)
- *
- * เส้นทาง sync เป็น **consumer** (ยิงซ้ำได้ตามกติกา `91`) ⇒ ข้อความพก `dedupeKey` ผูกกับรอบจ่าย
- * ⇒ เรียกซ้ำกี่ครั้งก็ได้แถวเดียว · ต้อง `await` เพื่อให้ job รู้ผลก่อนจบรอบ
- */
-async function notifyPayoutCompleted(
-  organizationId: string,
-  batch: { id: string; name: string; netSatang: number },
-  source: 'manual' | 'bank_reconciliation',
-): Promise<void> {
-  const userIds = await usersWithCapability(organizationId, 'manage_payout_batch')
-  await dispatchNotificationAwaited(
-    { organizationId, userIds },
-    payoutBatchCompletedMessage({
-      batchId: batch.id,
-      batchName: batch.name,
-      netSatang: batch.netSatang,
-      source,
-    }),
-  )
-}

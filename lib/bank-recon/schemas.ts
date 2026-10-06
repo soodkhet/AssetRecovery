@@ -52,6 +52,11 @@ export const bankMatchSchema = z.object({
   matchNote: z.string().trim().max(1000).nullable().default(null),
   /** ยืนยันเปลี่ยนการจับคู่เดิมหลังเห็น `ALREADY_MATCHED` (`35` §11 — เตือนก่อนเสมอ) */
   confirmRematch: z.boolean().default(false),
+  /**
+   * มติ PO U137 — ยืนยัน "คู่ที่ระบบเสนอ" (จับคู่ทางกลับ) · กติกาเหมือนจับคู่มือทุกข้อ ต่างแค่เหตุผลใน audit
+   * บอกที่มาว่าเป็นการยืนยันคู่ที่เสนอ
+   */
+  fromProposal: z.boolean().optional(),
 })
 
 export const resolveUnmatchedSchema = z.object({
