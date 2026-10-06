@@ -1,10 +1,26 @@
 import { PrismaPg } from '@prisma/adapter-pg'
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SessionUser } from '@/lib/auth/types'
 import { PrismaClient } from '@/lib/generated/prisma/client'
 import { fmtDate, toInputDate } from '@/lib/format/datetime'
 import { parseSimulatedAsOf } from '@/lib/jobs/job-types'
 import { markAdvancePaidOut } from '@/tests/helpers/advance-paid-out'
+
+/**
+ * สวิตช์จำลอง "ขั้นส่งแจ้งเตือนล้ม" (DEC-015 · มติ PO U120) — ปิดไว้ = ส่งจริงตามปกติ
+ * (เทสต์อื่นในไฟล์ไม่ได้รับผลกระทบ)
+ */
+const dispatchFault = vi.hoisted(() => ({ fail: false }))
+vi.mock('@/lib/notifications/dispatch', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/notifications/dispatch')>()
+  return {
+    ...actual,
+    dispatchNotificationAwaited: async (...args: Parameters<typeof actual.dispatchNotificationAwaited>) => {
+      if (dispatchFault.fail) throw new Error('จำลอง: ส่งแจ้งเตือนล้ม')
+      return actual.dispatchNotificationAwaited(...args)
+    },
+  }
+})
 
 /**
  * เทสต์ระดับ DB ของ Phase 3.3 — DoD ตาม `15` §16:
@@ -128,6 +144,7 @@ async function markPaid(advanceId: string): Promise<void> {
 async function reset(): Promise<void> {
   const tx = db()
   await tx.$executeRawUnsafe(`DELETE FROM notifications WHERE organization_id = '${ORG_ID}'`)
+  await tx.$executeRawUnsafe(`DELETE FROM notification_outbox WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM payout_batch_items WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM payout_batches WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM advances WHERE organization_id = '${ORG_ID}'`)
@@ -553,6 +570,51 @@ suite('job auto-overdue (`15` §9.1/§10 · `91` idempotent)', () => {
       select: { id: true },
     })
     expect(second.map((row) => row.id).sort()).toEqual(first.map((row) => row.id).sort())
+  })
+
+  it('(ก) ส่งแจ้งเตือนล้มหลังมาร์ค overdue ⇒ job ไม่ล้ม · แถวคิวยังอยู่ · รอบส่งถัดไปส่งสำเร็จครั้งเดียว (DEC-015)', async () => {
+    const outbox = await import('@/lib/notifications/outbox')
+    const id = await seedOverdueCandidate()
+
+    dispatchFault.fail = true
+    try {
+      const result = await job.runAdvanceOverdueJob({ organizationId: ORG_ID, jobId: 'advance_overdue_u120' })
+      expect(result.marked).toBe(1)
+      expect(result.notifications).toMatchObject({ sent: 0, retried: 1 })
+    } finally {
+      dispatchFault.fail = false
+    }
+
+    const advance = await db().advance.findUniqueOrThrow({ where: { id }, select: { status: true } })
+    expect(advance.status).toBe('overdue')
+    const pending = await db().notificationOutbox.findMany({
+      where: { organizationId: ORG_ID },
+      select: { status: true, attempts: true, lastError: true, sourceJobType: true, sourceJobRef: true },
+    })
+    expect(pending).toHaveLength(1)
+    expect(pending[0]).toMatchObject({
+      status: 'pending',
+      attempts: 1,
+      sourceJobType: 'advance_overdue',
+      sourceJobRef: 'advance_overdue_u120',
+    })
+    expect(pending[0]?.lastError).toContain('จำลอง')
+    expect(await db().notification.count({ where: { organizationId: ORG_ID, eventCode: 'advance.overdue' } })).toBe(0)
+
+    // job รอบถัดไปไม่หยิบรายการเดิมแล้ว (overdue) — การส่งเป็นหน้าที่ของคิว
+    expect((await job.runAdvanceOverdueJob({ organizationId: ORG_ID })).marked).toBe(0)
+
+    const afterBackoff = new Date(Date.now() + 2 * 60 * 60 * 1000)
+    const drained = await outbox.drainNotificationOutbox({ organizationId: ORG_ID, now: afterBackoff })
+    expect(drained).toMatchObject({ sent: 1, notificationsCreated: 1 })
+    const again = await outbox.drainNotificationOutbox({ organizationId: ORG_ID, now: afterBackoff })
+    expect(again.due).toBe(0)
+
+    const notices = await db().notification.findMany({
+      where: { organizationId: ORG_ID, eventCode: 'advance.overdue' },
+      select: { userId: true },
+    })
+    expect(notices).toEqual([{ userId: AGENT_ID }])
   })
 
   it('audit ของ job ระบุ actor = ระบบ พร้อม job id ใน reason (`90` §13)', async () => {

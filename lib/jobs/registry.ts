@@ -8,6 +8,7 @@ import { runDailyFieldAllowanceJob } from '@/lib/field/daily-allowance-job'
 import { runFuelDistanceRetryJob } from '@/lib/field/fuel-distance-job'
 import type { JobRow } from '@/lib/jobs/engine'
 import { DEV_TRIGGER_PAYLOAD_FLAG, simulatedAsOfInstant, type JobTypeCode } from '@/lib/jobs/job-types'
+import { drainNotificationOutboxSafely, type OutboxDrainResult } from '@/lib/notifications/outbox'
 import { generatePaymentFile } from '@/lib/payout/queries'
 import { prisma } from '@/lib/prisma'
 import { runReportExportJob } from '@/lib/reports/export-job'
@@ -220,17 +221,23 @@ export const JOB_HANDLERS: Partial<Readonly<Record<JobTypeCode, JobHandler>>> = 
 
 export interface SweeperResult {
   fuelDistance: Awaited<ReturnType<typeof runFuelDistanceRetryJob>>
+  /** คิวแจ้งเตือนของ job (DEC-015) — `null` = รอบนี้ส่งไม่สำเร็จ (แถวยังค้างในคิว) */
+  notificationOutbox: OutboxDrainResult | null
 }
 
 /**
  * เรียกตัวกวาดคิวที่ดูแลสถานะ job ของตัวเอง — หนึ่งครั้งต่อรอบของตัวตั้งเวลา
- * (`fuel_distance_retry` ตามมติ PO 14/08/2569 D10)
+ * (`fuel_distance_retry` ตามมติ PO 14/08/2569 D10) แล้วปิดท้ายด้วย **คิวแจ้งเตือนของ job**
+ * (DEC-015 · มติ PO U120 — retry แถวที่ส่งไม่สำเร็จจากรอบก่อน ๆ · ใช้เวลาจริงเสมอ)
  */
 export async function runSweeperJobs(options: { now?: Date; organizationId?: string } = {}): Promise<SweeperResult> {
-  return {
-    fuelDistance: await runFuelDistanceRetryJob({
-      ...(options.now === undefined ? {} : { now: options.now }),
-      ...(options.organizationId === undefined ? {} : { organizationId: options.organizationId }),
-    }),
-  }
+  const fuelDistance = await runFuelDistanceRetryJob({
+    ...(options.now === undefined ? {} : { now: options.now }),
+    ...(options.organizationId === undefined ? {} : { organizationId: options.organizationId }),
+  })
+  const notificationOutbox = await drainNotificationOutboxSafely(
+    options.organizationId === undefined ? {} : { organizationId: options.organizationId },
+    'cron',
+  )
+  return { fuelDistance, notificationOutbox }
 }

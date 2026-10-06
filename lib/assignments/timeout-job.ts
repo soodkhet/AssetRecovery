@@ -1,6 +1,7 @@
 import { swapAssignment, type AssignmentTxClient } from '@/lib/assignments/queries'
-import { dispatchNotificationAwaited } from '@/lib/notifications/dispatch'
 import { reassignmentTimeoutMessage } from '@/lib/notifications/messages'
+import { drainNotificationOutboxSafely, enqueueNotificationOutbox, type OutboxDrainResult } from '@/lib/notifications/outbox'
+import { outboxMessageEntries } from '@/lib/notifications/outbox-core'
 import { prisma } from '@/lib/prisma'
 
 /**
@@ -38,6 +39,8 @@ export interface ReassignTimeoutResult {
   /** ถูกพนักงานตอบมาก่อนพอดี (แพ้การแข่ง) — ไม่ใช่ error */
   skipped: number
   caseIds: string[]
+  /** ผลการส่งคิวแจ้งเตือนท้ายรอบ (DEC-015) — `null` = ส่งไม่สำเร็จ รอบ cron ถัดไปส่งให้ */
+  notifications: OutboxDrainResult | null
 }
 
 export async function resolveExpiredReassignments(
@@ -67,7 +70,7 @@ export async function resolveExpiredReassignments(
     },
   })
 
-  const result: ReassignTimeoutResult = { due: due.length, resolved: 0, skipped: 0, caseIds: [] }
+  const result: ReassignTimeoutResult = { due: due.length, resolved: 0, skipped: 0, caseIds: [], notifications: null }
 
   for (const pending of due) {
     const changed = await prisma.$transaction(async (tx) => {
@@ -97,32 +100,41 @@ export async function resolveExpiredReassignments(
         events: ['assignment.reassignment_timeout_resolved'],
         auditReason: `[job:${jobId}] หมดเวลารอความยินยอม — ${pending.reason}`,
       })
-      return true
-    })
 
-    if (changed) {
-      result.resolved += 1
-      result.caseIds.push(pending.caseId)
       // ทั้งสามคนต้องรู้ผลที่ job ตัดสินให้: คนเดิม คนใหม่ และผู้จัดการที่ขอ (`90` §6.3 แถว 3)
-      // await เสมอ — job ต้องมั่นใจว่าเขียนแถวแล้วก่อนจบรอบ · `dedupeKey` ทำให้รันซ้ำไม่แจ้งซ้ำ
+      // เข้าคิว **ในทรานแซกชันเดียวกับการเปลี่ยนผู้รับผิดชอบ** (DEC-015 · มติ PO U120) — ส่งไม่สำเร็จไม่หายอีกต่อไป
       // ข้อความ/ลิงก์แยกตามผู้รับ (UAT BUG-059): คนใหม่ได้งาน → หน้างานรอรับ · คนเดิมเสียงาน → แท็บปิดแล้ว ·
-      // ผู้ขอ → หน้ามอบหมาย (พนักงานเปิด `/cases/assign` ไม่ได้)
+      // ผู้ขอ → หน้ามอบหมาย (พนักงานเปิด `/cases/assign` ไม่ได้) · `dedupeKey` ทำให้รันซ้ำไม่แจ้งซ้ำ
       const notice = { caseRef: pending.case.caseRef, pendingReassignmentId: pending.id }
       const audiences = [
         [pending.newAgentId, 'new_agent'],
         [pending.fromAgentId, 'previous_agent'],
         [pending.requestedBy, 'requester'],
       ] as const
-      for (const [userId, audience] of audiences) {
-        await dispatchNotificationAwaited(
-          { organizationId: pending.organizationId, userIds: [userId] },
-          reassignmentTimeoutMessage(notice, audience),
-        )
-      }
+      await enqueueNotificationOutbox(
+        tx,
+        audiences.flatMap(([userId, audience]) =>
+          outboxMessageEntries(pending.organizationId, [userId], reassignmentTimeoutMessage(notice, audience)),
+        ),
+        { jobType: REASSIGN_TIMEOUT_JOB_TYPE, jobRef: options.jobId ?? null },
+      )
+      return true
+    })
+
+    if (changed) {
+      result.resolved += 1
+      result.caseIds.push(pending.caseId)
     } else {
       result.skipped += 1
     }
   }
 
+  // ส่งคิวแจ้งเตือนท้ายรอบ — ล้มไม่ทำให้ job ล้ม (แถวค้างในคิว รอบ cron ถัดไปส่งให้)
+  if (result.resolved > 0) {
+    result.notifications = await drainNotificationOutboxSafely(
+      options.organizationId === undefined ? {} : { organizationId: options.organizationId },
+      REASSIGN_TIMEOUT_JOB_TYPE,
+    )
+  }
   return result
 }

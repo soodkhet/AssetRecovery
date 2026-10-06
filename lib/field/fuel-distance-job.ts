@@ -10,7 +10,8 @@ import {
   type ExpenseTxClient,
 } from '@/lib/field/expense-queries'
 import { Prisma } from '@/lib/generated/prisma/client'
-import { notifyExpensesAwaitingApprovalAwaited } from '@/lib/notifications/approval-queue'
+import { drainNotificationOutboxSafely, enqueueNotificationOutbox } from '@/lib/notifications/outbox'
+import { outboxExpenseApprovalEntries } from '@/lib/notifications/outbox-core'
 import { prisma } from '@/lib/prisma'
 
 /**
@@ -99,7 +100,13 @@ export async function runFuelDistanceRetryJob(
     }
 
     try {
-      const outcome = await createFuelExpense({ jobId, assignmentId, organizationId: job.organizationId, now })
+      const outcome = await createFuelExpense({
+        jobId,
+        sourceJobId: job.id,
+        assignmentId,
+        organizationId: job.organizationId,
+        now,
+      })
       if (outcome === 'created') result.created += 1
       if (outcome === 'zero' || outcome === 'skipped') result.skippedZero += 1
       await releaseJob(job.id, { status: 'completed', completedAt: now, result: { outcome } })
@@ -125,6 +132,13 @@ export async function runFuelDistanceRetryJob(
     }
   }
 
+  // ส่งคิวแจ้งผู้อนุมัติท้ายรอบ (DEC-015) — ล้มไม่ทำให้รอบนี้ล้ม แถวค้างในคิวให้รอบ cron ถัดไป
+  if (result.created > 0) {
+    await drainNotificationOutboxSafely(
+      options.organizationId === undefined ? {} : { organizationId: options.organizationId },
+      FUEL_DISTANCE_JOB_TYPE,
+    )
+  }
   return result
 }
 
@@ -132,6 +146,8 @@ type FuelOutcome = 'created' | 'zero' | 'skipped'
 
 async function createFuelExpense(params: {
   jobId: string
+  /** แถว `jobs` ของงานนี้ — ลงแถวคิวแจ้งเตือนเพื่อตามรอย (DEC-015) */
+  sourceJobId: string
   assignmentId: string
   organizationId: string
   now: Date
@@ -212,7 +228,7 @@ async function createFuelExpense(params: {
   const outcome = assignment.case.outcome ?? (assignment.status === 'closed_success' ? 'closed_success' : 'closed_fail')
   const status = initialCaseExpenseStatus(outcome)
 
-  const createdId = await prisma.$transaction(async (tx) => {
+  await prisma.$transaction(async (tx) => {
     const payeeId = await ensureAgentPayeeId(tx as ExpenseTxClient, {
       organizationId: params.organizationId,
       userId: assignment.agentId,
@@ -261,13 +277,15 @@ async function createFuelExpense(params: {
       },
       tx as ExpenseTxClient,
     )
-    return created.id
+
+    // มติ PO U29 — แถวที่เข้าคิวอนุมัติทันที (ปิดงานไม่สำเร็จ) แจ้งผู้อนุมัติขั้น 1 · รอบสำเร็จยังรอคลัง = ตัวส่งข้ามเอง
+    // เข้าคิวในทรานแซกชันเดียวกับการสร้างรายการ (DEC-015 · มติ PO U120) แล้วส่งท้ายรอบ — ส่งไม่สำเร็จไม่หาย
+    // และไม่ทำให้งานคำนวณที่ commit แล้วถูก retry
+    await enqueueNotificationOutbox(tx, outboxExpenseApprovalEntries(params.organizationId, [created.id]), {
+      jobType: FUEL_DISTANCE_JOB_TYPE,
+      jobRef: params.sourceJobId,
+    })
   })
 
-  // มติ PO U29 — แถวที่เข้าคิวอนุมัติทันที (ปิดงานไม่สำเร็จ) แจ้งผู้อนุมัติขั้น 1 · รอบสำเร็จยังรอคลัง = ข้ามเอง
-  // แจ้งไม่สำเร็จห้ามทำให้งานคำนวณที่ commit แล้วถูก retry (จะได้รายการซ้ำไม่ได้อยู่แล้ว แต่ไม่ต้องเสียรอบ)
-  await notifyExpensesAwaitingApprovalAwaited(params.organizationId, [createdId]).catch((error: unknown) => {
-    console.error('[fuel_distance_retry] แจ้งผู้อนุมัติไม่สำเร็จ', { expenseId: createdId, error })
-  })
   return 'created'
 }

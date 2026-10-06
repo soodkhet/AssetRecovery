@@ -20,8 +20,9 @@ import type { CaseOutcome } from '@/lib/generated/prisma/enums'
 import { parseSettleDate } from '@/lib/jobs/job-types'
 import { CREATE_ADJUSTMENT } from '@/lib/adjustments/adjustment'
 import { MANAGE_ACCOUNTING_PERIOD } from '@/lib/accounting/period'
-import { notifyExpensesAwaitingApprovalAwaited } from '@/lib/notifications/approval-queue'
 import { dispatchNotificationAwaited } from '@/lib/notifications/dispatch'
+import { drainNotificationOutboxSafely, enqueueNotificationOutbox } from '@/lib/notifications/outbox'
+import { outboxExpenseApprovalEntries } from '@/lib/notifications/outbox-core'
 import { fieldAllowancePeriodLockedMessage } from '@/lib/notifications/messages'
 import { ORGANIZATION_SCOPE, usersWithCapability } from '@/lib/notifications/recipients'
 import { prisma } from '@/lib/prisma'
@@ -81,7 +82,10 @@ export interface DailyFieldAllowanceJobResult {
    * แถวแจ้งเตือนฝ่ายการเงินที่สร้างจริงจากวันที่งวดปิดแล้ว (มติ PO U25) — รันซ้ำวันเดิม = 0 (กันซ้ำด้วยคีย์ต่อพนักงาน×วัน)
    */
   periodLockedNotified: number
-  /** แถวแจ้งเตือนผู้อนุมัติของรายการที่เข้าคิวอนุมัติ (มติ PO U29) */
+  /**
+   * แถวแจ้งเตือนที่สร้างจริงจากการส่งคิวท้ายรอบ (มติ PO U29 แจ้งผู้อนุมัติ · DEC-015 ผ่านคิว) —
+   * ส่งไม่สำเร็จ = 0 แต่แถวยังค้างในคิวให้รอบ cron ถัดไป
+   */
   approvalNotified: number
   expensesCreated: number
   revenueIdsCreated: string[]
@@ -162,18 +166,19 @@ export async function runDailyFieldAllowanceJob(
       result.settled += 1
       result.expensesCreated += outcome.expenseIds.length
       result.revenueIdsCreated.push(...outcome.revenueIds)
-      // มติ PO U29 — แถวที่เข้าคิวอนุมัติทันที (ไม่ต้องรอคลัง) แจ้งผู้อนุมัติขั้น 1 · ล้มห้ามทำให้รอบนี้ล้ม
-      result.approvalNotified += await notifyExpensesAwaitingApprovalAwaited(day.organizationId, outcome.expenseIds).catch(
-        (error: unknown) => {
-          console.error('[daily_field_allowance] แจ้งผู้อนุมัติไม่สำเร็จ', { day, error })
-          return 0
-        },
-      )
     } else if (outcome.kind === 'already_settled') result.alreadySettled += 1
     else {
       result.periodLocked += 1
       result.periodLockedNotified += await notifyPeriodLockedFieldDay(day, outcome)
     }
+  }
+  // ส่งคิวแจ้งผู้อนุมัติท้ายรอบ (DEC-015) — ล้มไม่ทำให้ job ล้ม แถวค้างในคิวให้รอบ cron ถัดไป
+  if (result.settled > 0) {
+    const drained = await drainNotificationOutboxSafely(
+      options.organizationId === undefined ? {} : { organizationId: options.organizationId },
+      DAILY_FIELD_ALLOWANCE_JOB_TYPE,
+    )
+    result.approvalNotified = drained?.notificationsCreated ?? 0
   }
   return result
 }
@@ -524,6 +529,16 @@ export async function persistFieldDaySettlement(
         caseIds: allCaseIds,
         actorId: ownerId,
       })
+
+      // มติ PO U29 — แถวที่เข้าคิวอนุมัติทันที (ไม่ต้องรอคลัง) แจ้งผู้อนุมัติขั้น 1 · ทาง job เข้าคิวแจ้งเตือน
+      // **ในทรานแซกชันนี้** (DEC-015 · มติ PO U120) แล้วส่งท้ายรอบ — ส่งไม่สำเร็จไม่หาย (ตัวส่งกรองแถวที่ไม่ได้รออนุมัติเอง)
+      // ทางเบิกย้อนหลัง (คนกด) ยังแจ้งหลัง commit แบบเดิม (`backdated-field-day.ts`)
+      if (mode.kind === 'job') {
+        await enqueueNotificationOutbox(tx, outboxExpenseApprovalEntries(day.organizationId, expenseIds), {
+          jobType: DAILY_FIELD_ALLOWANCE_JOB_TYPE,
+          jobRef: mode.realJobId,
+        })
+      }
 
       return {
         kind: 'settled' as const,

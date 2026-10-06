@@ -23,6 +23,7 @@
 | v3.6 | 05/10/2569 | **มติ PO 05/10/2569 (UAT U10)** — DEC-009 ข้อ (3) เติมหมายเหตุ: รายการ "✅ only" = **9** (Superadmin 6 + บริหาร 3) ตามโค้ดและมติ 14/08/2569 ไม่ใช่ 7 — ข้อความเดิมคงไว้เป็นประวัติ · ไม่มีการเปลี่ยนสิทธิ์ |
 | v3.5 | 03/10/2569 | **เพิ่ม DEC-012** (job รายวัน `daily_field_allowance` — ค่าน้ำมันเหมาจ่าย/เบี้ยเลี้ยงเกิดหลังจบวันแทนตอนปิดงาน · มติ PO UAT Q21) |
 | v3.7 | 05/10/2569 | **เพิ่ม DEC-014** (Storage ไม่มี policy ให้ผู้ใช้ — อัปโหลด/เปิดดูไฟล์ผ่านโทเคน/signed URL ที่ API ออกให้หลังตรวจสิทธิ์ · ปิด BUG-143) |
+| v3.8 | 06/10/2569 | **เพิ่ม DEC-015** (Notification outbox ของ job — เขียนคิวแจ้งเตือนในทรานแซกชันเดียวกับการเปลี่ยนสถานะ · ตัวส่งแยก idempotent · มติ PO U120) |
 
 ขอบเขตเอกสารนี้: บันทึกการตัดสินใจสำคัญของโปรเจกต์ทั้งหมด (scope, architecture, accounting boundary, workflow policy) — เป็น **single source of truth ของทุก DEC** ที่ไฟล์อื่นอ้างอิงกลับมา
 
@@ -285,6 +286,16 @@
 | Reason | policy เดิมเปิด SELECT/INSERT/UPDATE ทั้ง bucket `case-documents` ให้ผู้ใช้ login แล้วทุกคน + client สร้าง signed URL เองได้ ⇒ พนักงานภาคสนาม/ผู้ใช้บริษัทอ่าน/อัปโหลด/เขียนทับเอกสารลูกหนี้ของใครก็ได้ — ขัด DEC-002 (สิทธิ์ต้องตรวจที่ API) |
 | Impact | `lib/uploads/{targets,access,client,storage}.ts` · `app/api/storage/{upload-url,download-url}/route.ts` · ตัวอัปโหลดฝั่ง browser 3 ไฟล์ (`lib/{cases,field,warehouse}/upload-client.ts`) · `scripts/setup-storage.ts` · DEC-003 ยังใช้ Supabase Storage เหมือนเดิม แต่ "access policy ต่อ bucket" ถูกแทนด้วยการตรวจที่ API |
 | Reversible | สูง — เพิ่ม policy กลับได้ด้วย SQL (แต่จะเปิดรูเดิม) |
+
+### DEC-015 — Notification outbox: แจ้งเตือนของ job เข้าคิวในทรานแซกชันเดียวกับการเปลี่ยนสถานะ (06/10/2569)
+
+| Field | Value |
+|---|---|
+| Decision | job ที่เปลี่ยนสถานะแล้วต้องแจ้งเตือน **ห้ามเขียนแจ้งเตือนหลัง commit ตรง ๆ** — ให้เขียนแถวคิวลงตาราง `notification_outbox` (`02` §10 v4.48) **ใน `$transaction` เดียวกับการเปลี่ยนสถานะ** ผ่าน `enqueueNotificationOutbox(tx, …)` (rollback = ไม่มีแถว) · **ตัวส่งแยก** `drainNotificationOutbox()` รันท้าย job และทุกรอบ cron (`runSweeperJobs()` ใน `GET /api/cron/jobs`) — จองแถวด้วย conditional update + lease 5 นาที (ตัวส่งพร้อมกันได้แถวละตัวเดียว) แล้วเขียน `notifications` ผ่าน `dispatchNotificationAwaited()` เดิม · **idempotent**: แถวคิว UNIQUE `(organization_id, dedupe_key)` ⇒ job รันซ้ำไม่เข้าคิวซ้ำ · แจ้งเตือนใช้ `dedupeKey` ของข้อความ (id แบบ deterministic) ⇒ ตัวส่งตายหลังเขียนแจ้งเตือนแล้วส่งซ้ำก็ได้แถวเดียว · **retry/backoff**: ล้ม = เก็บ `last_error` + นับ `attempts` แล้วรอ 1, 2, 4 … นาที (เพดาน 60) · ครบ `max_attempts` (8) = `failed` · ตัวส่ง**ไม่โยน error** ⇒ job ที่ commit แล้วไม่ล้มตาม · **ตามรอยได้**: `source_job_type` + `source_job_ref` (id ของ job) · payload 2 ชนิด (Zod `outboxPayloadSchema`): `message` (ผู้รับ 1 คน/แถว — ข้อความสำเร็จรูป) และ `expense_approval_queue` (id รายการเบิก — หาผู้อนุมัติตอนส่งจากข้อมูลที่ commit แล้ว) · ใช้กับ job ที่เปลี่ยนสถานะ: `reassign_timeout`, `advance_overdue`, `daily_field_allowance` (แจ้งผู้อนุมัติ U29), `fuel_distance_retry` (แจ้งผู้อนุมัติ U29) · endpoint ที่ผู้ใช้รอผลยังใช้รุ่นยิงแล้วลืม (`after()`) เหมือนเดิม |
+| Approved by | Product Owner — มติ U120 (06/10/2569 · `uat/PO-DECISIONS-2569-10-04.md`) |
+| Reason | เดิม job เรียก `dispatchNotificationAwaited()` **หลัง** commit และไม่มี try/catch ⇒ ขั้นแจ้งเตือนล้ม = job ล้มทั้งที่สถานะเปลี่ยนแล้ว และรอบหน้าไม่หยิบรายการเดิมซ้ำ (เงื่อนไขสถานะไม่ตรงแล้ว) ⇒ แจ้งเตือนหายถาวร (at-most-once) — ผู้ยืมไม่รู้ว่าเงินทดรองเลยกำหนด / พนักงานไม่รู้ว่าได้งานใหม่ |
+| Impact | ตารางใหม่ `notification_outbox` + enum `notification_outbox_status` (migration `20261007000000_notification_outbox`) · `lib/notifications/{outbox,outbox-core}.ts` · `lib/assignments/timeout-job.ts` · `lib/advances/overdue-job.ts` · `lib/field/{daily-allowance-job,fuel-distance-job}.ts` · `lib/jobs/registry.ts` (`runSweeperJobs()`) · `91` §6.3 |
+| Reversible | สูง — job กลับไปเรียก dispatch หลัง commit ได้ (แต่จะกลับไปเป็น at-most-once) · ตารางเป็นคิวชั่วคราว ลบได้โดยไม่กระทบข้อมูลธุรกิจ |
 
 ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items)
 

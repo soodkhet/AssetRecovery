@@ -119,7 +119,7 @@
 | 392 | ### 8.3 — Final Test ทั้งระบบ (ด่านของ orchestrator) |
 | 398 | ## สรุปยอดรวม (ประมาณการ) |
 
-### `docs/02-database-schema-design.md` (243 KB, 2589 บรรทัด — v4.47)
+### `docs/02-database-schema-design.md` (248 KB, 2622 บรรทัด — v4.48)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -127,26 +127,26 @@
 | 3 | # 02 — Database Schema Design (Full Production Schema) |
 | 4 | ## AssetRecovery — Asset Recovery Operations Platform |
 | 11 | ## Changelog |
-| 82 | ## 1. Summary |
-| 85 | ## 2. Conventions (กฎที่ใช้ทั้งไฟล์) |
-| 87 | ### 2.1 Naming |
-| 97 | ### 2.2 Money |
-| 104 | ### 2.3 Timestamps |
-| 109 | ### 2.4 Common Columns (ทุก table มีครบ) |
-| 120 | ### 2.5 Permission Architecture |
-| 127 | ## 3. Enum Types (ทั้งหมด) |
-| 483 | ## 4. Schema Group A — Identity & Access |
-| 584 | ## 5. Schema Group B — Master Data |
-| 954 | ## 6. Schema Group C — Case Workflow |
-| 1330 | ## 7. Schema Group D — Warehouse (ไฟล์ 44) |
-| 1419 | ## 8. Schema Group E — Finance Operation |
-| 1870 | ## 9. Schema Group F — Accounting Handover |
-| 2283 | ## 10. Schema Group G — Platform |
-| 2403 | ## 11. Migration Order (ลำดับที่ต้อง run) |
-| 2478 | ## 12. Seed Data |
-| 2546 | ## 13. Immutable Rules (ห้ามแก้ไขย้อนหลัง) |
-| 2568 | ## 14. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
-| 2578 | ## 15. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
+| 83 | ## 1. Summary |
+| 86 | ## 2. Conventions (กฎที่ใช้ทั้งไฟล์) |
+| 88 | ### 2.1 Naming |
+| 98 | ### 2.2 Money |
+| 105 | ### 2.3 Timestamps |
+| 110 | ### 2.4 Common Columns (ทุก table มีครบ) |
+| 121 | ### 2.5 Permission Architecture |
+| 128 | ## 3. Enum Types (ทั้งหมด) |
+| 488 | ## 4. Schema Group A — Identity & Access |
+| 589 | ## 5. Schema Group B — Master Data |
+| 959 | ## 6. Schema Group C — Case Workflow |
+| 1335 | ## 7. Schema Group D — Warehouse (ไฟล์ 44) |
+| 1424 | ## 8. Schema Group E — Finance Operation |
+| 1875 | ## 9. Schema Group F — Accounting Handover |
+| 2288 | ## 10. Schema Group G — Platform |
+| 2436 | ## 11. Migration Order (ลำดับที่ต้อง run) |
+| 2512 | ## 12. Seed Data |
+| 2580 | ## 13. Immutable Rules (ห้ามแก้ไขย้อนหลัง) |
+| 2602 | ## 14. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
+| 2612 | ## 15. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
 ### `docs/02_OPEN_DECISIONS.md` (71 KB, 300 บรรทัด)
 
@@ -1374,7 +1374,7 @@
 | 231 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
 | 240 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
-### `docs/91-platform-api-integration-jobs.md` (27 KB, 229 บรรทัด — v2.9)
+### `docs/91-platform-api-integration-jobs.md` (32 KB, 245 บรรทัด — v2.9)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -1382,28 +1382,29 @@
 | 3 | # 91 — Platform API Integration & Background Jobs |
 | 4 | ## AssetRecovery — Asset Recovery Operations Platform |
 | 11 | ## Changelog |
-| 33 | ## 1. Summary |
-| 37 | ## 2. Purpose |
-| 41 | ## 3. In Scope |
-| 47 | ## 4. Out of Scope |
-| 52 | ## 5. Actors & Responsibilities |
-| 67 | ## 6. Core Concepts |
-| 75 | ### 6.1 Job Type ที่ระบบรู้จัก (จาก `02-database-schema-design.md` §10) |
-| 89 | ### 6.2 Job Lifecycle (State Diagram) |
-| 105 | ## 7. Data Entities / Required Objects |
-| 113 | ## 8. UI / UX Rules |
-| 120 | ## 9. Workflow / Lifecycle |
-| 124 | ## 10. Security / Control Rules |
-| 130 | ## 11. Validation & Error Handling |
-| 140 | ## 12. Permission Requirements |
-| 147 | ## 13. Audit Log Requirements |
-| 154 | ## 14. API / Integration Draft |
-| 165 | ### 14.1 Dev Trigger Endpoint (`/api/dev/trigger-job`) |
-| 176 | ### 14.2 Dev ส่ง/ล็อกงวดด้วยวันที่จำลอง (`/api/dev/accounting-periods/{id}/send\|lock` ... |
-| 192 | ## 15. Acceptance Criteria |
-| 199 | ## 16. Test Cases |
-| 211 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
-| 220 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
+| 34 | ## 1. Summary |
+| 38 | ## 2. Purpose |
+| 42 | ## 3. In Scope |
+| 48 | ## 4. Out of Scope |
+| 53 | ## 5. Actors & Responsibilities |
+| 68 | ## 6. Core Concepts |
+| 76 | ### 6.1 Job Type ที่ระบบรู้จัก (จาก `02-database-schema-design.md` §10) |
+| 90 | ### 6.2 Job Lifecycle (State Diagram) |
+| 106 | ### 6.3 คิวแจ้งเตือนของ job (Notification Outbox — มติ PO 06/10/2569 U120 · DEC-015) |
+| 118 | ## 7. Data Entities / Required Objects |
+| 126 | ## 8. UI / UX Rules |
+| 133 | ## 9. Workflow / Lifecycle |
+| 137 | ## 10. Security / Control Rules |
+| 143 | ## 11. Validation & Error Handling |
+| 153 | ## 12. Permission Requirements |
+| 160 | ## 13. Audit Log Requirements |
+| 167 | ## 14. API / Integration Draft |
+| 178 | ### 14.1 Dev Trigger Endpoint (`/api/dev/trigger-job`) |
+| 189 | ### 14.2 Dev ส่ง/ล็อกงวดด้วยวันที่จำลอง (`/api/dev/accounting-periods/{id}/send\|lock` ... |
+| 205 | ## 15. Acceptance Criteria |
+| 212 | ## 16. Test Cases |
+| 227 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
+| 237 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
 ### `docs/93-roadmap-open-items.md` (23 KB, 239 บรรทัด — v3.2)
 
@@ -1433,7 +1434,7 @@
 | 227 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
 | 232 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
-### `docs/94-decision-log.md` (39 KB, 297 บรรทัด — v3.7)
+### `docs/94-decision-log.md` (43 KB, 307 บรรทัด — v3.7)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -1441,38 +1442,39 @@
 | 3 | # 94 — Decision Log |
 | 4 | ## AssetRecovery — Asset Recovery Operations Platform |
 | 11 | ## Changelog |
-| 33 | ## 1. Summary |
-| 37 | ## 2. Purpose |
-| 41 | ## 3. In Scope |
-| 47 | ## 4. Out of Scope |
-| 52 | ## 5. Actors & Responsibilities |
-| 67 | ## 6. Core Concepts |
-| 75 | ## 7. Data Entities / Required Objects |
-| 82 | ## 8. UI / UX Rules |
-| 88 | ## 9. Workflow / Lifecycle |
-| 92 | ## 10. Security / Control Rules |
-| 97 | ## 11. Validation & Error Handling |
-| 106 | ## 12. Permission Requirements |
-| 114 | ## 13. Audit Log Requirements |
-| 121 | ## 14. API / Integration Draft |
-| 129 | ## 15. Acceptance Criteria |
-| 136 | ## 16. Test Cases |
-| 147 | ## 17. Decision Records (Source of Truth ทุก DEC ของโปรเจกต์) |
-| 149 | ### DEC-001 — Tech Stack (02/07/2569) |
-| 159 | ### DEC-002 — Permission Architecture (02/07/2569) |
-| 169 | ### DEC-003 — File Storage (02/07/2569) |
-| 179 | ### DEC-004 — Polymorphic Relation Pattern (02/07/2569) |
-| 189 | ### DEC-005 — UI Datetime Calendar Standard (03/07/2569) |
-| 199 | ### DEC-006 — Batch 6 Consistency Sync: คำตอบ D1–D10 ครบชุด (04/07/2569) |
-| 209 | ### DEC-007 — Mockup Audit: ผลตรวจ HTML Mockup ทั้งชุด (04/07/2569) |
-| 219 | ### DEC-008 — Service Fee Template แสดงผลแบบการ์ด (05/07/2569) |
-| 229 | ### DEC-009 — Functional Permission Matrix ใช้ระดับสิทธิ์ 3 ระดับ (05/07/2569) |
-| 239 | ### DEC-010 — Login ด้วยอีเมลหรือ username + ผู้ดูแลตั้งรหัสผ่านให้ผู้ใช้ (03/10/2569) |
-| 249 | ### DEC-011 — Playwright เป็นเครื่องมือ UAT ฝั่ง dev (03/10/2569) |
-| 259 | ### DEC-012 — ค่าน้ำมันเหมาจ่าย/เบี้ยเลี้ยงเกิดจาก job รายวันหลังจบวัน (03/10/2569) |
-| 269 | ### DEC-013 — SheetJS ติดตั้งจาก cdn.sheetjs.com (pin tarball) ไม่ใช่ npm registry (04/... |
-| 279 | ### DEC-014 — Storage: ไม่มี policy ให้ผู้ใช้ · ทุกการเข้าถึงไฟล์ผ่าน server + โทเคน/si... |
-| 289 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
+| 34 | ## 1. Summary |
+| 38 | ## 2. Purpose |
+| 42 | ## 3. In Scope |
+| 48 | ## 4. Out of Scope |
+| 53 | ## 5. Actors & Responsibilities |
+| 68 | ## 6. Core Concepts |
+| 76 | ## 7. Data Entities / Required Objects |
+| 83 | ## 8. UI / UX Rules |
+| 89 | ## 9. Workflow / Lifecycle |
+| 93 | ## 10. Security / Control Rules |
+| 98 | ## 11. Validation & Error Handling |
+| 107 | ## 12. Permission Requirements |
+| 115 | ## 13. Audit Log Requirements |
+| 122 | ## 14. API / Integration Draft |
+| 130 | ## 15. Acceptance Criteria |
+| 137 | ## 16. Test Cases |
+| 148 | ## 17. Decision Records (Source of Truth ทุก DEC ของโปรเจกต์) |
+| 150 | ### DEC-001 — Tech Stack (02/07/2569) |
+| 160 | ### DEC-002 — Permission Architecture (02/07/2569) |
+| 170 | ### DEC-003 — File Storage (02/07/2569) |
+| 180 | ### DEC-004 — Polymorphic Relation Pattern (02/07/2569) |
+| 190 | ### DEC-005 — UI Datetime Calendar Standard (03/07/2569) |
+| 200 | ### DEC-006 — Batch 6 Consistency Sync: คำตอบ D1–D10 ครบชุด (04/07/2569) |
+| 210 | ### DEC-007 — Mockup Audit: ผลตรวจ HTML Mockup ทั้งชุด (04/07/2569) |
+| 220 | ### DEC-008 — Service Fee Template แสดงผลแบบการ์ด (05/07/2569) |
+| 230 | ### DEC-009 — Functional Permission Matrix ใช้ระดับสิทธิ์ 3 ระดับ (05/07/2569) |
+| 240 | ### DEC-010 — Login ด้วยอีเมลหรือ username + ผู้ดูแลตั้งรหัสผ่านให้ผู้ใช้ (03/10/2569) |
+| 250 | ### DEC-011 — Playwright เป็นเครื่องมือ UAT ฝั่ง dev (03/10/2569) |
+| 260 | ### DEC-012 — ค่าน้ำมันเหมาจ่าย/เบี้ยเลี้ยงเกิดจาก job รายวันหลังจบวัน (03/10/2569) |
+| 270 | ### DEC-013 — SheetJS ติดตั้งจาก cdn.sheetjs.com (pin tarball) ไม่ใช่ npm registry (04/... |
+| 280 | ### DEC-014 — Storage: ไม่มี policy ให้ผู้ใช้ · ทุกการเข้าถึงไฟล์ผ่าน server + โทเคน/si... |
+| 290 | ### DEC-015 — Notification outbox: แจ้งเตือนของ job เข้าคิวในทรานแซกชันเดียวกับการเปลี่ยนส... |
+| 300 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
 ### `docs/95-diagrams.md` (20 KB, 460 บรรทัด — v2)
 
