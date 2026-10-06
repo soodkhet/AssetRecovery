@@ -717,8 +717,10 @@ suite('Phase 2.6 — ยามสิทธิ์ + ข้อมูลประ�
     await queries.assignCase(manager, other, { agentId: AGENT_B }, { actor: manager, meta })
   })
 
-  it('หัวหน้าทีมเข้าถึงทีมที่ไม่ได้สังกัดไม่ได้ = PERMISSION_DENIED', async () => {
-    await expectCode(() => agentQueries.listTeamAgents(supervisor, TEAM_B), 'PERMISSION_DENIED')
+  it('หัวหน้าทีมเข้าถึงทีมที่ไม่ได้สังกัดไม่ได้ = TEAM_NOT_FOUND เหมือนทีมที่ไม่มีจริง (U138)', async () => {
+    await expectCode(() => agentQueries.listTeamAgents(supervisor, TEAM_B), 'TEAM_NOT_FOUND')
+    await expectCode(() => agentQueries.getTeamKanban(supervisor, TEAM_B, {}), 'TEAM_NOT_FOUND')
+    await expectCode(() => agentQueries.listAgentCases(supervisor, TEAM_B, AGENT_B), 'TEAM_NOT_FOUND')
   })
 
   it('active_case_count / success_rate / covered_provinces ตรงกับข้อมูลจริง', async () => {

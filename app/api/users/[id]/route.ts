@@ -6,7 +6,7 @@ import { userDeleteSchema, userUpdateSchema } from '@/lib/users/schemas'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
-/** `GET /api/users/:id` — ผู้ใช้รายคน (404 แบบไม่ leak ข้ามองค์กร · นอก scope = 403) */
+/** `GET /api/users/:id` — ผู้ใช้รายคน (404 แบบไม่ leak ทั้งข้ามองค์กรและนอก scope — มติ PO U138) */
 export const GET = withApiPermission<RouteContext>(
   'view',
   'manage_users',

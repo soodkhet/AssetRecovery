@@ -1,3 +1,4 @@
+import { clearSessionCache } from '@/lib/auth/session-cache'
 import { randomUUID } from 'node:crypto'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
@@ -263,6 +264,9 @@ suite('Final ด่าน 4 — security (route จริง + session จริ
       load('rolePermissions', () => import('@/app/api/roles/[id]/permissions/route')),
       load('auditLogs', () => import('@/app/api/audit-logs/route')),
       load('users', () => import('@/app/api/users/route')),
+      load('userDetail', () => import('@/app/api/users/[id]/route')),
+      load('teamDetail', () => import('@/app/api/teams/[id]/route')),
+      load('teamAgents', () => import('@/app/api/teams/[id]/agents/route')),
       load('financeCompanies', () => import('@/app/api/finance-companies/route')),
       load('devTrigger', () => import('@/app/api/dev/trigger-job/route')),
       load('devLock', () => import('@/app/api/dev/accounting-periods/[id]/lock/route')),
@@ -414,6 +418,41 @@ suite('Final ด่าน 4 — security (route จริง + session จริ
       expect(ids).toContain(CASE_T1_C1)
       expect(ids).not.toContain(CASE_T2_C2)
       expect(ids).not.toContain(CASE_ORG_B)
+    })
+
+    it('ผู้จัดการทีม: ผู้ใช้/ทีมนอก scope = 404 เหมือน id ที่ไม่มีจริง (U138)', async () => {
+      // Superadmin มอบสิทธิ์ดูผู้ใช้/ทีมให้ผู้จัดการ (ค่าเริ่มต้นไม่มี) — scope ทีมยังต้องคุมระดับแถว
+      const managerRoleId = roleIds.get(`${ORG_A}:inhouse:${TEAM_MANAGER_ROLE_NAME}`) ?? ''
+      for (const code of ['manage_users', 'view_master_data']) {
+        const capability = await db().capability.findUniqueOrThrow({ where: { code }, select: { id: true } })
+        await db().roleCapability.upsert({
+          where: { roleId_capabilityId: { roleId: managerRoleId, capabilityId: capability.id } },
+          update: { accessLevel: 'view' },
+          create: { roleId: managerRoleId, capabilityId: capability.id, accessLevel: 'view' },
+        })
+      }
+      clearSessionCache()
+      const users = routes['userDetail'] ?? {}
+      const own = await call('manager', users, 'GET', `/api/users/${userId.agent1}`, { id: userId.agent1 })
+      expect(own.status).toBe(200)
+      const otherUser = await denialShape('manager', users, (id) => `/api/users/${id}`, userId.agent2)
+      const missingUser = await denialShape('manager', users, (id) => `/api/users/${id}`, RANDOM_ID)
+      expect(otherUser).toEqual({ status: 404, code: 'USER_NOT_FOUND' })
+      expect(otherUser).toEqual(missingUser)
+
+      const teams = routes['teamDetail'] ?? {}
+      const ownTeam = await call('manager', teams, 'GET', `/api/teams/${TEAM_1}`, { id: TEAM_1 })
+      expect(ownTeam.status).toBe(200)
+      const otherTeam = await denialShape('manager', teams, (id) => `/api/teams/${id}`, TEAM_2)
+      const missingTeam = await denialShape('manager', teams, (id) => `/api/teams/${id}`, RANDOM_ID)
+      expect(otherTeam).toEqual({ status: 404, code: 'TEAM_NOT_FOUND' })
+      expect(otherTeam).toEqual(missingTeam)
+
+      const agents = routes['teamAgents'] ?? {}
+      const otherAgents = await denialShape('manager', agents, (id) => `/api/teams/${id}/agents`, TEAM_2)
+      const missingAgents = await denialShape('manager', agents, (id) => `/api/teams/${id}/agents`, RANDOM_ID)
+      expect(otherAgents.status).toBe(404)
+      expect(otherAgents).toEqual(missingAgents)
     })
 
     it('พนักงาน: เคสตัวเอง 200 · เคสทีมอื่น = ตอบเหมือนไม่มี record · รับงานแทนคนอื่นไม่ได้', async () => {

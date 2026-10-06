@@ -1,8 +1,8 @@
 import { FIELD_AGENT_ROLE_NAME } from '@/lib/auth/constants'
+import { isWithinScope } from '@/lib/auth/scope'
 import type { SessionUser } from '@/lib/auth/types'
 import { ACTIVE_ASSIGNMENT_STATUSES, assignmentStateOf } from '@/lib/assignments/assignment'
 import { AssignmentError } from '@/lib/assignments/errors'
-import { assertTeamInScope } from '@/lib/assignments/queries'
 import type { KanbanQuery } from '@/lib/assignments/schemas'
 import { successRate, toDecisionSupport } from '@/lib/assignments/success-rate'
 import type {
@@ -29,7 +29,10 @@ const CLOSED_CASE_STATUSES = ['closed_success', 'closed_fail'] as const
 const HELD_STATUSES: AssignmentStatus[] = [...ACTIVE_ASSIGNMENT_STATUSES]
 
 async function loadTeamInScope(user: SessionUser, teamId: string) {
-  assertTeamInScope(user, teamId)
+  // ทีมนอก scope = ตอบเหมือนไม่มีจริง (404 — มติ PO U138 · ไม่ leak ว่ามี record)
+  if (!isWithinScope(user.scope, { teamId })) {
+    throw new AssignmentError('TEAM_NOT_FOUND', { context: { teamId } })
+  }
   const team = await prisma.team.findFirst({
     where: { id: teamId, organizationId: user.organizationId, deletedAt: null },
     select: { id: true, name: true, side: true, provinces: true },

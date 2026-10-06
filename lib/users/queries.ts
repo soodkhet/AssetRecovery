@@ -139,11 +139,11 @@ function userScopeFilter(user: SessionUser): Prisma.UserWhereInput {
   }
 }
 
-/** แถวนอก scope ตอบ 403 ไม่ใช่ 404 (ผู้เรียกรู้อยู่แล้วว่ามีผู้ใช้คนอื่นในองค์กร) */
+/** แถวนอก scope ตอบ 404 เหมือนผู้ใช้ที่ไม่มีจริง — ไม่ leak ว่ามี record (มติ PO U138) */
 function assertUserInScope(actor: SessionUser, target: { id: string; teamId: string | null; companyId: string | null }): void {
   if (target.id === actor.id) return
   if (!isWithinScope(actor.scope, { teamId: target.teamId, companyId: target.companyId, userId: target.id })) {
-    throw new AuthError('PERMISSION_DENIED', `target=${target.id} user=${actor.id}`)
+    throw new UserError('USER_NOT_FOUND', { detail: `user=${target.id} out of scope actor=${actor.id}` })
   }
 }
 
@@ -200,9 +200,9 @@ export async function getUser(user: SessionUser, userId: string): Promise<UserDt
   })
   if (!row) throw new UserError('USER_NOT_FOUND', { detail: `user=${userId}` })
   assertUserInScope(user, { id: row.id, teamId: row.teamId, companyId: row.companyId })
-  // กลุ่มที่มองไม่เห็น (ธุรการ ↔ กลุ่ม system — UAT BUG-021) = 403 เหมือนแถวนอก scope · ตัวเองเห็นเสมอ
+  // กลุ่มที่มองไม่เห็น (ธุรการ ↔ กลุ่ม system — UAT BUG-021) = 404 เหมือนแถวนอก scope (U138) · ตัวเองเห็นเสมอ
   if (row.id !== user.id && !canViewAccountsIn(user, row.role.roleGroup)) {
-    throw new AuthError('PERMISSION_DENIED', `target=${row.id} roleGroup=${row.role.roleGroup} user=${user.id}`)
+    throw new UserError('USER_NOT_FOUND', { detail: `user=${row.id} roleGroup=${row.role.roleGroup} hidden actor=${user.id}` })
   }
   return toDto(row)
 }

@@ -20,6 +20,7 @@ import {
   PORTAL_VIEW_AS_CAPABILITIES,
   readPortalViewAsParam,
 } from '@/lib/portal/view-as'
+import { recordPortalViewAsOpen } from '@/lib/portal/view-as-audit'
 import { prisma } from '@/lib/prisma'
 
 /**
@@ -216,9 +217,13 @@ async function resolveViewAs(
 
   const company = await prisma.financeCompany.findFirst({
     where: { id: rawCompanyId, organizationId: user.organizationId, deletedAt: null },
-    select: { id: true, status: true },
+    select: { id: true, name: true, status: true },
   })
   if (company === null) return deny('PERMISSION_DENIED', 'view_as_company_not_found')
+
+  // เรียก API ตรง (ไม่ผ่านหน้า view-as) ก็ต้องมีร่องรอยการเปิดโหมด (มติ PO U141) — ครั้งแรกต่อ session ต่อบริษัท
+  // ใช้ตัวเดียวกับหน้า จึงไม่ลงซ้ำเมื่อหน้าลงไว้แล้ว · audit ล้มไม่ทำให้การดู (GET) ล้ม
+  await recordPortalViewAsOpen(user, company, request ? getRequestMeta(request) : undefined)
 
   return {
     user,

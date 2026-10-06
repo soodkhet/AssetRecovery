@@ -19,7 +19,10 @@ const emitAuditMock = vi.hoisted(() => vi.fn())
 vi.mock('@/lib/audit/audit', () => ({ emitAudit: emitAuditMock }))
 
 const findCompanyMock = vi.hoisted(() => vi.fn())
-vi.mock('@/lib/prisma', () => ({ prisma: { financeCompany: { findFirst: findCompanyMock } } }))
+const findAuditMock = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/prisma', () => ({
+  prisma: { financeCompany: { findFirst: findCompanyMock }, auditLog: { findFirst: findAuditMock } },
+}))
 
 const { requirePortalAccess, requirePortalRow, portalScopedUser, portalViewAsAuditFields } = await import('@/lib/portal/guard')
 
@@ -82,13 +85,15 @@ beforeEach(() => {
   loadCompanyStatusMock.mockReset()
   emitAuditMock.mockReset()
   findCompanyMock.mockReset()
+  findAuditMock.mockReset()
+  findAuditMock.mockResolvedValue(null)
   loadCompanyStatusMock.mockResolvedValue('active')
   emitAuditMock.mockResolvedValue(undefined)
-  findCompanyMock.mockResolvedValue({ id: COMPANY_A, status: 'active' })
+  findCompanyMock.mockResolvedValue({ id: COMPANY_A, name: 'ไฟแนนซ์ A', status: 'active' })
 })
 
 describe('requirePortalAccess — ?as=<companyId>', () => {
-  it('ผู้ใช้ภายในที่มีสิทธิ์ → context ของบริษัทนั้น สิทธิ์เท่าผู้จัดการ (ทุกหมวด + ดาวน์โหลด) · ไม่ลง audit', async () => {
+  it('ผู้ใช้ภายในที่มีสิทธิ์ → context ของบริษัทนั้น สิทธิ์เท่าผู้จัดการ (ทุกหมวด + ดาวน์โหลด) · ลง audit เปิดโหมด (U141)', async () => {
     const viewer = staff()
     getRawSessionUserMock.mockResolvedValue(viewer)
     const ctx = await requirePortalAccess('finance', { download: true, request: req(`/api/portal/tax-invoices?as=${COMPANY_A}`) })
@@ -103,7 +108,25 @@ describe('requirePortalAccess — ?as=<companyId>', () => {
     expect(findCompanyMock).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: COMPANY_A, organizationId: ORG, deletedAt: null } }),
     )
+    // เรียก API ตรงก็ลง audit view_as (มติ PO U141) — ตัวเดียวกับหน้า view-as
+    expect(emitAuditMock).toHaveBeenCalledTimes(1)
+    expect(lastAudit()).toMatchObject({ action: 'view_as', targetType: 'finance_companies', targetId: COMPANY_A, actorId: viewer.id })
+  })
+
+  it('เปิดโหมดซ้ำใน session เดิม (มีแถว view_as แล้ว) → ไม่ลง audit ซ้ำ (U141)', async () => {
+    getRawSessionUserMock.mockResolvedValue(staff())
+    findAuditMock.mockResolvedValue({ id: 'audit-1' })
+    await requirePortalAccess('cases', { request: req(`/api/portal/cases?as=${COMPANY_A}`) })
     expect(emitAuditMock).not.toHaveBeenCalled()
+  })
+
+  it('audit เปิดโหมดล้ม → การดูยังผ่าน (GET ล้วน)', async () => {
+    getRawSessionUserMock.mockResolvedValue(staff())
+    emitAuditMock.mockRejectedValue(new Error('db down'))
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const ctx = await requirePortalAccess('cases', { request: req(`/api/portal/cases?as=${COMPANY_A}`) })
+    expect(ctx.companyId).toBe(COMPANY_A)
+    errorSpy.mockRestore()
   })
 
   it('Superadmin (โดยนิยาม) เปิดดูได้', async () => {

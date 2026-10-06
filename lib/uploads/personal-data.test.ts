@@ -25,6 +25,22 @@ describe('ไฟล์ข้อมูลส่วนบุคคล (มติ P
     })
   })
 
+  it('ฉบับเซ็นใบรับรองแทนใบเสร็จ = บันทึก (U141)', () => {
+    expect(personalDataFileOf(`substitute-receipts/${WHT_ID}/signed/k.pdf`)).toEqual({
+      kind: 'substitute_receipt_signed',
+      targetType: 'substitute_receipts',
+      targetId: WHT_ID,
+      fileName: 'k.pdf',
+    })
+    const entry = buildPersonalFileViewAudit({
+      actor,
+      path: `substitute-receipts/${WHT_ID}/signed/k.pdf`,
+      ipAddress: null,
+      userAgent: null,
+    })
+    expect(entry).toMatchObject({ action: 'view', targetType: 'substitute_receipts', targetId: WHT_ID })
+  })
+
   it.each([
     `cases/${CASE_ID}/product_photo/k.jpg`,
     `cases/${CASE_ID}/field_evidence/photo/k.jpg`,

@@ -2,7 +2,6 @@ import { emitAudit } from '@/lib/audit/audit'
 import { FIELD_AGENT_ROLE_NAME } from '@/lib/auth/constants'
 import { AuthError } from '@/lib/auth/errors'
 import type { RequestMeta } from '@/lib/auth/request-meta'
-import { isWithinScope } from '@/lib/auth/scope'
 import type { SessionUser } from '@/lib/auth/types'
 import {
   ACCEPTED_ASSIGNMENT_STATUSES,
@@ -876,14 +875,6 @@ export async function swapAssignment(
   )
 
   return replacement
-}
-
-// ── scope ระดับแถวของ endpoint ที่อ้างทีมตรง (`40` §20 — หัวหน้าข้ามทีมไม่ได้) ──
-
-export function assertTeamInScope(user: SessionUser, teamId: string): void {
-  if (!isWithinScope(user.scope, { teamId })) {
-    throw new AuthError('PERMISSION_DENIED', `team=${teamId} user=${user.id}`)
-  }
 }
 
 export type { AssignmentState }

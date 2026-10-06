@@ -1,6 +1,5 @@
 import { emitAudit } from '@/lib/audit/audit'
 import { onUniqueViolation } from '@/lib/api/unique-violation'
-import { AuthError } from '@/lib/auth/errors'
 import type { RequestMeta } from '@/lib/auth/request-meta'
 import { isWithinScope } from '@/lib/auth/scope'
 import type { SessionUser } from '@/lib/auth/types'
@@ -106,10 +105,10 @@ function teamScopeFilter(user: SessionUser): { id?: { in: string[] } } {
   return { id: { in: [...user.scope.teamIds] } }
 }
 
-/** ทีมที่อยู่นอก scope ตอบ 403 — ไม่ใช่ 404 (ผู้ใช้รู้อยู่แล้วว่ามีทีมอื่นในองค์กร) */
+/** ทีมที่อยู่นอก scope ตอบ 404 เหมือนทีมที่ไม่มีจริง — ไม่ leak ว่ามี record (มติ PO U138) */
 function assertTeamInScope(user: SessionUser, teamId: string): void {
   if (!isWithinScope(user.scope, { teamId })) {
-    throw new AuthError('PERMISSION_DENIED', `team=${teamId} user=${user.id}`)
+    throw new TeamError('TEAM_NOT_FOUND', { detail: `team=${teamId} out of scope user=${user.id}` })
   }
 }
 
