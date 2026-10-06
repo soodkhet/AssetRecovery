@@ -56,7 +56,7 @@ import {
 /** ตัว refine ที่ใช้ร่วมได้ระหว่าง schema ฝั่งฟอร์ม (ไม่มี `reason`) และ schema ของ API */
 type RefineFn<T> = (values: T, ctx: z.RefinementCtx) => void
 
-const uuidSchema = z.string().uuid('รูปแบบรหัสไม่ถูกต้อง')
+const uuidSchema = z.string().guid('รูปแบบรหัสไม่ถูกต้อง')
 const nameSchema = z.string().trim().min(2, 'ชื่อสั้นเกินไป').max(120, 'ชื่อยาวเกินไป')
 /** ช่องข้อความสั้นที่ยอมให้ว่างได้ — ฟอร์มส่ง `''` มาเสมอ ต้องแปลงเป็น null **ก่อน** ตรวจรูปแบบ */
 const optionalText = (max: number) =>

@@ -10,7 +10,7 @@ import { dateOnlySchema } from '@/lib/api/validation'
  *    เพื่อให้ผู้ใช้ได้ code `CANCEL_REQUIRES_REASON` ตรงตาม `31` §11 ไม่ใช่ field error ทั่วไป
  */
 
-const uuidSchema = z.string().uuid('รูปแบบรหัสไม่ถูกต้อง')
+const uuidSchema = z.string().guid('รูปแบบรหัสไม่ถูกต้อง')
 
 export const salesListQuerySchema = z.object({
   periodId: uuidSchema.optional(),

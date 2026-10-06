@@ -75,12 +75,11 @@ export function ExportFormatsTab() {
               <Th>ไฟล์</Th>
               <Th>รูปแบบ</Th>
               <Th>เนื้อหา / คอลัมน์หลัก</Th>
-              <Th className="text-right">สเปคต้นทาง</Th>
             </Tr>
           </THead>
           {/* `TableState` เรนเดอร์ `<tbody>` ของตัวเอง — วางเป็นพี่น้องกับ `TBody` */}
           <TableState
-            colSpan={4}
+            colSpan={3}
             loading={loading}
             error={error}
             isEmpty={items.length === 0}
@@ -111,9 +110,6 @@ export function ExportFormatsTab() {
                   </Td>
                   <Td>
                     <span className="text-xs text-slate-600">{item.content}</span>
-                  </Td>
-                  <Td className="text-right">
-                    <Badge className="bg-slate-100 text-slate-600">ไฟล์ {item.sourceFile}</Badge>
                   </Td>
                 </Tr>
               ))}

@@ -12,7 +12,7 @@ import { reasonSchema, requiredIdSchema } from '@/lib/api/validation'
  * = กระทบ **สิทธิ์** (`90` §13)
  */
 
-const uuidSchema = z.string().uuid('รูปแบบรหัสไม่ถูกต้อง')
+const uuidSchema = z.string().guid('รูปแบบรหัสไม่ถูกต้อง')
 
 export const teamSideSchema = z.enum(['inhouse', 'outsource'])
 export const teamStatusSchema = z.enum(['active', 'inactive'])

@@ -47,7 +47,7 @@ export type ScheduleCaseInput = z.infer<typeof scheduleCaseSchema>
 /** `PATCH /api/field/cases/reorder` — ลำดับใหม่ทั้งวัน (`41` §8 `reorder_schedule`) */
 export const reorderSchedulesSchema = z.object({
   date: dateOnlySchema('วันที่'),
-  orderedCaseIds: z.array(z.uuid('รหัสเคสไม่ถูกต้อง')).min(1, 'ต้องมีอย่างน้อย 1 เคส').max(100),
+  orderedCaseIds: z.array(z.guid('รหัสเคสไม่ถูกต้อง')).min(1, 'ต้องมีอย่างน้อย 1 เคส').max(100),
 })
 
 export type ReorderSchedulesInput = z.infer<typeof reorderSchedulesSchema>
@@ -163,7 +163,7 @@ export const hotelClaimSchema = z.object({
   hotelNights: hotelNightsSchema.default(HOTEL_NIGHTS_DEFAULT),
   /** ใบเสร็จออกในนามบริษัท (มติ PO U96 #14) — ผู้เบิกติ๊กเอง · ไม่ส่ง = ไม่ติ๊ก */
   receiptInCompanyName: z.boolean().default(false),
-  sharedWithUserId: z.uuid('ผู้พักร่วมไม่ถูกต้อง').nullish(),
+  sharedWithUserId: z.guid('ผู้พักร่วมไม่ถูกต้อง').nullish(),
   /** ใบเสร็จจริง — ไม่มีใบเสร็จให้ส่ง `substituteReceipt` แทน (มติ PO U103 · อย่างใดอย่างหนึ่งเท่านั้น) */
   receiptFileUrl: fileUrl.nullish(),
   /** ติ๊ก "ไม่มีใบเสร็จ" → รายการของใบรับรองแทนใบเสร็จ · ยอดรวมของรายการต้องเท่ากับยอดเบิก */

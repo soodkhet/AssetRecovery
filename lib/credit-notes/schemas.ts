@@ -9,7 +9,7 @@ import { MAX_STORAGE_PATH_LENGTH } from '@/lib/uploads/targets'
  * ⚠️ `vatSatang` ไม่ส่ง = ใช้ค่าที่คำนวณจากอัตราเดิม · ส่งมา = ยอดตามเอกสาร (ตรวจ ±1 สตางค์ที่ service)
  */
 
-const uuidSchema = z.string().uuid('รูปแบบรหัสไม่ถูกต้อง')
+const uuidSchema = z.string().guid('รูปแบบรหัสไม่ถูกต้อง')
 
 /** `credit` = ใบลดหนี้ (ม.86/10) · `debit` = ใบเพิ่มหนี้ (ม.86/9 — มติ PO U19) */
 export const creditNoteTypeSchema = z.enum(['credit', 'debit'], { message: 'เลือกชนิดเอกสาร' })

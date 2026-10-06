@@ -105,3 +105,20 @@ describe('parseStoragePath', () => {
     expect(parseStoragePath(`cases/${CASE_ID.toUpperCase()}/contract_doc/a.pdf`)).toEqual({ kind: 'case', caseId: CASE_ID })
   })
 })
+
+describe('BUG-173 — id จาก seed (ไม่ใช่ UUID ตาม version RFC) ต้องผ่าน', () => {
+  const SEED_ORG_ID = '00000000-0000-0000-0000-000000000001'
+
+  it('organization_logo รับ id องค์กรจาก seed', () => {
+    const parsed = uploadTargetSchema.safeParse({ kind: 'organization_logo', organizationId: SEED_ORG_ID })
+    expect(parsed.success).toBe(true)
+  })
+
+  it('ยังปฏิเสธค่าที่ไม่ใช่รูปแบบ UUID', () => {
+    expect(uploadTargetSchema.safeParse({ kind: 'organization_logo', organizationId: 'not-a-uuid' }).success).toBe(false)
+    expect(
+      uploadTargetSchema.safeParse({ kind: 'organization_logo', organizationId: '00000000-0000-0000-0000-00000000001' })
+        .success,
+    ).toBe(false)
+  })
+})

@@ -174,8 +174,9 @@ export function SlaPolicyTab() {
         </Field>
 
         <InlineAlert tone="warning" title="ค่านี้ใช้กับรายงานเท่านั้น">
+          {/* มติ PO 15/08/2569 · D18 */}
           เกินเกณฑ์แล้วระบบไม่บล็อกงาน ไม่มอบหมายใหม่อัตโนมัติ และไม่มีค่าปรับ — เป็นตัวเลขสำหรับติดตามผลในรายงาน
-          O2/O4 เท่านั้น (มติ PO 15/08/2569 · D18)
+          O2/O4 เท่านั้น
         </InlineAlert>
 
         <Can action="manage" resource={MANAGE_SETTINGS}>

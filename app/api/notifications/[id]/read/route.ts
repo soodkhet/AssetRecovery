@@ -6,7 +6,7 @@ import { withAuthErrors } from '@/lib/auth/require-permission'
 import { requireInternalSession } from '@/lib/auth/internal-session'
 import { markNotificationsRead } from '@/lib/notifications/queries'
 
-const paramsSchema = z.object({ id: z.uuid() })
+const paramsSchema = z.object({ id: z.guid() })
 
 type RouteContext = { params: Promise<{ id: string }> }
 

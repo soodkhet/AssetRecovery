@@ -10,7 +10,7 @@ import { MAX_STORAGE_PATH_LENGTH } from '@/lib/uploads/targets'
  *    ยกเว้น `resolve-unmatched` ที่ note บังคับเสมอทุกกรณี (`35` §10) จึงบังคับที่ schema ได้เลย
  */
 
-const uuidSchema = z.string().uuid('รูปแบบรหัสไม่ถูกต้อง')
+const uuidSchema = z.string().guid('รูปแบบรหัสไม่ถูกต้อง')
 
 export const bankMatchStatusSchema = z.enum([
   'unmatched',

@@ -36,6 +36,8 @@ function dto(overrides: Partial<CompensationApprovalDto> = {}): CompensationAppr
     whtPctUsed: 0,
     whtRateSource: 'payee',
     whtWarning: null,
+    whtPayerBorne: false,
+    whtFromPayout: false,
     status: 'pending_approval',
     approvalStepCurrent: 1,
     approvalStepTotal: 2,

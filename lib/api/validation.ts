@@ -22,6 +22,9 @@ export const reasonSchema = z
  * "กรุณาเลือก…" เป็นภาษาไทย ไม่ใช่ข้อความดิบของ Zod "Invalid input: expected string, received undefined"
  * หรือ "รูปแบบรหัสไม่ถูกต้อง" ที่ทำให้ผู้ใช้งง (UAT BUG-003/BUG-017) · ค่าที่มีแต่ไม่ใช่ UUID ยังได้ข้อความรูปแบบเดิม
  *
+ * ใช้ `.guid()` (8-4-4-4-12 hex เท่ากับที่ Postgres `uuid` รับ) ไม่ใช่ `.uuid()` ของ Zod 4 ที่บังคับ version RFC
+ * ⇒ id จาก seed แบบ `00000000-0000-0000-0000-000000000001` ผ่านได้ (BUG-173 — ทั้ง repo ใช้ guid ทั้งหมด)
+ *
  * `label` = ชื่อช่องตามที่ผู้ใช้เห็น เช่น `requiredIdSchema('บทบาท')` → "กรุณาเลือกบทบาท"
  */
 export function requiredIdSchema(label: string) {
@@ -29,7 +32,7 @@ export function requiredIdSchema(label: string) {
   return z
     .string({ error: () => required })
     .min(1, required)
-    .uuid('รูปแบบรหัสไม่ถูกต้อง')
+    .guid('รูปแบบรหัสไม่ถูกต้อง')
 }
 
 /** เพดานเงินต่อช่อง 1,000,000,000 สตางค์ = 10 ล้านบาท — กันพิมพ์ผิดหลักจนล้น INTEGER */

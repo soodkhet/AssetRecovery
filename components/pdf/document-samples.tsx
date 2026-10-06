@@ -8,7 +8,7 @@ import { PackCover } from '@/components/pdf/pack-cover'
 import { PaymentVouchers } from '@/components/pdf/payment-voucher'
 import { PayoutBatchSummary } from '@/components/pdf/payout-batch-summary'
 import { Payslips } from '@/components/pdf/payslip'
-import { SampleMode } from '@/components/pdf/sample-stamp'
+import { runInSampleMode } from '@/components/pdf/sample-stamp'
 import { SubstituteReceiptPdf } from '@/components/pdf/substitute-receipt'
 import { TaxInvoicePDF } from '@/components/pdf/tax-invoice'
 import { ensureThaiFont } from '@/components/pdf/thai-font'
@@ -42,7 +42,7 @@ import { buildWhtCertificateDoc } from '@/lib/wht/wht'
  * เรนเดอร์ **ตัวอย่างเอกสาร** (มติ PO U104) ด้วย component + builder **ตัวเดียวกับเอกสารจริงทุกใบ**
  * ⇒ หน้าตาตัวอย่างตรงกับที่ระบบออกจริงเสมอ (แก้แบบเอกสาร = ตัวอย่างเปลี่ยนตามเอง)
  *
- * ต่างจากของจริง 2 อย่าง: ข้อมูลสมมติจาก `lib/documents/samples/fixtures.ts` และห่อ `<SampleMode>`
+ * ต่างจากของจริง 2 อย่าง: ข้อมูลสมมติจาก `lib/documents/samples/fixtures.ts` และเรนเดอร์ภายใน `runInSampleMode`
  * ⇒ ทุกหน้าพิมพ์ลายน้ำ + แถบ "ตัวอย่าง — ไม่ใช่เอกสารจริง" (`components/pdf/sample-stamp.tsx`)
  */
 
@@ -115,7 +115,6 @@ function documentOf(type: DocumentSampleType, context: DocumentSampleContext): R
 export async function renderDocumentSample(type: DocumentSampleType, context: DocumentSampleContext): Promise<Buffer> {
   ensureThaiFont()
   const document = documentOf(type, context)
-  // `<SampleMode>` เป็น context provider (ไม่ใช่ node ของ PDF) — react-pdf เรนเดอร์ `<Document>` ข้างในตามปกติ
-  const wrapped = <SampleMode>{document}</SampleMode>
-  return renderToBuffer(wrapped as unknown as ReactElement<DocumentProps>)
+  // ไม่ใช้ React context (BUG-172) — สถานะโหมดตัวอย่างไหลผ่าน AsyncLocalStorage ตลอดการเรนเดอร์ (sync + async)
+  return runInSampleMode(() => renderToBuffer(document))
 }

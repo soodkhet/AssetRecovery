@@ -112,3 +112,26 @@ export function approvalErrorToast(error: ApiCallError): { title: string; messag
   }
   return { title: error.title, message: error.message, stale: false }
 }
+
+/**
+ * ป้ายช่องภาษีบนคิวอนุมัติ/ค่าตอบแทน (BUG-176) — เงื่อนไข (2)/(3) บริษัทออกภาษีให้ ⇒ ไม่ใช่ยอด "หัก" จากผู้รับ
+ */
+export function whtAmountLabel(item: { whtPayerBorne: boolean }): string {
+  return item.whtPayerBorne ? 'ภาษีที่บริษัทออกให้' : 'WHT'
+}
+
+/** คำอธิบายใต้ยอดภาษีใน modal "ดูสูตร" (BUG-176) */
+export function whtAmountHint(item: {
+  whtPctUsed: number
+  whtRateSource: 'payee' | 'plan'
+  whtPayerBorne: boolean
+  whtFromPayout: boolean
+}, fmtPct: (pct: number) => string): string {
+  const parts = [
+    fmtPct(item.whtPctUsed),
+    item.whtRateSource === 'payee' ? 'จาก Tax Profile ของผู้รับเงิน' : 'ตกไปใช้อัตราของแผน',
+  ]
+  if (item.whtPayerBorne) parts.push('บริษัทออกให้ ไม่หักจากผู้รับ')
+  parts.push(item.whtFromPayout ? 'ยอดตามรอบจ่ายที่บันทึกแล้ว' : 'ยอดคาดการณ์ — ยอดจริงคิดตอนสร้างรอบจ่าย')
+  return parts.join(' · ')
+}

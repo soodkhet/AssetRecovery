@@ -132,7 +132,7 @@ export const JOB_TYPE_SPECS: Readonly<Record<JobTypeCode, JobTypeSpec>> = {
   fuel_distance_retry: {
     code: 'fuel_distance_retry',
     label: 'คำนวณระยะทางค่าน้ำมันย้อนหลัง',
-    description: 'คำนวณระยะทางที่ตอนปิดงานคำนวณไม่ได้ แล้วสร้างรายการเบิกค่าน้ำมันให้ครบ (D10)',
+    description: 'คำนวณระยะทางที่ตอนปิดงานคำนวณไม่ได้ แล้วสร้างรายการเบิกค่าน้ำมันให้ครบ', // D10
     source: 'มติ PO 14/08/2569 (D10) · `41` §10',
     inSpecCatalog: false,
     // ตัวกวาดคิวของตัวเอง (`SWEEPER_JOB_TYPES` ใน `lib/jobs/registry.ts`) — ตัวตั้งเวลาเรียก handler

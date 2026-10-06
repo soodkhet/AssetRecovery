@@ -36,6 +36,10 @@ describe('requiredIdSchema()', () => {
   it('UUID ถูกต้องผ่าน', () => {
     expect(schema.safeParse(VALID_ID).success).toBe(true)
   })
+
+  it('BUG-173: id จาก seed (ไม่ระบุ version RFC) ผ่าน', () => {
+    expect(schema.safeParse('00000000-0000-0000-0000-000000000002').success).toBe(true)
+  })
 })
 
 describe('dropdown บังคับของฟอร์ม master data', () => {

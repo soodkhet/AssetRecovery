@@ -48,6 +48,7 @@ import {
   expenseRowHighlight,
   pendingClaimTotalSatang,
   type ClaimStatusFilter,
+  whtAmountLabel,
 } from '@/lib/compensation/approval-ui'
 import { EXPENSE_STATUS_LABEL, EXPENSE_TYPE_LABEL, expenseStatusBadgeGroup } from '@/lib/field/expense-ui'
 import { fmtDate } from '@/lib/format/datetime'
@@ -181,7 +182,7 @@ export function ApprovalTab() {
                       <Td numeric>
                         <p className="font-semibold text-slate-800">{fmtSatangSymbol(item.grossSatang)}</p>
                         <p className="text-[11px] text-slate-500">
-                          WHT: {fmtSatangSymbol(item.whtSatang)} → Net:{' '}
+                          {whtAmountLabel(item)}: {fmtSatangSymbol(item.whtSatang)} → Net:{' '}
                           <span className="font-semibold text-emerald-700">{fmtSatangSymbol(item.netSatang)}</span>
                         </p>
                       </Td>

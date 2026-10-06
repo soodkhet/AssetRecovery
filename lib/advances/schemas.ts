@@ -13,7 +13,7 @@ import { substituteReceiptDraftSchema } from '@/lib/substitute-receipts/schemas'
  * ห้ามใช้ `fromInputDate()` ซึ่งให้เที่ยงคืนไทย = วันที่เพี้ยนไป 1 วัน (ดู REUSE_INDEX)
  */
 
-const uuidSchema = z.string().uuid('รูปแบบรหัสไม่ถูกต้อง')
+const uuidSchema = z.string().guid('รูปแบบรหัสไม่ถูกต้อง')
 
 const optionalText = (max: number, label: string) =>
   z.preprocess(

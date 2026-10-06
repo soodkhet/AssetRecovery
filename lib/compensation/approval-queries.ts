@@ -33,7 +33,10 @@ import {
   type ApprovalMatrixCandidate,
 } from '@/lib/finance/approval-flow-resolver'
 import { FinanceError } from '@/lib/finance/errors'
-import { calculateWhtForPayee } from '@/lib/finance/wht-calc'
+import { approvalWhtPreview, type ApprovalWhtPreview } from '@/lib/compensation/approval-wht'
+import { resolvePayoutSide } from '@/lib/payout/payout'
+import { resolveWhtPolicyForPayout } from '@/lib/settings/queries/wht-policy'
+import type { WhtPolicyValues } from '@/lib/settings/wht-policy'
 import { Prisma } from '@/lib/generated/prisma/client'
 import type { ExpenseStatus } from '@/lib/generated/prisma/enums'
 import { notifyExpensesAwaitingApproval } from '@/lib/notifications/approval-queue'
@@ -117,9 +120,20 @@ const expenseSelect = {
       /** ผู้ใช้เจ้าของ Payee — ปลายทางของการแจ้งเตือนผลอนุมัติ/ตีกลับ (`90` §6.3 แถว 6) */
       userId: true,
       isVerified: true,
-      user: { select: { fullName: true } },
+      user: {
+        select: { fullName: true, team: { select: { side: true } }, role: { select: { roleGroup: true } } },
+      },
       taxProfile: { select: { whtPct: true, whtBasis: true, whtMinThresholdSatang: true } },
+      // BUG-176 — ปัจจัย WHT ชุดเดียวกับตอนสร้างรอบจ่าย (ประเภทเงินได้ · อัตรา 40(2) · เงื่อนไขการหัก)
+      wht402Pct: true,
+      whtCondition: true,
+      payeeType: true,
     },
+  },
+  /** BUG-176 — รายการเข้ารอบจ่ายแล้ว ⇒ แสดงยอดที่บันทึกในรอบ (คัดตัวที่ตรง `payoutBatchItemId`) */
+  payoutBatchItemId: true,
+  payoutItems: {
+    select: { id: true, whtSatang: true, netSatang: true, whtPctSnapshot: true, whtCondition: true },
   },
   case: { select: { id: true, caseRef: true, debtorName: true } },
   assignment: { select: { teamId: true, agent: { select: { fullName: true } } } },
@@ -284,15 +298,20 @@ export function describeExpenseBasis(row: {
 
 // ── DTO ─────────────────────────────────────────────────────────────────────
 
-function toDto(row: ExpenseRow, flow: ResolvedFlow, viewer: CapabilityHolder): CompensationApprovalDto {
-  const pendingStep = row.status === 'approved' ? null : row.approvalStepCurrent
-  const pendingStepRole = pendingStep === null ? null : (flow.steps[pendingStep - 1] ?? null)
+/** ค่าตั้ง WHT ที่มีผล ณ ตอนนี้ — ตัวเดียวกับที่รอบจ่ายใช้ (`resolveWhtPolicyForPayout()`) */
+async function currentWhtPolicy(organizationId: string): Promise<WhtPolicyValues> {
+  return (await resolveWhtPolicyForPayout(organizationId, new Date())).values
+}
 
-  // `22` §6.9 · `18` §6.3 — **Payee ชนะ Plan** โดยตัวคำนวณกลาง ห้ามประกอบกฎ priority เองที่นี่
-  const wht = calculateWhtForPayee({
+function whtOf(row: ExpenseRow, policy: WhtPolicyValues): ApprovalWhtPreview {
+  const payoutItem =
+    row.payoutBatchItemId === null ? undefined : row.payoutItems.find((item) => item.id === row.payoutBatchItemId)
+  return approvalWhtPreview({
     grossSatang: row.grossSatang,
-    source: {
-      payeeTaxProfile:
+    expenseType: row.expenseType,
+    planWhtPct: row.compPlan?.whtPct.toNumber() ?? null,
+    payee: {
+      taxProfile:
         row.payee.taxProfile === null
           ? null
           : {
@@ -300,9 +319,38 @@ function toDto(row: ExpenseRow, flow: ResolvedFlow, viewer: CapabilityHolder): C
               whtBasis: row.payee.taxProfile.whtBasis as WhtBasis,
               whtMinThresholdSatang: row.payee.taxProfile.whtMinThresholdSatang,
             },
-      planWhtPct: row.compPlan?.whtPct.toNumber() ?? null,
+      wht402Pct: row.payee.wht402Pct === null ? null : row.payee.wht402Pct.toNumber(),
+      whtCondition: row.payee.whtCondition,
+      payeeType: row.payee.payeeType,
+      side: resolvePayoutSide({
+        teamSide: row.payee.user.team?.side ?? null,
+        roleGroup: row.payee.user.role.roleGroup,
+      }),
     },
+    policy,
+    payoutItem:
+      payoutItem === undefined
+        ? null
+        : {
+            whtSatang: payoutItem.whtSatang,
+            netSatang: payoutItem.netSatang,
+            whtPctSnapshot: payoutItem.whtPctSnapshot === null ? null : payoutItem.whtPctSnapshot.toNumber(),
+            whtCondition: payoutItem.whtCondition,
+          },
   })
+}
+
+function toDto(
+  row: ExpenseRow,
+  flow: ResolvedFlow,
+  viewer: CapabilityHolder,
+  policy: WhtPolicyValues,
+): CompensationApprovalDto {
+  const pendingStep = row.status === 'approved' ? null : row.approvalStepCurrent
+  const pendingStepRole = pendingStep === null ? null : (flow.steps[pendingStep - 1] ?? null)
+
+  // `22` §6.9 · `18` §6.3 — **Payee ชนะ Plan** + ฐาน/ประเภทเงินได้/เงื่อนไขการหัก ผ่านตัวคำนวณเดียวกับรอบจ่าย (BUG-176)
+  const wht = whtOf(row, policy)
 
   return {
     id: row.id,
@@ -323,8 +371,10 @@ function toDto(row: ExpenseRow, flow: ResolvedFlow, viewer: CapabilityHolder): C
     whtSatang: wht.whtSatang,
     netSatang: wht.netSatang,
     whtPctUsed: wht.whtPctUsed,
-    whtRateSource: wht.rate.source,
-    whtWarning: wht.rate.warning ?? null,
+    whtRateSource: wht.whtRateSource,
+    whtWarning: wht.whtWarning,
+    whtPayerBorne: wht.whtPayerBorne,
+    whtFromPayout: wht.whtFromPayout,
     status: row.status,
     approvalStepCurrent: row.approvalStepCurrent,
     approvalStepTotal: flow.totalSteps,
@@ -403,7 +453,10 @@ export async function listCompensationApprovals(
   })
   if (rows.length === 0) return []
 
-  const candidates = await loadMatrixCandidates(user.organizationId)
+  const [candidates, policy] = await Promise.all([
+    loadMatrixCandidates(user.organizationId),
+    currentWhtPolicy(user.organizationId),
+  ])
   // `16` §10 — ผู้อนุมัติขั้น N เห็นเฉพาะรายการที่ถึงขั้นของตน (UAT R6-7) · กรองหลังรู้สายของแต่ละรายการ
   // (สาย snapshot/คาดการณ์ต่างกันรายแถว จึงกรองใน SQL ตรง ๆ ไม่ได้)
   return rows.flatMap((row) => {
@@ -413,7 +466,7 @@ export async function listCompensationApprovals(
       approvalStepCurrent: row.approvalStepCurrent,
       steps: flow.steps,
     })
-    return visible ? [toDto(row, flow, user)] : []
+    return visible ? [toDto(row, flow, user, policy)] : []
   })
 }
 
@@ -625,7 +678,7 @@ export async function approveCompensationExpense(
   }
 
   return {
-    expense: toDto(outcome.row, { ...flow, projected: false }, user),
+    expense: toDto(outcome.row, { ...flow, projected: false }, user, await currentWhtPolicy(user.organizationId)),
     events: outcome.events,
     revenueEligibleCaseIds: outcome.revenueEligibleCaseIds,
   }
@@ -738,7 +791,7 @@ export async function rejectCompensationExpense(
   )
 
   return {
-    expense: toDto(updated, flow ?? fallbackFlow(updated), user),
+    expense: toDto(updated, flow ?? fallbackFlow(updated), user, await currentWhtPolicy(user.organizationId)),
     events: ['expense.rejected'],
   }
 }

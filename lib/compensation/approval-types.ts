@@ -43,6 +43,10 @@ export interface CompensationApprovalDto {
   /** `payee` = ใช้ Tax Profile ของผู้รับเงิน · `plan` = fallback ชั่วคราว ต้องโชว์ `whtWarning` */
   whtRateSource: 'payee' | 'plan'
   whtWarning: string | null
+  /** BUG-176 — เงื่อนไข (2)/(3) บริษัทออกภาษีให้ ⇒ `whtSatang` = ภาษีที่ออกให้ (ไม่หักจากผู้รับ) · `net = gross` */
+  whtPayerBorne: boolean
+  /** BUG-176 — true = ยอด WHT/Net มาจากรายการรอบจ่ายที่บันทึกแล้ว (ยอดโอนจริง) · false = คาดการณ์ */
+  whtFromPayout: boolean
   status: ExpenseStatus
   approvalStepCurrent: number
   approvalStepTotal: number
@@ -62,8 +66,8 @@ export const compensationListQuerySchema = z.object({
   status: z
     .enum(['pending_approval', 'pending_finance_approval', 'needs_revision', 'approved', 'all'])
     .default('all'),
-  caseId: z.string().uuid().optional(),
-  payeeId: z.string().uuid().optional(),
+  caseId: z.string().guid().optional(),
+  payeeId: z.string().guid().optional(),
 })
 
 export const compensationApproveSchema = z.object({
