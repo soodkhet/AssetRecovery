@@ -6,6 +6,7 @@ import {
   buildQueueItems,
   canViewCaseBoard,
   caseBoardHref,
+  canShowArOver60,
   dashboardKpiSource,
   showFieldTrackerShortcut,
   visibleDashboardQueues,
@@ -204,6 +205,7 @@ export async function getDashboardOverview(user: SessionUser, now: Date = new Da
 
   return {
     kpiSource: dashboardKpiSource(user),
+    arOver60: canShowArOver60(user),
     queues: buildQueueItems(defs, Object.fromEntries(countEntries)),
     caseBoard,
     fieldTracker: showFieldTrackerShortcut(user),

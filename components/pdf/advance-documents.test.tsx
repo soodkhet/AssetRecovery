@@ -236,6 +236,13 @@ describe('ใบรับรองแทนใบเสร็จรับเง�
     expect(doc.cancelled?.detail).toContain('กรอกรายการผิดวัน')
     expect(missingGlyphs(docTexts(doc))).toEqual([])
   })
+
+  it('มติ PO U117 — ใบที่ออกแทนพิมพ์ "ออกแทนเลขที่ <เลขเดิม>" · ใบออกครั้งแรกไม่มีบรรทัดนี้', () => {
+    expect(buildSubstituteReceiptDoc(CRT, LH).meta.map((entry) => entry.label)).not.toContain('ออกแทนเลขที่')
+    const doc = buildSubstituteReceiptDoc({ ...CRT, replacesReceiptNumber: 'CRT-2569-0006' }, LH)
+    expect(doc.meta).toContainEqual({ label: 'ออกแทนเลขที่', value: 'CRT-2569-0006' })
+    expect(missingGlyphs(docTexts(doc))).toEqual([])
+  })
 })
 
 /** ตั้ง `PDF_SAMPLE_DIR=<โฟลเดอร์>` ตอนรัน ⇒ เขียนไฟล์ตัวอย่างไว้ตรวจด้วยตา (ไม่ commit) */

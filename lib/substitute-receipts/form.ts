@@ -1,4 +1,5 @@
-import { parseBahtInput } from '@/lib/format/money'
+import { parseBahtInput, toBahtInput } from '@/lib/format/money'
+import type { SubstituteReceiptLineDto } from '@/lib/substitute-receipts/types'
 import { substituteReceiptDraftSchema } from '@/lib/substitute-receipts/schemas'
 
 /**
@@ -53,4 +54,22 @@ export function substituteDraftPayload(
     return { payload: null, error: `${prefix}${issue?.message ?? 'กรอกรายการให้ครบ'}` }
   }
   return { payload: { lines }, error: null }
+}
+
+/**
+ * บรรทัดของใบที่ยกเลิก → ฟอร์ม "ออกใบใหม่แทน" (มติ PO U117 ข้อ 1 — ดึงรายการ/ยอดมาให้แก้ได้)
+ * ไม่มีบรรทัด = บรรทัดว่าง 1 แถววันที่ `fallbackDate`
+ */
+export function substituteLinesToDrafts(
+  lines: readonly SubstituteReceiptLineDto[],
+  fallbackDate = '',
+): SubstituteLineDraft[] {
+  if (lines.length === 0) return [emptySubstituteLine('line-0', fallbackDate)]
+  return lines.map((line, index) => ({
+    key: `line-${index}`,
+    lineDate: line.lineDate,
+    description: line.description,
+    amountBaht: toBahtInput(line.amountSatang),
+    note: line.note ?? '',
+  }))
 }

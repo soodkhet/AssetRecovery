@@ -42,6 +42,7 @@ interface Envelope {
   success: boolean
   data?: {
     kpiSource: string
+    arOver60: boolean
     queues: { id: string; count: number; capped: boolean }[]
     caseBoard: { rows: { status: string; count: number }[]; total: number; href: string | null } | null
     fieldTracker: boolean
@@ -108,6 +109,8 @@ describe('GET /api/dashboard — สิทธิ์', () => {
 
     expect(status).toBe(200)
     expect(body.data?.kpiSource).toBe('finance')
+    // U115 — การเงินไม่เห็นการ์ดผู้บริหาร ⇒ ไม่มีบรรทัด "เกิน 60 วัน"
+    expect(body.data?.arOver60).toBe(false)
     expect(body.data?.queues.map((queue) => [queue.id, queue.count])).toEqual([
       ['exception_critical_open', 2],
       ['bank_unmatched', 1],
@@ -184,6 +187,7 @@ describe('GET /api/dashboard — Superadmin', () => {
     const { body } = await call()
 
     expect(body.data?.kpiSource).toBe('executive')
+    expect(body.data?.arOver60).toBe(true)
     expect(body.data?.queues).toHaveLength(17)
     expect(body.data?.caseBoard?.rows).toHaveLength(7)
     // active 4 + pending_review 2 + ปิดสำเร็จเดือนนี้ 1 + ปิดไม่สำเร็จเดือนนี้ 1

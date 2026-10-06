@@ -42,6 +42,7 @@ const TEAM_ID = '00000000-0000-4000-8000-000000c70006'
 const PAYEE_ID = '00000000-0000-4000-8000-000000c70007'
 const OTHER_PAYEE_ID = '00000000-0000-4000-8000-000000c70008'
 const ADV_ID = '00000000-0000-4000-8000-000000c700a1'
+const TAX_PROFILE_ID = '00000000-0000-4000-8000-000000c700b1'
 
 /** วันที่ออกใบคงที่ (ต.ค. 2569 เวลาไทย) — เลข CRT-2569-… */
 const AT = new Date('2026-10-06T03:00:00Z')
@@ -51,6 +52,7 @@ let receipts: typeof import('@/lib/substitute-receipts/queries')
 let advances: typeof import('@/lib/advances/queries')
 let advanceDocs: typeof import('@/lib/advances/doc-queries')
 let fieldExpenses: typeof import('@/lib/field/expense-queries')
+let approvals: typeof import('@/lib/compensation/approval-queries')
 
 function db(): PrismaClient {
   if (!url) throw new Error('ไม่มี TEST_DATABASE_URL')
@@ -113,13 +115,13 @@ async function expectCode(run: () => Promise<unknown>, code: string): Promise<vo
 
 let expenseSeq = 0
 
-async function seedHotelExpense(payeeId = PAYEE_ID, status = 'pending_approval'): Promise<string> {
+async function seedHotelExpense(payeeId = PAYEE_ID, status = 'pending_approval', type = 'hotel'): Promise<string> {
   expenseSeq += 1
   const id = `00000000-0000-4c70-8000-${String(expenseSeq).padStart(12, '0')}`
   await db().$executeRawUnsafe(`
     INSERT INTO expenses (id, organization_id, payee_id, expense_type, gross_satang, expense_date, status,
                           calculation_source, created_by)
-    VALUES ('${id}', '${ORG_ID}', '${payeeId}', 'hotel', 10000, '2026-10-05', '${status}', 'receipt', '${AGENT_ID}')
+    VALUES ('${id}', '${ORG_ID}', '${payeeId}', '${type}', 10000, '2026-10-05', '${status}', 'receipt', '${AGENT_ID}')
   `)
   return id
 }
@@ -156,6 +158,7 @@ async function reset(): Promise<void> {
   await tx.$executeRawUnsafe(`DELETE FROM advances WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM finance_policy_settings WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM document_number_series WHERE organization_id = '${ORG_ID}'`)
+  await tx.$executeRawUnsafe(`UPDATE payee_profiles SET tax_profile_id = NULL WHERE organization_id = '${ORG_ID}'`)
 }
 
 beforeAll(async () => {
@@ -165,6 +168,7 @@ beforeAll(async () => {
   advances = await import('@/lib/advances/queries')
   advanceDocs = await import('@/lib/advances/doc-queries')
   fieldExpenses = await import('@/lib/field/expense-queries')
+  approvals = await import('@/lib/compensation/approval-queries')
 
   const tx = db()
   await tx.$executeRawUnsafe(`
@@ -573,21 +577,7 @@ suite('U107 — ยกเลิกใบรับรองแทนใบเส�
     )
 
     // DTO ของใบเบิกแสดงใบที่ใช้งานอยู่ (ไม่ใช่ใบที่ยกเลิก)
-    const rows = await db().substituteReceipt.findMany({
-      where: { expenseId },
-      select: {
-        id: true,
-        receiptNumber: true,
-        status: true,
-        totalSatang: true,
-        issueDate: true,
-        signedAt: true,
-        cancelledAt: true,
-        cancelReason: true,
-        createdAt: true,
-        deletedAt: true,
-      },
-    })
+    const rows = await db().substituteReceipt.findMany({ where: { expenseId }, select: receipts.substituteReceiptRefSelect })
     expect(receipts.substituteReceiptRefOf(rows)?.id).toBe(reissued.id)
 
     const newPath = `substitute-receipts/${reissued.id}/signed/55555555-5555-4555-8555-555555555555.pdf`
@@ -619,5 +609,124 @@ suite('U107 — ยกเลิกใบรับรองแทนใบเส�
     // ใบใช้งานได้ไม่เกิน 1 ใบต่อใบเบิก (ใบที่ยกเลิกไม่นับ)
     await issueFor(expenseId, [10_000])
     await expect(issueFor(expenseId, [10_000])).rejects.toThrow()
+  })
+})
+
+suite('U117 — ออกใบใหม่แทน: ดึงรายการเดิม · "ออกแทนเลขที่" · การ์ดยังเห็นใบที่ยกเลิก · ปฏิเสธใบเบิกค่าที่พักถาวร', () => {
+  const ctxOf = (actor: SessionUser) => ({ actor, meta })
+
+  it('รายละเอียดใบ (บรรทัด) ให้ฟอร์มออกใบใหม่ตั้งต้น · นอก scope 404', async () => {
+    const expenseId = await seedHotelExpense()
+    const issued = await issueFor(expenseId, [6_000, 4_000])
+    await receipts.cancelSubstituteReceipt(ctxOf(agent), issued.id, { reason: 'กรอกวันที่ผิด ขอออกใหม่' })
+    const detail = await receipts.getSubstituteReceiptDetail(agent, issued.id)
+    expect(detail).toMatchObject({ receiptNumber: issued.receiptNumber, status: 'cancelled', totalSatang: 10_000 })
+    expect(detail.lines.map((entry) => [entry.lineDate, entry.amountSatang])).toEqual([
+      ['2026-10-03', 6_000],
+      ['2026-10-03', 4_000],
+    ])
+    await expectCode(() => receipts.getSubstituteReceiptDetail(otherAgent, issued.id), 'SUBSTITUTE_RECEIPT_NOT_FOUND')
+  })
+
+  it('ใบใหม่เก็บเลขใบที่แทน · PDF พิมพ์ "ออกแทนเลขที่" · การ์ดแสดงใบใหม่ + ใบที่ยกเลิก · แทนได้ครั้งเดียว/แก้ไม่ได้ (DB)', async () => {
+    const expenseId = await seedHotelExpense()
+    const issued = await issueFor(expenseId, [10_000])
+    await receipts.cancelSubstituteReceipt(ctxOf(agent), issued.id, { reason: 'เซ็นผิดช่อง ต้องออกใหม่' })
+    const reissued = await receipts.reissueSubstituteReceipt(ctxOf(agent), issued.id, [line(10_000)])
+    expect(reissued.replacesReceiptNumber).toBe(issued.receiptNumber)
+    const row = await db().substituteReceipt.findUniqueOrThrow({ where: { id: reissued.id } })
+    expect(row.replacesReceiptId).toBe(issued.id)
+
+    const rows = await db().substituteReceipt.findMany({ where: { expenseId }, select: receipts.substituteReceiptRefSelect })
+    const ref = receipts.substituteReceiptRefOf(rows)
+    expect(ref).toMatchObject({ id: reissued.id, replacesReceiptNumber: issued.receiptNumber })
+    expect(ref?.cancelledHistory).toEqual([
+      expect.objectContaining({ id: issued.id, receiptNumber: issued.receiptNumber, cancelReason: 'เซ็นผิดช่อง ต้องออกใหม่' }),
+    ])
+
+    const source = receipts.toSubstituteReceiptDocSource(await receipts.getSubstituteReceiptSource(agent, reissued.id))
+    expect(source.replacesReceiptNumber).toBe(issued.receiptNumber)
+    const first = receipts.toSubstituteReceiptDocSource(await receipts.getSubstituteReceiptSource(agent, issued.id))
+    expect(first.replacesReceiptNumber).toBeNull()
+
+    // ใบใหม่ถูกยกเลิก → ออกแทนต่อได้ (ใบละครั้ง) · ใบเดิมออกแทนซ้ำไม่ได้
+    await receipts.cancelSubstituteReceipt(ctxOf(agent), reissued.id, { reason: 'ยอดผิด ขอออกใหม่อีกครั้ง' })
+    await expectCode(
+      () => receipts.reissueSubstituteReceipt(ctxOf(agent), issued.id, [line(10_000)]),
+      'SUBSTITUTE_RECEIPT_REISSUE_NOT_ALLOWED',
+    )
+    const third = await receipts.reissueSubstituteReceipt(ctxOf(agent), reissued.id, [line(10_000)])
+    expect(third.replacesReceiptNumber).toBe(reissued.receiptNumber)
+    expect(third.cancelledHistory.map((entry) => entry.id)).toEqual(
+      expect.arrayContaining([issued.id, reissued.id]),
+    )
+
+    await expect(
+      db().$executeRawUnsafe(`UPDATE substitute_receipts SET replaces_receipt_id = NULL WHERE id = '${third.id}'`),
+    ).rejects.toThrow(/แก้ไขไม่ได้/)
+    await expect(
+      db().$executeRawUnsafe(`UPDATE substitute_receipts SET replaces_receipt_id = id WHERE id = '${issued.id}'`),
+    ).rejects.toThrow()
+  })
+
+  it('ปฏิเสธถาวรใบเบิกค่าที่พัก: เหตุผลบังคับ · audit · ใบรับรองที่ผูกไม่นับเพดานอีก · ต้องแก้ไข/ไม่ใช่ค่าที่พัก = ทำไม่ได้', async () => {
+    // DTO ของคิวอนุมัติต้องรู้อัตรา WHT ของผู้รับ
+    await db().$executeRawUnsafe(`
+      INSERT INTO tax_profiles (id, organization_id, name, wht_pct, wht_basis, wht_min_threshold_satang, created_by)
+      VALUES ('${TAX_PROFILE_ID}', '${ORG_ID}', 'บุคคลธรรมดา 3% U117', 3.00, 'before_vat', 100000, '${FINANCE_ID}')
+      ON CONFLICT (id) DO NOTHING
+    `)
+    await db().$executeRawUnsafe(`UPDATE payee_profiles SET tax_profile_id = '${TAX_PROFILE_ID}' WHERE id = '${PAYEE_ID}'`)
+    const ids: string[] = []
+    for (let index = 0; index < 6; index += 1) {
+      const id = await seedHotelExpense()
+      ids.push(id)
+      await issueFor(id, [50_000])
+    }
+    const next = await seedHotelExpense()
+    await expectCode(() => issueFor(next, [50_000]), 'SUBSTITUTE_RECEIPT_EXCEEDS_LIMIT')
+    const target = ids[0] ?? ''
+
+    await expectCode(
+      () => approvals.rejectExpensePermanently(ctxOf(finance), target, { reason: '' }),
+      'REJECT_REASON_REQUIRED',
+    )
+    const result = await approvals.rejectExpensePermanently(ctxOf(finance), target, {
+      reason: 'ไม่ได้ค้างคืนจริงตามวันที่เบิก',
+    })
+    expect(result.expense.status).toBe('rejected')
+    const audit = await db().auditLog.findFirstOrThrow({
+      where: { targetType: 'expenses', targetId: target, action: 'reject' },
+      orderBy: { createdAt: 'desc' },
+    })
+    expect(audit.reason).toBe('ไม่ได้ค้างคืนจริงตามวันที่เบิก')
+    expect(audit.afterData).toMatchObject({ status: 'rejected', permanent: true })
+
+    // ใบรับรองของใบเบิกที่ถูกปฏิเสธยังอยู่ (ไม่ถูกยกเลิก) แต่ไม่นับเพดานต่อเดือน ⇒ ออกใบถัดไปได้
+    await expect(issueFor(next, [50_000])).resolves.toMatchObject({ totalSatang: 50_000 })
+
+    // terminal — ปฏิเสธ/ตีกลับซ้ำไม่ได้
+    await expectCode(
+      () => approvals.rejectExpensePermanently(ctxOf(finance), target, { reason: 'กดซ้ำอีกครั้งหนึ่ง' }),
+      'EXPENSE_INVALID_STATUS',
+    )
+    // `23` §6.3: needs_revision → rejected ไม่อยู่ในเส้นสถานะ
+    const revision = await seedHotelExpense(PAYEE_ID, 'needs_revision')
+    await expectCode(
+      () => approvals.rejectExpensePermanently(ctxOf(finance), revision, { reason: 'ปฏิเสธใบที่รอแก้ไข' }),
+      'EXPENSE_INVALID_STATUS',
+    )
+    // เฉพาะใบเบิกค่าที่พัก
+    const receiptClaim = await seedHotelExpense(PAYEE_ID, 'pending_approval', 'receipt')
+    await expectCode(
+      () => approvals.rejectExpensePermanently(ctxOf(finance), receiptClaim, { reason: 'ปฏิเสธใบเบิกทั่วไป' }),
+      'EXPENSE_INVALID_STATUS',
+    )
+    // คนอื่น (ไม่มีสิทธิ์เห็นใบเบิก) ⇒ 404 ไม่ leak
+    const another = await seedHotelExpense()
+    await expectCode(
+      () => approvals.rejectExpensePermanently(ctxOf(otherAgent), another, { reason: 'ไม่ใช่ผู้อนุมัติ' }),
+      'EXPENSE_NOT_FOUND',
+    )
   })
 })

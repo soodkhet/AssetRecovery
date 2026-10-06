@@ -39,7 +39,8 @@ const TRANSITIONS: Readonly<Record<ExpenseAction, { from: readonly ExpenseStatus
   reject_expense: { from: ['pending_approval', 'pending_finance_approval'], to: 'needs_revision' },
   // แก้เอกสารแล้วกลับเข้าคิวอนุมัติ — **ไม่ผ่าน `pending_warehouse_confirm` ซ้ำ** (`41` §6.6)
   resubmit_expense: { from: ['needs_revision'], to: 'pending_approval' },
-  reject_permanent: { from: ['pending_approval', 'pending_finance_approval'], to: 'rejected' },
+  // `23` §6.3 — `pending_approval → rejected` เท่านั้น (ขั้นการเงิน/ต้องแก้ไข ไม่อยู่ในเส้นนี้ — มติ PO U117 ข้อ 3 รอตัดสินเพิ่ม)
+  reject_permanent: { from: ['pending_approval'], to: 'rejected' },
   // `41` §10.1 — รายการรอบเดิมถูกแทนที่ด้วยรายการใหม่หลังแก้หลักฐาน
   supersede: {
     from: ['pending_warehouse_confirm', 'pending_approval', 'pending_finance_approval', 'needs_revision', 'approved'],

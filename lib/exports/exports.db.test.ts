@@ -1218,6 +1218,9 @@ suite('มติ PO U94 ข้อ 4/5 · U96 #15 — ยอดรวมควบ
     )
     expect(summary.get('revenue_before_vat')).toBe('12000.00')
     expect(summary.get('wht_withheld')).toBe('291.00')
+    // U114 — ใบทั้งหมดเป็นเงื่อนไข (1) ⇒ บริษัทออกให้ 0 · รวมต้องนำส่ง = หักจากผู้รับ
+    expect(summary.get('wht_paid_by_payer')).toBe('0.00')
+    expect(summary.get('wht_remit_total')).toBe('291.00')
     expect(summary.get('payout_transfer')).toBe('9409.00')
     expect(summary.get('accrued_expenses')).toBe('600.00')
     expect(summary.get('unbilled_revenue')).toBe('12000.00')

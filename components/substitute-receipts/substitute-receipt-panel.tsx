@@ -7,14 +7,14 @@ import { callApi, jsonRequest } from '@/lib/api/types'
 import { EXPENSE_RECEIPT_ACCEPT } from '@/lib/field/media-upload'
 import { fmtDateTime } from '@/lib/format/datetime'
 import { fmtSatangSymbol } from '@/lib/format/money'
-import { emptySubstituteLine, substituteDraftPayload, type SubstituteLineDraft } from '@/lib/substitute-receipts/form'
+import { substituteDraftPayload, substituteLinesToDrafts, type SubstituteLineDraft } from '@/lib/substitute-receipts/form'
 import {
   SUBSTITUTE_RECEIPT_CANCEL_REASON_MIN,
   SUBSTITUTE_RECEIPT_STATUS_LABEL,
   substituteReceiptBadgeText,
   substituteReceiptStatusBadgeGroup,
 } from '@/lib/substitute-receipts/substitute-receipt'
-import type { SubstituteReceiptRefDto } from '@/lib/substitute-receipts/types'
+import type { SubstituteReceiptDetailDto, SubstituteReceiptRefDto } from '@/lib/substitute-receipts/types'
 import { StorageUploadError, uploadToStorage } from '@/lib/uploads/client'
 
 /**
@@ -56,6 +56,7 @@ export function SubstituteReceiptPanel({
   const [reissueLines, setReissueLines] = useState<SubstituteLineDraft[]>([])
   const [reissueError, setReissueError] = useState<string | null>(null)
   const [reissuing, setReissuing] = useState(false)
+  const [loadingLines, setLoadingLines] = useState(false)
   const pending = receipt.status === 'pending_signature'
   const cancelled = receipt.status === 'cancelled'
   const lineDate = defaultLineDate ?? receipt.issueDate
@@ -110,10 +111,18 @@ export function SubstituteReceiptPanel({
     }
   }
 
-  function openReissue(): void {
-    setReissueLines([emptySubstituteLine('line-0', lineDate)])
+  // มติ PO U117 ข้อ 1 — ตั้งต้นด้วยรายการ/ยอดของใบที่ยกเลิก (แก้ได้) · โหลดไม่ได้ = บรรทัดว่าง
+  async function openReissue(): Promise<void> {
     setReissueError(null)
+    setLoadingLines(true)
     setReissueOpen(true)
+    try {
+      const result = await callApi<SubstituteReceiptDetailDto>(`/api/substitute-receipts/${receipt.id}`)
+      setReissueLines(substituteLinesToDrafts(result.data?.lines ?? [], lineDate))
+      if (result.error !== undefined) setReissueError(`ดึงรายการจากใบเดิมไม่ได้ — กรอกรายการใหม่ (${result.error.message})`)
+    } finally {
+      setLoadingLines(false)
+    }
   }
 
   async function confirmReissue(): Promise<void> {
@@ -165,6 +174,11 @@ export function SubstituteReceiptPanel({
           label={SUBSTITUTE_RECEIPT_STATUS_LABEL[receipt.status]}
         />
       </div>
+      {receipt.replacesReceiptNumber !== null && (
+        <p className="text-[11px] text-slate-500">
+          ออกแทนเลขที่ <span className="font-mono">{receipt.replacesReceiptNumber}</span>
+        </p>
+      )}
       {!compact && (
         <p className="text-[11px] text-slate-600">
           ยอด {fmtSatangSymbol(receipt.totalSatang)}
@@ -218,13 +232,43 @@ export function SubstituteReceiptPanel({
         {canCancel && cancelled && (
           <button
             type="button"
-            onClick={openReissue}
+            onClick={() => void openReissue()}
             className="focus-ring text-[11px] font-semibold text-slate-700 underline"
           >
             ออกใบใหม่แทน
           </button>
         )}
       </div>
+
+      {receipt.cancelledHistory.length > 0 && (
+        <ul className="space-y-0.5 border-t border-slate-200 pt-1" aria-label="ใบรับรองที่ยกเลิกแล้ว">
+          {receipt.cancelledHistory.map((entry) => (
+            <li key={entry.id} className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500">
+              <span className="font-mono text-slate-400 line-through">{substituteReceiptBadgeText(entry.receiptNumber)}</span>
+              <StatusBadge
+                status="cancelled"
+                group={substituteReceiptStatusBadgeGroup('cancelled')}
+                label={SUBSTITUTE_RECEIPT_STATUS_LABEL.cancelled}
+              />
+              {!compact && (
+                <span>
+                  {fmtSatangSymbol(entry.totalSatang)}
+                  {entry.cancelledAt !== null && ` · ยกเลิกเมื่อ ${fmtDateTime(entry.cancelledAt)}`}
+                  {entry.cancelReason !== null && ` · เหตุผล: ${entry.cancelReason}`}
+                </span>
+              )}
+              <a
+                href={`/api/substitute-receipts/${entry.id}/pdf`}
+                target="_blank"
+                rel="noreferrer"
+                className="focus-ring text-emerald-700 underline"
+              >
+                PDF
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
 
       <ConfirmModal
         open={cancelOpen}
@@ -252,14 +296,14 @@ export function SubstituteReceiptPanel({
         open={reissueOpen}
         onClose={() => setReissueOpen(false)}
         title={`ออกใบรับรองแทนใบเสร็จใหม่ แทนใบ ${receipt.receiptNumber}`}
-        description="ระบบออกเลขใหม่และผูกกับรายการเดิม — เพดานต่อใบ/ต่อเดือนตรวจใหม่ (ใบที่ยกเลิกไม่นับแล้ว)"
+        description="ตั้งต้นด้วยรายการจากใบที่ยกเลิก แก้ได้ก่อนออก — ระบบออกเลขใหม่ ผูกกับรายการเดิม และพิมพ์ “ออกแทนเลขที่” บนใบใหม่ · เพดานต่อใบ/ต่อเดือนตรวจใหม่ (ใบที่ยกเลิกไม่นับแล้ว)"
         size="lg"
         footer={
           <>
             <Button variant="secondary" onClick={() => setReissueOpen(false)}>
               ปิด
             </Button>
-            <Button onClick={() => void confirmReissue()} loading={reissuing}>
+            <Button onClick={() => void confirmReissue()} loading={reissuing} disabled={loadingLines}>
               ออกใบรับรองใหม่
             </Button>
           </>
@@ -267,7 +311,11 @@ export function SubstituteReceiptPanel({
       >
         <div className="space-y-3">
           {reissueError !== null && <InlineAlert tone="error" title={reissueError} />}
-          <NoReceiptLinesEditor lines={reissueLines} onChange={setReissueLines} defaultDate={lineDate} />
+          {loadingLines ? (
+            <p className="text-xs text-slate-500">กำลังดึงรายการจากใบ {receipt.receiptNumber}...</p>
+          ) : (
+            <NoReceiptLinesEditor lines={reissueLines} onChange={setReissueLines} defaultDate={lineDate} />
+          )}
         </div>
       </Modal>
     </div>

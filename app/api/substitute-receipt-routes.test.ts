@@ -24,6 +24,7 @@ const receiptQueries = vi.hoisted(() => ({
   attachSignedSubstituteReceipt: vi.fn(),
   cancelSubstituteReceipt: vi.fn(),
   reissueSubstituteReceipt: vi.fn(),
+  getSubstituteReceiptDetail: vi.fn(),
   SUBSTITUTE_RECEIPT_CAPABILITIES: [
     'perform_field_work',
     'request_advance',
@@ -44,6 +45,7 @@ const { POST: postSigned } = await import('@/app/api/substitute-receipts/[id]/si
 const { POST: postCancel } = await import('@/app/api/substitute-receipts/[id]/cancel/route')
 const { POST: postReissue } = await import('@/app/api/substitute-receipts/[id]/reissue/route')
 const { GET: getAdvancePdf } = await import('@/app/api/advances/[id]/pdf/route')
+const { GET: getCrtDetail } = await import('@/app/api/substitute-receipts/[id]/route')
 
 const ID = '00000000-0000-4000-8000-0000000c7a01'
 const params = { params: Promise.resolve({ id: ID }) }
@@ -107,6 +109,7 @@ beforeEach(() => {
   receiptQueries.cancelSubstituteReceipt.mockReset().mockResolvedValue({ id: ID, status: 'cancelled' })
   receiptQueries.reissueSubstituteReceipt.mockReset().mockResolvedValue({ id: 'new-id', status: 'pending_signature' })
   advanceDocQueries.getAdvanceRequestDocSource.mockReset()
+  receiptQueries.getSubstituteReceiptDetail.mockReset()
 })
 
 describe('ไม่มี capability ฝั่งเบิก/อนุมัติ → 403', () => {
@@ -198,5 +201,29 @@ describe('มติ PO U107 — ยกเลิก / ออกใบใหม่
     expect(receiptQueries.reissueSubstituteReceipt).not.toHaveBeenCalled()
     expect((await postReissue(request('POST', LINES), params)).status).toBe(201)
     expect(receiptQueries.reissueSubstituteReceipt).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('มติ PO U117 ข้อ 1 — GET /api/substitute-receipts/:id (บรรทัดของใบให้ฟอร์มออกใบใหม่แทน)', () => {
+  it('ไม่มี capability → 403 · นอก scope → 404 · เจ้าของ → 200 พร้อมบรรทัด', async () => {
+    requireSessionMock.mockResolvedValue(userOf({ view_reports: 'view' }))
+    expect((await getCrtDetail(request('GET'), params)).status).toBe(403)
+    expect(receiptQueries.getSubstituteReceiptDetail).not.toHaveBeenCalled()
+
+    requireSessionMock.mockResolvedValue(userOf({ perform_field_work: 'manage' }))
+    receiptQueries.getSubstituteReceiptDetail.mockRejectedValueOnce(new SubstituteReceiptError('SUBSTITUTE_RECEIPT_NOT_FOUND'))
+    expect((await getCrtDetail(request('GET'), params)).status).toBe(404)
+
+    const detail = {
+      id: ID,
+      receiptNumber: 'CRT-2569-0006',
+      status: 'cancelled',
+      totalSatang: 50_000,
+      lines: [{ lineDate: '2026-10-03', description: 'ค่าที่พัก', amountSatang: 50_000, note: null }],
+    }
+    receiptQueries.getSubstituteReceiptDetail.mockResolvedValueOnce(detail)
+    const response = await getCrtDetail(request('GET'), params)
+    expect(response.status).toBe(200)
+    expect(((await response.json()) as { data: unknown }).data).toEqual(detail)
   })
 })

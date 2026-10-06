@@ -40,7 +40,9 @@ summary,09_Credit_Notes.csv,output_vat_credit_debit_notes,ปรับ VAT ข�
 summary,02_Cash_Receipts.csv,cash_received,รับเงินจากลูกค้า,1,12480.00
 summary,10_Customer_WHT.csv,customer_wht,ภาษีที่ลูกค้าหัก ณ ที่จ่าย (รับเงินในงวด),1,360.00
 summary,04_Payments.csv,payout_transfer,จ่ายออก (ยอดโอนจริง หลังหักคืนเงินทดรอง),1,8495.00
-summary,05_WHT_Data.csv,wht_withheld,ภาษีหัก ณ ที่จ่ายที่หักผู้รับ (ใบ 50 ทวิ ที่มีผล),1,255.00
+summary,05_WHT_Data.csv,wht_withheld,ภาษีหัก ณ ที่จ่าย — หักจากผู้รับ (ใบ 50 ทวิ ที่มีผล),1,255.00
+summary,05_WHT_Data.csv,wht_paid_by_payer,ภาษีหัก ณ ที่จ่าย — บริษัทออกให้ (ไม่ได้หักจากผู้รับ),0,0.00
+summary,05_WHT_Data.csv,wht_remit_total,ภาษีหัก ณ ที่จ่าย — รวมต้องนำส่ง,1,255.00
 summary,15_Accrued_Expenses.csv,accrued_expenses,ค่าใช้จ่ายค้างจ่าย (ยอดก่อนหักภาษี — ภาพ ณ เวลาสร้างชุด),2,4850.00
 summary,14_Unbilled_Revenue.csv,unbilled_revenue,รายได้ค้างรับ (ยอดก่อน VAT — ภาพ ณ เวลาสร้างชุด),1,750.00
 summary,11_Suspense_Receipts.csv,suspense_outstanding,เงินรับรอตรวจสอบคงค้าง (ภาพ ณ เวลาสร้างชุด),1,500.00

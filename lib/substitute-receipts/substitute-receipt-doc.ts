@@ -40,7 +40,11 @@ export interface SubstituteReceiptDocSource {
   reference: { label: string; value: string }
   /** มติ PO U107 — ใบที่ยกเลิกแล้ว (พิมพ์ป้าย "ยกเลิก" + เวลา/เหตุผล) · `null`/ไม่ระบุ = ใบปกติ */
   cancellation?: { cancelledAt: Date; reason: string } | null
+  /** มติ PO U117 — เลขใบที่ยกเลิกซึ่งใบนี้ออกแทน (พิมพ์ "ออกแทนเลขที่ …") · `null`/ไม่ระบุ = ออกครั้งแรก */
+  replacesReceiptNumber?: string | null
 }
+
+export const SUBSTITUTE_RECEIPT_REPLACES_LABEL = 'ออกแทนเลขที่'
 
 export function buildSubstituteReceiptDoc(
   source: SubstituteReceiptDocSource,
@@ -59,7 +63,13 @@ export function buildSubstituteReceiptDoc(
     copyLabel: ORIGINAL_COPY_LABEL,
     dateText: fmtDate(source.issueDate),
     number: source.receiptNumber,
-    meta: [source.reference, { label: 'ทีม', value: source.teamName ?? '-' }],
+    meta: [
+      source.reference,
+      { label: 'ทีม', value: source.teamName ?? '-' },
+      ...(source.replacesReceiptNumber === null || source.replacesReceiptNumber === undefined
+        ? []
+        : [{ label: SUBSTITUTE_RECEIPT_REPLACES_LABEL, value: source.replacesReceiptNumber }]),
+    ],
     parties: [payeeDocParty('ผู้จ่ายเงิน (ในนามบริษัท)', source.payee), organizationDocParty('บริษัท', letterhead)],
     columns: [
       { header: 'วัน เดือน ปี', width: '15%', align: 'center' },

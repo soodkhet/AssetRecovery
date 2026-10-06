@@ -1,3 +1,4 @@
+import { PERMANENT_REJECT_EXPENSE_TYPE_SET } from '@/lib/compensation/approval-ui'
 import { assertPeriodOpenAt } from '@/lib/accounting/period-guard'
 import { emitAudit } from '@/lib/audit/audit'
 import { hasCapability, type CapabilityHolder } from '@/lib/auth/permission'
@@ -700,10 +701,38 @@ export async function rejectCompensationExpense(
   expenseId: string,
   input: CompensationRejectInput,
 ): Promise<RejectResult> {
+  return rejectExpenseWith(context, expenseId, input, 'reject_expense')
+}
+
+/**
+ * `PATCH /api/claims/:id/reject-permanent` (มติ PO U117 ข้อ 3) — `reject_permanent` ของ `23` §6.3
+ * (`pending_approval → rejected` terminal · ผู้เบิกส่งใหม่ไม่ได้) · เหตุผลบังคับ · ยามสิทธิ์/scope/ขั้นชุดเดียวกับการตีกลับ
+ * · เฉพาะใบเบิกค่าที่พัก · ใบรับรองแทนใบเสร็จที่ผูกอยู่ไม่นับเพดานต่อเดือนอีก (กติกา `rejected` ไม่นับ — O68)
+ */
+export async function rejectExpensePermanently(
+  context: ApprovalMutationContext,
+  expenseId: string,
+  input: CompensationRejectInput,
+): Promise<RejectResult> {
+  return rejectExpenseWith(context, expenseId, input, 'reject_permanent')
+}
+
+async function rejectExpenseWith(
+  context: ApprovalMutationContext,
+  expenseId: string,
+  input: CompensationRejectInput,
+  action: 'reject_expense' | 'reject_permanent',
+): Promise<RejectResult> {
   const user = context.actor
   const reason = assertRejectReason(input.reason)
   const current = await findExpense(user, expenseId)
-  const nextStatus = nextExpenseStatus(current.status, 'reject_expense')
+  if (action === 'reject_permanent' && !PERMANENT_REJECT_EXPENSE_TYPE_SET.has(current.expenseType)) {
+    throw new ExpenseStateError('EXPENSE_INVALID_STATUS', {
+      context: { status: current.status, action, expenseType: current.expenseType },
+      detail: `expense=${expenseId} reject_permanent ทำได้เฉพาะใบเบิกค่าที่พัก`,
+    })
+  }
+  const nextStatus = nextExpenseStatus(current.status, action)
 
   await assertPeriodOpenAt({
     organizationId: user.organizationId,
@@ -770,6 +799,7 @@ export async function rejectCompensationExpense(
           rejected_at_step: current.approvalStepCurrent,
           step_role: stepRole,
           rejection_reason: reason,
+          ...(action === 'reject_permanent' ? { permanent: true } : {}),
           // ไม่แตะ `assignment_status` ของเคส (`41` §10.1)
           events: ['expense.rejected'],
         },
@@ -787,7 +817,12 @@ export async function rejectCompensationExpense(
   // `90` §6.3 แถว 6 — ตีกลับแล้วผู้เบิกต้องแก้เอง ⇒ ต้องรู้ทันทีพร้อมเหตุผล
   dispatchNotification(
     { organizationId: user.organizationId, userIds: [updated.payee.userId] },
-    expenseRejectedMessage({ grossSatang: updated.grossSatang, reason, caseBound: updated.assignmentId !== null }),
+    expenseRejectedMessage({
+      grossSatang: updated.grossSatang,
+      reason,
+      caseBound: updated.assignmentId !== null,
+      permanent: action === 'reject_permanent',
+    }),
   )
 
   return {

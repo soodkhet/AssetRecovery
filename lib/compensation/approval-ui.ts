@@ -3,7 +3,7 @@ import type { ApprovalHistoryEntry } from '@/lib/compensation/approval'
 import type { CompensationApprovalDto } from '@/lib/compensation/approval-types'
 import { isManualClaim } from '@/lib/claims/claim'
 import { canExpenseAction } from '@/lib/field/expense-status'
-import type { ExpenseStatus } from '@/lib/generated/prisma/enums'
+import type { ExpenseStatus, ExpenseType } from '@/lib/generated/prisma/enums'
 import type { StatusBadgeGroup } from '@/lib/ui/status-badge'
 
 /**
@@ -14,13 +14,18 @@ import type { StatusBadgeGroup } from '@/lib/ui/status-badge'
  * `lib/field/expense-ui.ts` (2.12) **ห้ามประกาศซ้ำ**
  */
 
+/** ชนิดรายการเบิกที่ปฏิเสธถาวรได้ (มติ PO 06/10/2569 U117 ข้อ 3 — ใบเบิกค่าที่พัก) · ใช้ทั้งปุ่มและ API */
+export const PERMANENT_REJECT_EXPENSE_TYPE_SET: ReadonlySet<ExpenseType> = new Set<ExpenseType>(['hotel'])
+
 /** ปุ่มบนแถวของตารางรออนุมัติ (mockup `finance.html` แท็บ `approval`/`comp`) */
-export type ExpenseRowAction = 'approve' | 'reject' | 'view_formula'
+export type ExpenseRowAction = 'approve' | 'reject' | 'reject_permanent' | 'view_formula'
 
 export interface ExpenseRowActionsInput {
   status: ExpenseStatus
   /** ผู้เรียกถือ capability ของสายอนุมัติสักขั้นไหม (UX เท่านั้น — API ตรวจขั้นที่รออยู่ซ้ำเสมอ) */
   canApprove: boolean
+  /** ชนิดรายการ — ปุ่ม "ปฏิเสธ" (ถาวร) มีเฉพาะใบเบิกค่าที่พัก (มติ PO U117 ข้อ 3) · ไม่ระบุ = ไม่มีปุ่ม */
+  expenseType?: ExpenseType
 }
 
 /**
@@ -30,8 +35,12 @@ export interface ExpenseRowActionsInput {
 export function expenseRowActions(input: ExpenseRowActionsInput): ExpenseRowAction[] {
   const inQueue =
     canExpenseAction(input.status, 'approve_manager') || canExpenseAction(input.status, 'approve_finance')
-  if (inQueue && input.canApprove) return ['approve', 'reject', 'view_formula']
-  return ['view_formula']
+  if (!inQueue || !input.canApprove) return ['view_formula']
+  const permanent =
+    input.expenseType !== undefined &&
+    PERMANENT_REJECT_EXPENSE_TYPE_SET.has(input.expenseType) &&
+    canExpenseAction(input.status, 'reject_permanent')
+  return permanent ? ['approve', 'reject', 'reject_permanent', 'view_formula'] : ['approve', 'reject', 'view_formula']
 }
 
 /**

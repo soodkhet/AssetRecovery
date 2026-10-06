@@ -3,6 +3,8 @@ import { ROLE_USERS, roleUser } from '@/lib/dashboard/role-fixtures.test-helper'
 import {
   buildCaseBoard,
   buildQueueItems,
+  canShowArOver60,
+  withArOver60Hint,
   canViewCaseBoard,
   caseBoardHref,
   CASE_BOARD_STATUSES,
@@ -207,5 +209,42 @@ describe('ประกอบผลนับ', () => {
     expect(board.rows.filter((row) => row.monthly).map((row) => row.status)).toEqual(['closed_success', 'closed_fail'])
     expect(board.rows.find((row) => row.status === 'closed_success')?.label).toBe('ปิดงานสำเร็จ (เดือนนี้)')
     expect(board.rows.find((row) => row.status === 'closed_fail')?.group).toBe('critical')
+  })
+})
+
+describe('การ์ด AR ผู้บริหาร — บรรทัด "เกิน 60 วัน" จาก F3 (มติ PO U115)', () => {
+  const arKpi = {
+    key: 'arOutstanding',
+    label: 'AR ค้างรับ',
+    value: 1_500_000,
+    type: 'money' as const,
+    hint: '2 บริษัทที่ยังมียอดค้าง',
+    higherIsBetter: false,
+  }
+  const agingKpis = [
+    { key: 'outstanding', label: 'ยอดค้างรับรวม', value: 1_500_000, type: 'money' as const },
+    { key: 'over60', label: 'ค้างเกิน 60 วัน', value: 425_050, type: 'money' as const },
+    { key: 'over90', label: 'ค้างเกิน 90 วัน', value: 100_000, type: 'money' as const },
+  ]
+
+  it('ยอดใหญ่คงเดิม + บรรทัดย่อยใช้ค่า over60 ของ F3 ตรงตัว', () => {
+    const merged = withArOver60Hint(arKpi, agingKpis)
+    expect(merged.value).toBe(1_500_000)
+    expect(merged.hint).toBe('เกิน 60 วัน ฿4,250.50 · 2 บริษัทที่ยังมียอดค้าง')
+  })
+
+  it('ไม่มีข้อมูล F3 / ไม่ใช่การ์ด AR ⇒ การ์ดเดิม', () => {
+    expect(withArOver60Hint(arKpi, null)).toBe(arKpi)
+    expect(withArOver60Hint(arKpi, [])).toBe(arKpi)
+    const revenue = { ...arKpi, key: 'revenue' }
+    expect(withArOver60Hint(revenue, agingKpis)).toBe(revenue)
+  })
+
+  it('สิทธิ์: เฉพาะผู้บริหาร/Superadmin (เห็นทั้ง E และ F) — การเงิน/บัญชี/ทีม ไม่ได้', () => {
+    expect(canShowArOver60(ROLE_USERS.executive())).toBe(true)
+    expect(canShowArOver60(ROLE_USERS.superadmin())).toBe(true)
+    for (const make of [ROLE_USERS.finance, ROLE_USERS.accounting, ROLE_USERS.manager, ROLE_USERS.fieldAgent]) {
+      expect(canShowArOver60(make())).toBe(false)
+    }
   })
 })
