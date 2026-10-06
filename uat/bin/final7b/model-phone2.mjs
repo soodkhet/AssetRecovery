@@ -1,0 +1,18 @@
+// Model Phone ต่อ: ค้นหา TAC (Enter) · นำเข้าไฟล์เอง (fixture ใน repo) · ประวัติการอัปเดต · ไม่กด "อัปเดตตอนนี้"
+import { openAs, shot, log, q, collect, trackApi, U, clean } from './_h.mjs'
+const s = await openAs('admin'); const { page } = s; const api = trackApi(page)
+await page.goto(U + '/settings/device-catalog'); await page.waitForLoadState('networkidle'); await page.waitForTimeout(1200)
+const main = async () => clean(await page.locator('main').innerText())
+await page.getByRole('tab', { name: 'TAC' }).or(page.getByRole('button', { name: 'TAC', exact: true })).first().click(); await page.waitForTimeout(900)
+await page.getByLabel('ค้นหา TAC').fill('35123456'); await page.getByLabel('ค้นหา TAC').press('Enter'); await page.waitForTimeout(2000)
+const t0 = await main(); log('mp', 'search 35123456 (Enter):', t0.slice(t0.indexOf('ผูกรุ่นในแคตตาล็อก'), t0.indexOf('ผูกรุ่นในแคตตาล็อก') + 300)); await shot(page, 'mp-tac-search')
+await page.getByLabel('ค้นหา TAC').fill('35777002'); await page.getByLabel('ค้นหา TAC').press('Enter'); await page.waitForTimeout(1500)
+await page.getByRole('button', { name: 'เพิ่ม/ผูก TAC เอง' }).click(); await page.waitForTimeout(600)
+log('mp', 'bind prefill after Enter:', await page.getByRole('dialog').last().locator('#bind-tac').inputValue()); await page.getByRole('dialog').last().getByRole('button', { name: 'ยกเลิก' }).click(); await page.waitForTimeout(400)
+await page.locator('input[type=file]').first().setInputFiles('lib/device-catalog/fixtures/tac-sample.csv')
+log('mp', 'import file', await collect(page, 8000), api.splice(0).map(x => x.slice(0, 300)))
+await page.getByRole('tab', { name: 'ประวัติการอัปเดต' }).or(page.getByRole('button', { name: 'ประวัติการอัปเดต', exact: true })).first().click(); await page.waitForTimeout(1500)
+const t = await main(); const i = t.indexOf('ประวัติการอัปเดต', t.indexOf('ตั้งค่า')); log('mp', 'history:', t.slice(i, i + 1300))
+await shot(page, 'mp-history', { fullPage: true })
+log('mp', q(`select status, trigger, new_tac_count, created_at from device_tac_updates order by created_at desc limit 3`))
+log('mp', 'console', s.consoleErrors, s.serverErrors); await s.browser.close()

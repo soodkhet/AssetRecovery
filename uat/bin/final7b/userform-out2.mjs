@@ -1,0 +1,17 @@
+// U131/U164 — ฟอร์มผู้ใช้ out2 (Outsource นิติบุคคล): ช่อง Tax Profile ตัวเลือกแรก = ค่าเริ่มต้นของทีม Outsource ตามประเภท · ไม่บันทึก
+import { openAs, shot, log, trackApi, U, clean } from './_h.mjs'
+const s = await openAs(process.argv[2] ?? 'admin'); const { page } = s; const api = trackApi(page)
+await page.goto(U + '/settings/users'); await page.waitForLoadState('networkidle'); await page.waitForTimeout(1000)
+await page.getByText('เจ้าหน้าที่ติดตามทรัพย์').first().click(); await page.waitForTimeout(800)
+await page.getByText('Outsource', { exact: true }).first().click(); await page.waitForTimeout(1200)
+const row = page.locator('tr', { hasText: 'uat.agent.out2' }).first(); log('uf', 'row', clean(await row.innerText()).slice(0, 200))
+await row.getByRole('button', { name: /แก้ไข/ }).first().click(); await page.waitForTimeout(1500)
+const d = page.getByRole('dialog').last(); const t = clean(await d.innerText())
+log('uf', 'out2 tax:', t.slice(t.indexOf('ประเภทผู้รับเงิน'), t.indexOf('ประเภทผู้รับเงิน') + 900))
+const tp = d.locator('#payee-tax-profile'); log('uf', 'out2 selected:', await tp.evaluate(e => e.options[e.selectedIndex]?.text), '| first:', await tp.evaluate(e => e.options[0]?.text))
+await shot(page, 'uf-out2', { fullPage: true })
+// เปลี่ยนประเภท → บุคคลธรรมดา: ตัวเลือกแรกต้องเปลี่ยนตาม (ไม่บันทึก)
+await d.locator('#payee-type').selectOption({ label: 'บุคคลธรรมดา' }); await page.waitForTimeout(600)
+log('uf', 'after switch to individual, first option:', await tp.evaluate(e => e.options[0]?.text))
+await d.getByRole('button', { name: /ยกเลิก/ }).first().click(); await page.waitForTimeout(500)
+log('uf', 'non-GET (must be none):', api); log('uf', 'console', s.consoleErrors, s.serverErrors); await s.browser.close()

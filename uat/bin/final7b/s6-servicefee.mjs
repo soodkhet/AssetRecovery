@@ -1,0 +1,15 @@
+// ข้อ 6 + U165 — แก้เทมเพลต T4 ยอดไม่สำเร็จ 1,000 → 1,200 (สร้าง v2) · validation ยอดติดลบ/ว่าง
+import { openAs, shot, log, q, collect, trackApi, U, clean } from './_h.mjs'
+const s = await openAs('admin'); const { page } = s; const api = trackApi(page)
+await page.goto(U + '/settings/service-fee'); await page.waitForLoadState('networkidle'); await page.waitForTimeout(1200)
+const card = page.locator('div').filter({ hasText: 'T4 เหมา 3,000 ไม่สำเร็จ 1,000' }).filter({ has: page.getByRole('button', { name: /แก้ไขข้อมูล/ }) }).last()
+await card.getByRole('button', { name: /แก้ไขข้อมูล/ }).click(); await page.waitForTimeout(900)
+const d = page.getByRole('dialog').last()
+log('s6', 'form', clean(await d.innerText()).slice(0, 900))
+await d.locator('#sf-fail-fee').fill('-5'); await d.locator('#sf-reason').fill('ทดสอบ'); await d.getByRole('button', { name: 'บันทึกเป็นเวอร์ชันใหม่' }).click(); await page.waitForTimeout(900)
+log('s6', 'neg fail fee →', clean(await d.innerText()).match(/ค่าบริการกรณีไม่สำเร็จ.{0,120}/)?.[0], api.splice(0))
+await d.locator('#sf-fail-fee').fill('1,200.00'); await d.locator('#sf-reason').fill('ปรับยอดกรณีไม่สำเร็จเป็น 1,200 ตามสัญญาใหม่ (ด่าน 7 รอบทวน)')
+await shot(page, 's6-t4-edit', { fullPage: true })
+await d.getByRole('button', { name: 'บันทึกเป็นเวอร์ชันใหม่' }).click(); log('s6', 'save', await collect(page, 4000), api.splice(0).map(x => x.slice(0, 200)))
+log('s6', q(`select name, version, model, base_satang, fail_fee_satang, is_active from service_fee_templates where name like 'T4%' order by version`))
+log('s6', 'console', s.consoleErrors, s.serverErrors); await s.browser.close()

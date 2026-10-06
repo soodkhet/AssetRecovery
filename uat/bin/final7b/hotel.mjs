@@ -1,0 +1,17 @@
+// in1 มือถือ: เบิกแยก → เบิกที่พัก (ใบเสร็จ) · validation ยอดว่าง/ติดลบ · ส่งคำขอ
+import { openAs, shot, log, q, collect, trackApi, U, clean } from './_h.mjs'
+const s = await openAs('uat.agent.in1', { mobile: true }); const { page } = s; await page.setViewportSize({ width: 375, height: 812 }); const api = trackApi(page)
+await page.goto(U + '/field/expenses'); await page.waitForLoadState('networkidle'); await page.waitForTimeout(1200)
+await page.getByText('เบิกแยก', { exact: true }).first().click(); await page.waitForTimeout(900)
+await page.getByRole('button', { name: /เบิกที่พัก/ }).click(); await page.waitForTimeout(900)
+const d = page.getByRole('dialog').last(); log('hotel', 'form', clean(await d.innerText()).slice(0, 700))
+const submit = d.getByRole('button').filter({ hasText: /ส่ง/ }).last()
+await submit.click(); await page.waitForTimeout(900); log('hotel', 'empty submit', clean(await d.innerText()).match(/.{0,40}(กรุณา|ต้อง|ไม่ถูกต้อง).{0,80}/g)?.slice(0, 4), api.splice(0).length)
+await d.locator('input[type=date]').fill('2026-10-07')
+const amt = d.locator('input[placeholder="0.00"]').first(); await amt.fill('-100'); await submit.click(); await page.waitForTimeout(800)
+log('hotel', 'neg amount', clean(await d.innerText()).match(/.{0,40}(ติดลบ|มากกว่า|ต้อง).{0,60}/g)?.slice(0, 3), api.splice(0).map(x => x.slice(0, 160)))
+await amt.fill('650.00'); await d.locator('input[type=file]').first().setInputFiles('uat/fixtures/files/C1-product.png'); await page.waitForTimeout(1500)
+await shot(page, 'hotel-form', { fullPage: true })
+await submit.click(); log('hotel', 'submit', await collect(page, 5000), api.splice(0).filter(x => !x.includes('storage/v1')).map(x => x.slice(0, 250)))
+log('hotel', q(`select x.expense_type,x.gross_satang,x.status,x.expense_date from expenses x join payee_profiles p on p.id=x.payee_id join users u on u.id=p.user_id where u.username='uat.agent.in1' and x.case_id is null order by x.created_at desc limit 2`))
+log('hotel', 'console', s.consoleErrors, s.serverErrors); await s.browser.close()
