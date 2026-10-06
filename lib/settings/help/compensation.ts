@@ -114,6 +114,8 @@ export function hotelCapHelp(maxPerNightSatang: number | null): SettingHelpConte
     })
   }
   return {
+    // มติ PO U140 — ค่าตั้งที่เป็นสมมติฐานรอนักบัญชียืนยัน
+    assumption: 'hotel_receipt',
     title: 'เพดานค่าที่พักต่อคืน',
     what: 'ยอดสูงสุดที่ทีมงานเบิกค่าที่พักได้ต่อคืน ใช้เพดานของแผน ณ วันที่เข้าพัก เกินเพดานส่งใบเบิกไม่ได้ · เว้นว่าง = ไม่จำกัด',
     examples,

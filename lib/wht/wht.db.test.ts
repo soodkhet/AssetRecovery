@@ -654,7 +654,7 @@ suite('Phase 4.5 — เลขที่ (D11) · mark-filed · Period Lock', () 
     const periodId = await junePeriodId()
     await db().whtFilingSummary.update({
       where: { periodId },
-      data: { status: 'pending', filedAt: null, filedBy: null },
+      data: { status: 'pending', filedAt: null, filedBy: null, supplementaryRequiredAt: null },
     })
     const summary = await db().whtFilingSummary.findUniqueOrThrow({ where: { periodId } })
     const filed = await wht.markWhtFilingFiled(ctx, summary.id, { reason: 'ยื่นแล้วหลังปิดงวด' })
@@ -716,7 +716,10 @@ suite('Phase 4.5 — เลขที่ (D11) · mark-filed · Period Lock', () 
     const periodId = await junePeriodId()
     // รอบนี้ถูก mark filed ในเทสต์ก่อนหน้า — รอบ filed ไม่ถูกคิดใหม่อีกแล้ว (`33` §7.2) ⇒ ทดสอบกับรอบ pending
     const filedBefore = await db().whtFilingSummary.findUniqueOrThrow({ where: { periodId } })
-    await db().whtFilingSummary.update({ where: { periodId }, data: { status: 'pending', filedAt: null } })
+    await db().whtFilingSummary.update({
+      where: { periodId },
+      data: { status: 'pending', filedAt: null, supplementaryRequiredAt: null },
+    })
     const seeded = await seedBatch([{ payeeId: PAYEE_PERSON_ID, gross: 30_000_00, wht: 900_00 }])
     await expenses.syncExpenseRecordsFromPayout(ctx, seeded.batchId)
     const real = (await db().whtFilingSummary.findUniqueOrThrow({ where: { periodId } })).pnd3Satang
@@ -885,5 +888,81 @@ suite('มติ PO 06/10/2569 (U94 ข้อ 1 · U96 #2/#4/#13) — snapshot �
         },
       })
     }
+  })
+
+  it('U127 — ยกเลิก/ออกใบในเดือนที่ยื่นแล้ว ⇒ ธงต้องยื่นเพิ่มเติม + ยอดต่าง + คิวแจ้งบัญชี · ยื่นเพิ่มเติมแล้วล้างธง', async () => {
+    await setPeriodStatus('collecting')
+    const periodId = await junePeriodId()
+    // ผู้รับแจ้งเตือน = ผู้ถือ `manage_wht` (บทบาทบัญชีของเทสต์)
+    await db().$executeRawUnsafe(`
+      INSERT INTO capabilities (code, label, module) VALUES ('manage_wht', 'ออกหนังสือรับรอง WHT', 'wht')
+      ON CONFLICT (code) DO NOTHING
+    `)
+    await db().$executeRawUnsafe(`
+      INSERT INTO role_capabilities (role_id, capability_id, access_level)
+      SELECT '${ROLE_ID}', id, 'manage' FROM capabilities WHERE code = 'manage_wht'
+      ON CONFLICT DO NOTHING
+    `)
+    // เริ่มจากรอบที่ยังไม่ยื่น แล้วออกใบ + mark filed ตามจริง
+    await db().whtFilingSummary.update({
+      where: { periodId },
+      data: { status: 'pending', filedAt: null, filedBy: null, supplementaryRequiredAt: null },
+    })
+    const seeded = await seedBatch([{ payeeId: PAYEE_PERSON_ID, gross: 20_000_00, wht: 600_00 }])
+    await expenses.syncExpenseRecordsFromPayout(ctx, seeded.batchId)
+    const certificate = await db().whtCertificate.findFirstOrThrow({
+      where: { expenseRecord: { payoutBatchItem: { payoutBatchId: seeded.batchId } } },
+    })
+    const summary = await db().whtFilingSummary.findUniqueOrThrow({ where: { periodId } })
+    await wht.markWhtFilingFiled(ctx, summary.id, { reason: 'ยื่น e-Filing 2569-0601' })
+    // ยังไม่มีเหตุการณ์หลังยื่น ⇒ ล้างธงไม่ได้
+    await expectCode(
+      () => wht.markWhtSupplementaryFiled(ctx, summary.id, { reason: 'ยังไม่ต้องยื่น' }),
+      'WHT_SUPPLEMENTARY_FILING_NOT_REQUIRED',
+    )
+
+    await wht.cancelWhtCertificate(ctx, certificate.id, { reason: 'จ่ายผิดคน', reissue: false })
+
+    const flagged = await db().whtFilingSummary.findUniqueOrThrow({ where: { periodId } })
+    expect(flagged.status).toBe('filed')
+    expect(flagged.supplementaryRequiredAt).not.toBeNull()
+    // ยอดที่ยื่นแล้วไม่ถูกเขียนทับ
+    expect(flagged.pnd3Satang).toBe(summary.pnd3Satang)
+
+    const list = await wht.listWhtFilingSummaries(accountant, { periodId })
+    const dto = list.items[0]!
+    expect(dto.supplementaryRequired).toBe(true)
+    expect(dto.supplementaryDiff).toEqual({ pnd1Satang: 0, pnd3Satang: -600_00, pnd53Satang: 0, totalSatang: -600_00 })
+
+    // แจ้งบัญชีผ่านคิว outbox ในทรานแซกชันเดียวกับการยกเลิก
+    const queued = await db().notificationOutbox.findMany({
+      where: { organizationId: ORG_ID, sourceJobType: 'wht_supplementary_filing' },
+    })
+    expect(queued.some((row) => JSON.stringify(row.payload).includes(certificate.certificateNumber))).toBe(true)
+
+    // job รายวันไม่ล้าง/ไม่ติดธงเพิ่ม
+    await summaryJob.runWhtSummaryJob({ organizationId: ORG_ID, periodId })
+    expect((await db().whtFilingSummary.findUniqueOrThrow({ where: { periodId } })).supplementaryRequiredAt).not.toBeNull()
+
+    // ไม่กรอกเหตุผล ⇒ schema ปฏิเสธที่ route (ทดสอบ service ด้วยเหตุผลที่กรอก)
+    const cleared = await wht.markWhtSupplementaryFiled(ctx, summary.id, { reason: 'ยื่นเพิ่มเติม 2569-0602' })
+    expect(cleared.supplementaryRequired).toBe(false)
+    expect(cleared.supplementaryFiledAt).not.toBeNull()
+    expect(cleared.pnd3Satang).toBe(summary.pnd3Satang - 600_00)
+    const audit = await db().auditLog.findFirst({
+      where: { targetType: 'wht_filing_summaries', targetId: summary.id, action: 'update' },
+      orderBy: { createdAt: 'desc' },
+    })
+    expect(audit?.reason).toContain('2569-0602')
+    await expectCode(
+      () => wht.markWhtSupplementaryFiled(ctx, summary.id, { reason: 'ซ้ำ' }),
+      'WHT_SUPPLEMENTARY_FILING_NOT_REQUIRED',
+    )
+
+    // ออกใบใหม่ของเดือนที่ยื่นแล้ว (ออกใบแทนผ่าน sync) ⇒ ติดธงอีกครั้ง
+    await expenses.syncExpenseRecordsFromPayout(ctx, seeded.batchId)
+    const again = await db().whtFilingSummary.findUniqueOrThrow({ where: { periodId } })
+    expect(again.supplementaryRequiredAt).not.toBeNull()
+    expect(again.pnd3Satang).toBe(summary.pnd3Satang - 600_00)
   })
 })

@@ -40,6 +40,7 @@ import { advanceReturnOutstandingSatang } from '@/lib/finance/advance-offset-cal
 import { Prisma } from '@/lib/generated/prisma/client'
 import type { AdvanceStatus } from '@/lib/generated/prisma/enums'
 import { notifyAdvanceAwaitingApproval, notifyExpensesAwaitingApproval } from '@/lib/notifications/approval-queue'
+import { captureLetterheadSnapshot } from '@/lib/organization/letterhead'
 import { prisma } from '@/lib/prisma'
 import { getFinancePolicy } from '@/lib/settings/queries/finance-policy'
 import { issueSubstituteReceipt, substituteReceiptRefOf, substituteReceiptsRelationSelect } from '@/lib/substitute-receipts/queries'
@@ -395,7 +396,15 @@ export async function approveAdvance(
     // ยึดแถวด้วยสถานะเดิม (compare-and-set) — อนุมัติ/ปฏิเสธใบเดียวกันพร้อมกันต้องสำเร็จได้คำขอเดียว (Final Test ด่าน 6)
     const claimed = await tx.advance.updateMany({
       where: { id: advanceId, organizationId: user.organizationId, status: current.status, deletedAt: null },
-      data: { status, approvedSatang, approvedBy: user.id, approvedAt: at, updatedBy: user.id },
+      data: {
+        status,
+        approvedSatang,
+        approvedBy: user.id,
+        approvedAt: at,
+        updatedBy: user.id,
+        // มติ PO U130 — หัวกระดาษใบเบิกเงินทดรอง ณ ตอนอนุมัติ (ใบพิมพ์ได้ตั้งแต่อนุมัติ)
+        ...(status === 'approved' ? { letterheadSnapshot: await captureLetterheadSnapshot(tx, user.organizationId) } : {}),
+      },
     })
     if (claimed.count !== 1) {
       throw new AdvanceError('ADVANCE_INVALID_STATUS', { detail: `advance=${advanceId} ถูกเปลี่ยนสถานะไปแล้ว` })
@@ -748,6 +757,8 @@ export async function recordAdvanceSeparateReturn(
         evidenceFileSha256: verified.sha256,
         note: input.note,
         createdBy: user.id,
+        // มติ PO U130 — หัวกระดาษใบรับคืนเงินทดรอง ณ ตอนบันทึก
+        letterheadSnapshot: await captureLetterheadSnapshot(tx, user.organizationId),
       },
       select: { id: true },
     })

@@ -92,6 +92,8 @@ export function whtBaseHelp(baseExpenseTypes: readonly ExpenseType[]): SettingHe
   )
   const net = result.lines.reduce((sum, each) => sum + each.netSatang, 0)
   return {
+    // มติ PO U140 — ค่าตั้งที่เป็นสมมติฐานรอนักบัญชียืนยัน
+    assumption: 'wht_base',
     title: 'ฐานภาษีหัก ณ ที่จ่ายคืออะไร',
     what:
       'เลือกว่ารายการจ่ายชนิดไหนถือเป็น "เงินได้" ของผู้รับ ต้องนำมาคิดภาษีหัก ณ ที่จ่าย ส่วนชนิดที่ไม่ติ๊กยังจ่ายเต็มตามปกติ แต่ไม่ถูกหักภาษีและไม่นับรวมเพื่อเทียบเกณฑ์ขั้นต่ำ',
@@ -139,6 +141,8 @@ export function whtCertificateModeHelp(mode: WhtCertificateMode): SettingHelpCon
   }))
   const countOf = (each: WhtCertificateMode): number => groupCertificateSources(sources, each).length
   return {
+    // มติ PO U140 — ค่าตั้งที่เป็นสมมติฐานรอนักบัญชียืนยัน
+    assumption: 'wht_certificate_mode',
     title: 'ออกหนังสือรับรอง 50 ทวิ แบบไหน',
     what: 'กำหนดว่าระบบออกหนังสือรับรองการหักภาษี ณ ที่จ่าย (50 ทวิ) ให้ผู้รับเป็นกี่ใบ ยอดภาษีรวมเท่ากันทุกแบบ ต่างกันแค่จำนวนใบ',
     options: WHT_CERTIFICATE_MODES.map((each) => ({
@@ -186,6 +190,8 @@ export function whtIncomeTypeHelp(values: {
     { label: 'ทีม Outsource (นิติบุคคล)', side: 'outsource', payeeType: 'corporate' },
   ]
   return {
+    // มติ PO U140 — ค่าตั้งที่เป็นสมมติฐานรอนักบัญชียืนยัน
+    assumption: 'wht_income_type',
     title: 'ประเภทเงินได้มีผลอย่างไร',
     what:
       'ประเภทเงินได้ตามประมวลรัษฎากรเป็นตัวกำหนดว่าใช้อัตราหักจากไหน และยื่นแบบ ภ.ง.ด. ใด — 40(1) เงินเดือน/ค่าจ้าง · 40(2) ค่าธรรมเนียม/ค่านายหน้า · 40(8) ค่าจ้างทำของ/รับจ้างอิสระ · ควรตั้งตามคำแนะนำของสำนักงานบัญชีและสัญญาจ้างจริง',
@@ -227,6 +233,8 @@ export function whtZeroRateHelp(issue: boolean): SettingHelpContent {
       grossSatang: SAMPLE_INCOME_SATANG,
     })
   return {
+    // มติ PO U140 — ค่าตั้งที่เป็นสมมติฐานรอนักบัญชียืนยัน
+    assumption: 'wht_zero_rate_certificate',
     title: 'ใบ 50 ทวิ ยอดภาษี 0 คืออะไร',
     what:
       'ผู้รับเงินได้ 40(1)/40(2) ที่สำนักงานบัญชีคำนวณแล้วอัตราหักเป็น 0% ไม่ถูกหักภาษี แต่ยังควรได้หนังสือรับรองแสดงเงินได้ไว้ยื่นภาษีประจำปีของตัวเอง',
@@ -269,6 +277,8 @@ export function whtConditionTable(incomeSatang: number, whtPct: number): Setting
 /** อนุญาตเงื่อนไข (2)/(3) */
 export function whtGrossUpHelp(allow: boolean): SettingHelpContent {
   return {
+    // มติ PO U140 — ค่าตั้งที่เป็นสมมติฐานรอนักบัญชียืนยัน
+    assumption: 'wht_gross_up',
     title: 'เงื่อนไขการหัก (1) (2) (3) ต่างกันอย่างไร',
     what:
       'เงื่อนไขบอกว่าใครรับภาระภาษี — (1) หัก ณ ที่จ่าย ผู้รับรับภาระเอง · (2) ออกให้ตลอดไป และ (3) ออกให้ครั้งเดียว บริษัทจ่ายภาษีแทน ผู้รับได้เงินเต็ม ภาษีที่ออกให้ถือเป็นเงินได้เพิ่มจึงพิมพ์รวมบนหนังสือรับรอง',
@@ -312,6 +322,8 @@ export function filingDueExample(
 
 export function whtFilingMethodHelp(method: WhtFilingMethod, holidays: readonly string[] = []): SettingHelpContent {
   return {
+    // มติ PO U140 — ค่าตั้งที่เป็นสมมติฐานรอนักบัญชียืนยัน
+    assumption: 'wht_filing_method',
     title: 'วิธียื่น ภ.ง.ด. มีผลอะไร',
     what: 'ใช้คำนวณวันกำหนดยื่นแบบ ภ.ง.ด. ของแต่ละเดือนและวันแจ้งเตือนล่วงหน้า — ไม่กระทบยอดภาษี',
     options: WHT_FILING_METHODS.map((each) => ({ label: WHT_FILING_METHOD_LABEL[each], effect: each === 'online' ? 'ยื่นทางอินเทอร์เน็ต (e-Filing)' : 'ยื่นที่สำนักงานสรรพากร' })),
@@ -336,6 +348,8 @@ export function taxProfileHelp(values: {
   const below = calc(SAMPLE_BELOW_THRESHOLD_SATANG)
   const above = calc(SAMPLE_ABOVE_THRESHOLD_SATANG)
   return {
+    // มติ PO U140 — ค่าตั้งที่เป็นสมมติฐานรอนักบัญชียืนยัน
+    assumption: 'wht_threshold',
     title: 'กติกาภาษี (Tax Profile) ทำงานอย่างไร',
     what:
       'ชุดกติกาที่ผูกกับผู้รับเงิน ใช้คิดภาษีหัก ณ ที่จ่ายของเงินได้ 40(8) — อัตราหัก ฐานที่ใช้หัก และยอดขั้นต่ำ · อัตราของผู้รับเงินชนะอัตราของแผนค่าตอบแทนเสมอ',

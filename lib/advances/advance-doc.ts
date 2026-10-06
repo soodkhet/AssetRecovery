@@ -60,6 +60,8 @@ export interface AdvanceDocSource {
   payoutBatchName: string | null
   /** ใบรับรองแทนใบเสร็จตอนเคลียร์ยอด (มติ PO U103) */
   substituteReceiptNumber: string | null
+  /** `advances.letterhead_snapshot` ดิบ (มติ PO U130 — ตอนอนุมัติ) · ไม่มี = หัวกระดาษปัจจุบัน */
+  letterheadSnapshot?: unknown
 }
 
 export const ADVANCE_REQUEST_NOTE =
@@ -144,6 +146,8 @@ export interface AdvanceReturnDocSource {
   /** ยอดที่รับคืนแล้วก่อนแถวนี้ (แถวที่ยังมีผล — ไม่นับที่กลับรายการ) */
   collectedBeforeSatang: number
   advance: AdvanceDocSource
+  /** `advance_returns.letterhead_snapshot` ดิบ (มติ PO U130 — ตอนบันทึกรับคืน) · ไม่มี = หัวกระดาษปัจจุบัน */
+  letterheadSnapshot?: unknown
 }
 
 export function advanceReturnFileName(returnNumber: string): string {

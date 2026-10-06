@@ -244,6 +244,9 @@ suite('เลข CRT', () => {
     ])
     const audit = await db().auditLog.findFirst({ where: { targetType: 'substitute_receipts', targetId: issued.id } })
     expect(audit?.action).toBe('create')
+    // มติ PO U130 — หัวกระดาษ snapshot ตอนออกใบ
+    const stored = await db().substituteReceipt.findUniqueOrThrow({ where: { id: issued.id }, select: { letterheadSnapshot: true } })
+    expect(stored.letterheadSnapshot).toMatchObject({ name: expect.any(String), tax_id: expect.any(String) })
   })
 })
 

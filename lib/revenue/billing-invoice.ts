@@ -120,6 +120,83 @@ export function billingInvoicePartiesOf(
   }
 }
 
+// ── snapshot รายละเอียดใบแจ้งหนี้ ณ วันส่ง (มติ PO 07/10/2569 U130) ──────────────
+
+/** รายละเอียดบนใบแจ้งหนี้ที่เดิมอ่านสด — % ภาษีที่ลูกค้าหัก + บัญชีรับเงิน + รายละเอียดทรัพย์ต่อบรรทัด */
+export interface BillingInvoiceDetailSnapshot {
+  /** NULL = ลูกค้าไม่หักภาษี ณ วันส่ง */
+  customerWhtPct: number | null
+  receivingAccount: DocBankAccount | null
+  /** ต่อรายได้ (`revenues.id`) */
+  lines: ReadonlyMap<string, { assetDescription: string | null; handoverDocRef: string | null }>
+}
+
+/** snapshot → JSONB (คีย์ snake_case · % เก็บเป็นข้อความทศนิยม 2 ตำแหน่ง ไม่ใช่ float) */
+export function billingInvoiceDetailSnapshotJson(snapshot: {
+  customerWhtPct: string | null
+  receivingAccount: DocBankAccount | null
+  lines: readonly { revenueId: string; assetDescription: string | null; handoverDocRef: string | null }[]
+}): {
+  customer_wht_pct: string | null
+  receiving_account: { bank_name: string; account_number: string; account_name: string | null } | null
+  lines: { revenue_id: string; asset_description: string | null; handover_doc_ref: string | null }[]
+} {
+  return {
+    customer_wht_pct: snapshot.customerWhtPct,
+    receiving_account:
+      snapshot.receivingAccount === null
+        ? null
+        : {
+            bank_name: snapshot.receivingAccount.bankName,
+            account_number: snapshot.receivingAccount.accountNumber,
+            account_name: snapshot.receivingAccount.accountName,
+          },
+    lines: snapshot.lines.map((line) => ({
+      revenue_id: line.revenueId,
+      asset_description: line.assetDescription,
+      handover_doc_ref: line.handoverDocRef,
+    })),
+  }
+}
+
+function recordOf(value: unknown): Record<string, unknown> | null {
+  return typeof value === 'object' && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : null
+}
+
+function textOrNull(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() !== '' ? value : null
+}
+
+/** อ่าน JSONB กลับ — `null` = ไม่มี snapshot (รอบที่ส่งก่อน U130) หรือรูปไม่ถูกต้อง ⇒ ผู้เรียกใช้ค่าปัจจุบัน */
+export function parseBillingInvoiceDetailSnapshot(value: unknown): BillingInvoiceDetailSnapshot | null {
+  const record = recordOf(value)
+  if (record === null || !Array.isArray(record['lines'])) return null
+  const pctText = textOrNull(record['customer_wht_pct'])
+  const pct = pctText === null ? null : Number(pctText)
+  if (pct !== null && !Number.isFinite(pct)) return null
+  const account = recordOf(record['receiving_account'])
+  const bankName = account === null ? null : textOrNull(account['bank_name'])
+  const accountNumber = account === null ? null : textOrNull(account['account_number'])
+  const lines = new Map<string, { assetDescription: string | null; handoverDocRef: string | null }>()
+  for (const entry of record['lines'] as unknown[]) {
+    const line = recordOf(entry)
+    const revenueId = line === null ? null : textOrNull(line['revenue_id'])
+    if (line === null || revenueId === null) continue
+    lines.set(revenueId, {
+      assetDescription: textOrNull(line['asset_description']),
+      handoverDocRef: textOrNull(line['handover_doc_ref']),
+    })
+  }
+  return {
+    customerWhtPct: pct,
+    receivingAccount:
+      bankName === null || accountNumber === null
+        ? null
+        : { bankName, accountNumber, accountName: account === null ? null : textOrNull(account['account_name']) },
+    lines,
+  }
+}
+
 export interface BillingInvoiceLineSource {
   caseRef: string
   revenueDate: Date

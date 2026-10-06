@@ -78,6 +78,7 @@
 | v4.51 | 07/10/2569 | **มติ PO 07/10/2569 (U125 + U126)** — `service_fee_templates`: ลบคอลัมน์ `charge_per_tracking_round` (U125 — คิดค่าบริการทุกรอบติดตามอิสระเสมอ รายได้แยกต่อ (เคส, `tracking_round`) ไม่หักกลบ) · §3 enum `service_fee_basis` เหลือ `debt_amount` ค่าเดียว (U126 — ตัด `asset_value`; migration มียามหยุดถ้ายังมีเทมเพลต/เคสใช้ `asset_value`) · `cases.asset_value_satang` คงไว้เป็นข้อมูลเคส (ไม่ใช้เป็นฐานค่าบริการ) · migration `20261007100000_service_fee_drop_round_switch_and_asset_value` |
 | v4.5x-CA | 07/10/2569 | **มติ PO 07/10/2569 (U134 + U136)** — **U134** `payout_batches` + `post_completion_synced_at TIMESTAMPTZ` (ขั้นหลังรอบจ่าย completed ครบแล้ว — NULL บนรอบ completed = ค้าง ⇒ ตัวกวาด `payout_completion_repair` ทำต่อ) + partial index `idx_payout_batches_org_post_completion_pending` · backfill: รอบ completed เดิมที่ทุกรายการมีบันทึกจ่ายแล้ว = ครบ (migration `20261008031000_payout_post_completion_marker`) · **U136** `bank_transactions` + `occurrence_seq INTEGER NOT NULL DEFAULT 1` (CHECK ≥ 1) และ `uniq_bank_tx_statement_row` รวม `occurrence_seq` (migration `20261008030000_bank_tx_statement_occurrence`) |
 | v4.5x-BY | 07/10/2569 | **มติ PO O72(2) (BUG-SF2)** — `recycle_requests` เพิ่ม 8 คอลัมน์ `prev_*` (ผลปิดงาน/วันปิดงาน/snapshot ค่าบริการ/ยอดหนี้ของ**รอบก่อนรีไซเกิล** — เติมตอนอนุมัติรีไซเกิล) ⇒ `tryCreateRevenue()` ประเมินรายได้**ต่อ (เคส, รอบติดตาม)**: รายการเบิกรอบเดิม (ผูกรอบผ่าน `case_assignments.tracking_round`) ที่อนุมัติหลังรีไซเกิลยังเกิดรายได้รอบเดิม · backfill คำขอเก่าจาก audit การอนุมัติรีไซเกิล · migration `20261008010000_recycle_previous_round_snapshot` · ไม่มีตาราง/enum ใหม่ |
+| v4.5x-BZ | 07/10/2569 | **มติ PO 07/10/2569 (U127 · U130 · U140)** (migration `20261008020000_supplementary_filing_doc_snapshots_assumptions`) — (U127) `wht_filing_summaries` + `supplementary_required_at`/`supplementary_filed_at`/`supplementary_filed_by` + CHECK `wht_filing_supplementary_only_when_filed` (ธงต้องยื่นเพิ่มเติม — ไม่เพิ่มสถานะ) · (U130) `letterhead_snapshot JSONB` บน `payout_batches`/`advances`/`advance_returns`/`substitute_receipts` (trigger `document_letterhead_snapshot_write_once`) + `billing_batches.invoice_detail_snapshot JSONB` (trigger `billing_batches_invoice_detail_snapshot_write_once`) — NULL = เอกสารก่อน U130 ใช้ค่าปัจจุบัน · (U140) ตารางใหม่ `setting_assumption_confirmations` (insert-only · unique ต่อองค์กรต่อรายการ) |
 
 ขอบเขตเอกสารนี้: Full Production Database Schema — ทุก table, column, type, FK, index, unique constraint, enum, migration order และ seed data สรุปจาก spec ไฟล์ทั้งหมดไว้ในที่เดียว ใช้เป็น source of truth เดียวก่อนเขียน Prisma schema
 
@@ -1602,6 +1603,7 @@ CREATE TABLE advances (
   rejection_reason    TEXT,
   -- A4 (มติ PO 2026-08-12): เส้นทางจ่ายเงินทดรองออกผ่านรอบจ่าย (คู่กับ payout_batch_items.advance_id)
   payout_batch_item_id UUID,
+  letterhead_snapshot JSONB,  -- v4.5x-BZ (U130) หัวกระดาษองค์กร ตอนอนุมัติ (ใบเบิกเงินทดรอง) · NULL = ก่อน U130 ⇒ ค่าปัจจุบัน · เขียนครั้งเดียว (trigger)
   created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
   created_by          UUID            NOT NULL REFERENCES users(id),
   updated_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
@@ -1664,6 +1666,7 @@ CREATE TABLE payout_batches (
   -- ⇒ ตัวกวาด payout_completion_repair ทำต่อ · เขียนด้วย raw SQL เท่านั้น (ไม่ขยับ updated_at)
   post_completion_synced_at TIMESTAMPTZ,
   -- Audit
+  letterhead_snapshot JSONB,  -- v4.5x-BZ (U130) หัวกระดาษองค์กร ตอนสร้างไฟล์โอนครั้งแรก (ใบสำคัญจ่าย/สลิป) · NULL = ก่อน U130 ⇒ ค่าปัจจุบัน · เขียนครั้งเดียว (trigger)
   created_at            TIMESTAMPTZ          NOT NULL DEFAULT NOW(),
   created_by            UUID                 NOT NULL REFERENCES users(id),
   updated_at            TIMESTAMPTZ          NOT NULL DEFAULT NOW(),
@@ -1729,6 +1732,7 @@ CREATE TABLE advance_returns (
   reversed_at           TIMESTAMPTZ,
   reversed_by           UUID                   REFERENCES users(id),
   reversal_reason       TEXT,
+  letterhead_snapshot JSONB,  -- v4.5x-BZ (U130) หัวกระดาษองค์กร ตอนบันทึกรับคืน (ใบรับคืนเงินทดรอง) · NULL = ก่อน U130 ⇒ ค่าปัจจุบัน · เขียนครั้งเดียว (trigger)
   created_at            TIMESTAMPTZ            NOT NULL DEFAULT NOW(),
   created_by            UUID                   NOT NULL REFERENCES users(id),
   updated_at            TIMESTAMPTZ            NOT NULL DEFAULT NOW(),
@@ -1766,6 +1770,7 @@ CREATE TABLE substitute_receipts (
   cancelled_by       UUID                      REFERENCES users(id),
   cancel_reason      TEXT,                     -- เหตุผลบังคับ (ไม่ว่าง)
   replaces_receipt_id UUID                     REFERENCES substitute_receipts(id),  -- U117: ใบที่ยกเลิกซึ่งใบนี้ออกแทน (ห้ามแก้ · ห้ามอ้างตัวเอง)
+  letterhead_snapshot JSONB,  -- v4.5x-BZ (U130) หัวกระดาษองค์กร ตอนออกใบรับรองแทนใบเสร็จ · NULL = ก่อน U130 ⇒ ค่าปัจจุบัน · เขียนครั้งเดียว (trigger)
   created_at         TIMESTAMPTZ               NOT NULL DEFAULT NOW(),
   created_by         UUID                      NOT NULL REFERENCES users(id),
   updated_at         TIMESTAMPTZ               NOT NULL,
@@ -1859,6 +1864,7 @@ CREATE TABLE billing_batches (
   -- UAT BUG-164 (v4.40): snapshot ผู้ขาย/ผู้ซื้อของใบแจ้งหนี้ ตอนส่งรอบ (draft = NULL ทั้งชุด · ส่งแล้วแก้ไม่ได้ — trigger)
   seller_name TEXT, seller_tax_id VARCHAR(13), seller_address TEXT, seller_phone VARCHAR(20), seller_branch_code VARCHAR(5),
   buyer_name  TEXT, buyer_tax_id  VARCHAR(13), buyer_address  TEXT, buyer_phone  VARCHAR(20), buyer_branch_code  VARCHAR(5),
+  invoice_detail_snapshot JSONB,  -- v4.5x-BZ (U130) {customer_wht_pct, receiving_account, lines[{revenue_id, asset_description, handover_doc_ref}]} ณ วันส่ง · NULL = ก่อน U130 ⇒ ค่าปัจจุบัน · เขียนครั้งเดียว (trigger)
   created_at        TIMESTAMPTZ           NOT NULL DEFAULT NOW(),
   created_by        UUID                  NOT NULL REFERENCES users(id),
   updated_at        TIMESTAMPTZ           NOT NULL DEFAULT NOW(),
@@ -2125,6 +2131,11 @@ CREATE TABLE wht_filing_summaries (
   status          wht_filing_status NOT NULL DEFAULT 'pending',
   filed_at        TIMESTAMPTZ,
   filed_by        UUID              REFERENCES users(id),
+  -- v4.5x-BZ (มติ PO 07/10/2569 U127) ธง "ต้องยื่นเพิ่มเติม" — ยกเลิก/ออกใบ 50 ทวิ ของเดือนนี้หลัง `filed`
+  -- ยอด pnd* ของรอบ filed = ยอดที่ยื่น (ไม่คิดทับ) · CHECK wht_filing_supplementary_only_when_filed
+  supplementary_required_at TIMESTAMPTZ,
+  supplementary_filed_at    TIMESTAMPTZ,   -- บัญชีกด "ยื่นเพิ่มเติมแล้ว" (ล้างธง + pnd* = ยอดปัจจุบัน)
+  supplementary_filed_by    UUID           REFERENCES users(id),
   created_at      TIMESTAMPTZ       NOT NULL DEFAULT NOW(),
   UNIQUE(organization_id, period_id)
 );
@@ -2389,6 +2400,20 @@ CREATE TABLE notification_outbox (
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CONSTRAINT chk_notification_outbox_attempts CHECK (attempts >= 0 AND max_attempts > 0),
   CONSTRAINT chk_notification_outbox_sent_at CHECK ((status = 'sent') = (sent_at IS NOT NULL))
+);
+
+-- ── setting_assumption_confirmations (v4.5x-BZ · มติ PO 07/10/2569 U140) ──────
+-- บัญชียืนยันค่าตั้งที่เป็นสมมติฐาน (ทะเบียนในโค้ด lib/settings/assumptions.ts) ⇒ ป้าย "รอนักบัญชียืนยัน" หาย
+-- insert-only (trigger ห้าม UPDATE/DELETE) · ไม่มี updated_*/deleted_at โดยเจตนา
+CREATE TABLE setting_assumption_confirmations (
+  id              UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID         NOT NULL REFERENCES organizations(id),
+  assumption_key  VARCHAR(64)  NOT NULL,
+  reason          TEXT         NOT NULL CHECK (length(btrim(reason)) > 0),
+  confirmed_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  confirmed_by    UUID         NOT NULL REFERENCES users(id),
+  created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  CONSTRAINT uniq_setting_assumption_confirmation UNIQUE (organization_id, assumption_key)
 );
 CREATE UNIQUE INDEX uniq_notification_outbox_org_dedupe_key ON notification_outbox(organization_id, dedupe_key);
 CREATE INDEX idx_notification_outbox_status_available_at ON notification_outbox(status, available_at);

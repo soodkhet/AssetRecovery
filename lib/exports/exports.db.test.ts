@@ -449,8 +449,8 @@ suite('Phase 4.6 — สร้างชุดเอกสารส่งบั�
     // มติ PO 05/10/2569 (U15) — filing_form ต่อท้ายสุด ค่าจาก `wht_certificates.filing_form`
     expect(whtCsv).toContain('wht_baht,wht_pct,filing_form,')
     // มติ PO 06/10/2569 (U94 ข้อ 1) — คอลัมน์ผู้ถูกหักต่อท้าย · ค่าจาก snapshot ของใบ (U96 #4)
-    expect(whtCsv).toContain('filing_form,payee_title,payee_address,payee_branch,wht_condition,wht_paid_by_payer_baht\r\n')
-    expect(whtCsv).toContain('8500.00,255.00,3.00,PND3,นาย,12 ม.3 ต.ป่าแดด อ.เมืองเชียงใหม่ จ.เชียงใหม่ 50100,-,withhold,0.00\r\n')
+    expect(whtCsv).toContain('filing_form,payee_title,payee_address,payee_branch,wht_condition,wht_paid_by_payer_baht,status,ref_cert_no\r\n')
+    expect(whtCsv).toContain('8500.00,255.00,3.00,PND3,นาย,12 ม.3 ต.ป่าแดด อ.เมืองเชียงใหม่ จ.เชียงใหม่ 50100,-,withhold,0.00,active,-\r\n')
   })
 
   it('Export ซ้ำรอบเดิม ⇒ v1.1 คนละแถว ไฟล์เดิมยังอยู่ครบ (`37` §16 — ไม่เขียนทับ)', async () => {
@@ -1312,5 +1312,43 @@ suite('มติ PO U94 ข้อ 4/5 · U96 #15 — ยอดรวมควบ
     const whtCsv = packFile(record.version, '05_WHT_Data.csv')
     expect(whtCsv).toContain(active?.certificate_number ?? '-')
     expect(whtCsv).not.toContain(cancelled?.certificate_number ?? '-')
+  })
+
+  it('U128 — ใบเดือนก่อนที่ส่งชุดแล้วถูกยกเลิกในงวดถัดไป ⇒ ไฟล์ 05 ของงวดถัดไปมีแถวกลับรายการ (ยอดติดลบ · อ้างใบเดิม) + 00 หักกลบ', async () => {
+    const [active] = await db().$queryRawUnsafe<{ id: string; certificate_number: string; wht_satang: number; gross_satang: number }[]>(
+      `SELECT id, certificate_number, wht_satang, gross_satang FROM wht_certificates
+        WHERE organization_id = '${ORG_ID}' AND status = 'active' ORDER BY certificate_number LIMIT 1`,
+    )
+    if (active === undefined) throw new Error('fixture')
+    // ชุดล่าสุดของเดือนมิถุนายน = ส่งให้สำนักงานบัญชีแล้ว (สร้างก่อนการยกเลิก)
+    await db().$executeRawUnsafe(`
+      UPDATE export_records SET status = 'sent', sent_at = '2026-07-02T03:00:00Z', generated_at = '2026-07-01T03:00:00Z'
+       WHERE id = (SELECT id FROM export_records WHERE organization_id = '${ORG_ID}'
+                    AND period_id = '${await junePeriodId()}' ORDER BY version DESC LIMIT 1)
+    `)
+    await db().$executeRawUnsafe(
+      `UPDATE wht_certificates SET status = 'cancelled', cancel_reason = 'ทดสอบ U128', cancelled_by = '${USER_ID}',
+              cancelled_at = '2026-07-10T03:00:00Z' WHERE id = '${active.id}'`,
+    )
+    const { ensurePeriodForDate } = await import('@/lib/accounting/queries')
+    const july = await ensurePeriodForDate(ctx, new Date('2026-07-10T03:00:00Z'))
+    const record = await exportsApi.createExportPack(ctx, { periodId: july.id })
+
+    const fileOf = (suffix: string): string =>
+      fileAt(
+        [...storage.keys()].find(
+          (key) => /\/2569-0?7\//.test(key) && key.includes(`/v${record.version}/`) && key.endsWith(suffix),
+        ) ?? '',
+      )
+    const lines = csvRows(fileOf('05_WHT_Data.csv'))
+    const reversal = lines.find((line) => line.startsWith(`${active.certificate_number},`))
+    expect(reversal).toBeDefined()
+    expect(reversal?.endsWith(`,cancelled,${active.certificate_number}`)).toBe(true)
+    expect(reversal).toContain(`,-${(active.gross_satang / 100).toFixed(2)},-${(active.wht_satang / 100).toFixed(2)},`)
+    // เดือนที่จ่าย = มิถุนายน ⇒ ไม่มีแถวปกติของใบนี้ในชุดเดือนกรกฎาคม
+    expect(lines.filter((line) => line.startsWith(`${active.certificate_number},`))).toHaveLength(1)
+
+    const control = fileOf('00_Control_Totals.csv')
+    expect(control).toContain(`,wht_remit_total,ภาษีหัก ณ ที่จ่าย — รวมต้องนำส่ง,1,-${(active.wht_satang / 100).toFixed(2)}`)
   })
 })

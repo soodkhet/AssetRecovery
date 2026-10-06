@@ -217,6 +217,12 @@ export const NOTIFICATION_EVENTS = {
     source: '90 §6.3 · 33 §9',
     description: 'ใกล้ครบกำหนดยื่น ภ.ง.ด. ของงวด — เตือนก่อนถึงกำหนด',
   },
+  'wht.supplementary_filing_required': {
+    module: 'บัญชี',
+    level: 'warning',
+    source: '33 §9 (มติ PO 07/10/2569 U127)',
+    description: 'มีการยกเลิก/ออกหนังสือรับรองใหม่ในเดือนที่ยื่นแบบแล้ว — ต้องยื่นเพิ่มเติม',
+  },
   'exception.created': {
     module: 'บัญชี',
     level: 'critical',

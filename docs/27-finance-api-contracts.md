@@ -32,6 +32,7 @@
 | v3.3 | 15/08/2569 | **เติม §6.7** (Phase 3.6 — Revenue/Billing `19`): `GET /api/billing-batches/:id` (ปุ่ม "เอกสาร" ของตาราง `19` §8 ต้องเปิดรายละเอียดรอบ + รายการรายได้ในรอบ) และ `DELETE /api/billing-batches/:id` (`19` §10 ระบุกติกา "ห้ามลบ Billing Batch ที่ `status != draft`" ไว้ตรง ๆ ⇒ ต้องมี endpoint ให้ลบรอบ `draft` ได้จริง) — เป็น endpoint ที่ flow ใน `19` §8/§10 ต้องใช้อยู่แล้วแต่ตกหล่นจากรายการ ไม่ใช่ business logic ใหม่ (แนวเดียวกับ v3/v3.2) |
 | v3.2 | 15/08/2569 | **เติม §6.6** (Phase 3.4 — Payout Batch `17`): `GET /api/payout-batches/:id` (ปุ่ม "ดู" ของตารางรอบจ่าย `17` §8 ต้องมีรายละเอียด+รายการในรอบ) และ `GET /api/payout-batches/:id/payment-file` (ไฟล์โอนเก็บใน bucket private ⇒ ดาวน์โหลดต้องผ่าน endpoint ที่ตรวจ `generate_payment_file` ทุกครั้ง ห้ามแจก signed URL) — เป็น endpoint ที่ flow ใน `17` §8/§9 ต้องใช้อยู่แล้วแต่ตกหล่นจากรายการ ไม่ใช่ business logic ใหม่ (แนวเดียวกับ v3) |
 | v3.x-CA | 07/10/2569 | **มติ PO 07/10/2569 (U137)** §6.14: `GET /api/bank-reconciliation/match-proposals` (คู่ที่ระบบเสนอ — สิทธิ์ view ของ `manage_bank_reconciliation`) · `PATCH /transactions/:id/match` รับ `fromProposal?: boolean` (audit ระบุที่มา · กติกาเหมือนจับคู่มือ) |
+| v3.x-BZ | 07/10/2569 | **มติ PO 07/10/2569 (U127 · U140)**: เพิ่ม `PATCH /api/accounting/wht-filing-summary/:id/mark-supplementary-filed` (ล้างธงต้องยื่นเพิ่มเติม · `manage_wht` · reason บังคับ) · `GET /api/settings/assumptions` + `POST /api/settings/assumptions/:key/confirm` (ป้าย "รอนักบัญชียืนยัน" บนหน้าตั้งค่า · confirm = `manage_accountant_questions` · reason บังคับ) |
 
 ขอบเขตเอกสารนี้: รวม API Endpoint ทั้งหมดของโมดูล Finance/Accounting เป็นรายการเดียว จัดกลุ่มตาม resource เพื่อให้ backend implement ตาม REST convention เดียวกันทั้งระบบ
 
@@ -63,6 +64,8 @@ GET/POST/PATCH /api/settings/tax-profiles
 GET/POST       /api/settings/tax-profile-defaults ← Tax Profile ค่าเริ่มต้นตามประเภทผู้รับ (มติ PO U121 · insert-only · POST = manage_tax_profiles + reason)
 GET/POST/PATCH /api/settings/vat-rates
 GET/POST       /api/settings/wht-policy          ← ค่าตั้งภาษีหัก ณ ที่จ่าย (มติ PO 05/10/2569 · insert-only)
+GET            /api/settings/assumptions         ← ค่าตั้งที่เป็นสมมติฐานรอนักบัญชียืนยัน + สถานะยืนยัน (มติ PO 07/10/2569 U140)
+POST           /api/settings/assumptions/:key/confirm ← บัญชียืนยันแล้ว (reason บังคับ · insert-only)
 GET            /api/settings/document-numbering          (มติ PO U102 — เลขที่เอกสารทุกชนิด · view_master_data)
 PATCH          /api/settings/document-numbering/:docType (manage_invoice_numbering + reason · แทน /api/settings/tax-invoice-numbering)
 GET/PATCH      /api/settings/organization           (มติ PO U99 — ข้อมูลองค์กร · ดู = view_master_data · แก้ = manage_invoice_numbering + reason)
@@ -202,6 +205,7 @@ GET    /api/accounting/wht-certificates
 PATCH  /api/accounting/wht-certificates/:id/cancel
 GET    /api/accounting/wht-filing-summary
 PATCH  /api/accounting/wht-filing-summary/:id/mark-filed
+PATCH  /api/accounting/wht-filing-summary/:id/mark-supplementary-filed   ← มติ PO 07/10/2569 U127 (reason บังคับ)
 ```
 
 ### 6.13 Exceptions (ไฟล์ 34)

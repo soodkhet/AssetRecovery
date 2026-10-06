@@ -681,10 +681,11 @@ function renderAccountingOperations() {
               <td class="px-4 py-3 text-xs ${w.status === 'pending' && w.daysRemaining < 0 ? 'text-red-600 font-bold' : 'text-slate-500'}">${w.filingDueDate}</td>
               <td class="px-4 py-3 font-semibold">฿ ${money(w.pnd3Total)}</td>
               <td class="px-4 py-3 font-semibold">฿ ${money(w.pnd53Total)}</td>
-              <td class="px-4 py-3">${statusBadge(w.status)}</td>
+              <td class="px-4 py-3">${statusBadge(w.status)}${w.supplementaryRequired ? `<div class="mt-1"><span class="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold bg-orange-100 text-orange-800">ต้องยื่นเพิ่มเติม</span><p class="text-[10px] text-slate-500 mt-0.5">ยอดต่างจากที่ยื่น ${w.supplementaryDiff}</p></div>` : ''}</td>
               <td class="px-4 py-3 text-right whitespace-nowrap">
                 <div class="inline-flex items-center gap-1.5">
                   ${w.status === 'pending' ? btnAction(Icon.check + ' Mark Filed', 'open-modal', 'mark-wht-filed', w.id, 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100') : ''}
+                  ${w.supplementaryRequired ? btnAction(Icon.check + ' ยื่นเพิ่มเติมแล้ว', 'open-modal', 'mark-wht-filed', w.id) : ''}
                   ${btnAction(Icon.eye + ' ดูรายละเอียด', 'open-modal', 'wht-summary-detail', w.id)}
                 </div>
               </td>

@@ -576,6 +576,26 @@ export function whtFilingReminderStage(daysLeft: number): string {
   return `overdue-w${Math.floor((Math.abs(daysLeft) - 1) / 7) + 1}`
 }
 
+/**
+ * มติ PO 07/10/2569 U127 — ยกเลิก/ออกใบ 50 ทวิ ในเดือนที่ยื่น ภ.ง.ด. แล้ว ⇒ บัญชีต้องยื่นเพิ่มเติม
+ * คีย์ = รอบ + ใบ + การกระทำ ⇒ เหตุการณ์เดียวกันไม่แจ้งซ้ำ แต่ใบใหม่/การยกเลิกครั้งต่อไปแจ้งใหม่
+ */
+export function whtSupplementaryFilingMessage(input: {
+  summaryId: string
+  periodLabel: string
+  certificateNumber: string
+  action: 'cancelled' | 'issued'
+}): NotificationMessage {
+  const what = input.action === 'cancelled' ? 'ยกเลิก' : 'ออก'
+  return {
+    eventCode: 'wht.supplementary_filing_required',
+    title: 'ต้องยื่น ภ.ง.ด. เพิ่มเติม',
+    body: `งวด ${input.periodLabel} ยื่นแบบไปแล้ว แต่มีการ${what}หนังสือรับรอง ${input.certificateNumber} ภายหลัง — ตรวจยอดต่างแล้วยื่นเพิ่มเติม`,
+    linkPath: '/accounting?tab=wht',
+    dedupeKey: `wht-supplementary-${input.summaryId}-${input.action}-${input.certificateNumber}`,
+  }
+}
+
 export function whtFilingDueMessage(input: {
   summaryId: string
   periodLabel: string

@@ -204,6 +204,9 @@ suite('ห้ามเบิกซ้อน (`15` §9.2/§16)', () => {
   it('มียอด approved ค้าง → ขอใหม่ไม่ได้', async () => {
     const first = await advances.createAdvance(ctx(agent), createInput())
     await advances.approveAdvance(ctx(finance), first.id, { approvedSatang: null, note: null })
+    // มติ PO U130 — หัวกระดาษใบเบิกเงินทดรอง snapshot ตอนอนุมัติ
+    const approved = await db().advance.findUniqueOrThrow({ where: { id: first.id }, select: { letterheadSnapshot: true } })
+    expect(approved.letterheadSnapshot).toMatchObject({ name: expect.any(String) })
 
     await expectCode(() => advances.createAdvance(ctx(agent), createInput()), 'ADVANCE_PENDING_SETTLEMENT')
   })

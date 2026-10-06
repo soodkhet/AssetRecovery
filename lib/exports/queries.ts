@@ -75,6 +75,7 @@ import {
   type TaxInvoiceExportRow,
   type UnbilledRevenueExportRow,
   type WhtExportRow,
+  whtReversalRow,
 } from '@/lib/exports/pack'
 import { estimateAccruedWhtSatang } from '@/lib/exports/accrued-expenses'
 import { loadTaxProfileDefaults } from '@/lib/settings/queries/tax-profile-defaults'
@@ -116,6 +117,7 @@ import { signedAdjustmentSatang } from '@/lib/adjustments/adjustment'
 import { CREDIT_NOTE_DOCUMENT_CODE } from '@/lib/credit-notes/credit-note'
 import { Prisma, type ExportRecordStatus } from '@/lib/generated/prisma/client'
 import { parseBillingPeriodLabel } from '@/lib/revenue/revenue'
+import { parseOrganizationLetterheadSnapshot } from '@/lib/organization/profile'
 import { prisma } from '@/lib/prisma'
 import { startOfBangkokDay } from '@/lib/format/datetime'
 import { assertOrgWideReadable } from '@/lib/auth/scope'
@@ -535,38 +537,32 @@ async function payoutVouchersOf(organizationId: string, rows: readonly ExpenseRe
   }
 }
 
-async function whtRows(
-  organizationId: string,
-  scope: PeriodScope,
-): Promise<{ rows: WhtExportRow[]; certificates: { id: string; number: string }[] }> {
-  const rows = await prisma.whtCertificate.findMany({
-    where: {
-      organizationId,
-      // ใบที่ยกเลิกไม่นับยอด (`33` §16) — ไฟล์ที่ส่งสำนักงานบัญชีจึงมีเฉพาะใบที่ยังมีผล
-      status: 'active',
-      expenseRecord: { periodId: scope.id },
-    },
-    orderBy: [{ certificateNumber: 'asc' }],
-    select: {
-      id: true,
-      certificateNumber: true,
-      incomeType: true,
-      paymentDate: true,
-      grossSatang: true,
-      whtSatang: true,
-      filingForm: true,
-      // snapshot ผู้ถูกหัก ณ วันออกใบ (มติ PO U96 #4) — ไม่อ่านโปรไฟล์ปัจจุบัน
-      payeeName: true,
-      payeeNameTitle: true,
-      payeeTaxId: true,
-      payeeAddress: true,
-      payeeBranchCode: true,
-      whtCondition: true,
-      expenseRecord: { select: { payoutBatchItem: { select: { whtPctSnapshot: true } } } },
-    },
-  })
+const WHT_EXPORT_SELECT = {
+  id: true,
+  certificateNumber: true,
+  incomeType: true,
+  paymentDate: true,
+  grossSatang: true,
+  whtSatang: true,
+  filingForm: true,
+  status: true,
+  cancelledAt: true,
+  createdAt: true,
+  // snapshot ผู้ถูกหัก ณ วันออกใบ (มติ PO U96 #4) — ไม่อ่านโปรไฟล์ปัจจุบัน
+  payeeName: true,
+  payeeNameTitle: true,
+  payeeTaxId: true,
+  payeeAddress: true,
+  payeeBranchCode: true,
+  whtCondition: true,
+  replaces: { select: { certificateNumber: true } },
+  expenseRecord: { select: { periodId: true, payoutBatchItem: { select: { whtPctSnapshot: true } } } },
+} satisfies Prisma.WhtCertificateSelect
 
-  const exportRows: WhtExportRow[] = rows.map((row) => ({
+type WhtExportSource = Prisma.WhtCertificateGetPayload<{ select: typeof WHT_EXPORT_SELECT }>
+
+function toWhtExportRow(row: WhtExportSource): WhtExportRow {
+  return {
     certificateNumber: row.certificateNumber,
     payeeName: row.payeeName,
     payeeTaxId: row.payeeTaxId,
@@ -580,7 +576,87 @@ async function whtRows(
     payeeAddress: row.payeeAddress,
     payeeBranchCode: row.payeeBranchCode,
     whtCondition: row.whtCondition,
-  }))
+    rowStatus: 'active',
+    refCertificateNumber: row.replaces?.certificateNumber ?? null,
+  }
+}
+
+/**
+ * งวดของ "เดือนที่จ่าย" ที่ส่งชุดให้สำนักงานบัญชีไปแล้ว **ก่อน** เหตุการณ์ (มติ PO 07/10/2569 U128) — ดูชุดล่าสุดของงวดนั้น:
+ * ชุดล่าสุดสร้างก่อนเหตุการณ์และ mark ส่งแล้ว (`sent`/`accepted`) ⇒ ไฟล์ที่สำนักงานบัญชีถืออยู่ยังไม่สะท้อนเหตุการณ์นี้
+ * · ชุดล่าสุดสร้างหลังเหตุการณ์ (สร้างงวดเดิมใหม่) = สะท้อนแล้ว ไม่ต้องลงซ้ำในงวดถัดไป · ยังไม่ส่ง = จะสร้างใหม่ก่อนส่งอยู่แล้ว
+ */
+async function sentPackLookup(
+  organizationId: string,
+  periodIds: readonly string[],
+): Promise<(periodId: string, eventAt: Date) => boolean> {
+  if (periodIds.length === 0) return () => false
+  const exports = await prisma.exportRecord.findMany({
+    where: { organizationId, periodId: { in: [...new Set(periodIds)] } },
+    orderBy: [{ periodId: 'asc' }, { version: 'desc' }],
+    select: { periodId: true, status: true, generatedAt: true },
+  })
+  const latest = new Map<string, { status: string; generatedAt: Date }>()
+  for (const row of exports) if (!latest.has(row.periodId)) latest.set(row.periodId, row)
+  return (periodId, eventAt) => {
+    const pack = latest.get(periodId)
+    return pack !== undefined && pack.status !== 'generated' && pack.generatedAt.getTime() <= eventAt.getTime()
+  }
+}
+
+/**
+ * `05_WHT_Data.csv` (มติ PO 07/10/2569 U128 — ตามเดือนที่จ่าย ตรงกับการยื่น ภ.ง.ด.)
+ * 1. ใบที่มีผลซึ่ง `payment_date` อยู่ในเดือนของงวด (ใบที่ยกเลิกไม่นับยอด — `33` §16)
+ * 2. **แถวกลับรายการ** (`status=cancelled` ยอดติดลบ · `ref_cert_no` = ใบเดิม) — ใบของเดือนก่อนที่ส่งชุดไปแล้ว
+ *    แต่ถูกยกเลิกในงวดนี้
+ * 3. **ใบที่ออกภายหลัง** (เช่นใบออกแทน · `ref_cert_no` = ใบที่ถูกแทน) — ใบของเดือนก่อนที่ส่งชุดไปแล้ว แต่ออกในงวดนี้
+ * ยอดใน `00_Control_Totals.csv` คิดจากแถวชุดนี้ (รวมยอดติดลบ) จึงตรงกับไฟล์เสมอ
+ */
+async function whtRows(
+  organizationId: string,
+  scope: PeriodScope,
+): Promise<{ rows: WhtExportRow[]; certificates: { id: string; number: string }[] }> {
+  const startAt = startOfBangkokDay(scope.start)
+  const endAt = startOfBangkokDay(scope.end)
+  const [paidInPeriod, lateEvents] = await Promise.all([
+    prisma.whtCertificate.findMany({
+      where: { organizationId, status: 'active', paymentDate: { gte: scope.start, lt: scope.end } },
+      orderBy: [{ certificateNumber: 'asc' }],
+      select: WHT_EXPORT_SELECT,
+    }),
+    // ใบของเดือนก่อนหน้าที่มีเหตุการณ์ (ยกเลิก/ออก) ในงวดนี้ — กรองต่อด้วย "ส่งชุดของเดือนนั้นไปแล้ว"
+    prisma.whtCertificate.findMany({
+      where: {
+        organizationId,
+        paymentDate: { lt: scope.start },
+        OR: [{ cancelledAt: { gte: startAt, lt: endAt } }, { createdAt: { gte: startAt, lt: endAt } }],
+      },
+      orderBy: [{ certificateNumber: 'asc' }],
+      select: WHT_EXPORT_SELECT,
+    }),
+  ])
+
+  const sentBefore = await sentPackLookup(
+    organizationId,
+    lateEvents.map((row) => row.expenseRecord.periodId),
+  )
+  const inScope = (at: Date | null): at is Date => at !== null && at >= startAt && at < endAt
+  const issuedLate = lateEvents.filter(
+    (row) => inScope(row.createdAt) && sentBefore(row.expenseRecord.periodId, row.createdAt),
+  )
+  const reversed = lateEvents.filter(
+    (row) =>
+      row.status === 'cancelled' &&
+      inScope(row.cancelledAt) &&
+      // ใบที่ออกและยกเลิกในงวดนี้เอง = แถวออก + แถวกลับรายการ (หักกลบเป็นศูนย์) · ใบที่อยู่ในชุดที่ส่งแล้ว = กลับรายการ
+      (sentBefore(row.expenseRecord.periodId, row.cancelledAt) || issuedLate.some((issued) => issued.id === row.id)),
+  )
+
+  const exportRows: WhtExportRow[] = [
+    ...paidInPeriod.map(toWhtExportRow),
+    ...issuedLate.map(toWhtExportRow),
+    ...reversed.map((row) => whtReversalRow(toWhtExportRow(row))),
+  ]
 
   // `payee_tax_id` ต้องเป็นเลข 13 หลักล้วนทุกแถว (DEC-006/D10) — ขาดแม้แถวเดียวคือหยุด ไม่ส่งช่องว่างออกไป
   const missing = payeesMissingTaxId(exportRows)
@@ -593,7 +669,10 @@ async function whtRows(
 
   return {
     rows: exportRows,
-    certificates: rows.map((row) => ({ id: row.id, number: row.certificateNumber })),
+    // PDF แนบชุดเดียวกับแถวที่มีผล (ใบที่ยกเลิกแนบแยกด้วย `-CANCELLED`)
+    certificates: [...paidInPeriod, ...issuedLate]
+      .filter((row) => row.status === 'active')
+      .map((row) => ({ id: row.id, number: row.certificateNumber })),
   }
 }
 
@@ -1325,8 +1404,9 @@ async function cancelledWhtCertificatesForPack(
     where: {
       organizationId,
       status: 'cancelled',
+      // มติ PO U128 — ตามเดือนที่จ่าย (ชุดเดียวกับไฟล์ 05) + ใบที่ถูกยกเลิกในช่วงงวดนี้
       OR: [
-        { expenseRecord: { periodId: scope.id } },
+        { paymentDate: { gte: scope.start, lt: scope.end } },
         { cancelledAt: { gte: startOfBangkokDay(scope.start), lt: startOfBangkokDay(scope.end) } },
       ],
     },
@@ -1376,22 +1456,26 @@ async function voucherPdfs(
     render: (item) => {
       let source: Promise<Awaited<ReturnType<typeof getPayoutDocSource>>> | null = null
       const load = () => (source ??= getPayoutDocSource(actor, item.id))
-      // เอกสารภายใน ⇒ หัวเอกสารจากค่าปัจจุบันขององค์กร (มติ PO U99)
+      // มติ PO U130 — หัวกระดาษ ณ ตอนสร้างไฟล์โอนครั้งแรก (snapshot ของรอบ) · รอบก่อน U130 = ค่าปัจจุบัน (U99)
+      const letterheadOf = (snapshot: unknown) =>
+        letterheads.forOrganizationSnapshot(parseOrganizationLetterheadSnapshot(snapshot))
       return [
         {
           suffix: 'PV-',
           render: async () => {
-            const { batch, issuer, payees } = await load()
+            const { batch, issuer, payees, letterheadSnapshot } = await load()
             return new Uint8Array(
-              await renderPaymentVouchers(buildPaymentVoucherDocs(batch, issuer, payees), await letterheads.current()),
+              await renderPaymentVouchers(buildPaymentVoucherDocs(batch, issuer, payees), await letterheadOf(letterheadSnapshot)),
             )
           },
         },
         {
           suffix: 'SLIP-',
           render: async () => {
-            const { batch, issuer, payees } = await load()
-            return new Uint8Array(await renderPayslips(buildPayslipDocs(batch, issuer, payees), await letterheads.current()))
+            const { batch, issuer, payees, letterheadSnapshot } = await load()
+            return new Uint8Array(
+              await renderPayslips(buildPayslipDocs(batch, issuer, payees), await letterheadOf(letterheadSnapshot)),
+            )
           },
         },
       ]

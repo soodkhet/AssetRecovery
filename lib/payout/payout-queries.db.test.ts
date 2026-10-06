@@ -444,6 +444,27 @@ suite('ไฟล์โอนเงิน + idempotency (`17` §6.3/§16 · `13` 
     expect(file.fileName).toBe(`${outcome.result.batch.idempotencyKey}-v1.csv`)
   })
 
+  it('U130 — หัวกระดาษใบสำคัญจ่าย/สลิป snapshot ตอนสร้างไฟล์ครั้งแรก · สร้างซ้ำ/แก้องค์กรภายหลังไม่เปลี่ยน · DB แก้ไม่ได้', async () => {
+    const batchId = await batchWithOneItem()
+    const org = await db().organization.findUniqueOrThrow({ where: { id: ORG_ID }, select: { name: true } })
+    await payout.generatePaymentFile(ctx, batchId, generateInput)
+    const first = await db().payoutBatch.findUniqueOrThrow({ where: { id: batchId }, select: { letterheadSnapshot: true } })
+    expect(first.letterheadSnapshot).toMatchObject({ name: org.name })
+    try {
+      await db().organization.update({ where: { id: ORG_ID }, data: { name: `${org.name} (เปลี่ยนชื่อ)` } })
+      await payout.generatePaymentFile(ctx, batchId, { ...generateInput, confirmDuplicate: true })
+      const again = await db().payoutBatch.findUniqueOrThrow({ where: { id: batchId }, select: { letterheadSnapshot: true } })
+      expect(again.letterheadSnapshot).toEqual(first.letterheadSnapshot)
+      const source = await payout.getPayoutDocSource(finance, batchId)
+      expect(source.issuer.name).toBe(org.name)
+      await expect(
+        db().payoutBatch.update({ where: { id: batchId }, data: { letterheadSnapshot: { name: 'แก้ทับ' } } }),
+      ).rejects.toThrow(/LETTERHEAD_SNAPSHOT_IMMUTABLE/)
+    } finally {
+      await db().organization.update({ where: { id: ORG_ID }, data: { name: org.name } })
+    }
+  })
+
   it('สร้างไฟล์พร้อมกันสองคำขอ → คีย์กันโอนซ้ำต้องมีค่าเดียว (Rule 09 — ธนาคารต้องจับซ้ำได้)', async () => {
     const batchId = await batchWithOneItem()
 

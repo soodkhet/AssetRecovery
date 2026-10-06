@@ -47,6 +47,8 @@ export function vatModeTable(ratePct: number | null, amountSatang = SAMPLE_SERVI
 
 export function vatRateHelp(ratePct: number | null): SettingHelpContent {
   return {
+    // มติ PO U140 — ค่าตั้งที่เป็นสมมติฐานรอนักบัญชียืนยัน
+    assumption: 'vat_rounding',
     title: 'อัตรา VAT ใช้ทำอะไร',
     what:
       'อัตราภาษีมูลค่าเพิ่มที่ใช้คิดรายได้ค่าบริการและใบกำกับภาษี ระบบเลือกอัตราตามวันที่เกิดรายได้ จึงต้องตั้งช่วงวันที่ไม่ทับกัน เมื่อรัฐเปลี่ยนอัตราให้เพิ่มช่วงใหม่ ไม่แก้ช่วงเดิม',
@@ -118,6 +120,8 @@ export function customerWhtHelp(input: {
     })
   }
   return {
+    // มติ PO U140 — ค่าตั้งที่เป็นสมมติฐานรอนักบัญชียืนยัน
+    assumption: 'customer_wht',
     title: 'ลูกค้าหักภาษี ณ ที่จ่ายคืออะไร',
     what:
       'บริษัทไฟแนนซ์บางรายหักภาษี ณ ที่จ่ายจากค่าบริการก่อนโอนเงินให้เรา ระบบใช้อัตรานี้ประมาณยอดที่จะได้รับจริง เพื่อจับคู่เงินเข้ากับบิลได้ถูกต้อง',

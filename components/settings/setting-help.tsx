@@ -1,3 +1,4 @@
+import { AssumptionBadge } from '@/components/settings/assumption-badge'
 import { cn } from '@/components/ui/cn'
 import type { SettingHelpContent } from '@/lib/settings/help/types'
 
@@ -18,10 +19,13 @@ export function SettingHelp({
   className?: string
 }) {
   const examples = help.examples ?? []
-  return (
+  const box = (
     <details
       open={defaultOpen}
-      className={cn('group rounded-lg border border-slate-200 bg-slate-50/70 text-xs text-slate-600', className)}
+      className={cn(
+        'group rounded-lg border border-slate-200 bg-slate-50/70 text-xs text-slate-600',
+        help.assumption === undefined ? className : undefined,
+      )}
     >
       <summary className="focus-ring flex cursor-pointer list-none items-center gap-2 rounded-lg px-3 py-2 font-semibold text-slate-700 hover:bg-slate-100 [&::-webkit-details-marker]:hidden">
         <span
@@ -113,5 +117,13 @@ export function SettingHelp({
         </dl>
       </div>
     </details>
+  )
+  // มติ PO U140 — ค่าตั้งที่เป็นสมมติฐาน: ป้าย "รอนักบัญชียืนยัน" เหนือกล่อง (หายเมื่อบัญชียืนยันแล้ว)
+  if (help.assumption === undefined) return box
+  return (
+    <div className={cn('space-y-1.5', className)}>
+      <AssumptionBadge assumptionKey={help.assumption} />
+      {box}
+    </div>
   )
 }

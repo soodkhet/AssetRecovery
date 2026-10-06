@@ -3,6 +3,10 @@
 import { useState } from 'react'
 import { CancelWhtModal } from '@/components/accounting/cancel-wht-modal'
 import { MarkWhtFiledModal } from '@/components/accounting/mark-wht-filed-modal'
+import {
+  MarkWhtSupplementaryFiledModal,
+  signedSatangText,
+} from '@/components/accounting/mark-wht-supplementary-filed-modal'
 import { useWht, type WhtStatusFilter } from '@/components/accounting/use-wht'
 import { usePermission } from '@/components/auth/permission-provider'
 import {
@@ -51,8 +55,11 @@ export function WhtTab() {
 
   const [cancelling, setCancelling] = useState<WhtCertificateDto | null>(null)
   const [marking, setMarking] = useState<WhtFilingSummaryDto | null>(null)
+  const [supplementing, setSupplementing] = useState<WhtFilingSummaryDto | null>(null)
 
   const pending = filings.pending
+  // มติ PO U127 — รอบที่ยื่นแล้วแต่มีการยกเลิก/ออกใบภายหลัง
+  const supplementary = filings.items.filter((item) => item.supplementaryRequired)
 
   return (
     <div className="space-y-6">
@@ -76,6 +83,14 @@ export function WhtTab() {
               </Button>
             )}
           </div>
+        </InlineAlert>
+      )}
+
+      {supplementary.length > 0 && (
+        <InlineAlert tone="warning" title={`ต้องยื่น ภ.ง.ด. เพิ่มเติม ${fmtCount(supplementary.length)} รอบ`}>
+          มีการยกเลิก/ออกหนังสือรับรองในเดือนที่ยื่นแบบไปแล้ว — รอบ{' '}
+          {supplementary.map((item) => `${item.periodLabel} (ยอดต่าง ${signedSatangText(item.supplementaryDiff?.totalSatang ?? 0)})`).join(' · ')}
+          {' '}· ยอดที่ยื่นแล้วยังคงเดิม ยื่นเพิ่มเติมนอกระบบแล้วกด &quot;ยื่นเพิ่มเติมแล้ว&quot; ที่แถวของรอบนั้น
         </InlineAlert>
       )}
 
@@ -147,11 +162,29 @@ export function WhtTab() {
                           {row.filedByName} · {fmtDate(row.filedAt)}
                         </p>
                       )}
+                      {row.supplementaryRequired && (
+                        <div className="mt-1 space-y-0.5">
+                          <StatusBadge group="warning" label="ต้องยื่นเพิ่มเติม" />
+                          <p className="text-[10px] text-slate-500">
+                            ยอดต่างจากที่ยื่น {signedSatangText(row.supplementaryDiff?.totalSatang ?? 0)}
+                          </p>
+                        </div>
+                      )}
+                      {!row.supplementaryRequired && row.supplementaryFiledAt !== null && (
+                        <p className="mt-0.5 text-[10px] text-slate-400">
+                          ยื่นเพิ่มเติมแล้ว · {row.supplementaryFiledByName ?? '-'} · {fmtDate(row.supplementaryFiledAt)}
+                        </p>
+                      )}
                     </Td>
                     <Td className="text-right whitespace-nowrap">
                       {row.status === 'pending' && canManage && (
                         <Button size="sm" variant="success" onClick={() => setMarking(row)}>
                           Mark Filed
+                        </Button>
+                      )}
+                      {row.supplementaryRequired && canManage && (
+                        <Button size="sm" variant="secondary" onClick={() => setSupplementing(row)}>
+                          ยื่นเพิ่มเติมแล้ว
                         </Button>
                       )}
                     </Td>
@@ -274,6 +307,13 @@ export function WhtTab() {
         key={`filed-${marking?.id ?? 'none'}`}
         summary={marking}
         onClose={() => setMarking(null)}
+        onFiled={() => void reload()}
+      />
+
+      <MarkWhtSupplementaryFiledModal
+        key={`supplementary-${supplementing?.id ?? 'none'}`}
+        summary={supplementing}
+        onClose={() => setSupplementing(null)}
         onFiled={() => void reload()}
       />
     </div>

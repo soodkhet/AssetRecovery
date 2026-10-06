@@ -6,7 +6,7 @@ import { getAdvanceReturnDocSource } from '@/lib/advances/doc-queries'
 import { APPROVE_ADVANCE, REQUEST_ADVANCE } from '@/lib/advances/queries'
 import { emitDocumentExportAudit } from '@/lib/audit/audit'
 import { attachmentHeader } from '@/lib/format/attachment'
-import { currentLetterhead } from '@/lib/organization/letterhead'
+import { issuedDocumentLetterhead } from '@/lib/organization/letterhead'
 
 type RouteContext = { params: Promise<{ id: string; returnId: string }> }
 
@@ -25,7 +25,8 @@ export const GET = withApiPermission<RouteContext>(
     const { id, returnId } = await context.params
     const source = await getAdvanceReturnDocSource(user, id, returnId)
 
-    const letterhead = await currentLetterhead(user.organizationId)
+    // มติ PO U130 — หัวกระดาษ ณ ตอนบันทึกรับคืน (แถวก่อน U130 = ค่าปัจจุบัน)
+    const letterhead = await issuedDocumentLetterhead(user.organizationId, source.letterheadSnapshot)
     const pdf = await renderAdvanceReturnPdf(buildAdvanceReturnDoc(source, letterhead), letterhead)
     const fileName = advanceReturnFileName(source.returnNumber)
 

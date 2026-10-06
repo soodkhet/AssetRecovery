@@ -1,3 +1,5 @@
+import type { SettingAssumptionKey } from '@/lib/settings/assumptions'
+
 /**
  * คำอธิบายค่าตั้งบนหน้าจอ (มติ PO 06/10/2569 U108) — โครงข้อมูลกลางที่ `<SettingHelp>` แสดง
  *
@@ -42,4 +44,9 @@ export interface SettingHelpContent {
   table?: SettingHelpTable
   who: string
   when: string
+  /**
+   * มติ PO 07/10/2569 U140 — ค่าตั้งนี้เป็นสมมติฐานรอนักบัญชียืนยัน (ทะเบียน `lib/settings/assumptions.ts`)
+   * ⇒ `<SettingHelp>` แสดงป้าย "รอนักบัญชียืนยัน" จนกว่าบัญชีจะกดยืนยันแล้ว · เป็นรหัส ไม่ใช่ข้อความ
+   */
+  assumption?: SettingAssumptionKey
 }

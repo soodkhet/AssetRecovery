@@ -189,6 +189,20 @@ export function parseSellerProfileSnapshot(value: unknown): SellerProfileSnapsho
   }
 }
 
+/** คอลัมน์ขององค์กรที่ประกอบเป็นหัวกระดาษ (ค่าปัจจุบัน + snapshot U111/U130) */
+export const LETTERHEAD_ORGANIZATION_SELECT = {
+  name: true,
+  nameEn: true,
+  taxId: true,
+  address: true,
+  phone: true,
+  email: true,
+  website: true,
+  branchCode: true,
+  logoUrl: true,
+  logoSha256: true,
+} as const
+
 // ── snapshot หัวกระดาษทั้งชุด (ใบส่งมอบ LOT/DLV — มติ PO U111) ─────────────────
 
 /** หัวกระดาษองค์กรครบทุกช่อง ณ ตอนยืนยันล็อต — เก็บเป็น JSONB `handover_lots.letterhead_snapshot` */

@@ -3,7 +3,7 @@ import { renderSubstituteReceiptPdf } from '@/components/pdf/substitute-receipt'
 import { toModuleErrorResponse, withApiPermission } from '@/lib/api/http'
 import { emitDocumentExportAudit } from '@/lib/audit/audit'
 import { attachmentHeader } from '@/lib/format/attachment'
-import { currentLetterhead } from '@/lib/organization/letterhead'
+import { issuedDocumentLetterhead } from '@/lib/organization/letterhead'
 import {
   getSubstituteReceiptSource,
   SUBSTITUTE_RECEIPT_CAPABILITIES,
@@ -30,7 +30,8 @@ export const GET = withApiPermission<RouteContext>(
     const { id } = await context.params
     const row = await getSubstituteReceiptSource(user, id)
 
-    const letterhead = await currentLetterhead(user.organizationId)
+    // มติ PO U130 — หัวกระดาษ ณ ตอนออกใบ (ใบก่อน U130 = ค่าปัจจุบัน)
+    const letterhead = await issuedDocumentLetterhead(user.organizationId, row.letterheadSnapshot)
     const pdf = await renderSubstituteReceiptPdf(
       buildSubstituteReceiptDoc(toSubstituteReceiptDocSource(row), letterhead),
       letterhead,
