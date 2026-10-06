@@ -189,6 +189,14 @@ export function CaseDetailModal({
         title: `${button.label}แล้ว`,
         description: `${response.data.case.caseRef} → ${caseStatusLabel(response.data.case.status)}`,
       })
+      // มติ PO U129 — เตือนเท่านั้น (ไม่บล็อก)
+      if (response.data.case.activeAssetImeiWarning !== null) {
+        showToast({
+          tone: 'warning',
+          title: 'IMEI ซ้ำกับเครื่องที่ยังไม่ส่งมอบ',
+          description: response.data.case.activeAssetImeiWarning,
+        })
+      }
       setDetail(response.data.case)
       setReason('')
       setChosenTeam(null)
@@ -444,6 +452,12 @@ function CaseSummary({ detail }: { detail: CaseDetailDto }) {
               {detail.assetIdentifierWarning !== null && (
                 <span className="mt-0.5 block text-[11px] font-semibold text-amber-600">
                   {detail.assetIdentifierWarning}
+                </span>
+              )}
+              {/* มติ PO U129 — IMEI ชนเครื่องที่ยังไม่ส่งมอบ: เตือนเท่านั้น (ปิดงานสำเร็จจะถูกบล็อกจนกว่าจะตรวจสอบ) */}
+              {detail.activeAssetImeiWarning !== null && (
+                <span className="mt-0.5 block text-[11px] font-semibold text-amber-600">
+                  {detail.activeAssetImeiWarning}
                 </span>
               )}
             </span>

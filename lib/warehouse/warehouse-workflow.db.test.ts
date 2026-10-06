@@ -436,6 +436,43 @@ suite('Phase 2.13 — Asset auto-create hook (`44` §6.1)', () => {
     expect(assets).toHaveLength(1)
     expect(assets[0]?.id).toBe(assetId)
   })
+
+  it('มติ PO U129 — IMEI ซ้ำกับเครื่องที่ยังไม่ส่งมอบ: เคสเห็นคำเตือน · ปิดงานสำเร็จ = IMEI_DUPLICATE_ACTIVE_ASSET (400) ไม่ใช่ 500', async () => {
+    const cases = await import('@/lib/cases/queries')
+    const first = await seedClosedSuccessCase(COMPANY_A, '355000000077771')
+    const secondId = await seedApprovedCase(COMPANY_A, '355000000077771')
+
+    const detail = await cases.getCase(manager, secondId)
+    expect(detail.activeAssetImeiWarning).toMatch(/ยังไม่ส่งมอบ/)
+    // เคสแรก (เจ้าของเครื่อง) ปิดแล้ว — ไม่เตือนตัวเอง
+    expect((await cases.getCase(manager, first.caseId)).activeAssetImeiWarning).toBeNull()
+
+    await assignments.assignCase(manager, secondId, { agentId: agent.id }, ctx(manager))
+    await field.acceptFieldCase(agent, secondId, ctx(agent))
+    await field.scheduleFieldCase(agent, secondId, { scheduleDate: new Date(`${DAY_1}T00:00:00.000Z`) }, ctx(agent))
+    await field.saveCloseDraft(
+      agent,
+      secondId,
+      {
+        outcome: null,
+        photos: [],
+        videos: [],
+        productPhotos: [],
+        travelOrigin: { latitude: 18.58, longitude: 99.0, source: 'gps_auto' },
+      },
+      ctx(agent),
+    )
+    await field.recordCheckin(agent, secondId, { latitude: 18.5801, longitude: 99.0031, checkinType: 'address' }, ctx(agent))
+    const error = await field
+      .closeFieldCase(agent, secondId, { outcome: 'closed_success', ...MEDIA }, ctx(agent))
+      .then(
+        () => null,
+        (caught: unknown) => caught,
+      )
+    expect(error).toMatchObject({ code: 'IMEI_DUPLICATE_ACTIVE_ASSET', status: 400 })
+    expect((error as { userMessage: string }).userMessage).toContain('355000000077771')
+    expect(await db().asset.count({ where: { caseId: secondId } })).toBe(0)
+  })
 })
 
 suite('Phase 2.13 — รับเข้าคลัง / ตีกลับ (`44` §8.2 · §17 T01–T04)', () => {
@@ -1033,6 +1070,29 @@ suite('Phase 2.13 — ยืนยันส่งมอบ = $transaction 4 ข�
     await expect(
       db().$executeRawUnsafe(`UPDATE handover_lots SET note = 'แก้ย้อนหลัง' WHERE id = '${lotId}'`),
     ).rejects.toThrowError(/LOT_ALREADY_CONFIRMED/)
+  })
+
+  it('มติ PO O72(1) — งวดของวันยืนยันล็อตถูกล็อก ⇒ PERIOD_LOCKED_DIRECT_EDIT ข้อความเรื่องล็อต · ล็อต/เครื่องไม่ขยับ', async () => {
+    const { lotId } = await seedPendingLot()
+    const [year, month] = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit' })
+      .format(new Date())
+      .split('-')
+    await db().$executeRawUnsafe(`
+      INSERT INTO accounting_periods (organization_id, period_label, year_be, month, status, created_by)
+      VALUES ('${ORG_ID}', 'งวดทดสอบ O72', ${Number(year) + 543}, ${Number(month)}, 'locked', '${ADMIN_ID}')
+    `)
+    try {
+      const error = await warehouse.confirmLot(admin, lotId, confirmInput(), ctx(admin)).then(
+        () => null,
+        (caught: unknown) => caught,
+      )
+      expect(error).toMatchObject({ code: 'PERIOD_LOCKED_DIRECT_EDIT', status: 400 })
+      expect((error as { userMessage: string }).userMessage).toMatch(/ยืนยันส่งมอบไม่ได้/)
+      const lot = await db().handoverLot.findUniqueOrThrow({ where: { id: lotId }, select: { status: true } })
+      expect(lot.status).not.toBe('confirmed')
+    } finally {
+      await db().$executeRawUnsafe(`DELETE FROM accounting_periods WHERE organization_id = '${ORG_ID}'`)
+    }
   })
 
   it('Final Test ด่าน 6 — 2 คนกดยืนยันล็อตเดียวกันพร้อมกัน ⇒ สำเร็จ 1 · อีกคน LOT_ALREADY_CONFIRMED · รายได้/audit ชุดเดียว', async () => {

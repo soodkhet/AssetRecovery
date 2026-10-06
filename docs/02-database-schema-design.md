@@ -77,6 +77,7 @@
 | v4.50 | 07/10/2569 | **มติ PO 06/10/2569 (U122) — เทมเพลตเอกสารมีผลจริง** (migration `20261007010000_document_template_signature`): `organizations` + `signature_path TEXT` / `signature_sha256 VARCHAR(64)` (รูปลายเซ็นผู้มีอำนาจ · CHECK hex 64 + มาคู่กัน `chk_organizations_signature_pair`) · `tax_document_template_settings` (คงชื่อตาราง): `document_type` เปลี่ยนเป็น enum ใหม่ `template_document_type` (`billing_invoice`/`tax_invoice`/`handover_note` — แถว `wht_certificate` ถูกลบ · ค่าเดิมอยู่ใน audit) · ลบคอลัมน์ `logo_url`/`signature_image_url`/`paper_size`/`language` · เพิ่ม `print_signature BOOLEAN NOT NULL DEFAULT false` · ลบ enum `tax_document_type`/`tax_doc_paper_size`/`tax_doc_language` · `document_template_snapshot JSONB` `{footer_note, signature_path, signature_sha256}` บน `tax_invoices` (ตอนออก · immutable ทั้งแถวเดิม) / `billing_batches` (ตอนส่งรอบ · เพิ่มใน trigger `billing_batches_party_snapshot_immutable`) / `handover_lots` (ตอนยืนยันล็อต · CHECK มีได้เฉพาะ confirmed) — CHECK เป็น object · NULL = เอกสารก่อน U122 (ไม่พิมพ์ · ไม่ backfill) |
 | v4.51 | 07/10/2569 | **มติ PO 07/10/2569 (U125 + U126)** — `service_fee_templates`: ลบคอลัมน์ `charge_per_tracking_round` (U125 — คิดค่าบริการทุกรอบติดตามอิสระเสมอ รายได้แยกต่อ (เคส, `tracking_round`) ไม่หักกลบ) · §3 enum `service_fee_basis` เหลือ `debt_amount` ค่าเดียว (U126 — ตัด `asset_value`; migration มียามหยุดถ้ายังมีเทมเพลต/เคสใช้ `asset_value`) · `cases.asset_value_satang` คงไว้เป็นข้อมูลเคส (ไม่ใช้เป็นฐานค่าบริการ) · migration `20261007100000_service_fee_drop_round_switch_and_asset_value` |
 | v4.5x-CA | 07/10/2569 | **มติ PO 07/10/2569 (U134 + U136)** — **U134** `payout_batches` + `post_completion_synced_at TIMESTAMPTZ` (ขั้นหลังรอบจ่าย completed ครบแล้ว — NULL บนรอบ completed = ค้าง ⇒ ตัวกวาด `payout_completion_repair` ทำต่อ) + partial index `idx_payout_batches_org_post_completion_pending` · backfill: รอบ completed เดิมที่ทุกรายการมีบันทึกจ่ายแล้ว = ครบ (migration `20261008031000_payout_post_completion_marker`) · **U136** `bank_transactions` + `occurrence_seq INTEGER NOT NULL DEFAULT 1` (CHECK ≥ 1) และ `uniq_bank_tx_statement_row` รวม `occurrence_seq` (migration `20261008030000_bank_tx_statement_occurrence`) |
+| v4.5x-BY | 07/10/2569 | **มติ PO O72(2) (BUG-SF2)** — `recycle_requests` เพิ่ม 8 คอลัมน์ `prev_*` (ผลปิดงาน/วันปิดงาน/snapshot ค่าบริการ/ยอดหนี้ของ**รอบก่อนรีไซเกิล** — เติมตอนอนุมัติรีไซเกิล) ⇒ `tryCreateRevenue()` ประเมินรายได้**ต่อ (เคส, รอบติดตาม)**: รายการเบิกรอบเดิม (ผูกรอบผ่าน `case_assignments.tracking_round`) ที่อนุมัติหลังรีไซเกิลยังเกิดรายได้รอบเดิม · backfill คำขอเก่าจาก audit การอนุมัติรีไซเกิล · migration `20261008010000_recycle_previous_round_snapshot` · ไม่มีตาราง/enum ใหม่ |
 
 ขอบเขตเอกสารนี้: Full Production Database Schema — ทุก table, column, type, FK, index, unique constraint, enum, migration order และ seed data สรุปจาก spec ไฟล์ทั้งหมดไว้ในที่เดียว ใช้เป็น source of truth เดียวก่อนเขียน Prisma schema
 
@@ -1132,6 +1133,16 @@ CREATE TABLE recycle_requests (
   -- เพิ่ม 14/08/2569 (Phase 2.2) — ไฟล์ 38 §6.4 `recycle_history` = แถวที่ status = 'approved' ของตารางนี้
   previous_round  INTEGER,
   new_round       INTEGER,
+  -- มติ PO O72(2) (BUG-SF2 · v4.5x-BY) — snapshot ของรอบเดิมก่อนเคสถูกล้างตอนอนุมัติรีไซเกิล (เติมตอน approve)
+  -- ใช้สร้างรายได้ของรอบเดิม (`revenues.tracking_round = previous_round`) เมื่อรายการเบิกรอบเดิมอนุมัติทีหลัง
+  prev_outcome                    case_outcome,
+  prev_closed_at                  TIMESTAMPTZ,
+  prev_service_fee_model          service_fee_model,
+  prev_service_fee_base_satang    INTEGER,
+  prev_service_fee_rate_pct       NUMERIC(5,2),
+  prev_service_fee_basis          service_fee_basis,
+  prev_service_fee_charge_on_fail BOOLEAN,
+  prev_debt_amount_satang         INTEGER,
   decided_by      UUID            REFERENCES users(id),
   decided_at      TIMESTAMPTZ,
   created_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),

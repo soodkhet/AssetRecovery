@@ -1,5 +1,5 @@
 import { Prisma } from '@/lib/generated/prisma/client'
-import type { CaseOutcome, ExpenseStatus, ServiceFeeModel } from '@/lib/generated/prisma/enums'
+import type { CaseOutcome, ExpenseStatus, ServiceFeeBasis, ServiceFeeModel, VatMode } from '@/lib/generated/prisma/enums'
 import {
   evaluateRevenueTrigger,
   type ExpenseGateState,
@@ -23,6 +23,9 @@ import type { WarehouseTxClient } from '@/lib/warehouse/asset-hook'
  * - เงื่อนไข "เกิด/ไม่เกิด" อยู่ที่ `lib/finance/revenue-trigger-rules.ts` **ที่เดียว** — ที่นี่แค่แปลง
  *   ข้อมูลจาก DB เป็น input ของตัวนั้น (ห้ามเขียนเงื่อนไขซ้ำ)
  * - **ยอดเงินคิดที่ `buildRevenueRow()` เท่านั้น** (`22` §6.5–6.8) — ห้าม hardcode สูตร/อัตรา VAT ที่นี่
+ * - **ประเมินต่อ (เคส, รอบติดตาม)** (มติ PO O72(2) · U125) — รอบปัจจุบันจากเคส + รอบก่อนรีไซเกิลจาก snapshot
+ *   ใน `recycle_requests` · รายการเบิกผูกรอบผ่าน `case_assignments.tracking_round` ⇒ รายการรอบ 1 ที่อนุมัติหลัง
+ *   รีไซเกิลยังเกิดรายได้รอบ 1 และรายการรอบ 1 ที่ค้างไม่บล็อกรายได้รอบ 2
  * - **idempotent ต่อ (เคส, รอบติดตาม)** — เคสที่มี Revenue ของรอบนั้นแล้วถูกข้ามเสมอ (B3 `02` §8)
  *   `02` §8 ไม่มี unique index คู่นี้ ⇒ กันซ้ำด้วยการอ่านก่อนเขียน**ในทรานแซกชันเดียวกัน** ซึ่งปลอดภัย
  *   เพราะทุกเส้นทางที่เรียกได้ล็อกแถวต้นทางไว้ก่อนแล้ว (UPDATE ล็อต/expense มาก่อนในทรานแซกชันเดียวกัน)
@@ -50,6 +53,8 @@ export type RevenueSkipReason = RevenueBlockReason | 'already_created' | 'missin
 export interface RevenueSkip {
   caseId: string
   reason: RevenueSkipReason
+  /** ระบุเฉพาะรอบก่อนรีไซเกิล (มติ PO O72) — ไม่ระบุ = รอบติดตามปัจจุบันของเคส */
+  trackingRound?: number
 }
 
 export interface TryCreateRevenueResult {
@@ -179,7 +184,7 @@ export async function tryCreateRevenue(
        FOR UPDATE
   `
 
-  const [cases, expenses, assets, revenues, unsettledDays] = await Promise.all([
+  const [cases, recycles, expenses, assets, revenues, unsettledDays] = await Promise.all([
     tx.case.findMany({
       where: { id: { in: caseIds }, organizationId: input.organizationId },
       select: {
@@ -197,22 +202,44 @@ export async function tryCreateRevenue(
         company: { select: { vatMode: true } },
       },
     }),
+    // มติ PO O72(2) (BUG-SF2) — ข้อมูลของรอบก่อนรีไซเกิล (เคสถูกล้าง outcome/snapshot ตอนขึ้นรอบใหม่)
+    tx.recycleRequest.findMany({
+      where: {
+        caseId: { in: caseIds },
+        organizationId: input.organizationId,
+        status: 'approved',
+        previousRound: { not: null },
+        prevOutcome: { not: null },
+      },
+      select: {
+        caseId: true,
+        previousRound: true,
+        prevOutcome: true,
+        prevClosedAt: true,
+        prevServiceFeeModel: true,
+        prevServiceFeeBaseSatang: true,
+        prevServiceFeeRatePct: true,
+        prevServiceFeeBasis: true,
+        prevServiceFeeChargeOnFail: true,
+        prevDebtAmountSatang: true,
+      },
+    }),
     tx.expense.findMany({
       where: { caseId: { in: caseIds }, deletedAt: null },
-      select: { caseId: true, status: true },
+      select: { caseId: true, status: true, assignment: { select: { trackingRound: true } } },
     }),
     tx.asset.findMany({
       where: { caseId: { in: caseIds }, deletedAt: null },
-      select: { caseId: true, lot: { select: { status: true } } },
+      select: { caseId: true, lot: { select: { status: true, confirmedAt: true } } },
     }),
     tx.revenue.findMany({
       where: { caseId: { in: caseIds }, deletedAt: null },
       select: { caseId: true, trackingRound: true },
     }),
     // มติ PO 03/10/2569 (UAT Q21): วันลงพื้นที่ (พนักงาน × วันไทยของเช็คอิน) ที่ยังไม่ถูก settle
-    // รายการรายวัน — อ่าน**หลัง**ล็อกแถวเคส จึงเห็นการ settle ที่ commit ก่อนหน้าเสมอ
-    tx.$queryRaw<{ caseId: string }[]>`
-      SELECT DISTINCT ci.case_id::text AS "caseId"
+    // รายการรายวัน — อ่าน**หลัง**ล็อกแถวเคส จึงเห็นการ settle ที่ commit ก่อนหน้าเสมอ · แยกตามรอบติดตาม (O72)
+    tx.$queryRaw<{ caseId: string; trackingRound: number }[]>`
+      SELECT DISTINCT ci.case_id::text AS "caseId", a.tracking_round AS "trackingRound"
         FROM check_ins ci
         JOIN case_assignments a ON a.id = ci.assignment_id
        WHERE ci.organization_id = ${input.organizationId}::uuid
@@ -226,29 +253,86 @@ export async function tryCreateRevenue(
     `,
   ])
 
-  const expensesByCase = groupBy(expenses, (row) => row.caseId)
   const assetsByCase = groupBy(assets, (row) => row.caseId)
-  const revenueRounds = new Set(revenues.map((row) => `${row.caseId}#${row.trackingRound}`))
-  const unsettledCaseIds = new Set(unsettledDays.map((row) => row.caseId))
+  const revenueRounds = new Set(revenues.map((row) => roundKey(row.caseId, row.trackingRound)))
+  const unsettledRounds = new Set(unsettledDays.map((row) => roundKey(row.caseId, Number(row.trackingRound))))
+  const currentRoundOf = new Map(cases.map((row) => [row.id, row.trackingRound]))
+  // รายการเบิกผูกรอบผ่านการมอบหมาย (`case_assignments.tracking_round`) — รายการที่ไม่ผูกการมอบหมาย = รอบปัจจุบัน
+  const expensesByRound = groupBy(expenses, (row) =>
+    roundKey(row.caseId ?? '', row.assignment?.trackingRound ?? currentRoundOf.get(row.caseId ?? '') ?? 1),
+  )
 
-  const snapshots: CaseRevenueSnapshot[] = cases.map((row) => {
-    const statuses = (expensesByCase.get(row.id) ?? []).map((expense) => expense.status)
-    const lotStatuses = (assetsByCase.get(row.id) ?? []).map((asset) => asset.lot?.status ?? null)
-    return {
+  // ── ฐานของแต่ละ (เคส, รอบ) — รอบปัจจุบันจากตัวเคส · รอบก่อนรีไซเกิลจาก snapshot ใน `recycle_requests` ──
+  const bases: RoundBasis[] = []
+  for (const row of cases) {
+    bases.push({
       caseId: row.id,
+      companyId: row.companyId,
+      vatMode: row.company.vatMode,
+      trackingRound: row.trackingRound,
+      isCurrentRound: true,
       model: row.serviceFeeModelSnapshot,
+      baseSatang: row.serviceFeeBaseSatang,
+      ratePct: row.serviceFeeRatePct === null ? null : row.serviceFeeRatePct.toNumber(),
+      basis: row.serviceFeeBasisSnapshot,
       chargeOnFail: row.serviceFeeChargeOnFail,
       outcome: row.outcome,
-      ...expenseGateOf(statuses),
-      lotState: lotGateOf(lotStatuses),
-      fieldDaysSettled: !unsettledCaseIds.has(row.id),
-      hasRevenue: revenueRounds.has(`${row.id}#${row.trackingRound}`),
-    }
-  })
+      closedAt: row.closedAt,
+      debtAmountSatang: row.debtAmountSatang,
+    })
+  }
+  const casesById = new Map(cases.map((row) => [row.id, row]))
+  for (const recycle of recycles) {
+    const owner = casesById.get(recycle.caseId)
+    if (owner === undefined || recycle.previousRound === null || recycle.previousRound >= owner.trackingRound) continue
+    bases.push({
+      caseId: recycle.caseId,
+      companyId: owner.companyId,
+      vatMode: owner.company.vatMode,
+      trackingRound: recycle.previousRound,
+      isCurrentRound: false,
+      model: recycle.prevServiceFeeModel,
+      baseSatang: recycle.prevServiceFeeBaseSatang,
+      ratePct: recycle.prevServiceFeeRatePct === null ? null : recycle.prevServiceFeeRatePct.toNumber(),
+      basis: recycle.prevServiceFeeBasis,
+      chargeOnFail: recycle.prevServiceFeeChargeOnFail,
+      outcome: recycle.prevOutcome,
+      closedAt: recycle.prevClosedAt,
+      debtAmountSatang: recycle.prevDebtAmountSatang,
+    })
+  }
 
-  const gates = evaluateCaseRevenueGates(snapshots)
-  const skipped: RevenueSkip[] = [...gates.skipped]
-  if (gates.eligibleCaseIds.length === 0) return { revenueIdsCreated: [], eligibleCaseIds: [], skipped }
+  const skipped: RevenueSkip[] = []
+  const eligible: RoundBasis[] = []
+  for (const basis of bases) {
+    const key = roundKey(basis.caseId, basis.trackingRound)
+    const statuses = (expensesByRound.get(key) ?? []).map((expense) => expense.status)
+    // เครื่องเกิดเฉพาะ `closed_success` ซึ่งเป็นสถานะจบ (รีไซเกิลได้จาก `closed_fail` เท่านั้น) ⇒ เป็นของรอบปัจจุบัน
+    const lotStatuses = basis.isCurrentRound
+      ? (assetsByCase.get(basis.caseId) ?? []).map((asset) => asset.lot?.status ?? null)
+      : []
+    const gates = evaluateCaseRevenueGates([
+      {
+        caseId: basis.caseId,
+        model: basis.model,
+        chargeOnFail: basis.chargeOnFail,
+        outcome: basis.outcome,
+        ...expenseGateOf(statuses),
+        lotState: lotGateOf(lotStatuses),
+        fieldDaysSettled: !unsettledRounds.has(key),
+        hasRevenue: revenueRounds.has(key),
+      },
+    ])
+    if (gates.eligibleCaseIds.length > 0) eligible.push(basis)
+    // รอบก่อนรีไซเกิล: ไม่ลงเหตุผลซ้ำทุกครั้ง (audit ยึดรอบปัจจุบัน) — ยกเว้นเกตที่ผู้ใช้ตามแก้ได้
+    for (const skip of gates.skipped) {
+      if (basis.isCurrentRound) skipped.push(skip)
+      else if (skip.reason === 'expense_not_approved' || skip.reason === 'field_days_not_settled') {
+        skipped.push({ ...skip, trackingRound: basis.trackingRound })
+      }
+    }
+  }
+  if (eligible.length === 0) return { revenueIdsCreated: [], eligibleCaseIds: [], skipped }
 
   // อ่านอัตรา VAT ทั้งประวัติครั้งเดียวต่อการเรียก แล้วให้ `buildRevenueRow()` เลือกช่วงตาม
   // `revenue_date` ของแต่ละเคสเอง (เคสในล็อตเดียวกันปิดคนละวันได้ → คนละอัตราได้)
@@ -263,36 +347,41 @@ export async function tryCreateRevenue(
     effectiveTo: row.effectiveTo,
   }))
 
-  const casesById = new Map(cases.map((row) => [row.id, row]))
   const eligibleCaseIds: string[] = []
   const revenueIdsCreated: string[] = []
 
-  for (const caseId of gates.eligibleCaseIds) {
-    const row = casesById.get(caseId)
+  for (const basis of eligible) {
+    const caseId = basis.caseId
     // เกตผ่านแล้วแปลว่ามี `model`/`outcome` เสมอ — เช็คซ้ำเพื่อความปลอดภัยของ type ไม่ใช่กติกาใหม่
-    if (row === undefined || row.serviceFeeModelSnapshot === null || row.outcome === null) continue
+    if (basis.model === null || basis.outcome === null) continue
+    const roundTag = basis.isCurrentRound ? {} : { trackingRound: basis.trackingRound }
 
-    // `revenue_date` = วันปิดงานของเคส (`19` §7.1) ตามปฏิทินไทย — เคสที่ปิดผ่าน job เก่ายังไม่มี
-    // `closed_at` ก็ใช้เวลาที่รายได้เกิดแทน (ไม่ปล่อยให้ล้มทั้งล็อตเพราะข้อมูลเก่าไม่ครบ)
-    const revenueDate = toBangkokDateOnly(row.closedAt ?? now)
+    const revenueDate = revenueDateOf({
+      outcome: basis.outcome,
+      lotConfirmedAts: basis.isCurrentRound
+        ? (assetsByCase.get(caseId) ?? []).map((asset) => asset.lot?.confirmedAt ?? null)
+        : [],
+      closedAt: basis.closedAt,
+      now,
+    })
 
     const built = buildRevenueRow({
       snapshot: {
-        model: row.serviceFeeModelSnapshot,
-        baseSatang: row.serviceFeeBaseSatang ?? 0,
-        ratePct: row.serviceFeeRatePct === null ? 0 : row.serviceFeeRatePct.toNumber(),
-        basis: row.serviceFeeBasisSnapshot,
-        chargeOnFail: row.serviceFeeChargeOnFail ?? false,
+        model: basis.model,
+        baseSatang: basis.baseSatang ?? 0,
+        ratePct: basis.ratePct ?? 0,
+        basis: basis.basis,
+        chargeOnFail: basis.chargeOnFail ?? false,
       },
-      outcome: row.outcome,
-      basisValues: { debtAmountSatang: row.debtAmountSatang },
-      vatMode: row.company.vatMode,
+      outcome: basis.outcome,
+      basisValues: { debtAmountSatang: basis.debtAmountSatang },
+      vatMode: basis.vatMode,
       revenueDate,
       vatRatePeriods,
     })
 
     if (!built.ok) {
-      skipped.push({ caseId, reason: built.reason })
+      skipped.push({ caseId, reason: built.reason, ...roundTag })
       continue
     }
 
@@ -304,8 +393,8 @@ export async function tryCreateRevenue(
       data: {
         organizationId: input.organizationId,
         caseId,
-        companyId: row.companyId,
-        trackingRound: row.trackingRound,
+        companyId: basis.companyId,
+        trackingRound: basis.trackingRound,
         grossSatang: built.values.grossSatang,
         vatSatang: built.values.vatSatang,
         vatRatePctUsed: new Prisma.Decimal(built.values.vatRatePctUsed.toFixed(2)),
@@ -320,7 +409,7 @@ export async function tryCreateRevenue(
     })
     const created = inserted[0]
     if (created === undefined) {
-      skipped.push({ caseId, reason: 'already_created' })
+      skipped.push({ caseId, reason: 'already_created', ...roundTag })
       continue
     }
 
@@ -329,6 +418,51 @@ export async function tryCreateRevenue(
   }
 
   return { revenueIdsCreated, eligibleCaseIds, skipped }
+}
+
+/** ฐานคิดรายได้ของ (เคส, รอบติดตาม) หนึ่ง — รอบปัจจุบันจากเคส · รอบก่อนรีไซเกิลจาก `recycle_requests` (O72) */
+interface RoundBasis {
+  caseId: string
+  companyId: string
+  vatMode: VatMode
+  trackingRound: number
+  isCurrentRound: boolean
+  model: ServiceFeeModel | null
+  baseSatang: number | null
+  ratePct: number | null
+  basis: ServiceFeeBasis | null
+  chargeOnFail: boolean | null
+  outcome: CaseOutcome | null
+  closedAt: Date | null
+  debtAmountSatang: number | null
+}
+
+function roundKey(caseId: string, trackingRound: number): string {
+  return `${caseId}#${trackingRound}`
+}
+
+/**
+ * **pure** — วันรับรู้รายได้ (มติ PO O72(1) · A7/U39 · `19` §7.1)
+ * - เคสผ่านคลัง (`closed_success`) = **วันยืนยันล็อตส่งมอบ** ตามปฏิทินไทย (TFRS 15 — โอนการควบคุมเมื่อส่งมอบ)
+ *   ไม่ใช่วันปิดงาน · หลายเครื่องในเคส = ล็อตที่ยืนยันล่าสุด (เกตรอครบทุกเครื่องอยู่แล้ว)
+ * - เคสไม่ผ่านคลัง (`closed_fail` + คิดเงินกรณีไม่สำเร็จ) = วันปิดงานของรอบนั้น
+ * - ไม่มีวันที่ (ข้อมูลเก่า) = เวลาที่รายได้เกิด — ไม่ปล่อยให้ล้มทั้งทรานแซกชัน
+ */
+export function revenueDateOf(input: {
+  outcome: CaseOutcome
+  lotConfirmedAts: readonly (Date | null)[]
+  closedAt: Date | null
+  now: Date
+}): Date {
+  if (input.outcome === 'closed_success') {
+    const confirmed = input.lotConfirmedAts.filter((value): value is Date => value !== null)
+    const latest = confirmed.reduce<Date | null>(
+      (max, value) => (max === null || value.getTime() > max.getTime() ? value : max),
+      null,
+    )
+    return toBangkokDateOnly(latest ?? input.now)
+  }
+  return toBangkokDateOnly(input.closedAt ?? input.now)
 }
 
 function groupBy<T, K>(rows: readonly T[], keyOf: (row: T) => K): Map<K, T[]> {

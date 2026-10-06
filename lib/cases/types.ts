@@ -232,6 +232,11 @@ export interface CaseDetailDto extends CaseListItemDto {
    * เป็นข้อมูลประกอบใน `data` ไม่ใช่ error code (ไม่ต้องเพิ่มรายการเตือนในแคตตาล็อก)
    */
   assetIdentifierWarning: string | null
+  /**
+   * เตือน (ไม่บล็อก) เมื่อ IMEI ของเคสตรงกับเครื่องที่ยังไม่ส่งมอบ (มติ PO U129) — ปิดงานสำเร็จจะถูกบล็อกจนกว่าจะตรวจสอบ
+   * ข้อมูลประกอบใน `data` ไม่ใช่ error code · `null` = ไม่มี/ไม่ได้ตรวจ (มุมมองฝั่งบริษัทไฟแนนซ์ไม่ตรวจ)
+   */
+  activeAssetImeiWarning: string | null
   projectedRevenueSatang: number | null
   /** ค่าดิบ `calculation_source` (มี template id) — เก็บไว้ trace · หน้าจอใช้ `projectedRevenueSourceLabel` */
   projectedRevenueSource: string | null

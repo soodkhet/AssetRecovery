@@ -42,6 +42,7 @@ import {
 } from '@/lib/assignments/assignment-ui'
 import { ASSIGNMENT_MANAGE_CAPABILITY } from '@/lib/assignments/permissions'
 import { ASSIGNMENT_STATE_FILTERS } from '@/lib/assignments/schemas'
+import type { AssignmentState } from '@/lib/assignments/assignment'
 import type { AssignmentListItemDto, AssignmentListResultDto } from '@/lib/assignments/types'
 import { fmtSatang } from '@/lib/format/money'
 
@@ -80,7 +81,14 @@ function buildListPath(filters: Filters, page: number): string {
   return apiPath('assignment.list', undefined, query)
 }
 
-export function AssignmentsManager({ canAct }: { canAct: boolean }) {
+export function AssignmentsManager({
+  canAct,
+  initialStatus = 'all',
+}: {
+  canAct: boolean
+  /** ตัวกรองสถานะตอนเปิดหน้า — ลิงก์จากคิวแดชบอร์ดส่ง `ready_to_assign` มา */
+  initialStatus?: AssignmentState | 'all'
+}) {
   const { can } = usePermission()
   /**
    * ปุ่มโผล่ต่อเมื่อ **ทั้ง** capability `assign_case` (DEC-009) และ settings ของ §6.4 อนุญาต —
@@ -92,7 +100,7 @@ export function AssignmentsManager({ canAct }: { canAct: boolean }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<ApiCallError | null>(null)
 
-  const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS)
+  const [filters, setFilters] = useState<Filters>({ ...EMPTY_FILTERS, status: initialStatus })
   const [page, setPage] = useState(1)
   const [counts, setCounts] = useState<Readonly<Record<string, number>>>({})
 

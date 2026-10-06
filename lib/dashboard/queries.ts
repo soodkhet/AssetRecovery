@@ -1,4 +1,5 @@
 import type { SessionUser } from '@/lib/auth/types'
+import { assignmentStateFilter } from '@/lib/assignments/queries'
 import { caseScopeWhere } from '@/lib/cases/queries'
 import { listCompensationApprovals } from '@/lib/compensation/approval-queries'
 import {
@@ -49,6 +50,23 @@ async function countCasesWithStatus(user: SessionUser, status: CaseBoardStatus |
   return { count }
 }
 
+/**
+ * มติ PO O72(4) — "เคสรอมอบหมายงาน" = เคสที่**ยังไม่มีการมอบหมายที่ active** (`ready_to_assign` ของ `40` §10)
+ * ใช้ตัวกรองเดียวกับหน้ามอบหมายงาน (`assignmentStateFilter`) ⇒ ตัวเลขเท่ากับแถวที่เห็นเมื่อกดลิงก์
+ * (เดิมนับทุกเคส `approved` รวมเคสที่ส่งให้พนักงานแล้วแต่ยังไม่กดรับ/รับแล้วยังไม่นัด)
+ */
+async function countCasesAwaitingAssignment(user: SessionUser): Promise<QueueCount> {
+  const count = await prisma.case.count({
+    where: {
+      organizationId: user.organizationId,
+      deletedAt: null,
+      status: { in: ['approved', 'active'] },
+      AND: [caseScopeWhere(user), assignmentStateFilter('ready_to_assign')],
+    },
+  })
+  return { count }
+}
+
 async function countMyCompensationStep(user: SessionUser): Promise<QueueCount> {
   const [manager, finance] = await Promise.all([
     listCompensationApprovals(user, { status: 'pending_approval' }),
@@ -78,7 +96,7 @@ const QUEUE_COUNTERS: Readonly<Record<DashboardQueueId, (user: SessionUser) => P
   case_need_info: (user) => countCasesWithStatus(user, 'need_info'),
   case_pending_review: (user) => countCasesWithStatus(user, 'pending_review'),
   case_recycle_review: (user) => countCasesWithStatus(user, 'pending_recycle_review'),
-  case_awaiting_assignment: (user) => countCasesWithStatus(user, 'approved'),
+  case_awaiting_assignment: countCasesAwaitingAssignment,
   reassign_waiting: countReassignWaiting,
   compensation_my_step: countMyCompensationStep,
   advance_pending_approval: async (user) => ({

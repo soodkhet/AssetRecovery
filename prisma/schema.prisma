@@ -1874,6 +1874,17 @@ model RecycleRequest {
   /// `38` §6.4 `recycle_history` — เลขรอบก่อน/หลังอนุมัติ (เติมตอน approve เท่านั้น)
   previousRound  Int?          @map("previous_round")
   newRound       Int?          @map("new_round")
+  /// มติ PO O72(2) (BUG-SF2) — snapshot ของ**รอบก่อนอนุมัติรีไซเกิล** (ผลปิดงาน/วันปิดงาน/ค่าบริการ/ยอดหนี้)
+  /// เคสถูกล้างค่าเหล่านี้ตอนขึ้นรอบใหม่ ⇒ รายการเบิกของรอบเดิมที่อนุมัติทีหลังยังสร้างรายได้ของรอบเดิมได้
+  /// (`revenues.tracking_round` = `previous_round`) · เติมตอน approve เท่านั้น · NULL = คำขอเก่าก่อนมติ (backfill จาก audit)
+  prevOutcome                 CaseOutcome?     @map("prev_outcome")
+  prevClosedAt                DateTime?        @map("prev_closed_at") @db.Timestamptz(6)
+  prevServiceFeeModel         ServiceFeeModel? @map("prev_service_fee_model")
+  prevServiceFeeBaseSatang    Int?             @map("prev_service_fee_base_satang")
+  prevServiceFeeRatePct       Decimal?         @map("prev_service_fee_rate_pct") @db.Decimal(5, 2)
+  prevServiceFeeBasis         ServiceFeeBasis? @map("prev_service_fee_basis")
+  prevServiceFeeChargeOnFail  Boolean?         @map("prev_service_fee_charge_on_fail")
+  prevDebtAmountSatang        Int?             @map("prev_debt_amount_satang")
   decidedBy      String?       @map("decided_by") @db.Uuid
   decidedAt      DateTime?     @map("decided_at") @db.Timestamptz(6)
 

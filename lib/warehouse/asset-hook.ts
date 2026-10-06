@@ -1,5 +1,7 @@
+import { Prisma } from '@/lib/generated/prisma/client'
 import type { AssetKind } from '@/lib/generated/prisma/enums'
 import type { prisma } from '@/lib/prisma'
+import { WarehouseError } from '@/lib/warehouse/errors'
 
 /**
  * Asset auto-create hook (`44` §6.1 · §9.1) — **1 เคส = 1 Asset เสมอ**
@@ -30,6 +32,20 @@ export function buildDeviceDesc(kind: AssetKind | null, description: string | nu
   const trimmed = (description ?? '').trim()
   if (trimmed !== '') return trimmed
   return kind === null ? 'ไม่ระบุอุปกรณ์' : ASSET_KIND_LABELS[kind]
+}
+
+/** ข้อความระบุเลขเคสที่ถือ IMEI เดียวกันอยู่ — ผู้ปิดงานรู้ว่าต้องไปตามเคสไหน (มติ PO U129) */
+function duplicateImeiError(imei: string, conflictingCaseRef: string): WarehouseError {
+  return new WarehouseError('IMEI_DUPLICATE_ACTIVE_ASSET', {
+    detail: `imei=${imei} conflicting_case_ref=${conflictingCaseRef}`,
+    context: { imei, conflictingCaseRef },
+    messages: {
+      title: 'IMEI ซ้ำกับเครื่องที่ยังไม่ส่งมอบ',
+      message:
+        `ปิดงานสำเร็จไม่ได้ — IMEI ${imei} ตรงกับเครื่องของเคส ${conflictingCaseRef} ที่ยังอยู่ในคลังหรือยังไม่ส่งมอบ ` +
+        'ติดต่อคลังหรือผู้ดูแลเคสเพื่อตรวจสอบ IMEI ก่อนปิดงาน',
+    },
+  })
 }
 
 export interface EnsureAssetInput {
@@ -75,23 +91,50 @@ export async function ensureAssetForClosedCase(
     },
   })
 
-  const asset = await tx.asset.create({
-    data: {
-      organizationId: input.organizationId,
-      caseId: input.caseId,
-      companyId: source.companyId,
-      caseRef: source.caseRef,
-      // เคสที่ปิดงานสำเร็จผ่าน `assertReadyForReview()` มาแล้ว ⇒ มีชื่อลูกหนี้เสมอ (กันไว้ที่ชั้นนี้อีกชั้น)
-      debtorName: source.debtorName ?? '(ไม่ระบุชื่อลูกหนี้)',
-      deviceDesc: buildDeviceDesc(source.assetKind, source.assetDescription),
-      imeiContract: source.imei,
-      serialContract: source.serialNo,
-      assetStatus: 'pending_intake',
-      closedAt: input.closedAt,
-      createdBy: input.actorId,
-    },
-    select: { id: true },
-  })
+  // มติ PO U129 — IMEI ซ้ำกับเครื่องที่ยังไม่ส่งมอบ (`uniq_assets_active_imei`) ⇒ บล็อกด้วยข้อความที่แก้ได้
+  // แทนที่จะชน unique แล้วหลุดเป็น 500 · ตอนส่งเคส/นำเข้าเป็นแค่คำเตือนในฟอร์ม (`findActiveAssetsByImei`)
+  if (source.imei !== null) {
+    const conflict = await tx.asset.findFirst({
+      where: {
+        organizationId: input.organizationId,
+        imeiContract: source.imei,
+        assetStatus: { not: 'handed_over' },
+        deletedAt: null,
+      },
+      select: { caseRef: true },
+    })
+    if (conflict !== null) throw duplicateImeiError(source.imei, conflict.caseRef)
+  }
+
+  const asset = await tx.asset
+    .create({
+      data: {
+        organizationId: input.organizationId,
+        caseId: input.caseId,
+        companyId: source.companyId,
+        caseRef: source.caseRef,
+        // เคสที่ปิดงานสำเร็จผ่าน `assertReadyForReview()` มาแล้ว ⇒ มีชื่อลูกหนี้เสมอ (กันไว้ที่ชั้นนี้อีกชั้น)
+        debtorName: source.debtorName ?? '(ไม่ระบุชื่อลูกหนี้)',
+        deviceDesc: buildDeviceDesc(source.assetKind, source.assetDescription),
+        imeiContract: source.imei,
+        serialContract: source.serialNo,
+        assetStatus: 'pending_intake',
+        closedAt: input.closedAt,
+        createdBy: input.actorId,
+      },
+      select: { id: true },
+    })
+    .catch((error: unknown) => {
+      // ปิดงานพร้อมกัน 2 เคสที่ IMEI เดียวกัน — ผ่านการตรวจข้างบนทั้งคู่แล้วชน unique ⇒ ข้อความเดียวกัน (ทรานแซกชันล้มทั้งก้อน)
+      if (
+        source.imei !== null &&
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw duplicateImeiError(source.imei, '(อีกเคสที่ปิดงานพร้อมกัน)')
+      }
+      throw error
+    })
 
   return { assetId: asset.id, created: true }
 }

@@ -486,6 +486,29 @@ export function fieldAllowancePeriodLockedMessage(
   }
 }
 
+/**
+ * มติ PO U135 — ค่าน้ำมันตามระยะทาง (`PER_KM`) คำนวณได้หลังงวดของวันปิดงานปิดแล้ว ⇒ ไม่เขียนเข้างวดนั้น
+ * ใช้ event เดียวกับรายการรายวัน (`field_allowance.period_locked` — ค่าน้ำมัน/เบี้ยเลี้ยงลงงวดที่ปิดไม่ได้)
+ */
+export function fuelPeriodLockedMessage(
+  input: { assignmentId: string; agentName: string; caseRef: string; workDate: Date; grossSatang: number },
+  audience: 'finance' | 'accounting' = 'finance',
+): NotificationMessage {
+  const summary =
+    `ค่าน้ำมันตามระยะทางของเคส ${input.caseRef} (${input.agentName}) ปิดงานวันที่ ${fmtDate(input.workDate)} ` +
+    `ยอด ${fmtSatangSymbol(input.grossSatang)} คำนวณได้หลังงวดบัญชีปิดแล้ว`
+  return {
+    eventCode: 'field_allowance.period_locked',
+    title: 'ค่าน้ำมันตามระยะทางเข้างวดที่ปิดแล้วไม่ได้',
+    body:
+      audience === 'finance'
+        ? `${summary} — กด "สร้างรายการเบิกย้อนหลัง" เพื่อลงรายการในงวดที่เปิดอยู่แล้วส่งเข้าสายอนุมัติ`
+        : `${summary} — ฝ่ายการเงินจะสร้างรายการเบิกย้อนหลังลงในงวดที่เปิดอยู่ (งวดที่ปิดไม่ถูกแก้)`,
+    linkPath: audience === 'finance' ? '/finance?tab=adjustment' : '/accounting?tab=closing',
+    dedupeKey: `fuel-locked-${input.assignmentId}`,
+  }
+}
+
 // ── Payout (17 §9) ──────────────────────────────────────────────────────────
 
 export function payoutBatchCompletedMessage(input: {

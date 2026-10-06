@@ -6,6 +6,7 @@ import { usePermission } from '@/components/auth/permission-provider'
 import { AdjustmentFormModal } from '@/components/finance/adjustment-form-modal'
 import { AdjustmentReviewModal } from '@/components/finance/adjustment-review-modal'
 import { LockedFieldDaysCard } from '@/components/finance/locked-field-days-card'
+import { LockedFuelExpensesCard } from '@/components/finance/locked-fuel-expenses-card'
 import { useAdjustments } from '@/components/finance/use-adjustments'
 import {
   Button,
@@ -89,6 +90,7 @@ export function AdjustmentTab() {
 
       {/* มติ PO U50 — ปลายทางของแจ้งเตือนวันลงพื้นที่ในงวดปิด (ไม่มีรายการ = ไม่แสดง) */}
       <LockedFieldDaysCard />
+      <LockedFuelExpensesCard />
 
       <Card>
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">

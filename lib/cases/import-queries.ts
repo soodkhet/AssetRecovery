@@ -7,7 +7,9 @@ import type { CaseImportInput } from '@/lib/cases/schemas'
 import type { CaseImportResultDto, CaseImportRowResultDto } from '@/lib/cases/types'
 import { ModuleError } from '@/lib/api/errors'
 import { prisma } from '@/lib/prisma'
+import { splitAssetIdentifier } from '@/lib/cases/case'
 import { assetIdentifierWarning } from '@/lib/warehouse/imei'
+import { ACTIVE_ASSET_IMEI_WARNING_MESSAGE, findImeisWithActiveAsset } from '@/lib/warehouse/imei-duplicate'
 
 /**
  * `POST /api/cases/import` (ไฟล์ 38 §8 `import_cases` · §17.1) — ชั้น DB
@@ -25,9 +27,17 @@ function headersOf(rows: readonly Record<string, unknown>[]): string[] {
   return [...headers]
 }
 
-/** เตือนต่อช่องของแถว (ไม่ทำให้แถวตก) — Serial ที่ดูเหมือน IMEI พิมพ์ผิด (มติ PO U54) */
-function rowWarnings(assetImeiSerial: string | null | undefined): Record<string, string> | null {
-  const warning = assetIdentifierWarning(assetImeiSerial)
+/**
+ * เตือนต่อช่องของแถว (ไม่ทำให้แถวตก) — Serial ที่ดูเหมือน IMEI พิมพ์ผิด (มติ PO U54)
+ * · IMEI ตรงกับเครื่องที่ยังไม่ส่งมอบ (มติ PO U129 — `activeImeis` อ่านจาก DB ครั้งเดียวต่อไฟล์)
+ */
+function rowWarnings(
+  assetImeiSerial: string | null | undefined,
+  activeImeis: ReadonlySet<string> = new Set(),
+): Record<string, string> | null {
+  const imei = splitAssetIdentifier(assetImeiSerial).imei
+  const warning =
+    imei !== null && activeImeis.has(imei) ? ACTIVE_ASSET_IMEI_WARNING_MESSAGE : assetIdentifierWarning(assetImeiSerial)
   return warning === null ? null : { assetImeiSerial: warning }
 }
 
@@ -41,6 +51,13 @@ export async function importCases(
 
   const plan = planImport(rawRows, input.financeCompanyId)
   const duplicateRowNumbers = findDuplicateRefsInFile(plan.rows, normalizeCaseRef)
+  const activeImeis = await findImeisWithActiveAsset(
+    organizationId,
+    plan.rows.flatMap((row) => {
+      const imei = splitAssetIdentifier(row.input.assetImeiSerial).imei
+      return imei === null ? [] : [imei]
+    }),
+  )
 
   const results: CaseImportRowResultDto[] = plan.errors.map((error) => ({
     rowNumber: error.rowNumber,
@@ -64,7 +81,7 @@ export async function importCases(
         errorCode: duplicate.code,
         errorMessage: 'เลขที่สัญญาซ้ำกับแถวก่อนหน้าในไฟล์เดียวกัน',
         fields: null,
-        warnings: rowWarnings(row.input.assetImeiSerial),
+        warnings: rowWarnings(row.input.assetImeiSerial, activeImeis),
       })
       continue
     }
@@ -78,7 +95,7 @@ export async function importCases(
         errorCode: null,
         errorMessage: null,
         fields: null,
-        warnings: rowWarnings(row.input.assetImeiSerial),
+        warnings: rowWarnings(row.input.assetImeiSerial, activeImeis),
       })
       continue
     }
@@ -93,7 +110,7 @@ export async function importCases(
         errorCode: null,
         errorMessage: null,
         fields: null,
-        warnings: rowWarnings(row.input.assetImeiSerial),
+        warnings: rowWarnings(row.input.assetImeiSerial, activeImeis),
       })
     } catch (error) {
       // error ของโมดูล (ref ซ้ำ/บริษัทถูกระงับ/เลขบัตรผิด) = แถวนั้นตก · error อื่นถือเป็นความผิดพลาดจริง
@@ -106,7 +123,7 @@ export async function importCases(
         errorCode: error.code,
         errorMessage: error.userMessage,
         fields: null,
-        warnings: rowWarnings(row.input.assetImeiSerial),
+        warnings: rowWarnings(row.input.assetImeiSerial, activeImeis),
       })
     }
   }

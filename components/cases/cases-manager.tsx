@@ -226,6 +226,14 @@ export function CasesManager() {
         title: `${button.label}แล้ว`,
         description: `${item.caseRef} → ${caseStatusLabel(response.data.case.status)}`,
       })
+      // มติ PO U129 — ส่งเคสได้ แต่ IMEI ชนเครื่องที่ยังไม่ส่งมอบ ⇒ เตือนให้ตรวจสอบกับคลังก่อนปิดงาน
+      if (response.data.case.activeAssetImeiWarning !== null) {
+        showToast({
+          tone: 'warning',
+          title: 'IMEI ซ้ำกับเครื่องที่ยังไม่ส่งมอบ',
+          description: response.data.case.activeAssetImeiWarning,
+        })
+      }
       setLoading(true)
       await reload()
     } finally {

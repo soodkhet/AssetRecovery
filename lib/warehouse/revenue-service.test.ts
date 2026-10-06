@@ -3,6 +3,7 @@ import {
   evaluateCaseRevenueGates,
   expenseGateOf,
   lotGateOf,
+  revenueDateOf,
   revenueOutcomeByCase,
   type CaseRevenueSnapshot,
 } from '@/lib/warehouse/revenue-service'
@@ -155,5 +156,41 @@ describe('revenueOutcomeByCase — ผลต่อเคสสำหรับ au
       { caseId: 'c1', result: 'skipped', reason: 'no_snapshot' },
       { caseId: 'c9', result: 'skipped', reason: 'no_snapshot' },
     ])
+  })
+})
+
+describe('revenueDateOf — วันรับรู้รายได้ (มติ PO O72(1))', () => {
+  const now = new Date('2026-11-05T05:00:00Z')
+
+  it('ผ่านคลัง = วันยืนยันล็อตตามปฏิทินไทย ไม่ใช่วันปิดงาน', () => {
+    const date = revenueDateOf({
+      outcome: 'closed_success',
+      lotConfirmedAts: [new Date('2026-09-30T17:30:00Z')],
+      closedAt: new Date('2026-09-20T03:00:00Z'),
+      now,
+    })
+    expect(date.toISOString().slice(0, 10)).toBe('2026-10-01')
+  })
+
+  it('หลายเครื่อง = ล็อตที่ยืนยันล่าสุด · ไม่มีวันยืนยัน (ข้อมูลเก่า) = เวลาที่รายได้เกิด', () => {
+    const latest = revenueDateOf({
+      outcome: 'closed_success',
+      lotConfirmedAts: [new Date('2026-10-02T03:00:00Z'), null, new Date('2026-10-09T03:00:00Z')],
+      closedAt: null,
+      now,
+    })
+    expect(latest.toISOString().slice(0, 10)).toBe('2026-10-09')
+    const legacy = revenueDateOf({ outcome: 'closed_success', lotConfirmedAts: [null], closedAt: null, now })
+    expect(legacy.toISOString().slice(0, 10)).toBe('2026-11-05')
+  })
+
+  it('ไม่ผ่านคลัง (closed_fail คิดเงิน) = วันปิดงานของรอบนั้น', () => {
+    const date = revenueDateOf({
+      outcome: 'closed_fail',
+      lotConfirmedAts: [],
+      closedAt: new Date('2026-08-10T18:00:00Z'),
+      now,
+    })
+    expect(date.toISOString().slice(0, 10)).toBe('2026-08-11')
   })
 })

@@ -641,6 +641,79 @@ suite('Phase 2.9 — D10: Google Maps ใช้ไม่ได้ตอนปิ
       await db().$executeRawUnsafe(`DELETE FROM accounting_periods WHERE organization_id = '${ORG_ID}'`)
     }
   })
+
+  it('มติ PO U135 — ค่าน้ำมันคำนวณได้หลังงวดปิด ⇒ เก็บยอดไว้ · การเงิน "สร้างรายการเบิกย้อนหลัง" ลงวันนี้ในงวดที่เปิด (idempotent)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('down', { status: 500 })),
+    )
+    const caseId = await seedReadyToClose()
+    await field.closeFieldCase(agentA, caseId, { outcome: 'closed_fail', failReason: 'debtor_not_found', ...MEDIA }, { actor: agentA, meta })
+    // ปิดงานครั้งแรกเมื่อ 40 วันก่อน (เดือนก่อน) แล้วงวดนั้นถูกล็อก — งวดของวันนี้ยังเปิด
+    await db().$executeRawUnsafe(
+      `UPDATE case_evidences SET submitted_at = submitted_at - INTERVAL '40 days' WHERE case_id = '${caseId}'`,
+    )
+    const workDay = new Date(Date.now() - 40 * 86_400_000 + 7 * 3_600_000)
+    await db().$executeRawUnsafe(`DELETE FROM accounting_periods WHERE organization_id = '${ORG_ID}'`)
+    await db().$executeRawUnsafe(`
+      INSERT INTO accounting_periods (organization_id, period_label, year_be, month, status, created_by)
+      VALUES ('${ORG_ID}', 'งวดทดสอบ U135 ค่าน้ำมัน', ${workDay.getUTCFullYear() + 543}, ${workDay.getUTCMonth() + 1},
+              'locked', '${MANAGER_ID}')
+    `)
+    const finance = sessionUser({
+      id: MANAGER_ID,
+      roleId: ROLE_MANAGER,
+      roleName: 'การเงิน',
+      teamId: null,
+      capabilities: { create_adjustment: 'manage' },
+      scope: { kind: 'global', teamIds: [], companyId: null, userId: MANAGER_ID },
+    })
+    try {
+      stubDistanceMatrix(10_000)
+      const result = await fuelJob.runFuelDistanceRetryJob({ organizationId: ORG_ID })
+      expect(result).toMatchObject({ created: 0, periodLocked: 1 })
+      expect((await expensesOf(caseId)).filter((row) => row.expenseType === 'fuel')).toHaveLength(0)
+
+      const listed = await fuelJob.listLockedFuelExpenses(finance)
+      expect(listed).toHaveLength(1)
+      const item = listed[0]
+      expect(item?.caseId).toBe(caseId)
+      expect(item?.workDate).toBe(workDay.toISOString().slice(0, 10))
+      expect(item?.grossSatang ?? 0).toBeGreaterThan(0)
+
+      // ไม่มีสิทธิ์ create_adjustment ⇒ PERMISSION_DENIED
+      await expect(
+        fuelJob.createBackdatedFuelExpense({ actor: agentA, meta }, { jobId: item?.jobId ?? '', reason: 'ระยะทางคำนวณหลังงวดปิด' }),
+      ).rejects.toMatchObject({ code: 'PERMISSION_DENIED' })
+
+      const created = await fuelJob.createBackdatedFuelExpense(
+        { actor: finance, meta },
+        { jobId: item?.jobId ?? '', reason: 'ระยะทางคำนวณหลังงวดปิด' },
+      )
+      const today = new Date(Date.now() + 7 * 3_600_000).toISOString().slice(0, 10)
+      expect(created).toMatchObject({ created: true, expenseDate: today })
+      const fuel = (await expensesOf(caseId)).filter((row) => row.expenseType === 'fuel')
+      expect(fuel).toHaveLength(1)
+      expect(fuel[0]?.grossSatang).toBe(item?.grossSatang)
+      expect(fuel[0]?.status).toBe('pending_approval')
+      const stored = await db().expense.findUniqueOrThrow({ where: { id: created.expenseId ?? '' } })
+      expect(stored.expenseDate.toISOString().slice(0, 10)).toBe(today)
+      expect(stored.revisionNote ?? '').toContain('งานปิดเมื่อ')
+      const audit = await db().auditLog.findFirstOrThrow({ where: { targetType: 'expenses', targetId: stored.id } })
+      expect(audit.actorId).toBe(MANAGER_ID)
+      expect(audit.reason ?? '').toContain('ระยะทางคำนวณหลังงวดปิด')
+
+      // กดซ้ำ = ไม่สร้างซ้ำ · รายการหายจากการ์ด
+      const again = await fuelJob.createBackdatedFuelExpense(
+        { actor: finance, meta },
+        { jobId: item?.jobId ?? '', reason: 'กดซ้ำ' },
+      )
+      expect(again.created).toBe(false)
+      expect(await fuelJob.listLockedFuelExpenses(finance)).toEqual([])
+    } finally {
+      await db().$executeRawUnsafe(`DELETE FROM accounting_periods WHERE organization_id = '${ORG_ID}'`)
+    }
+  })
 })
 
 suite('Phase 2.9 — 2 เส้นทางตีกลับ (`41` §10.1 ห้ามสลับ)', () => {
@@ -761,6 +834,46 @@ suite('Phase 2.9 — 2 เส้นทางตีกลับ (`41` §10.1 ห�
     expect(active.map((row) => row.expenseType).sort()).toEqual(['allowance', 'commission', 'fuel'])
     expect(active.find((row) => row.expenseType === 'fuel')?.grossSatang).toBe(1_500)
     expect(active.find((row) => row.expenseType === 'commission')?.grossSatang).toBe(COMMISSION_SATANG)
+  })
+
+  it('มติ PO U135 — resubmit ข้ามงวด: งวดของวันปิดงานเดิมล็อกแล้ว ⇒ รายการเดิม (ยังไม่อนุมัติ) superseded · ชุดใหม่ลงวันนี้ในงวดที่เปิด + อ้างวันงานเดิม', async () => {
+    const caseId = await closeSuccessfully()
+    await field.rejectFieldEvidence(manager, caseId, { reason: 'ขอภาพเพิ่มอีกมุม' }, { actor: manager, meta })
+
+    // ย้ายการปิดงานครั้งแรกไป 40 วันก่อน (เดือนก่อน) แล้วล็อกงวดนั้น
+    await db().$executeRawUnsafe(
+      `UPDATE case_evidences SET submitted_at = submitted_at - INTERVAL '40 days' WHERE case_id = '${caseId}'`,
+    )
+    const firstClose = new Date(Date.now() - 40 * 86_400_000 + 7 * 3_600_000)
+    const lockedYearBe = firstClose.getUTCFullYear() + 543
+    const lockedMonth = firstClose.getUTCMonth() + 1
+    await db().$executeRawUnsafe(`DELETE FROM accounting_periods WHERE organization_id = '${ORG_ID}'`)
+    await db().$executeRawUnsafe(`
+      INSERT INTO accounting_periods (organization_id, period_label, year_be, month, status, created_by)
+      VALUES ('${ORG_ID}', 'งวดทดสอบ U135', ${lockedYearBe}, ${lockedMonth}, 'locked', '${MANAGER_ID}')
+    `)
+    try {
+      clearDistanceCache()
+      stubDistanceMatrix(3_000)
+      await field.resubmitCloseCase(
+        agentA,
+        caseId,
+        { photos: ['p1.jpg', 'p2-new.jpg'], videos: ['v1.mp4'], productPhotos: ['pp1.jpg'] },
+        { actor: agentA, meta },
+      )
+
+      const all = await db().expense.findMany({ where: { caseId, fieldDaySettlementId: null } })
+      expect(all.filter((row) => row.status === 'superseded')).toHaveLength(2)
+      const active = all.filter((row) => row.status !== 'superseded')
+      expect(active).toHaveLength(2)
+      const today = new Date(Date.now() + 7 * 3_600_000).toISOString().slice(0, 10)
+      for (const row of active) {
+        expect(row.expenseDate.toISOString().slice(0, 10)).toBe(today)
+        expect(row.revisionNote ?? '').toContain('งานปิดเมื่อ')
+      }
+    } finally {
+      await db().$executeRawUnsafe(`DELETE FROM accounting_periods WHERE organization_id = '${ORG_ID}'`)
+    }
   })
 
   it('UAT Q7 (BUG-052) — แก้แผนระหว่างปิดงานกับ resubmit: ชุดใหม่ยังคิดด้วยแผนเวอร์ชัน/วันที่ของการปิดครั้งแรก', async () => {
