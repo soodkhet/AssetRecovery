@@ -148,6 +148,13 @@ export interface SubstituteReceiptViewer {
   canSeeAllAdvances: boolean
   /** ถือ `approve_expense_finance`/`approve_expense_executive` (เห็นคิวอนุมัติทั้งองค์กร) */
   canSeeAllExpenses: boolean
+  /**
+   * ถือ `approve_advance` ระดับ **manage** — ทำแทนเจ้าของได้ทั้งองค์กร (อัปโหลดฉบับเซ็น/ยกเลิก/ออกใหม่)
+   * ระดับ `view` = ดูอย่างเดียว (DEC-009) — Final Test ด่าน 4: เดิมใช้ธง "เห็น" ตัดสินสิทธิ์เขียน
+   */
+  canManageAllAdvances: boolean
+  /** ถือ `approve_expense_finance`/`approve_expense_executive` ระดับ **manage** (กติกาเดียวกับข้างบน) */
+  canManageAllExpenses: boolean
   /** ทีมที่ผู้เรียกดูแล (`team_managers`) — ผู้อนุมัติขั้นทีมเห็นรายการเบิกของทีมตัวเอง */
   managedTeamIds: readonly string[]
 }
@@ -180,7 +187,7 @@ export function canUploadSignedSubstituteReceipt(
   owner: SubstituteReceiptOwnerRef,
 ): boolean {
   if (viewer.isSuperadmin || viewer.userId === owner.payeeUserId) return true
-  return owner.link === 'advance' ? viewer.canSeeAllAdvances : viewer.canSeeAllExpenses
+  return owner.link === 'advance' ? viewer.canManageAllAdvances : viewer.canManageAllExpenses
 }
 
 // ── ยกเลิก / ออกใบใหม่แทน (มติ PO 06/10/2569 U107 · `23` §6.17) ─────────────────────
@@ -246,8 +253,8 @@ export function substituteReceiptCancelProblemMessage(problem: SubstituteReceipt
  */
 export function canCancelSubstituteReceipt(viewer: SubstituteReceiptViewer, owner: SubstituteReceiptOwnerRef): boolean {
   if (viewer.isSuperadmin) return true
-  if (owner.link === 'advance') return viewer.canSeeAllAdvances
-  return viewer.canSeeAllExpenses || viewer.userId === owner.payeeUserId
+  if (owner.link === 'advance') return viewer.canManageAllAdvances
+  return viewer.canManageAllExpenses || viewer.userId === owner.payeeUserId
 }
 
 /**

@@ -150,6 +150,8 @@ describe('scope การเห็น/อัปโหลด', () => {
     isSuperadmin: false,
     canSeeAllAdvances: false,
     canSeeAllExpenses: false,
+    canManageAllAdvances: false,
+    canManageAllExpenses: false,
     managedTeamIds: [],
   }
   const expenseOwner = { payeeUserId: 'u-owner', payeeTeamId: 't1', link: 'expense' as const }
@@ -247,16 +249,46 @@ describe('มติ PO U107 — ยกเลิก / ออกใบใหม่
   })
 
   it('สิทธิ์ยกเลิก: เจ้าของ (ใบเบิก) · การเงินของสายนั้น · Superadmin — ผู้จัดการทีม/เจ้าของใบเงินทดรองไม่ได้', () => {
-    const base = { userId: 'u-other', isSuperadmin: false, canSeeAllAdvances: false, canSeeAllExpenses: false, managedTeamIds: ['t1'] }
+    const base = {
+      userId: 'u-other',
+      isSuperadmin: false,
+      canSeeAllAdvances: false,
+      canSeeAllExpenses: false,
+      canManageAllAdvances: false,
+      canManageAllExpenses: false,
+      managedTeamIds: ['t1'],
+    }
     const expenseOwner = { payeeUserId: 'u-owner', payeeTeamId: 't1', link: 'expense' as const }
     const advanceOwner = { ...expenseOwner, link: 'advance' as const }
     expect(canCancelSubstituteReceipt({ ...base, userId: 'u-owner' }, expenseOwner)).toBe(true)
     expect(canCancelSubstituteReceipt({ ...base, userId: 'u-owner' }, advanceOwner)).toBe(false)
     expect(canCancelSubstituteReceipt(base, expenseOwner)).toBe(false) // ผู้จัดการทีมดูได้อย่างเดียว
-    expect(canCancelSubstituteReceipt({ ...base, canSeeAllExpenses: true }, expenseOwner)).toBe(true)
-    expect(canCancelSubstituteReceipt({ ...base, canSeeAllExpenses: true }, advanceOwner)).toBe(false)
-    expect(canCancelSubstituteReceipt({ ...base, canSeeAllAdvances: true }, advanceOwner)).toBe(true)
+    const financeExp = { ...base, canSeeAllExpenses: true, canManageAllExpenses: true }
+    const financeAdv = { ...base, canSeeAllAdvances: true, canManageAllAdvances: true }
+    expect(canCancelSubstituteReceipt(financeExp, expenseOwner)).toBe(true)
+    expect(canCancelSubstituteReceipt(financeExp, advanceOwner)).toBe(false)
+    expect(canCancelSubstituteReceipt(financeAdv, advanceOwner)).toBe(true)
     expect(canCancelSubstituteReceipt({ ...base, isSuperadmin: true }, advanceOwner)).toBe(true)
+  })
+
+  it('Final ด่าน 4: ถือสิทธิ์ระดับ view ทั้งองค์กร = ดูได้อย่างเดียว ยกเลิก/ออกใหม่/อัปโหลดฉบับเซ็นแทนไม่ได้ (DEC-009)', () => {
+    const viewOnly = {
+      userId: 'u-other',
+      isSuperadmin: false,
+      canSeeAllAdvances: true,
+      canSeeAllExpenses: true,
+      canManageAllAdvances: false,
+      canManageAllExpenses: false,
+      managedTeamIds: [],
+    }
+    const expenseOwner = { payeeUserId: 'u-owner', payeeTeamId: 't1', link: 'expense' as const }
+    const advanceOwner = { ...expenseOwner, link: 'advance' as const }
+    expect(canViewSubstituteReceipt(viewOnly, expenseOwner)).toBe(true)
+    expect(canViewSubstituteReceipt(viewOnly, advanceOwner)).toBe(true)
+    expect(canCancelSubstituteReceipt(viewOnly, expenseOwner)).toBe(false)
+    expect(canCancelSubstituteReceipt(viewOnly, advanceOwner)).toBe(false)
+    expect(canUploadSignedSubstituteReceipt(viewOnly, expenseOwner)).toBe(false)
+    expect(canUploadSignedSubstituteReceipt(viewOnly, advanceOwner)).toBe(false)
   })
 
   it('ยอดใบใหม่: ค่าที่พัก = ยอดเบิกพอดี · ชนิดอื่นไม่เกินยอดเบิก · เงินทดรองไม่เกินยอดใช้จริง', () => {

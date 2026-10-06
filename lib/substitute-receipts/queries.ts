@@ -299,6 +299,10 @@ export function substituteReceiptViewerOf(user: SessionUser): SubstituteReceiptV
     canSeeAllAdvances: hasCapability(user, 'view', APPROVE_ADVANCE),
     canSeeAllExpenses:
       hasCapability(user, 'view', 'approve_expense_finance') || hasCapability(user, 'view', 'approve_expense_executive'),
+    canManageAllAdvances: hasCapability(user, 'manage', APPROVE_ADVANCE),
+    canManageAllExpenses:
+      hasCapability(user, 'manage', 'approve_expense_finance') ||
+      hasCapability(user, 'manage', 'approve_expense_executive'),
     // ผู้อนุมัติขั้นทีมเห็นรายการเบิกของทีมที่ดูแล (กติกาเดียวกับคิวอนุมัติ)
     managedTeamIds: hasCapability(user, 'view', 'approve_expense_manager') ? [...user.scope.teamIds] : [],
   }
