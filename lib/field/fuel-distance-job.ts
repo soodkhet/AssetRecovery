@@ -1,3 +1,5 @@
+import { periodKeyOf } from '@/lib/accounting/period'
+import { periodStatusAt } from '@/lib/accounting/period-guard'
 import { emitAudit } from '@/lib/audit/audit'
 import { kmHundredthsToDecimalString, metersToKmHundredths, routePoints } from '@/lib/field/distance'
 import { DistanceUnavailableError, resolveRouteMeters } from '@/lib/field/distance-provider'
@@ -13,6 +15,7 @@ import { Prisma } from '@/lib/generated/prisma/client'
 import { drainNotificationOutboxSafely, enqueueNotificationOutbox } from '@/lib/notifications/outbox'
 import { outboxExpenseApprovalEntries } from '@/lib/notifications/outbox-core'
 import { prisma } from '@/lib/prisma'
+import { isDirectEditRejected } from '@/lib/settings/period-lock'
 
 /**
  * Job `fuel_distance_retry` (มติ PO 14/08/2569 — D10 · `91` §17)
@@ -47,6 +50,11 @@ export interface FuelDistanceJobResult {
   skippedZero: number
   /** ยังคำนวณไม่ได้ — คืนคิวไว้รอบหน้า */
   deferred: number
+  /**
+   * วันปิดงานอยู่ในงวดบัญชีที่ปิดแล้ว ⇒ ไม่สร้างรายการเข้างวดนั้น (`13` §6.11 · มติ PO U25 — job ไม่ settle ข้ามงวด)
+   * งานถูกปิดเป็น `failed` พร้อมเหตุผลให้เห็นใน Job Log (Final Test ด่าน 3)
+   */
+  periodLocked: number
 }
 
 interface JobPayload {
@@ -67,7 +75,7 @@ export async function runFuelDistanceRetryJob(
 ): Promise<FuelDistanceJobResult> {
   const now = options.now ?? new Date()
   const jobId = options.jobId ?? FUEL_DISTANCE_JOB_TYPE
-  const result: FuelDistanceJobResult = { claimed: 0, created: 0, skippedZero: 0, deferred: 0 }
+  const result: FuelDistanceJobResult = { claimed: 0, created: 0, skippedZero: 0, deferred: 0, periodLocked: 0 }
 
   const due = await prisma.job.findMany({
     where: {
@@ -107,6 +115,16 @@ export async function runFuelDistanceRetryJob(
         organizationId: job.organizationId,
         now,
       })
+      if (outcome === 'period_locked') {
+        result.periodLocked += 1
+        await releaseJob(job.id, {
+          status: 'failed',
+          errorMessage: 'งวดบัญชีของวันปิดงานถูกปิดแล้ว — สร้างรายการค่าน้ำมันเข้างวดนั้นไม่ได้ ต้องทำผ่านการปรับปรุงรายการ',
+          completedAt: now,
+          result: { outcome },
+        })
+        continue
+      }
       if (outcome === 'created') result.created += 1
       if (outcome === 'zero' || outcome === 'skipped') result.skippedZero += 1
       await releaseJob(job.id, { status: 'completed', completedAt: now, result: { outcome } })
@@ -142,7 +160,7 @@ export async function runFuelDistanceRetryJob(
   return result
 }
 
-type FuelOutcome = 'created' | 'zero' | 'skipped'
+type FuelOutcome = 'created' | 'zero' | 'skipped' | 'period_locked'
 
 async function createFuelExpense(params: {
   jobId: string
@@ -205,6 +223,12 @@ async function createFuelExpense(params: {
   const plan = pricing.plan
   if (plan === null) return 'skipped'
 
+  // Period Lock (`13` §6.11 · non-negotiable 12) — รายการลงวันที่วันปิดงาน ถ้างวดนั้นปิดแล้ว (retry ข้ามสิ้นเดือน)
+  // ห้ามเขียนตรงเข้างวด · เช็คก่อนเรียก Maps (ไม่เสียโควตา) — ยามเดียวกับ `isFieldDayPeriodLocked()` ของ job รายวัน
+  const expenseDate = bangkokBusinessDate(closedAt)
+  const periodStatus = await periodStatusAt(params.organizationId, periodKeyOf(expenseDate))
+  if (periodStatus !== null && isDirectEditRejected(periodStatus, true)) return 'period_locked'
+
   // โยน DistanceUnavailableError ออกไปให้ตัว job จัดการ retry (ยังไม่สร้างอะไรทั้งนั้น)
   const meters = await resolveRouteMeters(
     routePoints(
@@ -243,7 +267,7 @@ async function createFuelExpense(params: {
         payeeId,
         expenseType: 'fuel',
         grossSatang,
-        expenseDate: bangkokBusinessDate(closedAt),
+        expenseDate,
         distanceKm: new Prisma.Decimal(kmHundredthsToDecimalString(distanceKmHundredths)),
         calculationSource: 'compensation_plan',
         compPlanId: plan.planId,

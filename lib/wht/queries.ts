@@ -231,8 +231,13 @@ export async function refreshFilingSummary(
 
   const existing = await tx.whtFilingSummary.findUnique({
     where: { periodId: input.periodId },
-    select: { id: true },
+    select: { id: true, status: true },
   })
+  // `33` §7.2 — รอบที่บัญชี mark `filed` แล้ว (ยื่นจริงนอกระบบ) ห้ามคิดทับ: ทั้งยอด ภ.ง.ด. วันกำหนดยื่น และวิธียื่น
+  // คือบันทึกสิ่งที่ยื่นไปแล้ว (Final Test ด่าน 3) · การยกเลิก/ออกใบแทนหลังยื่นต้องทำอย่างไร = รอมติ (ยื่นเพิ่มเติม)
+  if (existing?.status === 'filed') {
+    return tx.whtFilingSummary.findUniqueOrThrow({ where: { id: existing.id }, select: FILING_SELECT })
+  }
 
   if (existing === null) {
     return tx.whtFilingSummary.create({
