@@ -72,7 +72,7 @@ export function CustodyTab({
   companies: readonly FilterOption[]
   /** เพิ่มค่าเมื่อมีเหตุจากภายนอกที่ทำให้รายการเปลี่ยน (สร้างล็อตแล้วเครื่องกลายเป็น `handover_pending`) */
   reloadToken?: number
-  onScheduleHandover?: (companyId: string, assets: readonly AssetListItemDto[]) => void
+  onScheduleHandover: (companyId: string, assets: readonly AssetListItemDto[]) => void
 }) {
   const { can } = usePermission()
   const { showToast } = useToast()
@@ -172,15 +172,6 @@ export function CustodyTab({
 
   function scheduleHandover(): void {
     if (openCompanyId === null || selectedHere.length === 0) return
-    if (onScheduleHandover === undefined) {
-      // Modal "นัดวันส่งมอบ" อยู่ใน Phase 2.15 — ยังไม่ผูกเข้ามาก็ต้องไม่ทำให้ผู้ใช้สับสน
-      showToast({
-        tone: 'info',
-        title: 'ยังเปิดใช้งานไม่ได้',
-        description: `เลือกไว้ ${selectedHere.length} เครื่อง — หน้าจอนัดวันส่งมอบอยู่ระหว่างพัฒนา`,
-      })
-      return
-    }
     const picked = drillRows.filter((row) => selectedHere.includes(row.id))
     onScheduleHandover(openCompanyId, picked)
   }

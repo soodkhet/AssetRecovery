@@ -207,7 +207,7 @@ export function PayoutDetailModal({
                       {item.description}
                       {item.caseRef !== null && (
                         <p className="text-[10px] text-slate-400">
-                          เคส {item.caseRef}
+                          เคส <span className="font-mono">{item.caseRef}</span>
                           {item.trackingRound > 1 ? ` (รอบติดตามที่ ${item.trackingRound})` : ''}
                         </p>
                       )}
@@ -241,7 +241,7 @@ export function PayoutDetailModal({
                       {fmtSatangSymbol(item.netSatang)}
                       {item.advanceOffsets.map((offset) => (
                         <p key={offset.advanceId} className="text-[10px] font-normal text-amber-700">
-                          หักคืนเงินทดรอง {offset.advanceRef} ({fmtSatangSymbol(offset.amountSatang)})
+                          หักคืนเงินทดรอง <span className="font-mono">{offset.advanceRef}</span> ({fmtSatangSymbol(offset.amountSatang)})
                         </p>
                       ))}
                       {item.advanceOffsetSatang > 0 && (

@@ -276,7 +276,7 @@ export function ApprovalMatrixTab() {
         <Table>
           <THead>
             <Tr>
-              <Th>เงื่อนไข</Th>
+              <Th>ชื่อสายอนุมัติ</Th>
               <Th className="text-right">เพดานเงิน</Th>
               <Th>ลำดับขั้นอนุมัติ</Th>
               <Th>แยกหน้าที่</Th>
@@ -388,12 +388,20 @@ export function ApprovalMatrixTab() {
         }
       >
         <div className="space-y-4">
-          <Field id="approval-condition" label="เงื่อนไขที่ทำให้ใช้สายนี้" required error={errors.condition}>
+          {/* ข้อความนี้เป็นแค่ชื่อเรียกสาย — ตัวเลือกสายจริงคือ "เพดานเงิน" (ยอด ≤ เพดาน · resolveApprovalFlow)
+              เดิม label/placeholder ชวนให้เข้าใจว่าพิมพ์เงื่อนไขแล้วมีผล และตัวอย่าง "เกิน" กลับทิศกับกติกาจริง (Final ด่าน 5) */}
+          <Field
+            id="approval-condition"
+            label="ชื่อสายอนุมัติ"
+            hint="ใช้เป็นชื่อเรียกเท่านั้น — ระบบเลือกสายจากเพดานเงินด้านล่าง (ยอดไม่เกินเพดาน)"
+            required
+            error={errors.condition}
+          >
             <Input
               id="approval-condition"
               value={form.condition}
               onChange={(event) => set('condition', event.target.value)}
-              placeholder='เช่น "เบิกค่าใช้จ่ายเกิน 10,000 บาท"'
+              placeholder='เช่น "สายปกติ — ยอดไม่เกิน 10,000 บาท"'
             />
           </Field>
 

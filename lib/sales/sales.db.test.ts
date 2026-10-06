@@ -671,16 +671,17 @@ suite('มติ PO U77/U82 (ม.86/4) — สาขาผู้ซื้อ/ผ
     ).rejects.toThrow(/TAX_INVOICE_IMMUTABLE/)
   })
 
-  it('สาขาผู้ขาย: ค่าตั้งองค์กร → snapshot บนใบ · แก้ค่าภายหลังใบเดิมไม่เปลี่ยน · audit + เหตุผล', async () => {
-    const { updateSellerBranch } = await import('@/lib/settings/queries/seller-branch')
+  // ค่าสาขาแก้ที่ ข้อมูลองค์กร (`updateOrganizationProfile` — audit + เหตุผลทดสอบใน organization.db.test)
+  // · endpoint แยก /api/settings/seller-branch ถูกลบแล้ว (มติ O73 — Final ด่าน 5) ⇒ test นี้ตั้งค่าตรงที่ DB
+  it('สาขาผู้ขาย: ค่าตั้งองค์กร → snapshot บนใบ · แก้ค่าภายหลังใบเดิมไม่เปลี่ยน', async () => {
     await setNumbering({ seq: 700 })
     await db().$executeRawUnsafe(`UPDATE organizations SET branch_code = '00000' WHERE id = '${ORG_ID}'`)
-    await updateSellerBranch({ actor: accountant, meta, reason: 'ออกใบกำกับจากสาขาที่ 2 (เทสต์ U82)' }, '00002')
+    await db().$executeRawUnsafe(`UPDATE organizations SET branch_code = '00002' WHERE id = '${ORG_ID}'`)
 
     const invoice = await sales.issueTaxInvoice(ctx, { cashReceiptId: (await seedReceivedBilling()).receiptId })
     expect((await sales.getTaxInvoiceDocSource(accountant, invoice.id)).sellerBranchCode).toBe('00002')
 
-    await updateSellerBranch({ actor: accountant, meta, reason: 'กลับไปออกที่สำนักงานใหญ่ (เทสต์ U82)' }, '00000')
+    await db().$executeRawUnsafe(`UPDATE organizations SET branch_code = '00000' WHERE id = '${ORG_ID}'`)
     expect((await sales.getTaxInvoiceDocSource(accountant, invoice.id)).sellerBranchCode).toBe('00002')
     await expect(
       db().$executeRawUnsafe(`UPDATE tax_invoices SET seller_branch_code = '00000' WHERE id = '${invoice.id}'`),

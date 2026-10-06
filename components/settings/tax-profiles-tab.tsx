@@ -9,7 +9,6 @@ import {
   MANAGE_TAX_PROFILES,
   STATUS_FILTER_LABEL,
   WHT_BASIS_LABEL,
-  WHT_FILING_FORM_LABEL,
   type StatusFilter,
 } from '@/components/settings/shared'
 import {
@@ -257,7 +256,6 @@ export function TaxProfilesTab() {
             <Tr>
               <Th>ชื่อ Profile</Th>
               <Th>ประเภทเงินได้</Th>
-              <Th>แบบนำส่ง</Th>
               <Th className="text-right">อัตรา WHT</Th>
               <Th>ฐานที่ใช้หัก</Th>
               <Th className="text-right">ขั้นต่ำที่ต้องหัก</Th>
@@ -266,7 +264,7 @@ export function TaxProfilesTab() {
           </THead>
           {/* `TableState` เรนเดอร์ `<tbody>` ของตัวเอง — วางเป็นพี่น้องกับ `TBody` */}
           <TableState
-            colSpan={7}
+            colSpan={6}
             loading={loading}
             error={error}
             isEmpty={items.length === 0}
@@ -295,9 +293,6 @@ export function TaxProfilesTab() {
                   </Td>
                   <Td>
                     <span className="text-xs text-slate-600">{item.incomeType}</span>
-                  </Td>
-                  <Td>
-                    <span className="text-xs text-slate-600">{WHT_FILING_FORM_LABEL[item.filingForm]}</span>
                   </Td>
                   <Td numeric>
                     <span className="font-semibold text-rose-700">{item.whtPct}%</span>
@@ -384,18 +379,13 @@ export function TaxProfilesTab() {
                 placeholder={String(DEFAULT_WHT_PCT)}
               />
             </Field>
-            <Field id="tax-filing-form" label="แบบนำส่ง" required error={errors.filingForm}>
-              <Select
-                id="tax-filing-form"
-                value={form.filingForm}
-                onChange={(event) => set('filingForm', event.target.value as WhtFilingForm)}
-              >
-                {(Object.keys(WHT_FILING_FORM_LABEL) as WhtFilingForm[]).map((value) => (
-                  <option key={value} value={value}>
-                    {WHT_FILING_FORM_LABEL[value]}
-                  </option>
-                ))}
-              </Select>
+            {/* แบบนำส่งไม่ได้มาจาก Tax Profile แล้ว (มติ O57 · U96 · U7 — `filingFormOf()` ตัดสินจากชนิดผู้รับ + ประเภทเงินได้)
+                เดิมเป็นตัวเลือกที่บันทึกได้แต่ไม่มีผล ⇒ แสดงกติกาแทน · ค่าเดิมในฐานข้อมูลคงไว้ไม่แตะ (Final ด่าน 5) */}
+            <Field id="tax-filing-form" label="แบบนำส่ง">
+              <p id="tax-filing-form" className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                ระบบกำหนดให้อัตโนมัติตามผู้รับ — นิติบุคคล: ภ.ง.ด.53 · บุคคลธรรมดาเงินได้ 40(1)/40(2): ภ.ง.ด.1 ·
+                บุคคลธรรมดาอื่น ๆ: ภ.ง.ด.3
+              </p>
             </Field>
           </div>
 

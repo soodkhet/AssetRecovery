@@ -14,13 +14,14 @@ import {
   Input,
   PageHeader,
   Select,
-  TBody,
-  THead,
+  StatusBadge,
   Table,
   TableState,
+  TBody,
   Td,
   Textarea,
   Th,
+  THead,
   Tr,
   useToast,
 } from '@/components/ui'
@@ -336,18 +337,15 @@ export function UsersManager() {
                   <Td className="text-right">
                     <div className="flex items-center justify-end gap-2">
                       {!user.isProvisioned && (
-                        <Badge className="bg-amber-100 text-amber-800">รอตั้งรหัสผ่าน</Badge>
+                        <StatusBadge group="pending" label="รอตั้งรหัสผ่าน" />
                       )}
                       {user.isProvisioned && user.mustChangePassword && (
-                        <Badge className="bg-amber-100 text-amber-800">รอผู้ใช้เปลี่ยนรหัส</Badge>
+                        <StatusBadge group="pending" label="รอผู้ใช้เปลี่ยนรหัส" />
                       )}
-                      <Badge
-                        className={
-                          user.status === 'active' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
-                        }
-                      >
-                        {user.status === 'active' ? 'Active' : 'Suspended'}
-                      </Badge>
+                      <StatusBadge
+                        group={user.status === 'active' ? 'success' : 'critical'}
+                        label={user.status === 'active' ? 'Active' : 'Suspended'}
+                      />
                       {/* บัญชีกลุ่ม system จัดการได้เฉพาะ Superadmin (DEC-010) — ซ่อนปุ่มทั้งชุด · API ตอบ 403 ซ้ำ */}
                       <Can action="manage" resource={MANAGE_RESOURCE}>
                         {session !== null && canManageAccountIn(session, user.roleGroup) && (

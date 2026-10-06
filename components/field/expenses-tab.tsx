@@ -128,7 +128,7 @@ function CaseGroupCard({ group }: { group: ExpenseCaseGroup }) {
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-extrabold text-slate-700">{group.debtorName ?? '—'}</span>
           <span className="mt-0.5 block truncate text-xs text-slate-400">
-            {group.caseRef ?? '—'} · {group.items.length} รายการ
+            <span className="font-mono">{group.caseRef ?? '—'}</span> · {group.items.length} รายการ
             {group.supersededItems.length > 0 && ` · ${group.supersededItems.length} รายการถูกแทนที่`}
           </span>
         </span>

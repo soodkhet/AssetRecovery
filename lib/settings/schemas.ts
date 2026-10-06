@@ -12,7 +12,6 @@ import {
   MAX_AGING_BUCKET_DAYS,
   MIN_AGING_BUCKETS,
 } from '@/lib/settings/finance-policy'
-import { BRANCH_CODE_PATTERN } from '@/lib/format/branch'
 import {
   DOCUMENT_NUMBER_TYPES,
   MAX_DIGITS,
@@ -130,7 +129,7 @@ export function cycleDueRuleLabel(values: z.infer<typeof cycleFieldsSchema>): st
 
 // ── §6.2 สายการอนุมัติ ─────────────────────────────────────────────────
 const approvalMatrixFieldsBase = z.object({
-  condition: z.string().trim().min(2, 'ระบุเงื่อนไขที่ทำให้ใช้สายอนุมัตินี้').max(200, 'เงื่อนไขยาวเกินไป'),
+  condition: z.string().trim().min(2, 'ระบุชื่อสายอนุมัติ').max(200, 'ชื่อสายอนุมัติยาวเกินไป'),
   /** เพดานเงินเป็น **satang** เสมอ (Rule 01) — FE แปลงจากบาทด้วย `parseBahtInput()` ก่อนส่ง */
   conditionThresholdSatang: satangSchema('เพดานเงิน').nullable().default(null),
   approvalFlow: z
@@ -492,19 +491,6 @@ export function bodyTouchesNumberingSequence(body: unknown): boolean {
   if (typeof body !== 'object' || body === null) return false
   return NUMBERING_READONLY_KEYS.some((key) => key in (body as Record<string, unknown>))
 }
-
-// ── สำนักงานใหญ่/สาขาของผู้ขาย (มติ PO U82 · ม.86/4) ───────────────────────
-/**
- * แก้สาขาผู้ขาย (องค์กรเรา) — บังคับส่งรหัสทุกครั้ง (ไม่มีค่า default ตอนแก้) · กระทบเอกสารภาษี ⇒ เหตุผลบังคับ
- */
-export const sellerBranchUpdateSchema = z.object({
-  branchCode: z
-    .string()
-    .trim()
-    .refine((value) => BRANCH_CODE_PATTERN.test(value), 'รหัสสาขาต้องเป็นตัวเลข 5 หลัก (สำนักงานใหญ่ = 00000)'),
-  reason: reasonSchema,
-})
-export type SellerBranchUpdateInput = z.infer<typeof sellerBranchUpdateSchema>
 
 // ── §6.13 เทมเพลตเอกสาร (มติ PO U122) ─────────────────────────────────────
 export const templateDocumentTypeSchema = z.enum(['billing_invoice', 'tax_invoice', 'handover_note'])

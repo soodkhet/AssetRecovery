@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import {
   BANK_ACCOUNT_USAGE_LABEL,
   DEFAULT_AUTO_MATCH_TOLERANCE_DAYS,
+  bankFileFormatNameOptions,
   canPayFrom,
+  defaultPaymentFileFormatId,
   canReceiveTo,
   maskAccountNumber,
   normalizeAccountNumber,
@@ -86,5 +88,32 @@ describe('toBankAccountAuditPayload', () => {
     const payload = toBankAccountAuditPayload(normalizeBankAccountValues(base))
     expect(payload).toMatchObject({ account_number: '1234567890', usage: 'both', auto_match_tolerance_days: 7 })
     expect(payload).not.toHaveProperty('is_payout_account')
+  })
+})
+
+describe('รูปแบบไฟล์ธนาคารของบัญชี (Final ด่าน 5 — เลือกแทนพิมพ์อิสระ)', () => {
+  const formats = [
+    { id: 'f1', bankName: 'KBank', usable: false },
+    { id: 'f2', bankName: 'SCB', usable: true },
+    { id: 'f3', bankName: 'KBank', usable: true },
+  ]
+
+  it('ตัวเลือกไม่ซ้ำ · ค่าเดิมที่ไม่พบยังแสดง (missing)', () => {
+    expect(bankFileFormatNameOptions(formats, '')).toEqual([
+      { value: 'KBank', missing: false },
+      { value: 'SCB', missing: false },
+    ])
+    expect(bankFileFormatNameOptions(formats, 'CSV มาตรฐาน KBank')[0]).toEqual({
+      value: 'CSV มาตรฐาน KBank',
+      missing: true,
+    })
+    expect(bankFileFormatNameOptions(formats, 'SCB')).toHaveLength(2)
+  })
+
+  it('ไฟล์โอน: เลือกรูปแบบที่ใช้ได้และตรงกับบัญชีก่อน · ไม่ตรง → ตัวที่ใช้ได้ตัวแรก', () => {
+    expect(defaultPaymentFileFormatId(formats, 'KBank')).toBe('f3')
+    expect(defaultPaymentFileFormatId(formats, null)).toBe('f2')
+    expect(defaultPaymentFileFormatId(formats, 'BBL')).toBe('f2')
+    expect(defaultPaymentFileFormatId([{ id: 'x', bankName: 'A', usable: false }], 'A')).toBe('')
   })
 })

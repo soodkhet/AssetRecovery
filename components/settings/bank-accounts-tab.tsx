@@ -37,9 +37,13 @@ import { callApi, jsonRequest } from '@/lib/api/types'
 import { toFieldErrors } from '@/lib/api/validation'
 import { fmtDate } from '@/lib/format/datetime'
 import type { BankAccountUsage } from '@/lib/generated/prisma/enums'
-import { DEFAULT_AUTO_MATCH_TOLERANCE_DAYS, MAX_AUTO_MATCH_TOLERANCE_DAYS } from '@/lib/settings/bank-account'
+import {
+  DEFAULT_AUTO_MATCH_TOLERANCE_DAYS,
+  MAX_AUTO_MATCH_TOLERANCE_DAYS,
+  bankFileFormatNameOptions,
+} from '@/lib/settings/bank-account'
 import { bankAccountCreateSchema } from '@/lib/settings/schemas'
-import type { BankAccountDto } from '@/lib/settings/types'
+import type { BankAccountDto, BankFileFormatDto } from '@/lib/settings/types'
 
 /**
  * แท็บ "บัญชีธนาคารบริษัท" (`13` §6.3)
@@ -101,6 +105,19 @@ export function BankAccountsTab() {
   const [deleteTarget, setDeleteTarget] = useState<BankAccountDto | null>(null)
   const [deleteReason, setDeleteReason] = useState('')
   const [deleting, setDeleting] = useState(false)
+  /** รูปแบบไฟล์ธนาคารที่ใช้งานอยู่ — ตัวเลือกของช่องรูปแบบ statement / ไฟล์โอน (โหลดไม่ได้ = ตัวเลือกว่าง ค่าเดิมยังแสดง) */
+  const [fileFormats, setFileFormats] = useState<readonly BankFileFormatDto[]>([])
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      const result = await callApi<BankFileFormatDto[]>('/api/settings/bank-file-formats?status=active')
+      if (!cancelled) setFileFormats(result.data ?? [])
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   /** ตัวดึงข้อมูล **ไม่มี setState ในตัวเอง** (กฎ `react-hooks/set-state-in-effect`) */
   const fetchItems = useCallback(async () => {
@@ -458,21 +475,44 @@ export function BankAccountsTab() {
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field id="bank-account-statement" label="รูปแบบไฟล์ statement" error={errors.statementFormat}>
-              <Input
+            {/* เลือกจากแท็บ "รูปแบบไฟล์ธนาคาร" — เดิมพิมพ์อิสระ พิมพ์ไม่ตรงชื่อ = นำเข้า statement ใช้รูปแบบมาตรฐานเงียบ ๆ (Final ด่าน 5) */}
+            <Field
+              id="bank-account-statement"
+              label="รูปแบบไฟล์ statement"
+              hint="ใช้เรียงคอลัมน์ตอนนำเข้า statement ของบัญชีนี้"
+              error={errors.statementFormat}
+            >
+              <Select
                 id="bank-account-statement"
                 value={form.statementFormat}
                 onChange={(event) => set('statementFormat', event.target.value)}
-                placeholder='เช่น "CSV มาตรฐาน KBank"'
-              />
+              >
+                <option value="">ไม่ระบุ (ใช้รูปแบบมาตรฐานของระบบ)</option>
+                {bankFileFormatNameOptions(fileFormats, form.statementFormat).map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.missing ? `${option.value} (ไม่พบในรูปแบบไฟล์ธนาคาร)` : option.value}
+                  </option>
+                ))}
+              </Select>
             </Field>
-            <Field id="bank-account-payment-file" label="รูปแบบไฟล์โอนเงิน" error={errors.paymentFileFormat}>
-              <Input
+            <Field
+              id="bank-account-payment-file"
+              label="รูปแบบไฟล์โอนเงิน"
+              hint="ระบบเลือกรูปแบบนี้ให้ก่อนตอนสร้างไฟล์โอนจากบัญชีนี้"
+              error={errors.paymentFileFormat}
+            >
+              <Select
                 id="bank-account-payment-file"
                 value={form.paymentFileFormat}
                 onChange={(event) => set('paymentFileFormat', event.target.value)}
-                placeholder='เช่น "K-Cash Connect"'
-              />
+              >
+                <option value="">ไม่ระบุ</option>
+                {bankFileFormatNameOptions(fileFormats, form.paymentFileFormat).map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.missing ? `${option.value} (ไม่พบในรูปแบบไฟล์ธนาคาร)` : option.value}
+                  </option>
+                ))}
+              </Select>
             </Field>
           </div>
 
