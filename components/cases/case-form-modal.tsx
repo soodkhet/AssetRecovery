@@ -193,8 +193,11 @@ export function CaseFormModal({
         : await callApi<CaseDetailDto>(apiPath('case.create'), jsonRequest('POST', parsed.data))
 
       if (result.error !== undefined || result.data === undefined) {
-        setFormError(result.error ?? { title: 'บันทึกไม่สำเร็จ', message: 'กรุณาลองใหม่' })
+        const failure = result.error ?? { title: 'บันทึกไม่สำเร็จ', message: 'กรุณาลองใหม่' }
+        setFormError(failure)
         setFieldErrors(result.error?.fields ?? {})
+        // ข้อความในฟอร์มอยู่บนสุด — ผู้ใช้ที่เลื่อนลงล่างไม่เห็น ⇒ แจ้ง toast ด้วยเสมอ (preship R4-004)
+        showToast({ tone: 'error', title: failure.title, description: failure.message })
         return
       }
 

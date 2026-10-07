@@ -1,12 +1,8 @@
-"use client";
+'use client'
 
-import { useState } from "react";
-import { AuditDetailModal } from "@/components/audit/audit-detail-modal";
-import {
-  EMPTY_AUDIT_FILTERS,
-  useAuditLogs,
-  type AuditLogFilters,
-} from "@/components/audit/use-audit-logs";
+import { useState } from 'react'
+import { AuditDetailModal } from '@/components/audit/audit-detail-modal'
+import { EMPTY_AUDIT_FILTERS, useAuditLogs, type AuditLogFilters } from '@/components/audit/use-audit-logs'
 import {
   Button,
   Card,
@@ -23,16 +19,11 @@ import {
   Td,
   Th,
   Tr,
-} from "@/components/ui";
-import {
-  AUDIT_ACTION_FILTER_LABEL,
-  auditRowDisplay,
-  auditActorLabel,
-  auditTargetLabel,
-} from "@/lib/audit/log-display";
-import type { AuditLogAction } from "@/lib/audit/log-schemas";
-import { fmtDateTime } from "@/lib/format/datetime";
-import { fmtCount } from "@/lib/format/money";
+} from '@/components/ui'
+import { AUDIT_ACTION_FILTER_LABEL, auditRowDisplay, auditActorLabel, auditTargetLabel } from '@/lib/audit/log-display'
+import type { AuditLogAction } from '@/lib/audit/log-schemas'
+import { fmtDateTime } from '@/lib/format/datetime'
+import { fmtCount } from '@/lib/format/money'
 
 /**
  * ตั้งค่าทั่วไป → บันทึกการใช้งาน (Audit Log) — `90` §8/§14 · mockup `settings.html` แท็บ `auditlog`
@@ -44,25 +35,22 @@ import { fmtCount } from "@/lib/format/money";
  *    Export Engine กลางของ Phase 6.1 (`96` §12) เพื่อไม่ให้เกิดตัวส่งออกซ้ำสองระบบ
  */
 
-const ACTION_OPTIONS = Object.entries(AUDIT_ACTION_FILTER_LABEL) as [
-  AuditLogAction,
-  string,
-][];
+const ACTION_OPTIONS = Object.entries(AUDIT_ACTION_FILTER_LABEL) as [AuditLogAction, string][]
 
 export function AuditLogsManager() {
-  const [filters, setFilters] = useState<AuditLogFilters>(EMPTY_AUDIT_FILTERS);
-  const [offset, setOffset] = useState(0);
-  const [openedId, setOpenedId] = useState<string | null>(null);
+  const [filters, setFilters] = useState<AuditLogFilters>(EMPTY_AUDIT_FILTERS)
+  const [offset, setOffset] = useState(0)
+  const [openedId, setOpenedId] = useState<string | null>(null)
 
-  const { data, loading, error, reload } = useAuditLogs(filters, offset);
+  const { data, loading, error, reload } = useAuditLogs(filters, offset)
 
   function update(patch: Partial<AuditLogFilters>): void {
-    setFilters((current) => ({ ...current, ...patch }));
-    setOffset(0);
+    setFilters((current) => ({ ...current, ...patch }))
+    setOffset(0)
   }
 
-  const shown = data.items.length;
-  const from = shown === 0 ? 0 : data.offset + 1;
+  const shown = data.items.length
+  const from = shown === 0 ? 0 : data.offset + 1
 
   return (
     <div className="space-y-6">
@@ -74,10 +62,7 @@ export function AuditLogsManager() {
       <Card>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <Field label="เป้าหมาย (Target)">
-            <Select
-              value={filters.targetType}
-              onChange={(event) => update({ targetType: event.target.value })}
-            >
+            <Select value={filters.targetType} onChange={(event) => update({ targetType: event.target.value })}>
               <option value="">ทั้งหมด</option>
               {data.targetTypes.map((targetType) => (
                 <option key={targetType} value={targetType}>
@@ -88,10 +73,7 @@ export function AuditLogsManager() {
           </Field>
           {/* `90` §14 กำหนดตัวกรองไว้ 3 ช่อง: เป้าหมาย · ผู้ดำเนินการ · ช่วงวัน */}
           <Field label="ผู้ดำเนินการ">
-            <Select
-              value={filters.actorId}
-              onChange={(event) => update({ actorId: event.target.value })}
-            >
+            <Select value={filters.actorId} onChange={(event) => update({ actorId: event.target.value })}>
               <option value="">ทั้งหมด</option>
               {data.actors.map((actor) => (
                 <option key={actor.id} value={actor.id}>
@@ -105,7 +87,7 @@ export function AuditLogsManager() {
               value={filters.action}
               onChange={(event) =>
                 update({
-                  action: event.target.value as AuditLogFilters["action"],
+                  action: event.target.value as AuditLogFilters['action'],
                 })
               }
             >
@@ -126,11 +108,7 @@ export function AuditLogsManager() {
             />
           </Field>
           <Field label="ถึงวันที่">
-            <Input
-              type="date"
-              value={filters.dateTo}
-              onChange={(event) => update({ dateTo: event.target.value })}
-            />
+            <Input type="date" value={filters.dateTo} onChange={(event) => update({ dateTo: event.target.value })} />
           </Field>
         </div>
 
@@ -138,8 +116,7 @@ export function AuditLogsManager() {
           {/* ระหว่างโหลด/โหลดไม่สำเร็จ ไม่แสดง "0–0 จาก 0 รายการ" คู่กับ error (preship R2-023) */}
           {!loading && error === null ? (
             <p className="text-xs text-slate-500">
-              แสดง {fmtCount(from)}–{fmtCount(data.offset + shown)} จาก{" "}
-              {fmtCount(data.total)} รายการ
+              แสดง {fmtCount(from)}–{fmtCount(data.offset + shown)} จาก {fmtCount(data.total)} รายการ
             </p>
           ) : (
             <span aria-hidden="true" />
@@ -150,8 +127,8 @@ export function AuditLogsManager() {
               size="sm"
               onClick={() => {
                 // ต้องรีเซ็ตหน้าด้วย — ไม่งั้นล้างตัวกรองตอนอยู่หน้า 3 แล้วยังค้าง offset เดิม
-                setFilters(EMPTY_AUDIT_FILTERS);
-                setOffset(0);
+                setFilters(EMPTY_AUDIT_FILTERS)
+                setOffset(0)
               }}
             >
               ล้างตัวกรอง
@@ -185,43 +162,26 @@ export function AuditLogsManager() {
         {!loading && error === null && shown > 0 && (
           <TBody>
             {data.items.map((row) => {
-              const display = auditRowDisplay(row);
+              const display = auditRowDisplay(row)
               return (
-                <Tr
-                  key={row.id}
-                  interactive
-                  onClick={() => setOpenedId(row.id)}
-                >
-                  <Td className="text-xs whitespace-nowrap text-slate-500">
-                    {fmtDateTime(row.createdAt)}
-                  </Td>
+                <Tr key={row.id} interactive onClick={() => setOpenedId(row.id)}>
+                  <Td className="text-xs whitespace-nowrap text-slate-500">{fmtDateTime(row.createdAt)}</Td>
                   <Td>
                     <StatusBadge group={display.group} label={display.label} />
                   </Td>
-                  <Td className="text-slate-600">
-                    {auditActorLabel(
-                      row.actorName,
-                      row.actorRole,
-                      row.loginFailure,
-                    )}
-                  </Td>
+                  <Td className="text-slate-600">{auditActorLabel(row.actorName, row.actorRole, row.loginFailure)}</Td>
                   <Td className="text-slate-600">
                     {/* ชื่อชนิดเป้าหมายกับรหัสแยกบรรทัด — เดิมต่อกันเป็น "ผู้ใช้งานa880581e" (UAT BUG-006) */}
                     <div>{auditTargetLabel(row.targetType)}</div>
                     {row.targetId !== null && (
-                      <RefText
-                        className="block text-[11px] text-slate-400"
-                        title={row.targetId}
-                      >
+                      <RefText className="block text-[11px] text-slate-400" title={row.targetId}>
                         {row.targetId.slice(0, 8)}
                       </RefText>
                     )}
                   </Td>
-                  <Td className="max-w-md truncate text-xs text-slate-500">
-                    {display.detail}
-                  </Td>
+                  <Td className="max-w-md truncate text-xs text-slate-500">{display.detail}</Td>
                 </Tr>
-              );
+              )
             })}
           </TBody>
         )}
@@ -251,5 +211,5 @@ export function AuditLogsManager() {
 
       <AuditDetailModal id={openedId} onClose={() => setOpenedId(null)} />
     </div>
-  );
+  )
 }

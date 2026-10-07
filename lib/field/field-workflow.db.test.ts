@@ -797,6 +797,17 @@ suite('Phase 2.8 — รายการงาน 4 กลุ่ม + มุม�
     expect(mine?.debtAmountSatang).toBe(1000000)
   })
 
+  it('ไฟล์บัตร/สัญญา/หลักฐานของเคส: ผู้ถืองานดาวน์โหลดได้ · เพื่อนร่วมทีมไม่ได้ (preship R4-007 · PDPA)', async () => {
+    const access = await import('@/lib/uploads/access')
+    const { caseDocumentRule } = await import('@/lib/uploads/rules')
+    const caseId = await seedAcceptedCase(agentB)
+    const path = `${caseDocumentRule(caseId, 'national_id_doc').prefix}r4-007.pdf`
+
+    const withFieldView = (agent: SessionUser): SessionUser => ({ ...agent, capabilities: { ...agent.capabilities, perform_field_work: 'view' } })
+    await expect(access.authorizeDownload(withFieldView(agentB), path)).resolves.toBeUndefined()
+    await expect(access.authorizeDownload(withFieldView(agentA), path)).rejects.toMatchObject({ code: 'ASSIGNMENT_NOT_FOUND' })
+  })
+
   it('รายละเอียดเคสเพื่อนร่วมทีม = มุมมองทีมไม่มี PII · ผู้รับผิดชอบเห็นเต็ม (preship R3-005 · PDPA)', async () => {
     const caseId = await seedAcceptedCase(agentB)
     await db().$executeRawUnsafe(`

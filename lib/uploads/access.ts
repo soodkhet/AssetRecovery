@@ -17,7 +17,7 @@ import { ExpenseStateError } from '@/lib/field/expense-status'
 import { FIELD_CAPABILITY } from '@/lib/field/permissions'
 import { MANAGE_TAX_INVOICE, SALES_READ_CAPABILITIES } from '@/lib/sales/sales'
 import { MANAGE_ORGANIZATION_PROFILE, VIEW_ORGANIZATION_PROFILE } from '@/lib/organization/permissions'
-import { assertOwnFieldCase, getFieldCase } from '@/lib/field/queries'
+import { assertCurrentFieldAssignee, assertOwnFieldCase } from '@/lib/field/queries'
 import { UploadError } from '@/lib/uploads/errors'
 import { assertCompanyDocumentAccess, MANAGE_COMPANIES, VIEW_COMPANY_DOCUMENTS } from '@/lib/finance-companies/document-queries'
 import { isReceiptVisibleViaExpense } from '@/lib/compensation/approval-queries'
@@ -326,7 +326,8 @@ async function assertCanView(user: SessionUser, owner: StoragePathOwner, path: s
       }
       if (hasAny(user, 'view', [FIELD_CAPABILITY])) {
         tried = true
-        failure = await passes(() => getFieldCase(user, owner.caseId))
+        // ภาคสนามเปิดไฟล์ได้เฉพาะเคสที่ตัวเองถืองานอยู่ — มุมมองทีมของเพื่อนร่วมทีมไม่นับเป็นสิทธิ์ดูไฟล์ (R4-007)
+        failure = await passes(() => assertCurrentFieldAssignee(user, owner.caseId))
         if (failure === null) return
       }
       if (!tried) throw denied(user, `view:case-file case=${owner.caseId}`)

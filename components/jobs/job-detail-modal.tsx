@@ -53,6 +53,8 @@ export function JobDetailModal({
     <Modal
       open={id !== null}
       onClose={onClose}
+      // ปุ่ม "สั่งทำงานใหม่" อยู่ใน body ⇒ ล็อกระหว่างส่ง (preship R4-006)
+      busy={submitting}
       size="lg"
       title="รายละเอียดงานเบื้องหลัง"
       description="สถานะ ผลลัพธ์ และสาเหตุที่ล้มเหลวของงานที่ระบบทำให้เบื้องหลัง"

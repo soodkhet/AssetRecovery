@@ -10,7 +10,8 @@ export type ButtonVariant = 'primary' | 'success' | 'info' | 'secondary' | 'dang
 export type ButtonSize = 'sm' | 'md'
 
 const VARIANT_CLASS: Readonly<Record<ButtonVariant, string>> = {
-  primary: 'bg-slate-900 text-white hover:bg-slate-800',
+  // กรอบโปร่งใส ⇒ สูงเท่าปุ่มที่มีกรอบ (secondary) เมื่อวางคู่กันใน footer (preship D4-004)
+  primary: 'border border-transparent bg-slate-900 text-white hover:bg-slate-800',
   success: 'bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100',
   info: 'bg-blue-50 border border-blue-200 text-blue-600 hover:bg-blue-100',
   secondary: 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-50',

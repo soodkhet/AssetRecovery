@@ -109,3 +109,29 @@ describe('withLoginAttemptLock', () => {
     expect(results.filter((r) => r !== LOGIN_ATTEMPT_BUSY)).toHaveLength(20)
   })
 })
+
+describe('withLoginAttemptLock — concurrency > 1 (คิวต่อ IP · R4-002)', () => {
+  it('ทำงานพร้อมกันไม่เกิน concurrency · ตัวที่รอได้ waited=true · ไม่มีใครแทรกตอนส่งต่อช่อง', async () => {
+    let active = 0
+    let maxActive = 0
+    const waitedFlags: boolean[] = []
+    await Promise.all(
+      Array.from({ length: 12 }, () =>
+        withLoginAttemptLock(
+          'ip|1.1.1.1',
+          async ({ waited }) => {
+            waitedFlags.push(waited)
+            active += 1
+            maxActive = Math.max(maxActive, active)
+            await tick()
+            active -= 1
+          },
+          { concurrency: 3 },
+        ),
+      ),
+    )
+    expect(maxActive).toBe(3)
+    expect(waitedFlags.filter((flag) => !flag)).toHaveLength(3)
+    expect(pendingLoginAttemptKeys()).toBe(0)
+  })
+})

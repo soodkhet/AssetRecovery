@@ -8,10 +8,24 @@ import { EmptyState, ErrorState, LoadingState } from '@/components/ui/states'
  * · row hover `hover:bg-slate-50` · divider `divide-y divide-slate-100` · เซลล์ตัวเลข/เงินชิดขวา
  */
 
+/**
+ * เงาขอบซ้าย/ขวาเมื่อเลื่อนได้ (scroll shadow แบบ background-attachment) — ชั้น `local` สีขาวปิดเงาเมื่อชิดขอบแล้ว
+ * ชั้น `scroll` คือเงาที่ติดขอบกรอบ ⇒ เห็นเงาเฉพาะฝั่งที่ยังมีเนื้อหาซ่อนอยู่
+ */
+const SCROLL_SHADOW_STYLE = {
+  background: [
+    'linear-gradient(to right, #fff 30%, rgba(255,255,255,0)) left center / 48px 100% no-repeat local',
+    'linear-gradient(to left, #fff 30%, rgba(255,255,255,0)) right center / 48px 100% no-repeat local',
+    'radial-gradient(farthest-side at 0 50%, rgba(15,23,42,0.18), rgba(15,23,42,0)) left center / 16px 100% no-repeat scroll',
+    'radial-gradient(farthest-side at 100% 50%, rgba(15,23,42,0.18), rgba(15,23,42,0)) right center / 16px 100% no-repeat scroll',
+  ].join(', '),
+} as const
+
 export function Table({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <div className={cn('overflow-hidden rounded-lg border border-slate-200 bg-white', className)}>
-      <div className="overflow-x-auto">
+      {/* ตารางกว้างกว่ากรอบ ⇒ เงาที่ขอบบอกว่ายังมีคอลัมน์ให้เลื่อนดู (preship R4-001) — CSS ล้วน ไม่ต้องเป็น client component */}
+      <div className="overflow-x-auto" style={SCROLL_SHADOW_STYLE}>
         <table className="w-full text-sm">{children}</table>
       </div>
     </div>

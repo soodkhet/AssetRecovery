@@ -91,7 +91,7 @@ suite('loginThrottled — นับจาก audit login ที่ผิด', ()
     expect(await throttle.loginThrottled({ organizationId: ORG_ID, throttleKey: `identifier:${identifier}`, accountId: null, ipAddress: null, now: later })).toBe(false)
   })
 
-  it('rateLimitAuditedSince — เห็นแถวถูกพักของกุญแจ+IP เดียวกันในช่วง · คนละ IP/กุญแจ/พ้นช่วงไม่นับ (R3-009)', async () => {
+  it('rateLimitAuditedSince — รู้ IP นับต่อ IP (ทุกกุญแจ) · คนละ IP/พ้นช่วงไม่นับ (R3-009 · R4-003)', async () => {
     const identifier = freshIdentifier()
     const ip = freshIp()
     const query = (overrides: { throttleKey?: string | null; ipAddress?: string; since?: Date } = {}) =>
@@ -107,13 +107,14 @@ suite('loginThrottled — นับจาก audit login ที่ผิด', ()
     await failedLogin(identifier, ip, 'LOGIN_RATE_LIMITED')
     expect(await query()).toBe(true)
     expect(await query({ ipAddress: freshIp() })).toBe(false)
-    expect(await query({ throttleKey: `identifier:${freshIdentifier()}` })).toBe(false)
+    // เปลี่ยน username จาก IP เดิม ⇒ ยังนับว่าลงแล้ว (R4-003 — เดิมเปลี่ยน username แล้วลงได้ทุกคำขอ)
+    expect(await query({ throttleKey: `identifier:${freshIdentifier()}` })).toBe(true)
     expect(await query({ since: new Date(Date.now() + 60_000) })).toBe(false)
   })
 
-  it('rateLimitAuditedSince — ไม่มีกุญแจบัญชี (identifier <invalid>) นับตาม IP', async () => {
-    const ip = freshIp()
-    const args = { organizationId: ORG_ID, throttleKey: null, ipAddress: ip, since: new Date(Date.now() - 60_000) }
+  it('rateLimitAuditedSince — ไม่รู้ IP นับตามกุญแจ (ไม่มีกุญแจ = identifier <invalid>)', async () => {
+    // since = ตอนเริ่มเทสต์ ⇒ แถวของรอบก่อน (audit ลบไม่ได้) ไม่ปน
+    const args = { organizationId: ORG_ID, throttleKey: null, ipAddress: null, since: new Date() }
     expect(await throttle.rateLimitAuditedSince(args)).toBe(false)
     await audit.emitAudit({
       organizationId: ORG_ID,
@@ -123,7 +124,7 @@ suite('loginThrottled — นับจาก audit login ที่ผิด', ()
       targetType: 'users',
       targetId: null,
       after: { result: 'failed', code: 'LOGIN_RATE_LIMITED', identifier: '<invalid>', throttle_key: null },
-      ipAddress: ip,
+      ipAddress: null,
       userAgent: 'vitest',
     })
     expect(await throttle.rateLimitAuditedSince(args)).toBe(true)

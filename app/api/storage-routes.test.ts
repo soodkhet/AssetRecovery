@@ -19,7 +19,8 @@ vi.mock('@/lib/auth/session', () => ({ requireSession: requireSessionMock }))
 const caseQueries = vi.hoisted(() => ({ getCase: vi.fn() }))
 vi.mock('@/lib/cases/queries', () => caseQueries)
 
-const fieldQueries = vi.hoisted(() => ({ getFieldCase: vi.fn(), assertOwnFieldCase: vi.fn() }))
+// ดาวน์โหลดฝั่งภาคสนามตรวจด้วย assertCurrentFieldAssignee (ผู้ถืองานปัจจุบันเท่านั้น — preship R4-007)
+const fieldQueries = vi.hoisted(() => ({ assertCurrentFieldAssignee: vi.fn(), assertOwnFieldCase: vi.fn() }))
 vi.mock('@/lib/field/queries', () => fieldQueries)
 
 const warehouseQueries = vi.hoisted(() => ({ getAsset: vi.fn(), getLot: vi.fn() }))
@@ -105,7 +106,7 @@ async function errorCode(response: Response): Promise<string | undefined> {
 beforeEach(() => {
   vi.clearAllMocks()
   caseQueries.getCase.mockResolvedValue({ id: CASE_ID })
-  fieldQueries.getFieldCase.mockResolvedValue({ id: CASE_ID })
+  fieldQueries.assertCurrentFieldAssignee.mockResolvedValue(undefined)
   fieldQueries.assertOwnFieldCase.mockResolvedValue(undefined)
   warehouseQueries.getAsset.mockResolvedValue({ id: ASSET_ID })
   warehouseQueries.getLot.mockResolvedValue({ id: LOT_ID })
@@ -257,7 +258,7 @@ describe('POST /api/storage/download-url', () => {
 
   it('พนักงานภาคสนามเปิดหลักฐานของเคสที่ไม่ใช่ของตัวเอง/ทีม = ASSIGNMENT_NOT_FOUND', async () => {
     requireSessionMock.mockResolvedValue(AGENT)
-    fieldQueries.getFieldCase.mockRejectedValue(new AssignmentError('ASSIGNMENT_NOT_FOUND'))
+    fieldQueries.assertCurrentFieldAssignee.mockRejectedValue(new AssignmentError('ASSIGNMENT_NOT_FOUND'))
     const response = await postDownloadUrl(downloadReq(`cases/${CASE_ID}/field_evidence/photo/u-p.jpg`))
     expect(response.status).toBe(404)
     expect(caseQueries.getCase).not.toHaveBeenCalled()

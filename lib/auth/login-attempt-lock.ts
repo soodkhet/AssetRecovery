@@ -21,77 +21,100 @@ export const LOGIN_ATTEMPT_MAX_QUEUE = 20
 /** รอคิวนานสุดก่อนตอบ BUSY */
 export const LOGIN_ATTEMPT_MAX_WAIT_MS = 15_000
 
+/**
+ * ตรวจรหัสพร้อมกันได้สูงสุดต่อ IP (ทุกบัญชีรวมกัน) — preship R4-002: เดิมคิวแยกตาม บัญชี+IP เท่านั้น
+ * ยิงพร้อมกันหลาย username จาก IP เดียวจึงทะลุเพดาน 30 ครั้ง/IP (60 พร้อมกัน ⇒ ตรวจจริง 55)
+ * ตัวที่รอคิวตรวจเพดานซ้ำก่อนทำงาน ⇒ เกินเพดานได้ไม่เกินค่านี้ · สำนักงานที่ใช้ NAT เดียวกัน login พร้อมกันรอสั้นๆ
+ */
+export const LOGIN_IP_CONCURRENCY = 4
+/** คิวต่อ IP ยาวสุด — เกิน ⇒ ตอบแบบถูกพัก (เฉพาะ IP นั้น) */
+export const LOGIN_IP_MAX_QUEUE = 100
+
+/** กุญแจคิวต่อ IP — `null` = ไม่รู้ IP (dev/proxy ไม่ส่ง) ⇒ ไม่ใช้คิวต่อ IP */
+export function loginIpLockKey(ipAddress: string | null): string | null {
+  return ipAddress === null ? null : `ip|${ipAddress}`
+}
+
 /** กุญแจคิว = กุญแจนับครั้งที่ผิดของบัญชี + IP (`null` = ไม่รู้ IP ⇒ ใช้คิวร่วมของบัญชี) */
 export function loginAttemptLockKey(throttleKey: string, ipAddress: string | null): string {
   return `${throttleKey}|${ipAddress ?? '-'}`
 }
 
-interface QueueEntry {
-  tail: Promise<void>
-  pending: number
+interface Slot {
+  active: number
+  /** ผู้รอ — เรียกแล้ว = ได้ช่องที่ผู้ปล่อยส่งต่อให้ตรงๆ (active ไม่ลด/ไม่เพิ่ม กันคนใหม่แทรก) */
+  waiters: Array<() => void>
 }
 
-const queues = new Map<string, QueueEntry>()
+const slots = new Map<string, Slot>()
 
 export interface LoginAttemptContext {
   /** ต้องรอคำขอก่อนหน้าของกุญแจเดียวกัน — ผู้เรียกควรตรวจเพดานซ้ำ (ครั้งที่ผิดของตัวก่อนหน้าเพิ่งลง audit) */
   waited: boolean
 }
 
+export interface LoginConcurrencyOptions {
+  /** ทำงานพร้อมกันได้สูงสุดกี่คำขอต่อกุญแจ (ค่าเริ่มต้น 1 = ทีละคำขอ) */
+  concurrency?: number
+  /** จำนวนคำขอสูงสุดต่อกุญแจ รวมตัวที่กำลังทำงาน — เกิน ⇒ BUSY ทันที */
+  maxQueue?: number
+  maxWaitMs?: number
+}
+
 /**
- * รัน `fn` ทีละคำขอต่อกุญแจ — ตัวถัดไปเริ่มหลัง `fn` ของตัวก่อนจบ (รวมการเขียน audit ที่ commit แล้ว)
+ * รัน `fn` ได้พร้อมกันไม่เกิน `concurrency` คำขอต่อกุญแจ — ที่เกินรอคิว (ไม่ถือ connection ของ DB)
+ * ค่าเริ่มต้น = ทีละคำขอ (คิวต่อ บัญชี+IP) · ใช้ซ้อนกับคิวต่อ IP ได้ ({@link LOGIN_IP_CONCURRENCY} — R4-002)
  */
 export async function withLoginAttemptLock<T>(
   key: string,
   fn: (context: LoginAttemptContext) => Promise<T>,
-  options: { maxQueue?: number; maxWaitMs?: number } = {},
+  options: LoginConcurrencyOptions = {},
 ): Promise<T | typeof LOGIN_ATTEMPT_BUSY> {
+  const concurrency = options.concurrency ?? 1
   const maxQueue = options.maxQueue ?? LOGIN_ATTEMPT_MAX_QUEUE
   const maxWaitMs = options.maxWaitMs ?? LOGIN_ATTEMPT_MAX_WAIT_MS
 
-  const entry = queues.get(key) ?? { tail: Promise.resolve(), pending: 0 }
-  if (entry.pending >= maxQueue) return LOGIN_ATTEMPT_BUSY
-  const waited = entry.pending > 0
-  entry.pending += 1
-  queues.set(key, entry)
+  const slot = slots.get(key) ?? { active: 0, waiters: [] }
+  if (slot.active + slot.waiters.length >= maxQueue) return LOGIN_ATTEMPT_BUSY
+  slots.set(key, slot)
 
-  const previous = entry.tail
-  let release: () => void = () => undefined
-  const mine = new Promise<void>((resolve) => {
-    release = resolve
-  })
-  entry.tail = previous.then(() => mine)
-
-  const done = () => {
-    release()
-    entry.pending -= 1
-    if (entry.pending === 0 && queues.get(key) === entry) queues.delete(key)
-  }
-
-  if (waited) {
-    let timer: ReturnType<typeof setTimeout> | undefined
-    const timedOut = await Promise.race([
-      previous.then(() => false),
-      new Promise<boolean>((resolve) => {
-        timer = setTimeout(() => resolve(true), maxWaitMs)
-      }),
-    ])
-    clearTimeout(timer)
-    if (timedOut) {
-      // ปล่อยช่องของตัวเองต่อจากตัวก่อนหน้า ให้คิวเดินต่อได้เมื่อตัวก่อนหน้าจบ
-      void previous.then(done)
+  let waited = false
+  if (slot.active >= concurrency) {
+    waited = true
+    const granted = await new Promise<boolean>((resolve) => {
+      const waiter = () => {
+        clearTimeout(timer)
+        resolve(true)
+      }
+      const timer = setTimeout(() => {
+        const index = slot.waiters.indexOf(waiter)
+        if (index >= 0) slot.waiters.splice(index, 1)
+        resolve(false)
+      }, maxWaitMs)
+      slot.waiters.push(waiter)
+    })
+    if (!granted) {
+      if (slot.active === 0 && slot.waiters.length === 0 && slots.get(key) === slot) slots.delete(key)
       return LOGIN_ATTEMPT_BUSY
     }
+  } else {
+    slot.active += 1
   }
 
   try {
     return await fn({ waited })
   } finally {
-    done()
+    const next = slot.waiters.shift()
+    if (next !== undefined) {
+      next() // ส่งช่องต่อให้ผู้รอตรงๆ — active คงเดิม
+    } else {
+      slot.active -= 1
+      if (slot.active === 0 && slots.get(key) === slot) slots.delete(key)
+    }
   }
 }
 
 /** สำหรับเทสต์ — จำนวนกุญแจที่ยังมีคิวค้าง (ต้องกลับเป็น 0 เมื่อทุกคำขอจบ) */
 export function pendingLoginAttemptKeys(): number {
-  return queues.size
+  return slots.size
 }

@@ -24,19 +24,13 @@ export function decideModalClose({
 }
 
 /**
- * ปุ่มที่กำลังหมุน (`aria-busy`) ถือเป็น "กำลังบันทึก" ของ modal ไหม — preship R3-002
- * นับ: ปุ่มใน footer · ปุ่ม submit ของฟอร์ม · หรือ modal ไม่มี footer (ปุ่มหลักอยู่ใน body)
- * ไม่นับ: ปุ่มย่อยใน body ของ modal ที่มี footer (ค้นหา/ดาวน์โหลด/โหลดตัวเลือก) — เดิมปุ่มค้นหาค้าง
- * แล้วทั้ง modal รวมปุ่ม "ยกเลิก" ล็อกจนต้อง reload
+ * ปุ่มที่กำลังหมุน (`aria-busy`) ถือเป็น "กำลังบันทึก" ของ modal ไหม — preship R3-002 → R4-006
+ * ค่าเริ่มต้น = ล็อกเสมอ (ปุ่มบันทึกจริงอยู่ใน body ก็มี — R4-006: เดิมดูจากตำแหน่ง ทำให้ modal เอกสารบริษัท
+ * ปิด/ทิ้งได้ระหว่างบันทึกแต่คำขอยังถูกส่ง) · ยกเว้นปุ่มย่อยที่ติด `data-modal-busy="ignore"` (ค้นหา/ดาวน์โหลด/โหลดตัวเลือก)
  */
-export function busyElementLocksModal({
-  hasFooter,
-  inFooter,
-  isSubmit,
-}: {
-  hasFooter: boolean
-  inFooter: boolean
-  isSubmit: boolean
-}): boolean {
-  return !hasFooter || inFooter || isSubmit
+export function busyElementLocksModal({ optedOut }: { optedOut: boolean }): boolean {
+  return !optedOut
 }
+
+/** แอตทริบิวต์บนปุ่มย่อยใน modal ที่หมุนได้โดยไม่ล็อกทั้ง modal — `<Button {...MODAL_BUSY_IGNORE}>` */
+export const MODAL_BUSY_IGNORE = { 'data-modal-busy': 'ignore' } as const

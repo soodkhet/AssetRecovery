@@ -14,6 +14,7 @@ import {
   useToast,
 } from '@/components/ui'
 import { cn } from '@/components/ui/cn'
+import { MODAL_BUSY_IGNORE } from '@/components/ui/modal-close-guard'
 import { ADJUSTMENT_TARGET_LABEL, ADJUSTMENT_TARGET_TYPES, type AdjustmentTargetType } from '@/lib/adjustments/adjustment'
 import { periodStatusBadgeGroup, periodStatusLabel } from '@/lib/adjustments/adjustment-ui'
 import type { AdjustmentDto, AdjustmentTargetDto } from '@/lib/adjustments/types'
@@ -167,6 +168,8 @@ export function AdjustmentFormModal({
             />
             <Button
               variant="secondary"
+              // ปุ่มค้นหาย่อย — หมุนได้โดยไม่ล็อกทั้ง modal (R3-002)
+              {...MODAL_BUSY_IGNORE}
               loading={searching}
               onClick={() => {
                 setSearching(true)

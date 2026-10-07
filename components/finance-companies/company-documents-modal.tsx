@@ -206,6 +206,8 @@ export function CompanyDocumentsModal({
       <Modal
         open
         onClose={onClose}
+        // ปุ่มบันทึกอยู่ใน body ⇒ บอก modal ตรงๆ ว่ากำลังบันทึก (preship R4-006 — เดิมปิด/ทิ้งได้แต่คำขอยังถูกส่ง)
+        busy={saving}
         size="lg"
         title={`เอกสารบริษัท — ${company.name}`}
         description="เก็บทุกเวอร์ชัน ไม่มีการลบ — แนบใหม่จะเป็นเวอร์ชันใหม่และไฟล์เดิมยังเปิดดูได้"

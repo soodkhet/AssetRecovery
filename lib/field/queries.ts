@@ -305,6 +305,37 @@ export async function assertOwnFieldCase(user: SessionUser, caseId: string): Pro
   await loadOwnAssignment(user, caseId)
 }
 
+/**
+ * ยามดาวน์โหลดไฟล์ของเคสฝั่งภาคสนาม (preship R4-007) — ผ่านเฉพาะ **ผู้ถือ assignment ล่าสุดของเคส** (รอบปัจจุบัน
+ * ไม่ถูกย้ายงานออก) · เพื่อนร่วมทีม (มุมมองทีมแบบจำกัด) และคนที่ถูกย้ายงานออกแล้วเปิดไฟล์บัตร/สัญญา/หลักฐานไม่ได้
+ * ไม่ผ่าน = `ASSIGNMENT_NOT_FOUND` (ไม่ leak ว่ามีเคส/ไฟล์นี้)
+ */
+export async function assertCurrentFieldAssignee(user: SessionUser, caseId: string): Promise<void> {
+  const latest = await prisma.caseAssignment.findFirst({
+    where: {
+      caseId,
+      organizationId: user.organizationId,
+      case: { deletedAt: null, organizationId: user.organizationId, ...caseScopeWhere(user) },
+    },
+    orderBy: { createdAt: 'desc' },
+    select: { agentId: true, status: true, trackingRound: true, case: { select: { trackingRound: true } } },
+  })
+  if (!isCurrentAssignee(latest, user.id)) throw new AssignmentError('ASSIGNMENT_NOT_FOUND')
+}
+
+/** pure — แถว assignment ล่าสุดของเคสเป็นของผู้ใช้ รอบปัจจุบัน และยังไม่ถูกย้ายออก */
+export function isCurrentAssignee(
+  latest: { agentId: string; status: string; trackingRound: number; case: { trackingRound: number } } | null,
+  userId: string,
+): boolean {
+  return (
+    latest !== null &&
+    latest.agentId === userId &&
+    latest.status !== 'reassigned_away' &&
+    latest.trackingRound === latest.case.trackingRound
+  )
+}
+
 async function pendingReassignmentCaseIds(caseIds: readonly string[]): Promise<Set<string>> {
   if (caseIds.length === 0) return new Set()
   const rows = await prisma.pendingReassignment.findMany({

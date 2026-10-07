@@ -50,11 +50,16 @@ vi.mock('@/lib/auth/login-throttle-queries', () => ({
 const LOGIN_ATTEMPT_BUSY = vi.hoisted(() => Symbol('busy'))
 // ค่าเริ่มต้นได้คิวทันที (รัน fn ตรง) · เทสต์ยิงซ้อนตั้งค่าเอง
 const withLoginAttemptLockMock = vi.hoisted(() =>
-  vi.fn(async (_key: string, fn: (context: { waited: boolean }) => Promise<unknown>) => fn({ waited: false })),
+  vi.fn(async (_key: string, fn: (context: { waited: boolean }) => Promise<unknown>, _options?: object) =>
+    fn({ waited: false }),
+  ),
 )
 vi.mock('@/lib/auth/login-attempt-lock', () => ({
   withLoginAttemptLock: withLoginAttemptLockMock,
   loginAttemptLockKey: (key: string, ip: string | null) => `${key}|${ip ?? '-'}`,
+  loginIpLockKey: (ip: string | null) => (ip === null ? null : `ip|${ip}`),
+  LOGIN_IP_CONCURRENCY: 4,
+  LOGIN_IP_MAX_QUEUE: 100,
   LOGIN_ATTEMPT_BUSY,
 }))
 
@@ -314,6 +319,31 @@ describe('login — พักเมื่อผิดซ้ำเกินเพ
     expect(loginThrottledMock).toHaveBeenCalledTimes(2)
     expect(getAuthEmailMock).not.toHaveBeenCalled()
     expect(signInMock).not.toHaveBeenCalled()
+  })
+
+  it('ตรวจรหัสผ่านคิวต่อ IP (จำกัดพร้อมกัน) ก่อนคิวต่อบัญชี+IP (R4-002)', async () => {
+    prismaMock.user.findFirst.mockResolvedValue(account())
+    signInMock.mockResolvedValue({ data: { user: null }, error: { message: 'Invalid login credentials' } })
+
+    expect((await loginError()).code).toBe('INVALID_CREDENTIALS')
+    expect(withLoginAttemptLockMock.mock.calls[0]?.[0]).toBe(`ip|${META.ipAddress}`)
+    expect(withLoginAttemptLockMock.mock.calls[0]?.[2]).toEqual({ concurrency: 4, maxQueue: 100 })
+    expect(withLoginAttemptLockMock.mock.calls[1]?.[0]).toBe(`user:${account().id}|${META.ipAddress}`)
+  })
+
+  it('ถูกพักด้วย username ต่างกันจาก IP เดียว ⇒ audit ถูกพักครั้งเดียวต่อ IP (R4-003)', async () => {
+    loginThrottledMock.mockResolvedValue(true)
+    for (const identifier of ['ghost1', 'ghost2', 'ghost3']) {
+      prismaMock.user.findFirst.mockResolvedValue(null)
+      const error = await login({ identifier, password: 'x' }, META).then(
+        () => null,
+        (e: unknown) => e as AuthError,
+      )
+      expect(error?.code).toBe('LOGIN_RATE_LIMITED')
+    }
+    const rateLimitAudits = emitAuditMock.mock.calls.filter(([entry]) => entry.after?.code === 'LOGIN_RATE_LIMITED')
+    expect(rateLimitAudits).toHaveLength(1)
+    loginThrottledMock.mockResolvedValue(false)
   })
 
   it('ถูกพักซ้ำจากบัญชี+IP เดิม ⇒ ลง audit ครั้งแรกครั้งเดียวต่อช่วงเวลา (R3-009)', async () => {

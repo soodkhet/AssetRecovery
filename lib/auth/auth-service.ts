@@ -13,7 +13,14 @@ import {
 import type { RequestMeta } from '@/lib/auth/request-meta'
 import type { LoginInput } from '@/lib/auth/schemas'
 import { padLoginFailure, realLoginTimingClock, type LoginTimingClock } from '@/lib/auth/login-timing'
-import { LOGIN_ATTEMPT_BUSY, loginAttemptLockKey, withLoginAttemptLock } from '@/lib/auth/login-attempt-lock'
+import {
+  LOGIN_ATTEMPT_BUSY,
+  LOGIN_IP_CONCURRENCY,
+  LOGIN_IP_MAX_QUEUE,
+  loginAttemptLockKey,
+  loginIpLockKey,
+  withLoginAttemptLock,
+} from '@/lib/auth/login-attempt-lock'
 import {
   createRateLimitAuditGate,
   LOGIN_RATE_LIMIT_AUDIT_INTERVAL_MS,
@@ -141,13 +148,14 @@ export function resetRateLimitAuditGateForTests(): void {
 }
 
 /**
- * ลง audit "ถูกพัก" ครั้งแรกต่อ (กุญแจบัญชี, IP) ต่อ {@link LOGIN_RATE_LIMIT_AUDIT_INTERVAL_MS} — preship R3-009
+ * ลง audit "ถูกพัก" ครั้งแรกต่อ IP (ไม่รู้ IP = ต่อกุญแจบัญชี) ต่อ {@link LOGIN_RATE_LIMIT_AUDIT_INTERVAL_MS} — preship R3-009 · R4-003
  * ครั้งถัดไปในช่วงเดียวกันไม่ลงซ้ำ (ด่านในโปรเซสก่อน แล้วเช็ค DB กันหลาย instance)
  * ⚠️ ส่วนต่างจาก `05` §13 ("ลงทุกครั้ง") — ตัดสินชั่วคราวรอ PO (uat/PO-DECISIONS-2569-10-08.md)
  */
 async function shouldAuditRateLimit(organizationId: string, throttleKey: string | null, ipAddress: string | null): Promise<boolean> {
   const now = Date.now()
-  if (!rateLimitAuditGate.claim(`${throttleKey ?? '-'}|${ipAddress ?? '-'}`, now)) return false
+  // รู้ IP ⇒ นับต่อ IP อย่างเดียว (R4-003 — เดิมต่อ บัญชี+IP เปลี่ยน username ทุกคำขอแล้วลงได้ทุกครั้ง)
+  if (!rateLimitAuditGate.claim(ipAddress === null ? `key|${throttleKey ?? '-'}` : `ip|${ipAddress}`, now)) return false
   const since = new Date(now - LOGIN_RATE_LIMIT_AUDIT_INTERVAL_MS)
   return !(await rateLimitAuditedSince({ organizationId, throttleKey, ipAddress, since }))
 }
@@ -200,13 +208,23 @@ async function verifyCredentials(input: LoginInput, account: LoginAccount | null
   }
 
   if (await throttled()) return rateLimited()
-  if (throttleKey === null) return attempt()
-  const result = await withLoginAttemptLock(loginAttemptLockKey(throttleKey, meta.ipAddress), async ({ waited }) => {
-    // รอคำขอก่อนหน้าของบัญชี+IP เดียวกัน ⇒ ครั้งที่ผิดของตัวก่อนเพิ่งลง audit — ตรวจเพดานซ้ำ (กันยิงพร้อมกันเกินเพดาน R2-002)
-    if (waited && (await throttled())) return LOGIN_ATTEMPT_BUSY
-    return attempt()
-  })
-  // คิวของบัญชี+IP นี้เต็ม / ถูกพักระหว่างรอ ⇒ ตอบแบบถูกพัก (ไม่กระทบ IP อื่น — R3-008)
+  // รอคิวมาแล้ว ⇒ ครั้งที่ผิดของตัวก่อนหน้าเพิ่งลง audit — ตรวจเพดานซ้ำ (กันยิงพร้อมกันเกินเพดาน R2-002 · R4-002)
+  const recheck = async (waited: boolean, run: () => Promise<string | typeof LOGIN_ATTEMPT_BUSY>) =>
+    waited && (await throttled()) ? LOGIN_ATTEMPT_BUSY : run()
+  const perAccount = (): Promise<string | typeof LOGIN_ATTEMPT_BUSY> =>
+    throttleKey === null
+      ? attempt()
+      : withLoginAttemptLock(loginAttemptLockKey(throttleKey, meta.ipAddress), ({ waited }) => recheck(waited, attempt))
+  // ชั้นนอก: ตรวจรหัสพร้อมกันได้ไม่เกิน LOGIN_IP_CONCURRENCY ต่อ IP (ทุกบัญชีรวมกัน — R4-002) · ชั้นใน: ทีละคำขอต่อ บัญชี+IP
+  const ipKey = loginIpLockKey(meta.ipAddress)
+  const result =
+    ipKey === null
+      ? await perAccount()
+      : await withLoginAttemptLock(ipKey, ({ waited }) => recheck(waited, perAccount), {
+          concurrency: LOGIN_IP_CONCURRENCY,
+          maxQueue: LOGIN_IP_MAX_QUEUE,
+        })
+  // คิวเต็ม / ถูกพักระหว่างรอ ⇒ ตอบแบบถูกพัก (กระทบเฉพาะ IP นั้น — R3-008)
   return result === LOGIN_ATTEMPT_BUSY ? rateLimited() : result
 }
 

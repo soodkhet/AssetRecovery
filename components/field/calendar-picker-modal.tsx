@@ -139,6 +139,8 @@ export function CalendarPickerModal({
     <Modal
       open={open}
       onClose={onClose}
+      // ปุ่มจัดวันอยู่ใน body ⇒ ล็อกระหว่างบันทึก (preship R4-006)
+      busy={saving}
       size="lg"
       title="เลือกวันที่จะไปติดตาม"
       description={target === null ? undefined : `${target.caseRef} · ${target.debtorName ?? '—'}`}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { busyElementLocksModal, decideModalClose } from '@/components/ui/modal-close-guard'
+import { busyElementLocksModal, decideModalClose, MODAL_BUSY_IGNORE } from '@/components/ui/modal-close-guard'
 
 describe('decideModalClose', () => {
   it('ระหว่างบันทึก ปิดไม่ได้เลย แม้กรอกข้อมูลไว้หรือปิดการยืนยันทิ้ง', () => {
@@ -21,14 +21,13 @@ describe('decideModalClose', () => {
   })
 })
 
-describe('busyElementLocksModal (R3-002)', () => {
-  it('ปุ่มใน footer / ปุ่ม submit / modal ไม่มี footer ⇒ ล็อก', () => {
-    expect(busyElementLocksModal({ hasFooter: true, inFooter: true, isSubmit: false })).toBe(true)
-    expect(busyElementLocksModal({ hasFooter: true, inFooter: false, isSubmit: true })).toBe(true)
-    expect(busyElementLocksModal({ hasFooter: false, inFooter: false, isSubmit: false })).toBe(true)
+describe('busyElementLocksModal (R3-002 → R4-006)', () => {
+  it('ปุ่มที่หมุนใน modal ล็อกเสมอ — รวมปุ่มบันทึกที่อยู่ใน body', () => {
+    expect(busyElementLocksModal({ optedOut: false })).toBe(true)
   })
 
-  it('ปุ่มย่อยใน body (ค้นหา/ดาวน์โหลด) ของ modal ที่มี footer ⇒ ไม่ล็อกทั้ง modal', () => {
-    expect(busyElementLocksModal({ hasFooter: true, inFooter: false, isSubmit: false })).toBe(false)
+  it('ปุ่มย่อยที่ติด data-modal-busy="ignore" (ค้นหา) ไม่ล็อกทั้ง modal', () => {
+    expect(busyElementLocksModal({ optedOut: true })).toBe(false)
+    expect(MODAL_BUSY_IGNORE).toEqual({ 'data-modal-busy': 'ignore' })
   })
 })

@@ -63,7 +63,7 @@ async function accountCountingStart(
 }
 
 /**
- * มีแถว audit "ถูกพัก" ของกุญแจ + IP เดียวกันหลัง `since` แล้วหรือยัง — preship R3-009
+ * มีแถว audit "ถูกพัก" ของ IP เดียวกัน (ไม่รู้ IP = กุญแจบัญชีเดียวกัน) หลัง `since` แล้วหรือยัง — preship R3-009 · R4-003
  * ใช้ลง audit การถูกพักครั้งแรกต่อช่วงเวลา แทนลงทุกคำขอ (audit ลบไม่ได้ ⇒ ยิงซ้ำไม่จำกัดตารางโตไม่หยุด)
  */
 export async function rateLimitAuditedSince(input: {
@@ -82,10 +82,12 @@ export async function rateLimitAuditedSince(input: {
           afterData: { path: ['code'], equals: 'LOGIN_RATE_LIMITED' },
           ipAddress: input.ipAddress,
         },
-        // ไม่มีกุญแจบัญชี = identifier ลง audit เป็น `<invalid>` (`loginThrottleKey`)
-        input.throttleKey === null
-          ? { afterData: { path: ['identifier'], equals: UNAUDITABLE_IDENTIFIER } }
-          : { afterData: { path: ['throttle_key'], equals: input.throttleKey } },
+        // รู้ IP ⇒ นับต่อ IP อย่างเดียว (R4-003) · ไม่รู้ IP ⇒ ต่อกุญแจบัญชี (ไม่มีกุญแจ = identifier `<invalid>`)
+        input.ipAddress !== null
+          ? {}
+          : input.throttleKey === null
+            ? { afterData: { path: ['identifier'], equals: UNAUDITABLE_IDENTIFIER } }
+            : { afterData: { path: ['throttle_key'], equals: input.throttleKey } },
       ],
     },
     select: { id: true },
