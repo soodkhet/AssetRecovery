@@ -4,6 +4,7 @@ import { dateOnlySchema } from '@/lib/api/validation'
 import { CLOSE_FAIL_REASONS } from '@/lib/field/fail-reasons'
 import { FIELD_GROUPS } from '@/lib/field/field-status'
 import {
+  HOTEL_CLAIM_NOTE_MAX_LENGTH,
   HOTEL_NIGHTS_DEFAULT,
   HOTEL_NIGHTS_MAX,
   HOTEL_NIGHTS_MIN,
@@ -168,7 +169,7 @@ export const hotelClaimSchema = z.object({
   receiptFileUrl: fileUrl.nullish(),
   /** ติ๊ก "ไม่มีใบเสร็จ" → รายการของใบรับรองแทนใบเสร็จ · ยอดรวมของรายการต้องเท่ากับยอดเบิก */
   substituteReceipt: substituteReceiptDraftSchema.nullish(),
-  note: trimmedText.max(1000).nullish(),
+  note: trimmedText.max(HOTEL_CLAIM_NOTE_MAX_LENGTH).nullish(),
 }).superRefine((value, ctx) => {
   const hasReceipt = value.receiptFileUrl !== null && value.receiptFileUrl !== undefined
   const substitute = value.substituteReceipt ?? null

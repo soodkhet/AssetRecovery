@@ -1,5 +1,6 @@
 import { AssumptionBadge } from '@/components/settings/assumption-badge'
 import { cn } from '@/components/ui/cn'
+import { TBody, THead, Table, Td, Th, Tr } from '@/components/ui/table'
 import type { SettingHelpContent } from '@/lib/settings/help/types'
 
 /**
@@ -57,33 +58,33 @@ export function SettingHelp({
         )}
 
         {help.table !== undefined && (
-          <div className="overflow-x-auto rounded-md border border-slate-200 bg-white">
-            <table className="w-full text-[11px]">
-              <thead className="bg-slate-50 text-slate-600">
-                <tr>
-                  {help.table.headers.map((header, index) => (
-                    <th key={header} className={cn('px-2 py-1.5 font-semibold', index === 0 ? 'text-left' : 'text-right')}>
-                      {header}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {help.table.rows.map((row) => (
-                  <tr key={row[0]} className="border-t border-slate-100">
-                    {row.map((cell, index) => (
-                      <td
-                        key={`${row[0]}-${index}`}
-                        className={cn('px-2 py-1.5', index === 0 ? 'text-left text-slate-700' : 'text-right font-mono text-slate-900')}
-                      >
-                        {cell}
-                      </td>
-                    ))}
-                  </tr>
+          // ใช้ Table ของ UI Kit (preship R2-038) — ย่อ padding/ตัวอักษรให้พอดีกล่องคำอธิบาย
+          <Table className="rounded-md">
+            <THead>
+              <Tr>
+                {help.table.headers.map((header, index) => (
+                  <Th key={header} numeric={index !== 0} className="px-2 py-1.5 text-[11px]">
+                    {header}
+                  </Th>
                 ))}
-              </tbody>
-            </table>
-          </div>
+              </Tr>
+            </THead>
+            <TBody>
+              {help.table.rows.map((row) => (
+                <Tr key={row[0]}>
+                  {row.map((cell, index) => (
+                    <Td
+                      key={`${row[0]}-${index}`}
+                      numeric={index !== 0}
+                      className={cn('px-2 py-1.5 text-[11px]', index !== 0 && 'text-slate-900')}
+                    >
+                      {cell}
+                    </Td>
+                  ))}
+                </Tr>
+              ))}
+            </TBody>
+          </Table>
         )}
 
         {examples.map((example) => (

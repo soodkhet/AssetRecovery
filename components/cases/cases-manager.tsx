@@ -1,6 +1,7 @@
 'use client'
 
-import { replaceUrlParams } from '@/components/ui/url-state'
+import { pickUuid, replaceUrlParams } from '@/components/ui/url-state'
+import { useSearchParamChange } from '@/components/ui/use-search-param-change'
 import { kpiValue } from '@/components/ui/kpi-value'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Can, usePermission } from '@/components/auth/permission-provider'
@@ -137,6 +138,12 @@ export function CasesManager({
   const [editing, setEditing] = useState<CaseDetailDto | null>(null)
   const [openingCaseId, setOpeningCaseId] = useState<string | null>(null)
   const [detailCaseId, setDetailCaseId] = useState<string | null>(initialDetailCaseId)
+  // นำทางมา route เดิมด้วย `?case=` ใหม่ (เช่น กดแจ้งเตือนตอนอยู่หน้านี้) — เปิดรายละเอียดเคสนั้น (preship R2-009)
+  // ค่าว่าง (ปิด dialog แล้วลบ `?case=` ออกเอง) ไม่ต้องทำอะไร
+  useSearchParamChange('case', (value) => {
+    const caseId = pickUuid(value ?? undefined)
+    if (caseId !== null) setDetailCaseId(caseId)
+  })
   const [importOpen, setImportOpen] = useState(false)
   /** เคสที่กำลังเปลี่ยนสถานะจากปุ่มบนแถว (ส่งตรวจสอบ / กลับไปแก้ไข) */
   const [rowBusyId, setRowBusyId] = useState<string | null>(null)

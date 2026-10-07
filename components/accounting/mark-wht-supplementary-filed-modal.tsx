@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Button, Field, InlineAlert, Modal, Textarea, useToast } from '@/components/ui'
+import { Button, Field, InlineAlert, Modal, TBody, THead, Table, Td, Textarea, Th, Tr, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { fmtDateTime } from '@/lib/format/datetime'
 import { fmtSatangSymbol } from '@/lib/format/money'
@@ -80,28 +80,38 @@ export function MarkWhtSupplementaryFiledModal({
       }
     >
       <div className="space-y-4">
-        <div className="overflow-hidden rounded-lg border border-slate-200 text-xs">
-          <table className="w-full">
-            <thead className="bg-slate-50 text-slate-600">
-              <tr>
-                <th className="px-3 py-2 text-left font-semibold">แบบ</th>
-                <th className="px-3 py-2 text-right font-semibold">ยอดที่ยื่นแล้ว</th>
-                <th className="px-3 py-2 text-right font-semibold">ยอดปัจจุบัน</th>
-                <th className="px-3 py-2 text-right font-semibold">ยอดต่าง</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr key={row.label} className="border-t border-slate-100">
-                  <td className="px-3 py-2 font-semibold text-slate-700">{row.label}</td>
-                  <td className="px-3 py-2 text-right font-mono">{fmtSatangSymbol(row.filed)}</td>
-                  <td className="px-3 py-2 text-right font-mono">{fmtSatangSymbol(row.filed + row.delta)}</td>
-                  <td className="px-3 py-2 text-right font-mono font-bold">{signedSatangText(row.delta)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Table>
+          <THead>
+            <Tr>
+              <Th className="px-3 py-2">แบบ</Th>
+              <Th numeric className="px-3 py-2">
+                ยอดที่ยื่นแล้ว
+              </Th>
+              <Th numeric className="px-3 py-2">
+                ยอดปัจจุบัน
+              </Th>
+              <Th numeric className="px-3 py-2">
+                ยอดต่าง
+              </Th>
+            </Tr>
+          </THead>
+          <TBody>
+            {rows.map((row) => (
+              <Tr key={row.label}>
+                <Td className="px-3 py-2 text-xs font-semibold">{row.label}</Td>
+                <Td numeric className="px-3 py-2 text-xs">
+                  {fmtSatangSymbol(row.filed)}
+                </Td>
+                <Td numeric className="px-3 py-2 text-xs">
+                  {fmtSatangSymbol(row.filed + row.delta)}
+                </Td>
+                <Td numeric className="px-3 py-2 text-xs font-bold">
+                  {signedSatangText(row.delta)}
+                </Td>
+              </Tr>
+            ))}
+          </TBody>
+        </Table>
 
         {summary.supplementaryRequiredAt !== null && (
           <p className="text-xs text-slate-500">

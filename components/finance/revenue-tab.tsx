@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { kpiValue } from '@/components/ui/kpi-value'
 import { usePermission } from '@/components/auth/permission-provider'
 import { ArAgingPanel } from '@/components/finance/ar-aging-panel'
 import { BillingStatusBadge } from '@/components/finance/billing-status-badge'
@@ -119,23 +120,26 @@ export function RevenueTab() {
 
   const sendWht = action?.kind === 'send' ? customerWhtSummary(action.batch) : null
   const unbilledCount = revenues.data.filter((revenue) => revenue.billingBatchId === null).length
+  // ระหว่างโหลด/โหลดไม่สำเร็จ KPI = "—" ไม่ใช่ ฿0.00 ที่อ่านเหมือนไม่มี AR ค้าง (preship R2-007)
+  const batchesReady = !batches.loading && batches.error === null
+  const revenuesReady = !revenues.loading && revenues.error === null
 
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard
           label="ยอดค้างรับ (AR)"
-          value={fmtSatangSymbol(totalArOutstandingSatang(batches.data))}
-          hint={`${fmtCount(batches.data.filter(isArOverdue).length)} รอบเลยกำหนดชำระ`}
+          value={kpiValue(batchesReady ? totalArOutstandingSatang(batches.data) : null, fmtSatangSymbol)}
+          hint={`${kpiValue(batchesReady ? batches.data.filter(isArOverdue).length : null, fmtCount)} รอบเลยกำหนดชำระ`}
         />
         <StatCard
           label="รอบวางบิลตามตัวกรอง"
-          value={fmtCount(batches.data.length)}
-          hint={`${fmtCount(batches.data.filter((batch) => batch.status === 'draft').length)} รอบยังไม่ส่งบิล`}
+          value={kpiValue(batchesReady ? batches.data.length : null, fmtCount)}
+          hint={`${kpiValue(batchesReady ? batches.data.filter((batch) => batch.status === 'draft').length : null, fmtCount)} รอบยังไม่ส่งบิล`}
         />
         <StatCard
           label="รายได้ที่ยังไม่ถูกรวมรอบ"
-          value={fmtCount(unbilledCount)}
+          value={kpiValue(revenuesReady ? unbilledCount : null, fmtCount)}
           hint="เกิดอัตโนมัติเมื่อรายการเบิกอนุมัติและคลังยืนยันส่งมอบ"
         />
       </div>
@@ -161,8 +165,8 @@ export function RevenueTab() {
               aria-label="กรองตามบริษัทไฟแนนซ์"
               value={companyId}
               onChange={(event) => setCompanyId(event.target.value)}
-              // ตัวกรองใช้ Select ของ UI Kit (เดิมเขียน class เอง — preship PS-037)
-              className="w-auto bg-white py-1.5 text-xs font-semibold text-slate-700"
+              // ตัวกรองใช้ Select ของ UI Kit ขนาดเดียวกับตัวกรองหน้าอื่น — คงไว้แค่ความกว้าง (preship PS-037 · R2-039)
+              className="w-auto"
             >
               <option value="">ทุกบริษัท</option>
               {companyOptions.map(([id, name]) => (

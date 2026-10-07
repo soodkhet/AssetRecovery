@@ -17,6 +17,9 @@ import {
   DEBTOR_NATIONALITIES,
   DEBTOR_NATIONALITY_LABEL,
   digitsOnly,
+  normalizePhoneInput,
+  PHONE_INPUT_MAX_LENGTH,
+  phoneInputError,
   DOCUMENT_SLOT_LABEL,
   isCaseDocumentDeletable,
   type DebtorNationalityCode,
@@ -37,10 +40,9 @@ import { ASSET_TYPE_LABEL } from '@/lib/cases/status-display'
 import type { CaseDetailDto, CaseDocumentDto, CaseTeamOptionDto, CaseTeamOptionsDto } from '@/lib/cases/types'
 import { uploadCaseFile } from '@/lib/cases/upload-client'
 import { parseBahtInput } from '@/lib/format/money'
-import { assetIdentifierWarning, embeddedImeiCandidate } from '@/lib/warehouse/imei'
+import { assetIdentifierWarning, embeddedImeiCandidates } from '@/lib/warehouse/imei'
 
 /** ความยาวช่องเบอร์โทรขณะกรอก — ยาวกว่า 10 หลักเพื่อให้วางเบอร์ที่มีขีด/ช่องว่างได้ไม่ถูกตัดกลางเลข */
-const PHONE_PASTE_MAX_LENGTH = 16
 
 /**
  * ฟอร์มรับเคสแบบกรอกมือ + แก้ไขเคส (`38` §7.3 · §8 `create_case_manual`/`edit_case`)
@@ -450,23 +452,23 @@ export function CaseFormModal({
           </div>
 
           <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field id="debtor-mobile" label="เบอร์โทรมือถือ" required error={fieldErrors.debtorPhoneMobile}>
+            <Field id="debtor-mobile" label="เบอร์โทรมือถือ" required error={fieldErrors.debtorPhoneMobile ?? phoneInputError(form.debtorPhoneMobile) ?? undefined}>
               <Input
                 id="debtor-mobile"
                 className="font-mono"
                 value={form.debtorPhoneMobile}
                 inputMode="numeric"
-                // เผื่อตัวคั่นตอนวาง (081-234-5678) — onChange ตัดเหลือตัวเลข 10 หลักเอง (preship PS-031)
-                maxLength={PHONE_PASTE_MAX_LENGTH}
+                // เผื่อตัวคั่น/+66 ตอนวาง — onChange แปลงเป็นตัวเลขเอง ไม่ตัดความยาวเงียบ (preship PS-031/R2-008)
+                maxLength={PHONE_INPUT_MAX_LENGTH}
                 placeholder="10 หลัก"
-                invalid={fieldErrors.debtorPhoneMobile !== undefined}
-                onChange={(event) => patch({ debtorPhoneMobile: digitsOnly(event.target.value).slice(0, 10) })}
+                invalid={fieldErrors.debtorPhoneMobile !== undefined || phoneInputError(form.debtorPhoneMobile) !== null}
+                onChange={(event) => patch({ debtorPhoneMobile: normalizePhoneInput(event.target.value) })}
               />
             </Field>
             <Field
               id="debtor-work-phone"
               label="เบอร์โทรที่ทำงาน"
-              error={fieldErrors.debtorPhoneWork}
+              error={fieldErrors.debtorPhoneWork ?? phoneInputError(form.debtorPhoneWork) ?? undefined}
               hint="9-10 หลัก (ไม่บังคับ)"
             >
               <Input
@@ -474,10 +476,10 @@ export function CaseFormModal({
                 className="font-mono"
                 value={form.debtorPhoneWork}
                 inputMode="numeric"
-                // เผื่อตัวคั่นตอนวาง (081-234-5678) — onChange ตัดเหลือตัวเลข 10 หลักเอง (preship PS-031)
-                maxLength={PHONE_PASTE_MAX_LENGTH}
-                invalid={fieldErrors.debtorPhoneWork !== undefined}
-                onChange={(event) => patch({ debtorPhoneWork: digitsOnly(event.target.value).slice(0, 10) })}
+                // เผื่อตัวคั่น/+66 ตอนวาง — onChange แปลงเป็นตัวเลขเอง ไม่ตัดความยาวเงียบ (preship PS-031/R2-008)
+                maxLength={PHONE_INPUT_MAX_LENGTH}
+                invalid={fieldErrors.debtorPhoneWork !== undefined || phoneInputError(form.debtorPhoneWork) !== null}
+                onChange={(event) => patch({ debtorPhoneWork: normalizePhoneInput(event.target.value) })}
               />
             </Field>
           </div>
@@ -576,15 +578,16 @@ export function CaseFormModal({
                   {assetIdentifierWarning(form.assetImeiSerial)}
                 </p>
               )}
-              {/* วาง IMEI มาพร้อมข้อความ — เสนอให้ผู้ใช้กดใช้เฉพาะตัวเลขเอง ไม่ตัดให้เงียบ ๆ (preship PS-005) */}
-              {fieldErrors.assetImeiSerial === undefined && embeddedImeiCandidate(form.assetImeiSerial) !== null && (
-                <Button
-                  variant="secondary"
-                  className="mt-1"
-                  onClick={() => patch({ assetImeiSerial: embeddedImeiCandidate(form.assetImeiSerial) ?? form.assetImeiSerial })}
-                >
-                  ใช้ <span className="font-mono">{embeddedImeiCandidate(form.assetImeiSerial)}</span> เป็น IMEI
-                </Button>
+              {/* วาง IMEI มาพร้อมข้อความ — เสนอให้ผู้ใช้กดใช้เฉพาะตัวเลขเอง ไม่ตัดให้เงียบ ๆ (preship PS-005)
+                  เครื่องสองซิมมีหลายเลข ⇒ แสดงปุ่มทุกเลขให้เลือกเลขหลักเอง (R2-014) */}
+              {fieldErrors.assetImeiSerial === undefined && embeddedImeiCandidates(form.assetImeiSerial).length > 0 && (
+                <div className="mt-1 flex flex-wrap gap-2">
+                  {embeddedImeiCandidates(form.assetImeiSerial).map((imei) => (
+                    <Button key={imei} variant="secondary" onClick={() => patch({ assetImeiSerial: imei })}>
+                      ใช้ <span className="font-mono">{imei}</span> เป็น IMEI
+                    </Button>
+                  ))}
+                </div>
               )}
             </Field>
             {/* มติ PO U166 — กรอก IMEI ก่อน แล้วเติมยี่ห้อ/รุ่นจากฐาน TAC (แก้ได้) */}

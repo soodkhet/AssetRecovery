@@ -106,15 +106,30 @@ export function looksLikeMistypedImei(value: string | null | undefined): boolean
 const DIGIT_RUN = /\d(?:[\s.-]*\d)*/g
 
 /**
- * IMEI 15 หลักที่ฝังอยู่ในค่าที่ถูกจัดเป็น **Serial** (มีตัวอักษร) — เช่นวางมาจาก SMS/สัญญา `IMEI: 356938035643809`
- * หรือ `356938035643809 (เครื่องลูกค้า)` (preship PS-005)
- * คืนเลข 15 หลักเมื่อพบชุดตัวเลขที่ `parseImei()` ผ่าน **ชุดเดียวพอดี** · ไม่พบ/พบหลายชุด = `null`
- * ⚠️ ใช้เพื่อ**เสนอ**ให้ผู้ใช้กดยืนยันเท่านั้น — ห้ามตัดข้อความทิ้งเองเงียบ ๆ (CLAUDE.md ข้อ 10 · มติ PO U24/U54)
+ * IMEI 15 หลักทุกเลขที่ฝังอยู่ในค่าที่ถูกจัดเป็น **Serial** (มีตัวอักษร) — เช่นวางมาจาก SMS/สัญญา `IMEI: 356938035643809`
+ * หรือเครื่องสองซิม `IMEI1: 3569… IMEI2: 3569…` (preship PS-005 · R2-014) · เรียงตามที่พบ ไม่ซ้ำ
+ * ชุดตัวเลขที่คั่นด้วยช่องว่างจนติดกันเกิน 15 หลัก (`3569…809 3569…817`) แยกตามช่องว่างเมื่อทุกท่อนเป็น IMEI ที่ถูกต้อง
+ * ⚠️ ใช้เพื่อ**เสนอ**ให้ผู้ใช้กดเลือกเท่านั้น — ห้ามตัดข้อความทิ้งเองเงียบ ๆ (CLAUDE.md ข้อ 10 · มติ PO U24/U54)
  */
-export function embeddedImeiCandidate(value: string | null | undefined): string | null {
+export function embeddedImeiCandidates(value: string | null | undefined): string[] {
   const trimmed = value?.trim() ?? ''
-  if (trimmed === '' || isImeiLikeIdentifier(trimmed)) return null
-  const candidates = (trimmed.match(DIGIT_RUN) ?? []).map(parseImei).filter((imei): imei is string => imei !== null)
+  if (trimmed === '' || isImeiLikeIdentifier(trimmed)) return []
+  const found: string[] = []
+  for (const run of trimmed.match(DIGIT_RUN) ?? []) {
+    const whole = parseImei(run)
+    if (whole !== null) {
+      found.push(whole)
+      continue
+    }
+    const parts = run.split(/\s+/).map(parseImei)
+    if (parts.length > 1 && parts.every((imei) => imei !== null)) found.push(...(parts as string[]))
+  }
+  return [...new Set(found)]
+}
+
+/** IMEI ที่ฝังอยู่ **เลขเดียวพอดี** — ไม่พบ/พบหลายเลข = `null` (หลายเลขให้ใช้ {@link embeddedImeiCandidates}) */
+export function embeddedImeiCandidate(value: string | null | undefined): string | null {
+  const candidates = embeddedImeiCandidates(value)
   return candidates.length === 1 ? (candidates[0] ?? null) : null
 }
 
@@ -122,10 +137,16 @@ export function embeddedImeiCandidate(value: string | null | undefined): string 
 export const IMEI_EMBEDDED_WARNING_MESSAGE =
   'มีเลข IMEI 15 หลักปนอยู่กับข้อความ — ระบบจะบันทึกทั้งหมดเป็น Serial ถ้าเป็น IMEI ให้กรอกเฉพาะตัวเลข'
 
+/** ข้อความเตือน (ไม่บล็อก) เมื่อมี IMEI หลายเลขปนกัน (เครื่องสองซิม) — ต้องเลือกเลขหลักเอง ระบบไม่เลือกให้ */
+export const IMEI_MULTIPLE_WARNING_MESSAGE =
+  'พบเลข IMEI หลายเลข (เครื่องสองซิม) — ระบบจะบันทึกทั้งหมดเป็น Serial ให้เลือกเลขหลักเพียงเลขเดียวเป็น IMEI'
+
 /** ข้อความเตือนของช่อง "IMEI หรือ Serial" — `null` = ไม่มีอะไรต้องเตือน (ใช้ร่วมฟอร์ม/นำเข้าไฟล์/API) */
 export function assetIdentifierWarning(value: string | null | undefined): string | null {
   if (looksLikeMistypedImei(value)) return IMEI_TYPO_WARNING_MESSAGE
-  if (embeddedImeiCandidate(value) !== null) return IMEI_EMBEDDED_WARNING_MESSAGE
+  const embedded = embeddedImeiCandidates(value)
+  if (embedded.length > 1) return IMEI_MULTIPLE_WARNING_MESSAGE
+  if (embedded.length === 1) return IMEI_EMBEDDED_WARNING_MESSAGE
   return null
 }
 

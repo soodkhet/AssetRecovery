@@ -5,6 +5,7 @@ import { FieldCaseDetailBody } from '@/components/field/field-case-detail'
 import { IconAlert, IconChevronLeft, IconChevronRight } from '@/components/field/field-icons'
 import { useFieldCases } from '@/components/field/field-cases-provider'
 import { Button, ErrorState, LoadingState, Modal, useToast } from '@/components/ui'
+import { TOUCH_TARGET_CLASS } from '@/components/ui/button'
 import { cn } from '@/components/ui/cn'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
@@ -57,6 +58,8 @@ export function CalendarPickerModal({
   const [detail, setDetail] = useState<FieldCaseDetailDto | null>(null)
   const [detailError, setDetailError] = useState<ApiCallError | null>(null)
   const [teamItems, setTeamItems] = useState<readonly FieldCaseListItemDto[]>([])
+  /** เพิ่มค่าเมื่อกด "ลองใหม่" หลังโหลดเคสไม่สำเร็จ (preship R2-022) */
+  const [retryKey, setRetryKey] = useState(0)
 
   const caseId = target?.caseId ?? null
 
@@ -76,7 +79,7 @@ export function CalendarPickerModal({
     return () => {
       cancelled = true
     }
-  }, [open, caseId])
+  }, [open, caseId, retryKey])
 
   /** badge ต่อวัน = เคสของเราที่จัดวันไว้แล้ว (`41` §7.4) */
   const countByDate = useMemo(
@@ -151,13 +154,17 @@ export function CalendarPickerModal({
           </div>
         )}
 
-        <div className="rounded-2xl border-2 border-slate-200 bg-white p-3">
+        {/*
+          จอแตะ: ช่องวัน/ปุ่มเลื่อนเดือนต้องสูง ≥44px (preship R2-026) — จอ 320px กว้างไม่พอให้ช่องกว้าง 44px ครบ 7 คอลัมน์
+          ⇒ ลด padding/gap ใต้ sm ให้ช่องกว้างที่สุด แล้วยืดความสูงเป็น 44px (เลิก aspect-square บน pointer-coarse)
+        */}
+        <div className="rounded-2xl border-2 border-slate-200 bg-white p-1.5 sm:p-3">
           <div className="mb-3 flex items-center justify-between">
             <button
               type="button"
               aria-label="เดือนก่อนหน้า"
               onClick={() => setCurrent((month) => shiftMonth(month, -1))}
-              className="focus-ring rounded-lg p-2 text-slate-600 hover:bg-slate-100"
+              className={cn('focus-ring inline-flex items-center justify-center rounded-lg p-2 text-slate-600 hover:bg-slate-100', TOUCH_TARGET_CLASS)}
             >
               <IconChevronLeft className="h-5 w-5" />
             </button>
@@ -166,13 +173,13 @@ export function CalendarPickerModal({
               type="button"
               aria-label="เดือนถัดไป"
               onClick={() => setCurrent((month) => shiftMonth(month, 1))}
-              className="focus-ring rounded-lg p-2 text-slate-600 hover:bg-slate-100"
+              className={cn('focus-ring inline-flex items-center justify-center rounded-lg p-2 text-slate-600 hover:bg-slate-100', TOUCH_TARGET_CLASS)}
             >
               <IconChevronRight className="h-5 w-5" />
             </button>
           </div>
 
-          <div className="mb-1.5 grid grid-cols-7 gap-1">
+          <div className="mb-1.5 grid grid-cols-7 gap-0.5 sm:gap-1">
             {WEEKDAY_LABELS_TH.map((weekday) => (
               <div key={weekday} className="py-1 text-center text-xs font-extrabold text-slate-400">
                 {weekday}
@@ -180,7 +187,7 @@ export function CalendarPickerModal({
             ))}
           </div>
 
-          <div className="grid grid-cols-7 gap-1">
+          <div className="grid grid-cols-7 gap-0.5 sm:gap-1">
             {cells.map((cell, index) =>
               cell.dateIso === null ? (
                 <div key={`empty-${index}`} />
@@ -191,7 +198,7 @@ export function CalendarPickerModal({
                   disabled={cell.isPast}
                   onClick={() => setPickedDate(cell.dateIso)}
                   className={cn(
-                    'focus-ring relative flex aspect-square flex-col items-center justify-center rounded-xl',
+                    'focus-ring relative flex aspect-square flex-col items-center justify-center rounded-xl pointer-coarse:aspect-auto pointer-coarse:min-h-11',
                     cell.isPast ? 'cursor-not-allowed text-slate-300' : 'text-slate-800 hover:bg-blue-50',
                     cell.isToday && 'ring-2 ring-slate-900',
                   )}
@@ -210,7 +217,14 @@ export function CalendarPickerModal({
 
         <div className="text-xs font-extrabold text-slate-500">รายละเอียดเคสที่กำลังจัดวันที่</div>
         {detailError !== null ? (
-          <ErrorState title={detailError.title} message={detailError.message} />
+          <ErrorState
+            title={detailError.title}
+            message={detailError.message}
+            onRetry={() => {
+              setDetailError(null)
+              setRetryKey((key) => key + 1)
+            }}
+          />
         ) : detail === null ? (
           <LoadingState message="กำลังโหลดรายละเอียดเคส..." />
         ) : (

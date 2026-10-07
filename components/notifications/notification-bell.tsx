@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
+import { TOUCH_TARGET_CLASS } from '@/components/ui/button'
 import { cn } from '@/components/ui/cn'
 import { IconBell, IconClose } from '@/components/notifications/notification-icons'
 import { callApi, jsonRequest } from '@/lib/api/types'
@@ -116,7 +117,11 @@ export function NotificationBell({
                   type="button"
                   aria-label="ปิด"
                   onClick={() => setOpen(false)}
-                  className="focus-ring rounded p-1 text-slate-400 hover:bg-slate-100"
+                  // จอสัมผัสได้พื้นที่แตะ ≥ 44px (preship R2-011)
+                  className={cn(
+                    'focus-ring inline-flex items-center justify-center rounded p-1 text-slate-400 hover:bg-slate-100',
+                    TOUCH_TARGET_CLASS,
+                  )}
                 >
                   <IconClose className="h-4 w-4" />
                 </button>

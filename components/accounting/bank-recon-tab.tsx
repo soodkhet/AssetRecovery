@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { kpiValue } from '@/components/ui/kpi-value'
 import { ImportStatementModal } from '@/components/accounting/import-statement-modal'
 import { ManualMatchModal } from '@/components/accounting/manual-match-modal'
 import { MatchDetailModal } from '@/components/accounting/match-detail-modal'
@@ -59,6 +60,8 @@ export function BankReconTab() {
 
   const [status, setStatus] = useState<BankStatusFilter>('all')
   const { data, loading, error, reload } = useBankTransactions(status)
+  // ระหว่างโหลด/โหลดไม่สำเร็จ KPI = "—" ไม่ใช่ ฿0.00/0 ที่อ่านเหมือนไม่มียอด (preship R2-007)
+  const ready = !loading && error === null
   // คู่ที่ระบบเสนอ (มติ PO U137) โหลดใหม่ทุกครั้งที่รายการเดินบัญชีเปลี่ยน
   const [proposalsVersion, setProposalsVersion] = useState(0)
   function refresh(): void {
@@ -76,15 +79,15 @@ export function BankReconTab() {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-5">
-        <StatCard label="รายการทั้งหมด" value={fmtCount(data.summary.total)} hint="ตามตัวกรองปัจจุบัน" />
-        <StatCard label="ยังไม่จับคู่" value={fmtCount(data.summary.unmatched)} hint="ต้องเป็น 0 ก่อนส่งงวด" />
+        <StatCard label="รายการทั้งหมด" value={kpiValue(ready ? data.summary.total : null, fmtCount)} hint="ตามตัวกรองปัจจุบัน" />
+        <StatCard label="ยังไม่จับคู่" value={kpiValue(ready ? data.summary.unmatched : null, fmtCount)} hint="ต้องเป็น 0 ก่อนส่งงวด" />
         <StatCard
           label="เงินรับรอตรวจสอบคงค้าง"
-          value={fmtSatangSymbol(data.summary.suspenseOutstandingSatang)}
-          hint={`${fmtCount(data.summary.suspenseOutstandingCount)} รายการ · ทุกงวด`}
+          value={kpiValue(ready ? data.summary.suspenseOutstandingSatang : null, fmtSatangSymbol)}
+          hint={`${kpiValue(ready ? data.summary.suspenseOutstandingCount : null, fmtCount)} รายการ · ทุกงวด`}
         />
-        <StatCard label="เงินเข้ารวม" value={fmtSatangSymbol(data.summary.totalInSatang)} hint="ตามตัวกรอง" />
-        <StatCard label="เงินออกรวม" value={fmtSatangSymbol(data.summary.totalOutSatang)} hint="ตามตัวกรอง" />
+        <StatCard label="เงินเข้ารวม" value={kpiValue(ready ? data.summary.totalInSatang : null, fmtSatangSymbol)} hint="ตามตัวกรอง" />
+        <StatCard label="เงินออกรวม" value={kpiValue(ready ? data.summary.totalOutSatang : null, fmtSatangSymbol)} hint="ตามตัวกรอง" />
       </div>
 
       <div className="flex flex-wrap items-start justify-between gap-3">

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { kpiValue } from '@/components/ui/kpi-value'
 import { CostCenterMapModal } from '@/components/accounting/cost-center-map-modal'
 import { ExpenseDetailModal } from '@/components/accounting/expense-detail-modal'
 import { useExpenseRecords, type ExpenseDocumentFilter } from '@/components/accounting/use-expense-records'
@@ -48,6 +49,8 @@ export function ExpensesTab() {
 
   const [documentStatus, setDocumentStatus] = useState<ExpenseDocumentFilter>('all')
   const { data, loading, error, reload } = useExpenseRecords(documentStatus)
+  // ระหว่างโหลด/โหลดไม่สำเร็จ KPI = "—" ไม่ใช่ ฿0.00/0 ที่อ่านเหมือนไม่มียอด (preship R2-007)
+  const ready = !loading && error === null
 
   const [mapping, setMapping] = useState<ExpenseRecordDto | null>(null)
   const [viewing, setViewing] = useState<ExpenseRecordDto | null>(null)
@@ -55,10 +58,10 @@ export function ExpensesTab() {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
-        <StatCard label="รายการทั้งหมด" value={fmtCount(data.summary.count)} hint="ตามตัวกรองปัจจุบัน" />
-        <StatCard label="ยอดจ่ายจริง (Net)" value={fmtSatangSymbol(data.summary.netSatang)} hint="รวมตามตัวกรอง" />
-        <StatCard label="หัก ณ ที่จ่ายรวม" value={fmtSatangSymbol(data.summary.whtSatang)} hint="ฐานของใบ 50 ทวิ" />
-        <StatCard label="เอกสารไม่ครบ" value={fmtCount(data.summary.incompleteCount)} hint="ตามเก็บก่อนส่งบัญชี" />
+        <StatCard label="รายการทั้งหมด" value={kpiValue(ready ? data.summary.count : null, fmtCount)} hint="ตามตัวกรองปัจจุบัน" />
+        <StatCard label="ยอดจ่ายจริง (Net)" value={kpiValue(ready ? data.summary.netSatang : null, fmtSatangSymbol)} hint="รวมตามตัวกรอง" />
+        <StatCard label="หัก ณ ที่จ่ายรวม" value={kpiValue(ready ? data.summary.whtSatang : null, fmtSatangSymbol)} hint="ฐานของใบ 50 ทวิ" />
+        <StatCard label="เอกสารไม่ครบ" value={kpiValue(ready ? data.summary.incompleteCount : null, fmtCount)} hint="ตามเก็บก่อนส่งบัญชี" />
       </div>
 
       <div className="flex flex-wrap items-start justify-between gap-3">

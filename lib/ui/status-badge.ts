@@ -135,3 +135,12 @@ export const ROLE_GROUP_BADGE_CLASS: Readonly<Record<'system' | 'inhouse' | 'out
   outsource: 'bg-purple-100 text-purple-800',
   finance_company: 'bg-amber-100 text-amber-800',
 }
+
+/**
+ * ป้ายข้อความฝั่งทีม (`inhouse`/`outsource`) — คู่กับ `ROLE_GROUP_BADGE_CLASS` · ตัวพิมพ์ตาม mockup "Inhouse"/"Outsource"
+ * (preship R2-033 — เดิมบางหน้า render enum ดิบตัวเล็ก)
+ */
+export const TEAM_SIDE_LABEL: Readonly<Record<'inhouse' | 'outsource', string>> = {
+  inhouse: 'Inhouse',
+  outsource: 'Outsource',
+}

@@ -1,7 +1,7 @@
 'use client'
 
 import { useAuditLogDetail } from '@/components/audit/use-audit-logs'
-import { Button, InlineAlert, LoadingState, Modal, RefText, StatusBadge } from '@/components/ui'
+import { Button, InlineAlert, LoadingState, Modal, RefText, StatusBadge, TBody, THead, Table, Td, Th, Tr } from '@/components/ui'
 import {
   auditActionLabel,
   auditActorLabel,
@@ -71,34 +71,26 @@ export function AuditDetailModal({ id, onClose }: { id: string | null; onClose: 
                 รายการนี้ไม่ได้เก็บค่าก่อน/หลัง (เช่น การเข้าสู่ระบบ)
               </p>
             ) : (
-              <div className="overflow-hidden rounded-lg border border-slate-200">
-                <table className="w-full text-sm">
-                  <thead className="border-b border-slate-200 bg-slate-50 text-xs text-slate-600">
-                    <tr>
-                      <th scope="col" className="px-3 py-2 text-left font-medium">
-                        ฟิลด์
-                      </th>
-                      <th scope="col" className="px-3 py-2 text-left font-medium">
-                        ก่อน
-                      </th>
-                      <th scope="col" className="px-3 py-2 text-left font-medium">
-                        หลัง
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {changes.map((change) => (
-                      <tr key={change.field} className="align-top">
-                        <td className="px-3 py-2 font-mono text-xs text-slate-700">{change.field}</td>
-                        <td className="px-3 py-2 text-xs break-all text-slate-500">{auditValueText(change.before, change.field)}</td>
-                        <td className="px-3 py-2 text-xs font-medium break-all text-slate-800">
-                          {auditValueText(change.after, change.field)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <Table>
+                <THead>
+                  <Tr>
+                    <Th className="px-3 py-2">ฟิลด์</Th>
+                    <Th className="px-3 py-2">ก่อน</Th>
+                    <Th className="px-3 py-2">หลัง</Th>
+                  </Tr>
+                </THead>
+                <TBody>
+                  {changes.map((change) => (
+                    <Tr key={change.field} className="align-top">
+                      <Td className="px-3 py-2 font-mono text-xs">{change.field}</Td>
+                      <Td className="px-3 py-2 text-xs break-all text-slate-500">{auditValueText(change.before, change.field)}</Td>
+                      <Td className="px-3 py-2 text-xs font-medium break-all text-slate-800">
+                        {auditValueText(change.after, change.field)}
+                      </Td>
+                    </Tr>
+                  ))}
+                </TBody>
+              </Table>
             )}
           </div>
         </div>

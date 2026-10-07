@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Badge, Button, Field, InlineAlert, LoadingState, Modal, Select, Textarea, useToast } from '@/components/ui'
 import { MATRIX_LEVELS, MATRIX_LEVEL_LABEL, type MatrixLevel, type MatrixSection } from '@/lib/roles/matrix'
-import type { ApiData, ApiErrorBody, RoleDetail, RolePermissionsPayload } from '@/lib/roles/types'
+import { callApi, jsonRequest } from '@/lib/api/types'
+import type { RoleDetail, RolePermissionsPayload } from '@/lib/roles/types'
 
 /**
  * Permission Matrix editor ของ role หนึ่งตัว (`07` §8 · `13` §6.10 · mockup `settings.html` แท็บสิทธิ์)
@@ -52,29 +53,25 @@ export function PermissionMatrixModal({
     let cancelled = false
 
     void (async () => {
-      try {
-        const response = await fetch(`/api/roles/${roleId}/permissions`)
-        const body: unknown = await response.json()
-        if (cancelled) return
+      // ผ่าน `callApi` ⇒ มี timeout + แยก 5xx/เครือข่ายล่ม ไม่ค้าง loading เมื่อ server ช้า (preship R2-017)
+      const result = await callApi<RolePermissionsPayload>(`/api/roles/${roleId}/permissions`)
+      if (cancelled) return
 
-        if (!response.ok) {
-          setState({ loading: false, error: (body as ApiErrorBody).error.message })
-          return
-        }
-
-        const payload = (body as ApiData<RolePermissionsPayload>).data
-        const nextLevels: Record<string, MatrixLevel> = {}
-        for (const section of payload.sections) {
-          for (const row of section.rows) nextLevels[row.code] = row.level
-        }
-
-        setSections(payload.sections)
-        setLevels(nextLevels)
-        setInitialLevels(nextLevels)
-        setState({ loading: false, error: null })
-      } catch {
-        if (!cancelled) setState({ loading: false, error: 'เชื่อมต่อระบบไม่สำเร็จ กรุณาลองใหม่' })
+      if (result.error !== undefined || result.data === undefined) {
+        setState({ loading: false, error: result.error?.message ?? 'โหลดสิทธิ์ไม่สำเร็จ กรุณาลองใหม่' })
+        return
       }
+
+      const payload = result.data
+      const nextLevels: Record<string, MatrixLevel> = {}
+      for (const section of payload.sections) {
+        for (const row of section.rows) nextLevels[row.code] = row.level
+      }
+
+      setSections(payload.sections)
+      setLevels(nextLevels)
+      setInitialLevels(nextLevels)
+      setState({ loading: false, error: null })
     })()
 
     return () => {
@@ -95,17 +92,14 @@ export function PermissionMatrixModal({
     setSaving(true)
 
     try {
-      const response = await fetch(`/api/roles/${roleId}/permissions`, {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ entries: changed, reason }),
-      })
-      const body: unknown = await response.json()
+      const result = await callApi<unknown>(
+        `/api/roles/${roleId}/permissions`,
+        jsonRequest('PATCH', { entries: changed, reason }),
+      )
 
-      if (!response.ok) {
-        const error = (body as ApiErrorBody).error
-        showToast({ tone: 'error', title: error.title, description: error.message })
-        setState({ loading: false, error: error.message })
+      if (result.error !== undefined) {
+        showToast({ tone: 'error', title: result.error.title, description: result.error.message })
+        setState({ loading: false, error: result.error.message })
         return
       }
 
@@ -116,8 +110,6 @@ export function PermissionMatrixModal({
       })
       onSaved()
       onClose()
-    } catch {
-      setState({ loading: false, error: 'บันทึกไม่สำเร็จ กรุณาลองใหม่' })
     } finally {
       setSaving(false)
     }

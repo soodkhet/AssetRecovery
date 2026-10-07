@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Badge, Button, ConfirmModal, InlineAlert } from '@/components/ui'
+import { Button, ConfirmModal, InlineAlert, StatusBadge } from '@/components/ui'
+import { buttonClass } from '@/components/ui/button'
 import {
   assertProductPhotoCapacity,
   countDocuments,
@@ -235,14 +236,14 @@ export function CaseAttachmentsFields({
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-semibold text-slate-800">{DOCUMENT_SLOT_LABEL[slot]}</span>
                       {count > 0 ? (
-                        <Badge className="bg-emerald-50 text-emerald-700">อัปโหลดแล้ว ✓ ({count} ไฟล์)</Badge>
+                        <StatusBadge group="success" label={`อัปโหลดแล้ว ✓ (${count} ไฟล์)`} />
                       ) : (
-                        <Badge className="bg-slate-100 text-slate-500">ยังไม่อัปโหลด</Badge>
+                        <StatusBadge group="neutral" label="ยังไม่อัปโหลด" />
                       )}
                     </div>
                     <p className="mt-0.5 text-[11px] text-slate-500">{DOCUMENT_SLOT_HINT[slot]}</p>
                   </div>
-                  <label className="focus-ring cursor-pointer rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                  <label className={buttonClass('secondary', 'sm', 'cursor-pointer')}>
                     เลือกไฟล์
                     <input
                       type="file"

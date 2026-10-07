@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { kpiValue } from '@/components/ui/kpi-value'
 import { useAwaitingCreditNotes } from '@/components/accounting/use-credit-notes'
 import { usePermission } from '@/components/auth/permission-provider'
 import { AdjustmentFormModal } from '@/components/finance/adjustment-form-modal'
@@ -79,17 +80,19 @@ export function AdjustmentTab() {
 
   const pending = items.filter((row) => row.status === 'pending_approval')
   const lockedPending = pending.filter((row) => row.periodStatusAtTarget === 'locked')
+  // ระหว่างโหลด/โหลดไม่สำเร็จ KPI = "—" ไม่ใช่ 0 ที่อ่านเหมือนไม่มีรายการรออนุมัติ (preship R2-007)
+  const ready = !loading && error === null
 
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatCard label="รออนุมัติ" value={fmtCount(pending.length)} hint="ตามตัวกรองปัจจุบัน" />
+        <StatCard label="รออนุมัติ" value={kpiValue(ready ? pending.length : null, fmtCount)} hint="ตามตัวกรองปัจจุบัน" />
         <StatCard
           label="รออนุมัติของรอบที่ปิดแล้ว"
-          value={fmtCount(lockedPending.length)}
+          value={kpiValue(ready ? lockedPending.length : null, fmtCount)}
           hint="ต้องผู้บริหารอนุมัติเท่านั้น"
         />
-        <StatCard label="รายการทั้งหมด" value={fmtCount(items.length)} hint="เรียงจากรายการล่าสุด" />
+        <StatCard label="รายการทั้งหมด" value={kpiValue(ready ? items.length : null, fmtCount)} hint="เรียงจากรายการล่าสุด" />
       </div>
 
       {/* มติ PO U50 — ปลายทางของแจ้งเตือนวันลงพื้นที่ในงวดปิด (ไม่มีรายการ = ไม่แสดง) */}
@@ -118,8 +121,8 @@ export function AdjustmentTab() {
               aria-label="กรองตามประเภทรายการต้นทาง"
               value={targetType}
               onChange={(event) => setTargetType(event.target.value as AdjustmentTargetFilter)}
-              // ตัวกรองใช้ Select ของ UI Kit (เดิมเขียน class เอง — preship PS-037)
-              className="w-auto bg-white py-1.5 text-xs font-semibold text-slate-700"
+              // ตัวกรองใช้ Select ของ UI Kit ขนาดเดียวกับตัวกรองหน้าอื่น — คงไว้แค่ความกว้าง (preship PS-037 · R2-039)
+              className="w-auto"
             >
               {ADJUSTMENT_TARGET_FILTERS.map((option) => (
                 <option key={option.value} value={option.value}>

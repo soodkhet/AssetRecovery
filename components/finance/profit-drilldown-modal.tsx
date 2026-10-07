@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Button, InlineAlert, Modal, TBody, THead, Table, TableState, Td, Th, Tr } from '@/components/ui'
+import { Button, ErrorState, InlineAlert, Modal, TBody, THead, Table, TableState, Td, Th, Tr } from '@/components/ui'
 import { callApi } from '@/lib/api/types'
 import { fmtCount, fmtRatioPct, fmtSatangSymbol } from '@/lib/format/money'
 import type { ReportPeriodType } from '@/lib/reports/period'
@@ -29,6 +29,14 @@ export function ProfitDrilldownModal({
   const [detail, setDetail] = useState<ProfitabilityDrilldownDto | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<{ title: string; message: string } | null>(null)
+
+  /** เพิ่มค่าเมื่อกด "ลองใหม่" หลังโหลดไม่สำเร็จ — บังคับ effect ยิงซ้ำ (preship R2-022) */
+  const [retryKey, setRetryKey] = useState(0)
+  const retry = (): void => {
+    setError(null)
+    setLoading(true)
+    setRetryKey((key) => key + 1)
+  }
   const targetKey = target?.key ?? null
 
   useEffect(() => {
@@ -51,7 +59,7 @@ export function ProfitDrilldownModal({
     return () => {
       cancelled = true
     }
-  }, [targetKey, dimension, period])
+  }, [targetKey, dimension, period, retryKey])
 
   return (
     <Modal
@@ -67,11 +75,7 @@ export function ProfitDrilldownModal({
       }
     >
       {loading && <p className="text-sm text-slate-500">กำลังโหลดรายละเอียด…</p>}
-      {error !== null && (
-        <InlineAlert tone="error" title={error.title}>
-          {error.message}
-        </InlineAlert>
-      )}
+      {error !== null && <ErrorState title={error.title} message={error.message} onRetry={retry} />}
 
       {!loading && error === null && detail !== null && (
         <div className="space-y-4">

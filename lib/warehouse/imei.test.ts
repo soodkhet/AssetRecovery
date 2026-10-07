@@ -12,6 +12,8 @@ import {
   isValidImei,
   parseImei,
   embeddedImeiCandidate,
+  embeddedImeiCandidates,
+  IMEI_MULTIPLE_WARNING_MESSAGE,
   IMEI_EMBEDDED_WARNING_MESSAGE,
 } from '@/lib/warehouse/imei'
 
@@ -239,5 +241,30 @@ describe('embeddedImeiCandidate / assetIdentifierWarning — IMEI ปนข้�
     expect(assetIdentifierWarning('IMEI: 356938035643809')).toBe(IMEI_EMBEDDED_WARNING_MESSAGE)
     expect(assetIdentifierWarning('SN: C02XK1ABJG5J')).toBeNull()
     expect(isImeiLikeIdentifier('IMEI: 356938035643809')).toBe(false)
+  })
+})
+
+describe('embeddedImeiCandidates — เครื่องสองซิม (preship R2-014)', () => {
+  it('พบทุกเลข · คั่นด้วย label / จุลภาค / ทับ / ช่องว่างล้วน', () => {
+    expect(embeddedImeiCandidates('IMEI1: 356938035643809 IMEI2: 356938035643817')).toEqual([
+      '356938035643809',
+      '356938035643817',
+    ])
+    expect(embeddedImeiCandidates('IMEI 356938035643809, 356938035643817')).toHaveLength(2)
+    expect(embeddedImeiCandidates('IMEI 356938035643809 / 356938035643817')).toHaveLength(2)
+    expect(embeddedImeiCandidates('IMEI 356938035643809 356938035643817')).toHaveLength(2)
+  })
+
+  it('ไม่มีตัวอักษรเลย ⇒ เป็นช่อง IMEI ที่ต้องผ่าน parseImei (ปฏิเสธ) ไม่ใช่ Serial ที่ต้องเสนอ', () => {
+    expect(embeddedImeiCandidates('356938035643809 / 356938035643817')).toEqual([])
+  })
+
+  it('ชุดที่ช่องว่างคั่นแต่ไม่ใช่ IMEI ครบทุกท่อน ⇒ ไม่เดาแยกเอง', () => {
+    expect(embeddedImeiCandidates('IMEI 3569380356438 0935643817')).toEqual([])
+  })
+
+  it('หลายเลข ⇒ เตือนให้เลือกเลขหลัก (ไม่บล็อก ไม่เลือกให้)', () => {
+    expect(assetIdentifierWarning('IMEI1: 356938035643809 IMEI2: 356938035643817')).toBe(IMEI_MULTIPLE_WARNING_MESSAGE)
+    expect(embeddedImeiCandidate('IMEI1: 356938035643809 IMEI2: 356938035643817')).toBeNull()
   })
 })

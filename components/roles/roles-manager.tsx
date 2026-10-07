@@ -6,7 +6,6 @@ import { Can } from '@/components/auth/permission-provider'
 import { PermissionMatrixModal } from '@/components/roles/permission-matrix-modal'
 import { RoleGroupTabs } from '@/components/roles/role-group-tabs'
 import {
-  Badge,
   Button,
   Card,
   CardHeader,
@@ -16,6 +15,7 @@ import {
   Modal,
   PageHeader,
   Select,
+  StatusBadge,
   TBody,
   THead,
   Table,
@@ -27,7 +27,8 @@ import {
   useToast,
 } from '@/components/ui'
 import { ROLE_GROUP_LABEL, roleGroupsForTab, type RoleGroupTabId } from '@/lib/roles/role-groups'
-import type { ApiData, ApiErrorBody, RoleListItem } from '@/lib/roles/types'
+import { callApi, jsonRequest } from '@/lib/api/types'
+import type { RoleListItem } from '@/lib/roles/types'
 
 /**
  * หน้า "สิทธิ์การใช้งาน (Roles & Permissions)" — `07` §8 + mockup `settings.html` (`renderRolesContent`)
@@ -44,26 +45,19 @@ interface LoadState {
   error: string | null
 }
 
-function errorOf(body: unknown): { title: string; message: string } {
-  const error = (body as ApiErrorBody).error
-  return { title: error.title, message: error.message }
-}
-
 interface RolesResult {
   roles?: readonly RoleListItem[]
   error?: string
 }
 
-/** ดึงรายการบทบาท — ไม่มี setState ในตัวเอง เพื่อให้เรียกจาก effect ได้โดยไม่ชนกฎ react-hooks */
+/**
+ * ดึงรายการบทบาท — ไม่มี setState ในตัวเอง เพื่อให้เรียกจาก effect ได้โดยไม่ชนกฎ react-hooks
+ * ผ่าน `callApi` ⇒ มี timeout + แยก 5xx/เครือข่ายล่มได้ถูก ไม่ค้างหมุนเมื่อ server ช้า (preship R2-017)
+ */
 async function fetchRoles(): Promise<RolesResult> {
-  try {
-    const response = await fetch('/api/roles')
-    const body: unknown = await response.json()
-    if (!response.ok) return { error: errorOf(body).message }
-    return { roles: (body as ApiData<RoleListItem[]>).data }
-  } catch {
-    return { error: 'เชื่อมต่อระบบไม่สำเร็จ กรุณาลองใหม่' }
-  }
+  const result = await callApi<RoleListItem[]>('/api/roles')
+  if (result.error !== undefined) return { error: result.error.message }
+  return { roles: result.data ?? [] }
 }
 
 export function RolesManager() {
@@ -124,14 +118,12 @@ export function RolesManager() {
   async function createRole() {
     setCreating(true)
     try {
-      const response = await fetch('/api/roles', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ name: createName, roleGroup: createGroup, reason: createReason }),
-      })
-      const body: unknown = await response.json()
-      if (!response.ok) {
-        showToast({ tone: 'error', ...errorOf(body) })
+      const result = await callApi<unknown>(
+        '/api/roles',
+        jsonRequest('POST', { name: createName, roleGroup: createGroup, reason: createReason }),
+      )
+      if (result.error !== undefined) {
+        showToast({ tone: 'error', title: result.error.title, description: result.error.message })
         return
       }
 
@@ -140,8 +132,6 @@ export function RolesManager() {
       setCreateName('')
       setCreateReason('')
       await load()
-    } catch {
-      showToast({ tone: 'error', title: 'สร้างบทบาทไม่สำเร็จ', description: 'กรุณาลองใหม่' })
     } finally {
       setCreating(false)
     }
@@ -151,14 +141,9 @@ export function RolesManager() {
     if (deleteTarget === null) return
     setDeleting(true)
     try {
-      const response = await fetch(`/api/roles/${deleteTarget.id}`, {
-        method: 'DELETE',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ reason: deleteReason }),
-      })
-      const body: unknown = await response.json()
-      if (!response.ok) {
-        showToast({ tone: 'error', ...errorOf(body) })
+      const result = await callApi<unknown>(`/api/roles/${deleteTarget.id}`, jsonRequest('DELETE', { reason: deleteReason }))
+      if (result.error !== undefined) {
+        showToast({ tone: 'error', title: result.error.title, description: result.error.message })
         return
       }
 
@@ -166,8 +151,6 @@ export function RolesManager() {
       setDeleteTarget(null)
       setDeleteReason('')
       await load()
-    } catch {
-      showToast({ tone: 'error', title: 'ลบบทบาทไม่สำเร็จ', description: 'กรุณาลองใหม่' })
     } finally {
       setDeleting(false)
     }
@@ -233,10 +216,11 @@ export function RolesManager() {
                     </span>
                   </Td>
                   <Td>
+                    {/* สีจาก mapper กลาง — ไม่ใส่คลาสสีเอง (preship R2-037) */}
                     {role.isSeed ? (
-                      <Badge className="border border-indigo-200 bg-indigo-50 text-indigo-700">🔒 Seed</Badge>
+                      <StatusBadge group="info" label="🔒 Seed" />
                     ) : (
-                      <Badge className="bg-emerald-50 text-emerald-700">Custom</Badge>
+                      <StatusBadge group="neutral" label="Custom" />
                     )}
                   </Td>
                   <Td align="right">

@@ -1,6 +1,6 @@
 'use client'
 
-import { ROLE_GROUP_BADGE_CLASS } from '@/lib/ui/status-badge'
+import { ROLE_GROUP_BADGE_CLASS, TEAM_SIDE_LABEL } from '@/lib/ui/status-badge'
 import { useCallback, useEffect, useState } from 'react'
 import { Can } from '@/components/auth/permission-provider'
 import { CompensationPlanFormModal } from '@/components/compensation/compensation-plan-form-modal'
@@ -220,7 +220,7 @@ export function CompensationPlansManager() {
                     <div className="text-base font-bold text-slate-900">{plan.name}</div>
                     <div className="mt-1 flex items-center gap-1.5">
                       <Badge className={ROLE_GROUP_BADGE_CLASS[plan.side]}>
-                        {plan.side}
+                        {TEAM_SIDE_LABEL[plan.side]}
                       </Badge>
                       <span className="font-mono text-[10px] text-slate-400">
                         v{plan.version} · มีผล {fmtDate(plan.effectiveFrom)}

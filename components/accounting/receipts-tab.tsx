@@ -2,6 +2,7 @@
 
 import { BillingStatusBadge } from '@/components/finance/billing-status-badge'
 import { useState } from 'react'
+import { kpiValue } from '@/components/ui/kpi-value'
 import { IssueTaxInvoiceModal, type IssueTarget } from '@/components/accounting/issue-tax-invoice-modal'
 import { useCashReceipts } from '@/components/accounting/use-sales'
 import { usePermission } from '@/components/auth/permission-provider'
@@ -34,6 +35,8 @@ import { MANAGE_TAX_INVOICE } from '@/lib/sales/sales'
  */
 export function ReceiptsTab() {
   const { data, loading, error, reload } = useCashReceipts()
+  // ระหว่างโหลด/โหลดไม่สำเร็จ KPI = "—" ไม่ใช่ ฿0.00/0 ที่อ่านเหมือนไม่มียอด (preship R2-007)
+  const ready = !loading && error === null
   const { can } = usePermission()
   const canManageInvoice = can('manage', MANAGE_TAX_INVOICE)
   const [issuing, setIssuing] = useState<IssueTarget | null>(null)
@@ -41,16 +44,16 @@ export function ReceiptsTab() {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
-        <StatCard label="เงินรับรวม" value={fmtSatangSymbol(data.totalSatang)} hint="ยอดที่เข้าบัญชีจริง" />
+        <StatCard label="เงินรับรวม" value={kpiValue(ready ? data.totalSatang : null, fmtSatangSymbol)} hint="ยอดที่เข้าบัญชีจริง" />
         <StatCard
           label="ลูกค้าหัก ณ ที่จ่าย"
-          value={fmtSatangSymbol(data.totalWhtWithheldByCustomerSatang)}
+          value={kpiValue(ready ? data.totalWhtWithheldByCustomerSatang : null, fmtSatangSymbol)}
           hint="เครดิตภาษีของบริษัท — ต้องมีหนังสือรับรองจากลูกค้า"
         />
-        <StatCard label="จำนวนรายการ" value={fmtCount(data.items.length)} hint="ตามรอบที่แสดงอยู่" />
+        <StatCard label="จำนวนรายการ" value={kpiValue(ready ? data.items.length : null, fmtCount)} hint="ตามรอบที่แสดงอยู่" />
         <StatCard
           label="ยังไม่ออกใบเสร็จรับเงิน/ใบกำกับภาษี"
-          value={fmtCount(data.awaitingTaxInvoiceCount)}
+          value={kpiValue(ready ? data.awaitingTaxInvoiceCount : null, fmtCount)}
           hint="ภาษีขายเกิดในเดือนที่รับเงิน — ควรออกให้ครบก่อนปิดงวด"
         />
       </div>

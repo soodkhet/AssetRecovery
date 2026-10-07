@@ -6,6 +6,7 @@ import { PortalStatusBadge } from '@/components/portal/cases-status-badge'
 import { PortalIcon } from '@/components/portal/portal-icons'
 import { usePortalData } from '@/components/portal/use-portal-data'
 import { Button, ErrorState, LoadingState, RefText } from '@/components/ui'
+import { TOUCH_TARGET_CLASS } from '@/components/ui/button'
 import { isTopModal, registerModal, unregisterModal } from '@/components/ui/modal-stack'
 import { fmtDate } from '@/lib/format/datetime'
 import { portalCaseDetailApiPath, portalServiceFeeRows } from '@/lib/portal/cases-view'
@@ -79,7 +80,8 @@ export function PortalCaseDetailDrawer({
             type="button"
             onClick={onClose}
             aria-label="ปิด"
-            className="focus-ring rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+            // preship R2-011 — พื้นที่แตะ ≥44px บนจอสัมผัส (แบบปุ่มปิดของ Modal กลาง)
+            className={`focus-ring inline-flex items-center justify-center rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 ${TOUCH_TARGET_CLASS}`}
           >
             <PortalIcon name="close" />
           </button>

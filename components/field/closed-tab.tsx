@@ -141,7 +141,8 @@ export function ClosedTab() {
             onClick={() => setFilter(option)}
             aria-pressed={filter === option}
             className={cn(
-              'focus-ring flex-1 rounded-xl py-2.5 text-xs font-extrabold lg:flex-none lg:px-4 lg:text-[13px]',
+              // จอสัมผัสสูง 44px (preship R2-028 — เดิม 36px)
+              'focus-ring flex-1 rounded-xl py-2.5 text-xs font-extrabold pointer-coarse:min-h-11 lg:flex-none lg:px-4 lg:text-[13px]',
               filter === option ? CLOSED_FILTER_ACTIVE_CLASS[option] : 'bg-slate-100 text-slate-500',
             )}
           >

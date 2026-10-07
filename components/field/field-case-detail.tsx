@@ -41,6 +41,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   )
 }
 
+// preship R2-029 — ลิงก์แผนที่/แถวติดต่อ/แถวไฟล์ สูง ≥44px บนจอสัมผัส
 function AddressBlock({ label, address }: { label: string; address: FieldAddressDto }) {
   const full = formatFieldAddress(address)
   const maps = mapsSearchHref(address)
@@ -58,7 +59,7 @@ function AddressBlock({ label, address }: { label: string; address: FieldAddress
               href={maps}
               target="_blank"
               rel="noreferrer"
-              className="focus-ring inline-flex items-center gap-1.5 rounded-lg bg-blue-50 px-2.5 py-1.5 text-xs font-bold text-blue-600"
+              className="focus-ring inline-flex items-center gap-1.5 rounded-lg bg-blue-50 px-2.5 py-1.5 text-xs font-bold text-blue-600 pointer-coarse:min-h-11"
             >
               <IconMapPin className="h-4 w-4" /> เปิด Google Maps
             </a>
@@ -75,7 +76,7 @@ function ContactLink({ icon, label, value, href }: { icon: ReactNode; label: str
       href={href}
       target={href.startsWith('tel:') ? undefined : '_blank'}
       rel="noreferrer"
-      className="focus-ring flex items-center gap-2.5 rounded-lg px-2 py-2.5 text-sm text-slate-700 hover:bg-slate-50"
+      className="focus-ring flex items-center gap-2.5 rounded-lg px-2 py-2.5 text-sm text-slate-700 hover:bg-slate-50 pointer-coarse:min-h-11"
     >
       {icon}
       <span className="font-semibold">{label}:</span>
@@ -89,7 +90,7 @@ function FileRow({ file, onOpen, tag }: { file: ViewableFile; onOpen: () => void
     <button
       type="button"
       onClick={onOpen}
-      className="focus-ring flex w-full items-center gap-2.5 rounded-lg px-2 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50"
+      className="focus-ring flex w-full items-center gap-2.5 rounded-lg px-2 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50 pointer-coarse:min-h-11"
     >
       <IconFile className="h-4 w-4 shrink-0 text-slate-400" />
       <span className="truncate font-semibold">{file.originalName}</span>

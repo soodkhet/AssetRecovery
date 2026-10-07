@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useState, type FormEvent } from 'react'
+import { FetchTimeoutError, fetchWithTimeout } from '@/lib/api/fetch-with-timeout'
 import { userFacingIssueMessage } from '@/lib/api/validation'
 import { authErrorMessage, type AuthErrorCode } from '@/lib/auth/errors'
 import { loginSchema } from '@/lib/auth/schemas'
@@ -46,7 +47,8 @@ export function LoginForm({ reason, nextPath }: { reason?: AuthErrorCode; nextPa
     }
 
     try {
-      const response = await fetch('/api/auth/login', {
+      // preship R2-017 — มี timeout กันปุ่มหมุนไม่จบเมื่อ server ค้าง
+      const response = await fetchWithTimeout('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(parsed.data),
@@ -62,7 +64,11 @@ export function LoginForm({ reason, nextPath }: { reason?: AuthErrorCode; nextPa
       const redirectTo = extractRedirect(body) ?? nextPath ?? '/'
       router.replace(redirectTo)
       router.refresh()
-    } catch {
+    } catch (caught) {
+      if (caught instanceof FetchTimeoutError) {
+        fail({ title: 'ระบบตอบช้าเกินไป', message: 'ระบบใช้เวลานานเกินกำหนด กรุณาลองเข้าสู่ระบบใหม่อีกครั้ง' })
+        return
+      }
       fail({ title: 'เชื่อมต่อไม่สำเร็จ', message: 'กรุณาตรวจสอบการเชื่อมต่อแล้วลองใหม่อีกครั้ง' })
     }
   }
@@ -126,7 +132,7 @@ export function LoginForm({ reason, nextPath }: { reason?: AuthErrorCode; nextPa
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
                 placeholder="name@company.co.th หรือ username"
-                className="focus-ring w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                className="focus-ring w-full rounded-lg border border-slate-300 px-3 py-2 text-sm pointer-coarse:text-base"
               />
             </div>
 
@@ -144,12 +150,15 @@ export function LoginForm({ reason, nextPath }: { reason?: AuthErrorCode; nextPa
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="focus-ring w-full rounded-lg border border-slate-300 px-3 py-2 pr-16 text-sm"
+                  className="focus-ring w-full rounded-lg border border-slate-300 px-3 py-2 pr-16 text-sm pointer-coarse:pr-20 pointer-coarse:text-base"
                 />
+                {/* preship R2-010/R2-029 — ช่องกรอก 16px บนจอสัมผัส (กัน iOS ซูม) · ปุ่มแสดง/ซ่อน ≥44px */}
                 <button
                   type="button"
                   onClick={() => setShowPassword((value) => !value)}
-                  className="absolute top-1/2 right-2 -translate-y-1/2 rounded px-1.5 py-1 text-[11px] font-semibold text-slate-500 hover:text-slate-800"
+                  aria-pressed={showPassword}
+                  aria-label={showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}
+                  className="absolute top-1/2 right-2 inline-flex -translate-y-1/2 items-center justify-center rounded px-1.5 py-1 text-[11px] font-semibold text-slate-500 hover:text-slate-800 pointer-coarse:right-0 pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:text-xs"
                 >
                   {showPassword ? 'ซ่อน' : 'แสดง'}
                 </button>
@@ -159,7 +168,7 @@ export function LoginForm({ reason, nextPath }: { reason?: AuthErrorCode; nextPa
             <button
               type="submit"
               disabled={loading}
-              className="focus-ring flex w-full items-center justify-center gap-2 rounded-lg bg-slate-900 px-3 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+              className="focus-ring flex w-full items-center justify-center gap-2 rounded-lg bg-slate-900 px-3 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 pointer-coarse:min-h-11"
             >
               {loading ? (
                 <>

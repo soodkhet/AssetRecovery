@@ -5,6 +5,7 @@ import {
   STATUS_BADGE_CLASS,
   statusBadgeClass,
   statusBadgeGroup,
+  TEAM_SIDE_LABEL,
   type StatusBadgeGroup,
 } from '@/lib/ui/status-badge'
 
@@ -102,5 +103,11 @@ describe('statusBadgeGroup', () => {
     expect(statusBadgeGroup(null)).toBe(DEFAULT_STATUS_GROUP)
     expect(statusBadgeGroup('')).toBe(DEFAULT_STATUS_GROUP)
     expect(statusBadgeClass(undefined)).toBe(EXPECTED_CLASSES[DEFAULT_STATUS_GROUP])
+  })
+})
+
+describe('TEAM_SIDE_LABEL', () => {
+  it('แสดงฝั่งทีมตามตัวพิมพ์ใน mockup — ไม่ใช่ enum ดิบ (preship R2-033)', () => {
+    expect(TEAM_SIDE_LABEL).toEqual({ inhouse: 'Inhouse', outsource: 'Outsource' })
   })
 })

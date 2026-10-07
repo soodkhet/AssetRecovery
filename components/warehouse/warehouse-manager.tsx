@@ -1,6 +1,7 @@
 'use client'
 
-import { replaceUrlParams } from '@/components/ui/url-state'
+import { pickParam, replaceUrlParams } from '@/components/ui/url-state'
+import { useSearchParamChange } from '@/components/ui/use-search-param-change'
 import { useCallback, useEffect, useState } from 'react'
 import { usePermission } from '@/components/auth/permission-provider'
 import { PageHeader } from '@/components/ui'
@@ -14,7 +15,7 @@ import { callApi } from '@/lib/api/types'
 import type { FinanceCompanyDto } from '@/lib/finance-companies/types'
 import type { TeamDto } from '@/lib/teams/types'
 import type { UserDto } from '@/lib/users/types'
-import type { AssetTab } from '@/lib/warehouse/asset-status'
+import { ASSET_TABS, type AssetTab } from '@/lib/warehouse/asset-status'
 import { statusesOnWarehouseTab, type FilterOption } from '@/lib/warehouse/asset-filters'
 import { statusesInLotTab } from '@/lib/warehouse/lot-status'
 import type { AssetListDto, AssetListItemDto, LotListDto } from '@/lib/warehouse/types'
@@ -45,6 +46,8 @@ export function WarehouseManager({ initialTab = 'intake' }: { initialTab?: Asset
   useEffect(() => {
     replaceUrlParams({ tab })
   }, [tab])
+  // นำทางมา route เดิมด้วย `?tab=` ใหม่ (เช่น กดแจ้งเตือน) — หน้าจอต้องตาม URL (preship R2-009) · กติกาเดียวกับ page
+  useSearchParamChange('tab', (value) => setTab(pickParam(value ?? undefined, ASSET_TABS, 'intake')))
   const [counts, setCounts] = useState<WarehouseTabCounts>(EMPTY_TAB_COUNTS)
   const [countsVersion, setCountsVersion] = useState(0)
 

@@ -59,6 +59,8 @@ export function DeviceTacList({ refreshKey, onChanged }: { refreshKey: number; o
   const [error, setError] = useState<{ title: string; message: string } | null>(null)
   const [loading, setLoading] = useState(true)
   const [binding, setBinding] = useState<{ tac: string } | null>(null)
+  /** เพิ่มค่าเมื่อกด "ลองใหม่" หลังโหลดไม่สำเร็จ — บังคับ effect ด้านล่างยิงซ้ำ (preship R2-022) */
+  const [retryKey, setRetryKey] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -77,7 +79,7 @@ export function DeviceTacList({ refreshKey, onChanged }: { refreshKey: number; o
     return () => {
       cancelled = true
     }
-  }, [page, query, source, refreshKey])
+  }, [page, query, source, refreshKey, retryKey])
 
   const items = data?.items ?? []
   return (
@@ -143,6 +145,11 @@ export function DeviceTacList({ refreshKey, onChanged }: { refreshKey: number; o
           isEmpty={!loading && error === null && items.length === 0}
           emptyTitle="ไม่พบ TAC"
           emptyDescription="ยังไม่ได้นำเข้าฐาน TAC หรือคำค้นไม่ตรง — กด “อัปเดตตอนนี้” หรือ “นำเข้าไฟล์เอง” ด้านบน"
+          onRetry={() => {
+            setError(null)
+            setLoading(true)
+            setRetryKey((key) => key + 1)
+          }}
         />
         {items.length > 0 && (
           <TBody>
@@ -298,6 +305,12 @@ export function DeviceTacHistory({ refreshKey }: { refreshKey: number }) {
   const [data, setData] = useState<DeviceTacHistoryDto | null>(null)
   const [error, setError] = useState<{ title: string; message: string } | null>(null)
   const [openModels, setOpenModels] = useState<DeviceTacUpdateDto | null>(null)
+  /** เพิ่มค่าเมื่อกด "ลองใหม่" — ล้าง error แล้วโหลดใหม่ (preship R2-022) */
+  const [retryKey, setRetryKey] = useState(0)
+  const retry = (): void => {
+    setError(null)
+    setRetryKey((key) => key + 1)
+  }
 
   const load = useCallback(async () => callApi<DeviceTacHistoryDto>('/api/settings/device-catalog/tac-history'), [])
   useEffect(() => {
@@ -314,7 +327,7 @@ export function DeviceTacHistory({ refreshKey }: { refreshKey: number }) {
     return () => {
       cancelled = true
     }
-  }, [load, refreshKey])
+  }, [load, refreshKey, retryKey])
 
   const updates = data?.updates ?? []
   const learned = data?.learned ?? []
@@ -340,6 +353,7 @@ export function DeviceTacHistory({ refreshKey }: { refreshKey: number }) {
             isEmpty={data !== null && updates.length === 0}
             emptyTitle="ยังไม่มีประวัติ"
             emptyDescription="ระบบตรวจแหล่งข้อมูลทุกวันหลังเที่ยงคืน หรือกด “อัปเดตตอนนี้”"
+            onRetry={retry}
           />
           {updates.length > 0 && (
             <TBody>
@@ -393,6 +407,7 @@ export function DeviceTacHistory({ refreshKey }: { refreshKey: number }) {
             isEmpty={data !== null && learned.length === 0}
             emptyTitle="ยังไม่มีรายการที่ระบบจำ"
             emptyDescription="เมื่อผู้ใช้กรอก IMEI ที่ฐานไม่รู้จักแล้วเลือก/ระบุรุ่นเองในฟอร์มรับเคส ระบบจะจำไว้ที่นี่"
+            onRetry={retry}
           />
           {learned.length > 0 && (
             <TBody>

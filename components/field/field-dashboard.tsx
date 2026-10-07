@@ -211,9 +211,10 @@ export function FieldDashboard() {
         </Link>
       )}
 
-      <h1 className="mb-4 text-lg font-extrabold text-slate-900 lg:hidden">
+      {/* คำทักทาย ไม่ใช่หัวข้อหน้า — h1 ของหน้าอยู่ที่ TopBar แล้ว (preship R2-035) */}
+      <p className="mb-4 text-lg font-extrabold text-slate-900 lg:hidden">
         สวัสดี, {session?.fullName ?? 'พนักงานภาคสนาม'}
-      </h1>
+      </p>
 
       {/* Mobile = เรียงซ้อนแนวตั้ง · Desktop = 2 คอลัมน์ (เนื้อหาหลัก 2/3 + สรุปด่วน 1/3) ตาม §7.1 */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">

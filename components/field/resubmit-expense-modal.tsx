@@ -109,7 +109,7 @@ export function ResubmitExpenseModal({
       title="แก้ไขรายการเบิกที่ถูกตีกลับ"
       description={`${EXPENSE_TYPE_ICON[expense.expenseType]} ${expenseTypeLabel(expense.expenseType)} · ${fmtDate(expense.expenseDate)} · ${fmtSatangSymbol(expense.grossSatang)}`}
       footer={
-        <Button onClick={() => void submit()} disabled={submitting} className="w-full justify-center py-3">
+        <Button onClick={() => void submit()} loading={submitting} className="w-full justify-center py-3">
           {submitting ? 'กำลังส่ง...' : 'ส่งกลับเข้าคิวอนุมัติ'}
         </Button>
       }

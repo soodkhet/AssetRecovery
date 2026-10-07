@@ -26,6 +26,7 @@ import { NotificationBell } from '@/components/notifications/notification-bell'
 import { FieldPwaProvider } from '@/components/field/pwa-provider'
 import { FieldReassignmentProvider } from '@/components/field/reassignment-provider'
 import { ToastProvider } from '@/components/ui'
+import { FetchTimeoutError, fetchWithTimeout } from '@/lib/api/fetch-with-timeout'
 import { LOGIN_PATH } from '@/lib/auth/constants'
 import type { ClientSession } from '@/lib/auth/types'
 import {
@@ -142,30 +143,48 @@ function MenuRow({
 function LogoutRow({ compact = false }: { compact?: boolean }) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   async function handleLogout() {
     setLoading(true)
+    setError(null)
     try {
-      await fetch('/api/auth/logout', { method: 'POST' })
-    } finally {
-      router.replace(LOGIN_PATH)
-      router.refresh()
+      // preship R2-017 — มี timeout · เดิม server ค้างแล้วปุ่มหมุนไม่จบ
+      await fetchWithTimeout('/api/auth/logout', { method: 'POST' })
+    } catch (caught) {
+      // ออกจากระบบฝั่ง server ไม่สำเร็จ ⇒ session ยังใช้ได้ — ไม่พาไปหน้า login (จะเด้งกลับ) แต่บอกให้ลองใหม่
+      setError(
+        caught instanceof FetchTimeoutError
+          ? 'ระบบตอบช้าเกินไป ออกจากระบบไม่สำเร็จ กรุณาลองใหม่'
+          : 'เชื่อมต่อไม่สำเร็จ กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่',
+      )
+      setLoading(false)
+      return
     }
+    router.replace(LOGIN_PATH)
+    router.refresh()
   }
 
   return (
-    <button
-      type="button"
-      onClick={handleLogout}
-      disabled={loading}
-      className={cn(
-        'focus-ring flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-red-600 hover:bg-red-50 disabled:opacity-60',
-        compact && 'py-2.5',
+    <>
+      <button
+        type="button"
+        onClick={handleLogout}
+        disabled={loading}
+        className={cn(
+          'focus-ring flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-red-600 hover:bg-red-50 disabled:opacity-60',
+          compact && 'py-2.5',
+        )}
+      >
+        <IconLogout className="h-5 w-5" />
+        <span className="flex-1 text-sm font-semibold">{loading ? 'กำลังออกจากระบบ...' : 'ออกจากระบบ'}</span>
+      </button>
+      {error !== null && (
+        <p role="alert" className="mx-3 mt-1 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+          {error}
+        </p>
       )}
-    >
-      <IconLogout className="h-5 w-5" />
-      <span className="flex-1 text-sm font-semibold">{loading ? 'กำลังออกจากระบบ...' : 'ออกจากระบบ'}</span>
-    </button>
+    </>
   )
 }
 
@@ -253,7 +272,8 @@ function HamburgerDrawer({
             type="button"
             onClick={onClose}
             aria-label="ปิดเมนู"
-            className="focus-ring rounded-lg p-2 text-slate-500 hover:bg-slate-100"
+            // preship R2-029 — ≥44px บนจอสัมผัส (แบบปุ่มเปิดเมนู)
+            className="focus-ring inline-flex items-center justify-center rounded-lg p-2 text-slate-500 hover:bg-slate-100 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
           >
             <IconClose className="h-5 w-5" />
           </button>

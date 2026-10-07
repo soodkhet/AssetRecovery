@@ -43,7 +43,7 @@ import { SubstituteReceiptPanel } from '@/components/substitute-receipts/substit
  */
 
 export function CompensationTab() {
-  const { items, loading, error, isBusy, canApprove, approve, reject } = useApprovalActions('/api/compensation')
+  const { items, loading, error, reload, isBusy, canApprove, approve, reject } = useApprovalActions('/api/compensation')
 
   const [formulaTarget, setFormulaTarget] = useState<CompensationApprovalDto | null>(null)
   // มติ PO U152 — กดแถวเห็นหมายเหตุ/คำชี้แจง/ใบเสร็จ/ผู้พักร่วมก่อนอนุมัติ
@@ -83,6 +83,7 @@ export function CompensationTab() {
             isEmpty={items.length === 0}
             emptyTitle="ยังไม่มีรายการค่าตอบแทน"
             colSpan={6}
+            onRetry={() => void reload()}
           />
           <TBody>
             {!loading &&

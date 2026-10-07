@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AssignmentModal } from '@/components/assignments/assignment-modal'
 import { KanbanBoard } from '@/components/assignments/kanban-board'
 import { usePermission } from '@/components/auth/permission-provider'
+import { kpiValue } from '@/components/ui/kpi-value'
 import { CaseDetailModal } from '@/components/cases/case-detail-modal'
 import {
   Badge,
@@ -44,7 +45,7 @@ import { ASSIGNMENT_MANAGE_CAPABILITY } from '@/lib/assignments/permissions'
 import { ASSIGNMENT_STATE_FILTERS } from '@/lib/assignments/schemas'
 import type { AssignmentState } from '@/lib/assignments/assignment'
 import type { AssignmentListItemDto, AssignmentListResultDto } from '@/lib/assignments/types'
-import { fmtSatang } from '@/lib/format/money'
+import { fmtCount, fmtSatang } from '@/lib/format/money'
 
 /**
  * หน้า "มอบหมายงาน" (`/cases/assign` — `40` §7.1/§7.2 · `06` §7.1.1)
@@ -102,7 +103,7 @@ export function AssignmentsManager({
 
   const [filters, setFilters] = useState<Filters>({ ...EMPTY_FILTERS, status: initialStatus })
   const [page, setPage] = useState(1)
-  const [counts, setCounts] = useState<Readonly<Record<string, number>>>({})
+  const [counts, setCounts] = useState<Readonly<Record<string, number | null>>>({})
 
   const [view, setView] = useState<'list' | 'kanban'>('list')
   /** เพิ่มค่าเมื่อ mutation สำเร็จ — ใช้บังคับให้กระดาน Kanban โหลดใหม่โดยไม่ล้าง filter ที่ตั้งไว้ */
@@ -119,7 +120,8 @@ export function AssignmentsManager({
       KPI_STATES.map(async (item) => {
         const path = apiPath('assignment.list', undefined, { status: item.state, page: 1, limit: 1 })
         const response = await callApi<AssignmentListResultDto>(path)
-        return [item.state, response.data?.total ?? 0] as const
+        // โหลดไม่สำเร็จ = null ⇒ การ์ดแสดง "—" ไม่ใช่ 0 (preship R2-007)
+        return [item.state, response.data?.total ?? null] as const
       }),
     )
     return Object.fromEntries(results)
@@ -129,6 +131,7 @@ export function AssignmentsManager({
     const [list, kpi] = await Promise.all([fetchList(), fetchCounts()])
     if (list.error !== undefined) {
       setError(list.error)
+      setCounts({})
       setLoading(false)
       return
     }
@@ -145,6 +148,7 @@ export function AssignmentsManager({
       if (cancelled) return
       if (list.error !== undefined) {
         setError(list.error)
+        setCounts({})
         setLoading(false)
         return
       }
@@ -215,7 +219,7 @@ export function AssignmentsManager({
           <StatCard
             key={item.state}
             label={assignmentStateLabel(item.state)}
-            value={counts[item.state] ?? 0}
+            value={kpiValue(counts[item.state] ?? null, fmtCount)}
             hint={item.hint}
           />
         ))}

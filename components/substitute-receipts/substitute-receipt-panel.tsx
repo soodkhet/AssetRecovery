@@ -189,12 +189,13 @@ export function SubstituteReceiptPanel({
               : ' · ดาวน์โหลดไปเซ็นแล้วอัปโหลดกลับเพื่อใช้แทนใบเสร็จ'}
         </p>
       )}
+      {/* preship R2-027 — ลิงก์/ปุ่มเอกสาร ≥44px บนจอสัมผัส (แบบลิงก์เอกสารเงินทดรอง) */}
       <div className="flex flex-wrap items-center gap-2">
         <a
           href={`/api/substitute-receipts/${receipt.id}/pdf`}
           target="_blank"
           rel="noreferrer"
-          className="focus-ring text-[11px] font-semibold text-emerald-700 underline"
+          className="focus-ring text-[11px] font-semibold text-emerald-700 underline inline-flex items-center pointer-coarse:min-h-11 pointer-coarse:px-1"
         >
           ดาวน์โหลดใบรับรอง PDF
         </a>
@@ -204,7 +205,7 @@ export function SubstituteReceiptPanel({
               type="button"
               disabled={uploading}
               onClick={() => fileRef.current?.click()}
-              className="focus-ring text-[11px] font-semibold text-slate-700 underline disabled:opacity-50"
+              className="focus-ring text-[11px] font-semibold text-slate-700 underline disabled:opacity-50 inline-flex items-center pointer-coarse:min-h-11 pointer-coarse:px-1"
             >
               {uploading ? 'กำลังอัปโหลด...' : 'อัปโหลดฉบับเซ็นแล้ว'}
             </button>
@@ -224,7 +225,7 @@ export function SubstituteReceiptPanel({
           <button
             type="button"
             onClick={() => setCancelOpen(true)}
-            className="focus-ring text-[11px] font-semibold text-red-700 underline"
+            className="focus-ring text-[11px] font-semibold text-red-700 underline inline-flex items-center pointer-coarse:min-h-11 pointer-coarse:px-1"
           >
             ยกเลิกใบรับรอง
           </button>
@@ -233,7 +234,7 @@ export function SubstituteReceiptPanel({
           <button
             type="button"
             onClick={() => void openReissue()}
-            className="focus-ring text-[11px] font-semibold text-slate-700 underline"
+            className="focus-ring text-[11px] font-semibold text-slate-700 underline inline-flex items-center pointer-coarse:min-h-11 pointer-coarse:px-1"
           >
             ออกใบใหม่แทน
           </button>
@@ -261,7 +262,7 @@ export function SubstituteReceiptPanel({
                 href={`/api/substitute-receipts/${entry.id}/pdf`}
                 target="_blank"
                 rel="noreferrer"
-                className="focus-ring text-emerald-700 underline"
+                className="focus-ring text-emerald-700 underline inline-flex items-center pointer-coarse:min-h-11 pointer-coarse:px-1"
               >
                 PDF
               </a>

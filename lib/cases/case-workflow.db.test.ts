@@ -967,4 +967,25 @@ suite('Phase 2.3 — state machine + snapshot + recycle (DB จริง)', () =
     )
     expect(Number(rows[0]?.count)).toBe(0)
   })
+
+  it('Import dryRun: เลขที่สัญญาที่มีเคสในฐานแล้วตกตั้งแต่ preview (preship R2-001)', async () => {
+    const { importCases } = await import('@/lib/cases/import-queries')
+    // ฐานทดสอบไม่ล้างเคสข้ามรอบ ⇒ ใช้เลขสุ่มทุกรอบ
+    const suffix = Date.now().toString(36).toUpperCase()
+    await importCases({ financeCompanyId: COMPANY_ID, dryRun: false, rows: [{ 'เลขที่สัญญา': `R2-OLD-${suffix}` }] }, { actor, meta })
+    // พิมพ์ต่างตัวพิมพ์/ช่องว่างก็ต้องจับได้
+    const preview = await importCases(
+      {
+        financeCompanyId: COMPANY_ID,
+        dryRun: true,
+        rows: [{ 'เลขที่สัญญา': ` r2-old-${suffix.toLowerCase()} ` }, { 'เลขที่สัญญา': `R2-NEW-${suffix}` }],
+      },
+      { actor, meta },
+    )
+    expect(preview.rows.map((row) => [row.status, row.errorCode])).toEqual([
+      ['failed', 'CASE_REF_DUPLICATE'],
+      ['created', null],
+    ])
+    expect(preview.createdCount).toBe(1)
+  })
 })

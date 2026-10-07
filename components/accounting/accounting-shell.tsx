@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { replaceUrlParams } from '@/components/ui/url-state'
+import { useSearchParamChange } from '@/components/ui/use-search-param-change'
 import { useSession } from '@/components/auth/permission-provider'
 import { BankReconTab } from '@/components/accounting/bank-recon-tab'
 import { ClosingTab } from '@/components/accounting/closing-tab'
@@ -15,7 +16,7 @@ import { SalesTab } from '@/components/accounting/sales-tab'
 import { WhtTab } from '@/components/accounting/wht-tab'
 import { Card, EmptyState, PageHeader } from '@/components/ui'
 import { cn } from '@/components/ui/cn'
-import { visibleAccountingTabs } from '@/lib/accounting/accounting-tabs'
+import { resolveAccountingTab, visibleAccountingTabs } from '@/lib/accounting/accounting-tabs'
 import { UNDER_DEVELOPMENT_TEXT } from '@/lib/nav/menu-registry'
 
 /**
@@ -32,6 +33,10 @@ export function AccountingShell({ initialTab }: { initialTab: string }) {
     replaceUrlParams({ tab })
   }, [tab])
   const session = useSession()
+  // นำทางมา route เดิมด้วย `?tab=` ใหม่ (เช่น กดแจ้งเตือนตอนอยู่หน้านี้) — หน้าจอต้องตาม URL (preship R2-009)
+  useSearchParamChange('tab', (value) => {
+    if (session !== null) setTab(resolveAccountingTab(value ?? undefined, session))
+  })
   // แท็บที่ผู้ใช้ไม่มีสิทธิ์อ่าน **ซ่อน** (BUG-158 — เดิมบริหารเห็นแท็บกระทบยอด การ์ด ฿0.00 + ตาราง "ไม่มีสิทธิ์ใช้งาน")
   // · API ตรวจสิทธิ์ซ้ำทุก endpoint (DEC-002)
   const tabs = session === null ? [] : visibleAccountingTabs(session)
@@ -45,9 +50,10 @@ export function AccountingShell({ initialTab }: { initialTab: string }) {
       />
 
       <Card>
+        {/* แท็บขึ้นบรรทัดใหม่แทนการเลื่อนแนวนอนแบบซ่อน scrollbar — จอ tablet เคยมองไม่เห็นแท็บท้ายแถว (preship R2-013) */}
         <nav
           aria-label="แท็บงานบัญชี"
-          className="no-scrollbar mb-6 flex gap-6 overflow-x-auto border-b border-slate-200"
+          className="mb-6 flex flex-wrap gap-x-6 border-b border-slate-200"
         >
           {tabs.map((item) => {
             if (!item.available) {

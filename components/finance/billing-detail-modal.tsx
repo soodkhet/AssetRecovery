@@ -38,6 +38,14 @@ export function BillingDetailModal({ batch, onClose }: { batch: BillingBatchDto 
   const [detail, setDetail] = useState<BillingBatchDetailDto | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<{ title: string; message: string } | null>(null)
+
+  /** เพิ่มค่าเมื่อกด "ลองใหม่" หลังโหลดไม่สำเร็จ — บังคับ effect ยิงซ้ำ (preship R2-022) */
+  const [retryKey, setRetryKey] = useState(0)
+  const retry = (): void => {
+    setError(null)
+    setLoading(true)
+    setRetryKey((key) => key + 1)
+  }
   const batchId = batch?.id ?? null
 
   useEffect(() => {
@@ -57,7 +65,7 @@ export function BillingDetailModal({ batch, onClose }: { batch: BillingBatchDto 
     return () => {
       cancelled = true
     }
-  }, [batchId])
+  }, [batchId, retryKey])
 
   if (batch === null) return null
 
@@ -153,6 +161,7 @@ export function BillingDetailModal({ batch, onClose }: { batch: BillingBatchDto 
               isEmpty={revenues.length === 0}
               emptyTitle="ไม่มีรายการรายได้ในรอบนี้"
               colSpan={7}
+              onRetry={retry}
             />
             <TBody>
               {!loading &&

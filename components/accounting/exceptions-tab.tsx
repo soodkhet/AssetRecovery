@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { kpiValue } from '@/components/ui/kpi-value'
 import {
   ExceptionActionModal,
   type ExceptionActionKind,
@@ -70,6 +71,8 @@ export function ExceptionsTab() {
   const [status, setStatus] = useState<ExceptionStatusFilter>('all')
   const [level, setLevel] = useState<ExceptionLevelFilter>('all')
   const { data, loading, error, reload } = useAccountingExceptions({ status, level, periodId: '' })
+  // ระหว่างโหลด/โหลดไม่สำเร็จ KPI = "—" ไม่ใช่ ฿0.00/0 ที่อ่านเหมือนไม่มียอด (preship R2-007)
+  const ready = !loading && error === null
   const { items: periods } = usePeriods()
 
   const [creating, setCreating] = useState(false)
@@ -83,22 +86,22 @@ export function ExceptionsTab() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
         <StatCard
           label="ยังไม่จัดการ"
-          value={fmtCount(summary.open.total)}
-          hint={`วิกฤต ${fmtCount(summary.open.critical)} · คำเตือน ${fmtCount(summary.open.warning)}`}
+          value={kpiValue(ready ? summary.open.total : null, fmtCount)}
+          hint={`วิกฤต ${kpiValue(ready ? summary.open.critical : null, fmtCount)} · คำเตือน ${kpiValue(ready ? summary.open.warning : null, fmtCount)}`}
         />
         <StatCard
           label="บล็อกการส่งมอบ"
-          value={fmtCount(summary.blockingCritical)}
+          value={kpiValue(ready ? summary.blockingCritical : null, fmtCount)}
           hint="วิกฤตที่ยังเปิดอยู่ — ต้องเคลียร์ก่อน Export"
         />
         <StatCard
           label="ผ่านแบบมีข้อยกเว้น"
-          value={fmtCount(summary.authorized.total)}
+          value={kpiValue(ready ? summary.authorized.total : null, fmtCount)}
           hint="ผู้บริหารอนุมัติให้ข้าม — ปัญหายังไม่ถูกแก้จริง"
         />
         <StatCard
           label="แก้ไขแล้ว"
-          value={fmtCount(summary.resolved.total)}
+          value={kpiValue(ready ? summary.resolved.total : null, fmtCount)}
           hint="แก้ที่ต้นทางเรียบร้อย"
         />
       </div>

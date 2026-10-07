@@ -2,6 +2,7 @@
 
 import { BillingStatusBadge } from '@/components/finance/billing-status-badge'
 import { useState } from 'react'
+import { kpiValue } from '@/components/ui/kpi-value'
 import { CreditNoteModal, type CreditNoteInvoice } from '@/components/accounting/credit-note-modal'
 import { IssueTaxInvoiceModal, type IssueTarget } from '@/components/accounting/issue-tax-invoice-modal'
 import { useAwaitingCreditNotes, useCreditNotes } from '@/components/accounting/use-credit-notes'
@@ -58,6 +59,8 @@ export function SalesTab() {
 
   const [invoiceState, setInvoiceState] = useState<SalesInvoiceFilter>('all')
   const { data, loading, error, reload } = useSalesRecords(invoiceState)
+  // ระหว่างโหลด/โหลดไม่สำเร็จ KPI = "—" ไม่ใช่ ฿0.00/0 ที่อ่านเหมือนไม่มียอด (preship R2-007)
+  const ready = !loading && error === null
 
   const [issuing, setIssuing] = useState<IssueTarget | null>(null)
   const [cancelling, setCancelling] = useState<TaxInvoiceSummaryDto | null>(null)
@@ -122,12 +125,12 @@ export function SalesTab() {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
-        <StatCard label="มูลค่าก่อนภาษี" value={fmtSatangSymbol(data.totalBeforeVatSatang)} hint="ตามตัวกรองปัจจุบัน" />
-        <StatCard label="ภาษีมูลค่าเพิ่ม" value={fmtSatangSymbol(data.vatSatang)} hint="ประมาณการ ณ วันวางบิล" />
-        <StatCard label="รวมทั้งสิ้น" value={fmtSatangSymbol(data.totalSatang)} hint="ยอดตามใบแจ้งหนี้" />
+        <StatCard label="มูลค่าก่อนภาษี" value={kpiValue(ready ? data.totalBeforeVatSatang : null, fmtSatangSymbol)} hint="ตามตัวกรองปัจจุบัน" />
+        <StatCard label="ภาษีมูลค่าเพิ่ม" value={kpiValue(ready ? data.vatSatang : null, fmtSatangSymbol)} hint="ประมาณการ ณ วันวางบิล" />
+        <StatCard label="รวมทั้งสิ้น" value={kpiValue(ready ? data.totalSatang : null, fmtSatangSymbol)} hint="ยอดตามใบแจ้งหนี้" />
         <StatCard
           label="ยังไม่มีเอกสารภาษี"
-          value={fmtCount(data.awaitingInvoiceCount)}
+          value={kpiValue(ready ? data.awaitingInvoiceCount : null, fmtCount)}
           hint="ออกใบเสร็จรับเงิน/ใบกำกับภาษีเมื่อรับเงิน"
         />
       </div>

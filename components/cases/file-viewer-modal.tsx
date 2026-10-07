@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Button, ErrorState, LoadingState, Modal } from '@/components/ui'
+import { buttonClass } from '@/components/ui/button'
 import { isPdfMime } from '@/lib/cases/document-upload'
 import { signedFileUrl } from '@/lib/cases/upload-client'
 import { fmtDateTime } from '@/lib/format/datetime'
@@ -73,7 +74,7 @@ export function FileViewerModal({
               href={url}
               target="_blank"
               rel="noreferrer"
-              className="focus-ring rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              className={buttonClass('secondary')}
             >
               เปิดในแท็บใหม่
             </a>

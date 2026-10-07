@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { usePortalApiUrl } from '@/components/portal/portal-scope'
 import { Button, cn } from '@/components/ui'
 import { readEnvelope } from '@/lib/api/envelope'
+import { FetchTimeoutError, fetchWithTimeout } from '@/lib/api/fetch-with-timeout'
 import { downloadFile } from '@/lib/imports/download-client'
 import {
   fileNameFromDisposition,
@@ -50,7 +51,8 @@ export function HandoverDownloadButton({
     setBusy(true)
     setError(null)
     try {
-      const response = await fetch(apiUrl(portalLotDocumentApiUrl(lotId, kind)), { cache: 'no-store' })
+      // มี timeout — server ค้างแล้วปุ่มไม่หมุนค้าง (preship R2-017)
+      const response = await fetchWithTimeout(apiUrl(portalLotDocumentApiUrl(lotId, kind)), { cache: 'no-store' })
       const contentType = response.headers.get('content-type') ?? ''
       if (response.ok && !contentType.includes('application/json')) {
         const bytes = await response.arrayBuffer()
@@ -63,8 +65,10 @@ export function HandoverDownloadButton({
       }
       const envelope = readEnvelope<unknown>(await response.json().catch(() => null), false)
       setError(envelope.success ? 'ดาวน์โหลดไม่สำเร็จ กรุณาลองใหม่' : envelope.error.message)
-    } catch {
-      setError('เชื่อมต่อไม่สำเร็จ กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่')
+    } catch (error) {
+      setError(
+        error instanceof FetchTimeoutError ? 'ระบบตอบช้าเกินไป กรุณาลองใหม่อีกครั้ง' : 'เชื่อมต่อไม่สำเร็จ กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่',
+      )
     } finally {
       setBusy(false)
     }

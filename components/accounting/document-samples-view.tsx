@@ -13,6 +13,7 @@ import {
   PageHeader,
   RefText,
 } from '@/components/ui'
+import { FetchTimeoutError, fetchWithTimeout } from '@/lib/api/fetch-with-timeout'
 import { callApi } from '@/lib/api/types'
 import {
   DOCUMENT_SAMPLE_GROUP_LABEL,
@@ -44,7 +45,7 @@ function pdfUrl(type: string): string {
  */
 export async function fetchSamplePdf(type: string): Promise<PdfResult> {
   try {
-    const response = await fetch(pdfUrl(type))
+    const response = await fetchWithTimeout(pdfUrl(type))
     if (response.ok) return { blob: await response.blob() }
     const body: unknown = await response.json().catch(() => null)
     const error =
@@ -57,8 +58,11 @@ export async function fetchSamplePdf(type: string): Promise<PdfResult> {
         message: error?.message ?? 'กรุณาลองใหม่อีกครั้ง',
       },
     }
-  } catch {
-    return { error: { title: 'เชื่อมต่อระบบไม่สำเร็จ', message: 'กรุณาลองใหม่อีกครั้ง' } }
+  } catch (error) {
+    // มี timeout — server ค้างแล้วปุ่มไม่หมุนค้าง (preship R2-017)
+    return error instanceof FetchTimeoutError
+      ? { error: { title: 'ระบบตอบช้า', message: 'ระบบตอบช้าเกินไป กรุณาลองใหม่อีกครั้ง' } }
+      : { error: { title: 'เชื่อมต่อระบบไม่สำเร็จ', message: 'กรุณาลองใหม่อีกครั้ง' } }
   }
 }
 

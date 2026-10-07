@@ -17,6 +17,7 @@ import {
   Tr,
 } from '@/components/ui'
 import { cn } from '@/components/ui/cn'
+import { KPI_UNAVAILABLE, kpiValue } from '@/components/ui/kpi-value'
 import { fmtDateTime } from '@/lib/format/datetime'
 import { fmtCount, fmtRatioPct, fmtSatangSymbol } from '@/lib/format/money'
 import type { ReportPeriodType } from '@/lib/reports/period'
@@ -76,6 +77,7 @@ export function ProfitTab() {
       {/*
         ⚠️ โหลดรายงานไม่สำเร็จ = `data` เป็นค่า EMPTY (`use-reports.ts`) ⇒ ถ้าไม่บอกให้ชัด ผู้ใช้จะ
         อ่าน "฿0.00 / กำไร 0" เป็นตัวเลขจริง — KPI ต้องหายไปพร้อมข้อความ ไม่ใช่โชว์ศูนย์ปลอม
+        ระหว่างโหลดก็เช่นกัน — แสดง "—" (preship R2-007)
       */}
       {error !== null ? (
         <InlineAlert tone="error" title={error.title}>
@@ -85,25 +87,31 @@ export function ProfitTab() {
         <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
         <StatCard
           label="รายได้ (Revenue)"
-          value={fmtSatangSymbol(data.total.revenueSatang)}
+          value={kpiValue(loading ? null : data.total.revenueSatang, fmtSatangSymbol)}
           hint={`${data.periodLabel === '' ? '—' : data.periodLabel} · ยอดก่อน VAT`}
           className="border-emerald-200 bg-emerald-50"
         />
         <StatCard
           label="ต้นทุนตรง (Direct Cost)"
-          value={fmtSatangSymbol(data.total.directCostSatang)}
+          value={kpiValue(loading ? null : data.total.directCostSatang, fmtSatangSymbol)}
           hint="ค่าน้ำมัน + เบี้ยเลี้ยง + ค่าตอบแทนเคส"
           className="border-amber-200 bg-amber-50"
         />
         <StatCard
           label="กำไรขั้นต้น (Gross Profit)"
-          value={fmtSatangSymbol(data.total.grossProfitSatang)}
+          value={kpiValue(loading ? null : data.total.grossProfitSatang, fmtSatangSymbol)}
           hint="Revenue − Direct Cost"
           className="border-blue-200 bg-blue-50"
         />
         <StatCard
           label="Gross Margin"
-          value={<span className={marginToneClass(data.total.marginPct)}>{fmtRatioPct(data.total.marginPct)}</span>}
+          value={
+            loading ? (
+              KPI_UNAVAILABLE
+            ) : (
+              <span className={marginToneClass(data.total.marginPct)}>{fmtRatioPct(data.total.marginPct)}</span>
+            )
+          }
           hint="กำไร ÷ รายได้ × 100"
         />
         </div>

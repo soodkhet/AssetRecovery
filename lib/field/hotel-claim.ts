@@ -58,6 +58,9 @@ export function assertSharedAgentInTeam(
 /** จำนวนคืนต่อใบเบิก — ไม่บังคับกรอก (ว่าง = 1) · จำนวนเต็ม 1–31 · DB CHECK ช่วงเดียวกัน */
 export const HOTEL_NIGHTS_DEFAULT = 1
 export const HOTEL_NIGHTS_MIN = 1
+/** หมายเหตุใบเบิกค่าที่พักยาวสุด — schema กับช่องกรอกใช้ค่าเดียวกัน (preship R2-025) */
+export const HOTEL_CLAIM_NOTE_MAX_LENGTH = 1000
+
 export const HOTEL_NIGHTS_MAX = 31
 
 export const HOTEL_NIGHTS_RANGE_MESSAGE = `จำนวนคืนต้องเป็นจำนวนเต็ม ${HOTEL_NIGHTS_MIN}–${HOTEL_NIGHTS_MAX}`

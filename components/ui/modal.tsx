@@ -33,6 +33,7 @@ export function Modal({
   footer,
   children,
   busy = false,
+  lockClose = false,
   confirmDiscard = true,
 }: {
   open: boolean
@@ -44,6 +45,11 @@ export function Modal({
   children?: ReactNode
   /** กำลังบันทึก — ไม่จำเป็นต้องส่งถ้าปุ่มบันทึกใช้ `<Button loading>` อยู่แล้ว (modal ตรวจเจอเอง) */
   busy?: boolean
+  /**
+   * ห้ามปิดแต่ยังกรอกต่อได้ — ใช้ตอนงานเบื้องหลังที่ผู้ใช้แก้ฟอร์มต่อได้ระหว่างรอ เช่นอัปโหลดหลักฐาน
+   * (ปิดกลางทางแล้วไฟล์ค้างใน storage โดยไม่ผูกกับเคส — preship R2-005)
+   */
+  lockClose?: boolean
   /** ถามยืนยันก่อนปิดเมื่อผู้ใช้กรอก/เปลี่ยนค่าใน modal แล้ว — ปิดได้สำหรับ modal ที่ช่องกรอกเป็นแค่ตัวกรอง */
   confirmDiscard?: boolean
 }) {
@@ -51,12 +57,13 @@ export function Modal({
   const [ownBusy, setOwnBusy] = useState(false)
   const [confirming, setConfirming] = useState(false)
   const isBusy = busy || ownBusy
+  const closeLocked = isBusy || lockClose
   // handler ของ Esc ผูกกับ `open` อย่างเดียว (ดูเหตุผลด้านล่าง) จึงอ่านค่าล่าสุดผ่าน ref
   const dirtyRef = useRef(false)
-  const guardRef = useRef({ isBusy, confirming, confirmDiscard })
+  const guardRef = useRef({ closeLocked, confirming, confirmDiscard })
   useEffect(() => {
-    guardRef.current = { isBusy, confirming, confirmDiscard }
-  }, [isBusy, confirming, confirmDiscard])
+    guardRef.current = { closeLocked, confirming, confirmDiscard }
+  }, [closeLocked, confirming, confirmDiscard])
   // ผู้เรียกมักส่ง `onClose` เป็น arrow ใหม่ทุก render — เก็บใน ref เพื่อให้ effect ด้านล่างผูกกับ `open` อย่างเดียว
   // (ไม่งั้น modal ข้างหลังที่ re-render จะลงทะเบียนชั้นใหม่ขึ้นไปทับตัวบน + แย่ง focus กลับมา)
   const onCloseRef = useRef(onClose)
@@ -66,7 +73,7 @@ export function Modal({
 
   /** ปิดตามคำสั่งผู้ใช้ (Esc / backdrop / X) — ผ่าน guard ก่อนเสมอ */
   function requestClose() {
-    const { isBusy: busyNow, confirmDiscard: confirmNow } = guardRef.current
+    const { closeLocked: busyNow, confirmDiscard: confirmNow } = guardRef.current
     const decision = decideModalClose({ busy: busyNow, dirty: dirtyRef.current, confirmDiscard: confirmNow })
     if (decision === 'confirm-discard') setConfirming(true)
     else if (decision === 'close') onCloseRef.current()
@@ -153,7 +160,7 @@ export function Modal({
           <button
             type="button"
             onClick={requestClose}
-            disabled={isBusy}
+            disabled={closeLocked}
             aria-label="ปิด"
             // จอสัมผัสขยายพื้นที่แตะเป็น 44×44 (เดิม 24×24 — preship PS-018)
             className="focus-ring inline-flex items-center justify-center rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-40 pointer-coarse:-m-2.5 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
@@ -174,8 +181,11 @@ export function Modal({
         )}
 
         {footer !== undefined && (
-          <div className="flex shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
-            {footer}
+          <div className="shrink-0 border-t border-slate-200 bg-slate-50 px-5 py-3">
+            {/* ปุ่มใน footer (รวม "ยกเลิก") ล็อกระหว่างบันทึกด้วย — เดิมปุ่มยกเลิกปิด modal กลางคำขอได้ (preship R2-006) */}
+            <fieldset disabled={isBusy} className="m-0 flex w-full min-w-0 items-center justify-end gap-2 border-0 p-0">
+              {footer}
+            </fieldset>
           </div>
         )}
 

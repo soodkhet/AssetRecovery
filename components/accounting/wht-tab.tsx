@@ -2,6 +2,7 @@
 
 import { buttonClass } from '@/components/ui/button'
 import { useState } from 'react'
+import { kpiValue } from '@/components/ui/kpi-value'
 import { CancelWhtModal } from '@/components/accounting/cancel-wht-modal'
 import { MarkWhtFiledModal } from '@/components/accounting/mark-wht-filed-modal'
 import {
@@ -53,6 +54,8 @@ export function WhtTab() {
 
   const [status, setStatus] = useState<WhtStatusFilter>('all')
   const { certificates, filings, warning, loading, error, reload } = useWht(status)
+  // ระหว่างโหลด/โหลดไม่สำเร็จ KPI = "—" ไม่ใช่ ฿0.00/0 ที่อ่านเหมือนไม่มียอด (preship R2-007)
+  const ready = !loading && error === null
 
   const [cancelling, setCancelling] = useState<WhtCertificateDto | null>(null)
   const [marking, setMarking] = useState<WhtFilingSummaryDto | null>(null)
@@ -96,16 +99,16 @@ export function WhtTab() {
       )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-5">
-        <StatCard label="ใบที่ใช้งานอยู่" value={fmtCount(certificates.summary.activeCount)} hint="ตามตัวกรองปัจจุบัน" />
-        <StatCard label="ภ.ง.ด.3 (บุคคลธรรมดา)" value={fmtSatangSymbol(certificates.summary.pnd3Satang)} hint="ไม่รวมใบที่ยกเลิก" />
-        <StatCard label="ภ.ง.ด.53 (นิติบุคคล)" value={fmtSatangSymbol(certificates.summary.pnd53Satang)} hint="ไม่รวมใบที่ยกเลิก" />
+        <StatCard label="ใบที่ใช้งานอยู่" value={kpiValue(ready ? certificates.summary.activeCount : null, fmtCount)} hint="ตามตัวกรองปัจจุบัน" />
+        <StatCard label="ภ.ง.ด.3 (บุคคลธรรมดา)" value={kpiValue(ready ? certificates.summary.pnd3Satang : null, fmtSatangSymbol)} hint="ไม่รวมใบที่ยกเลิก" />
+        <StatCard label="ภ.ง.ด.53 (นิติบุคคล)" value={kpiValue(ready ? certificates.summary.pnd53Satang : null, fmtSatangSymbol)} hint="ไม่รวมใบที่ยกเลิก" />
         <StatCard
           label="ภ.ง.ด.1 (เงินได้ 40(1)/40(2))"
-          value={fmtSatangSymbol(certificates.summary.pnd1Satang)}
+          value={kpiValue(ready ? certificates.summary.pnd1Satang : null, fmtSatangSymbol)}
           // จำนวนราย/เงินได้รวมใบอัตรา 0% (ภาษี 0) ด้วย — มติ PO 05/10/2569 UAT U16
-          hint={`${fmtCount(certificates.summary.pnd1Count)} ใบ · เงินได้ ${fmtSatangSymbol(certificates.summary.pnd1GrossSatang)} · ไม่รวมใบที่ยกเลิก`}
+          hint={`${kpiValue(ready ? certificates.summary.pnd1Count : null, fmtCount)} ใบ · เงินได้ ${kpiValue(ready ? certificates.summary.pnd1GrossSatang : null, fmtSatangSymbol)} · ไม่รวมใบที่ยกเลิก`}
         />
-        <StatCard label="ใบที่ยกเลิก" value={fmtCount(certificates.summary.cancelledCount)} hint="เก็บไว้เป็นหลักฐาน ห้ามลบ" />
+        <StatCard label="ใบที่ยกเลิก" value={kpiValue(ready ? certificates.summary.cancelledCount : null, fmtCount)} hint="เก็บไว้เป็นหลักฐาน ห้ามลบ" />
       </div>
 
       <section className="space-y-3">

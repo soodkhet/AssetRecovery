@@ -3,6 +3,7 @@
 import { Fragment, useCallback, useState } from "react";
 import { usePortalApiUrl } from "@/components/portal/portal-scope";
 import { usePortalData } from "@/components/portal/use-portal-data";
+import { FetchTimeoutError, fetchWithTimeout } from "@/lib/api/fetch-with-timeout";
 import {
   Button,
   Card,
@@ -59,7 +60,8 @@ export function PortalTaxInvoices({ canDownload }: { canDownload: boolean }) {
     setDownloadingId(invoice.id);
     setDownloadError(null);
     try {
-      const response = await fetch(
+      // มี timeout — server ค้างแล้วปุ่มไม่หมุนค้าง (preship R2-017)
+      const response = await fetchWithTimeout(
         apiUrl(portalTaxInvoiceDownloadUrl(invoice.id)),
       );
       const contentType = response.headers.get("content-type") ?? "";
@@ -92,11 +94,12 @@ export function PortalTaxInvoices({ canDownload }: { canDownload: boolean }) {
         title,
         message,
       });
-    } catch {
+    } catch (error) {
+      const timedOut = error instanceof FetchTimeoutError;
       setDownloadError({
         invoiceNumber: invoice.invoiceNumber,
-        title: "เชื่อมต่อระบบไม่สำเร็จ",
-        message: "กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่",
+        title: timedOut ? "ระบบตอบช้า" : "เชื่อมต่อระบบไม่สำเร็จ",
+        message: timedOut ? "ระบบตอบช้าเกินไป กรุณาลองใหม่อีกครั้ง" : "กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่",
       });
     } finally {
       setDownloadingId(null);

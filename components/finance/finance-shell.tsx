@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { replaceUrlParams } from '@/components/ui/url-state'
+import { useSearchParamChange } from '@/components/ui/use-search-param-change'
 import { CustomerWhtTab } from '@/components/accounting/customer-wht-tab'
 import { AdjustmentTab } from '@/components/finance/adjustment-tab'
 import { AdvanceTab } from '@/components/finance/advance-tab'
@@ -16,7 +17,7 @@ import { PayeeTab } from '@/components/settings/payee-tab'
 import { Card, EmptyState, PageHeader } from '@/components/ui'
 import { cn } from '@/components/ui/cn'
 import { useSession } from '@/components/auth/permission-provider'
-import { visibleFinanceOperationTabs } from '@/lib/finance/operation-tabs'
+import { resolveFinanceOperationTab, visibleFinanceOperationTabs } from '@/lib/finance/operation-tabs'
 import { UNDER_DEVELOPMENT_TEXT } from '@/lib/nav/menu-registry'
 
 /**
@@ -33,6 +34,10 @@ export function FinanceShell({ initialTab }: { initialTab: string }) {
     replaceUrlParams({ tab })
   }, [tab])
   const session = useSession()
+  // นำทางมา route เดิมด้วย `?tab=` ใหม่ (เช่น กดแจ้งเตือนตอนอยู่หน้านี้) — หน้าจอต้องตาม URL (preship R2-009)
+  useSearchParamChange('tab', (value) => {
+    if (session !== null) setTab(resolveFinanceOperationTab(value ?? undefined, session))
+  })
   // แท็บที่ผู้ใช้ไม่มีสิทธิ์อ่าน **ซ่อน** (ไม่ใช่โชว์ตารางว่าง) — ผู้จัดการทีมเห็นเฉพาะคิวอนุมัติค่าตอบแทน
   // (มติ PO 03/10/2569 — UAT R6-A) · API ตรวจสิทธิ์ซ้ำทุก endpoint (DEC-002)
   const tabs = session === null ? [] : visibleFinanceOperationTabs(session)
@@ -47,9 +52,10 @@ export function FinanceShell({ initialTab }: { initialTab: string }) {
       />
 
       <Card>
+        {/* แท็บขึ้นบรรทัดใหม่แทนการเลื่อนแนวนอนแบบซ่อน scrollbar — จอ tablet เคยมองไม่เห็นแท็บท้ายแถว (preship R2-013) */}
         <nav
           aria-label="แท็บงานการเงิน"
-          className="no-scrollbar mb-6 flex gap-6 overflow-x-auto border-b border-slate-200"
+          className="mb-6 flex flex-wrap gap-x-6 border-b border-slate-200"
         >
           {tabs.map((item) => {
             // หน้าจริงอยู่คนละ route — ลิงก์ข้ามไป (ปัจจุบันไม่มีแท็บแบบนี้ เก็บไว้รองรับในอนาคต)

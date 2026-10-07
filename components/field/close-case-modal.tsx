@@ -153,7 +153,8 @@ function FailReasonSection({
               disabled={locked}
               onClick={() => onSelect(reason)}
               className={cn(
-                'focus-ring rounded-xl border-2 px-3 py-2.5 text-left text-xs font-bold',
+                // preship R2-029 — ≥44px บนจอสัมผัส
+                'focus-ring rounded-xl border-2 px-3 py-2.5 text-left text-xs font-bold pointer-coarse:min-h-11',
                 selected ? 'border-slate-700 bg-slate-100 text-slate-800' : 'border-slate-200 text-slate-500',
                 locked && 'cursor-not-allowed opacity-60',
               )}
@@ -228,6 +229,35 @@ function MediaThumb({ kind, path, icon: Icon }: { kind: FieldMediaKind; path: st
   )
 }
 
+/** แถบยืนยันลบหลักฐานใต้กริด (preship R2-012) — ไม่เปิด modal ซ้อนบนฟอร์มปิดงาน */
+function RemoveConfirmBar({
+  label,
+  onCancel,
+  onConfirm,
+}: {
+  label: string
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  return (
+    <div
+      role="alertdialog"
+      aria-label={label}
+      className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-red-200 bg-white px-3 py-2"
+    >
+      <span className="text-xs font-bold text-red-700">{label} ลบแล้วต้องแนบไฟล์ใหม่</span>
+      <span className="flex gap-2">
+        <Button variant="secondary" size="sm" onClick={onCancel}>
+          ยกเลิก
+        </Button>
+        <Button variant="danger" size="sm" onClick={onConfirm}>
+          ลบไฟล์
+        </Button>
+      </span>
+    </div>
+  )
+}
+
 function MediaGrid({
   section,
   urls,
@@ -247,6 +277,10 @@ function MediaGrid({
   const pickerRef = useRef<HTMLInputElement>(null)
   const Icon = section.icon
   const capture = FIELD_MEDIA_CAPTURE[section.kind]
+  // ลบหลักฐานต้องยืนยันก่อน (preship R2-012 — รูปที่ถ่ายผ่านกล้องอาจไม่มีสำเนาในเครื่อง + ฟอร์ม autosave ทันที)
+  // จำด้วย path ไม่ใช่ index ⇒ รายการเลื่อน/เปลี่ยนระหว่างรอยืนยันจะไม่ลบผิดไฟล์
+  const [pendingRemove, setPendingRemove] = useState<string | null>(null)
+  const pendingIndex = pendingRemove === null ? -1 : urls.indexOf(pendingRemove)
 
   return (
     <div>
@@ -255,26 +289,27 @@ function MediaGrid({
       </SectionTitle>
       <div className="grid grid-cols-4 gap-2">
         {urls.map((url, index) => (
-          <div
-            key={`${url}-${index}`}
-            className="relative flex aspect-square items-center justify-center rounded-xl border-2 border-emerald-300 bg-slate-100"
-          >
+          <div key={`${url}-${index}`} className="flex flex-col gap-1">
             <button
               type="button"
               onClick={() => onOpen(url)}
               title={`เปิดดูไฟล์ ${uploadDisplayName(url)}`}
-              className="focus-ring flex h-full w-full items-center justify-center overflow-hidden rounded-xl text-emerald-600"
+              className={cn(
+                'focus-ring flex aspect-square w-full items-center justify-center overflow-hidden rounded-xl border-2 bg-slate-100 text-emerald-600',
+                index === pendingIndex ? 'border-red-500' : 'border-emerald-300',
+              )}
             >
               <MediaThumb kind={section.kind} path={url} icon={Icon} />
             </button>
+            {/* ปุ่มลบอยู่ใต้ภาพ ไม่ซ้อนบนภาพ ⇒ พื้นที่แตะ 44px ไม่ทับพื้นที่เปิดดูรูป (preship R2-012) */}
             <button
               type="button"
               aria-label={`ลบ${section.title}ลำดับที่ ${index + 1}`}
-              onClick={() => onRemove(index)}
-              // พื้นที่แตะ 44×44 ด้วย ::after โปร่งใส (ปุ่มที่เห็นยังเล็กเท่าเดิม ไม่ทับรูป — preship PS-017)
-              className="focus-ring absolute -top-1.5 -right-1.5 rounded-full bg-slate-900 p-1 text-white after:absolute after:-inset-3 after:content-['']"
+              disabled={busy}
+              onClick={() => setPendingRemove(url)}
+              className="focus-ring flex w-full items-center justify-center gap-1 rounded-lg py-1 text-[11px] font-bold text-slate-500 hover:bg-slate-100 hover:text-red-600 disabled:opacity-50 pointer-coarse:min-h-11"
             >
-              <IconTrash className="h-3 w-3" />
+              <IconTrash className="h-3 w-3" /> ลบ
             </button>
           </div>
         ))}
@@ -301,6 +336,17 @@ function MediaGrid({
           <span className="text-[11px] font-extrabold">เลือกไฟล์</span>
         </button>
       </div>
+
+      {pendingIndex >= 0 && (
+        <RemoveConfirmBar
+          label={`ลบ${section.title}ลำดับที่ ${pendingIndex + 1}?`}
+          onCancel={() => setPendingRemove(null)}
+          onConfirm={() => {
+            onRemove(pendingIndex)
+            setPendingRemove(null)
+          }}
+        />
+      )}
 
       {capture !== null && (
         <input
@@ -344,6 +390,7 @@ function AudioSection({
   onOpen: (url: string) => void
 }) {
   const pickerRef = useRef<HTMLInputElement>(null)
+  const [confirmRemove, setConfirmRemove] = useState(false)
 
   return (
     <div>
@@ -373,12 +420,23 @@ function AudioSection({
           <button
             type="button"
             aria-label="ลบไฟล์เสียง"
-            onClick={onRemove}
-            className="focus-ring rounded-lg p-1 text-slate-400 hover:bg-white"
+            disabled={busy}
+            onClick={() => setConfirmRemove(true)}
+            className="focus-ring inline-flex items-center justify-center rounded-lg p-1 text-slate-400 hover:bg-white disabled:opacity-50 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
           >
             <IconClose className="h-4 w-4" />
           </button>
         </div>
+      )}
+      {url !== null && confirmRemove && (
+        <RemoveConfirmBar
+          label="ลบไฟล์เสียง?"
+          onCancel={() => setConfirmRemove(false)}
+          onConfirm={() => {
+            onRemove()
+            setConfirmRemove(false)
+          }}
+        />
       )}
       <input
         ref={pickerRef}
@@ -756,6 +814,8 @@ export function CloseCaseModal({
       open
       onClose={onClose}
       size="lg"
+      // อัปโหลดสื่อ/check-in/บันทึกต้นทางอยู่ ⇒ ห้ามปิด (ไฟล์จะค้างโดยไม่ผูกเคส) แต่ยังแก้โน้ต/ผลลัพธ์ต่อได้ — R2-005
+      lockClose={busy}
       title={mode?.revision === true ? 'แก้ไขหลักฐานปิดงาน' : 'ปิดงาน'}
       description={detail === null ? undefined : `${detail.debtorName ?? '—'} · ${detail.caseRef}`}
       footer={

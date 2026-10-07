@@ -36,6 +36,34 @@ export function digitsOnly(value: string): string {
   return value.replace(/\D/g, '')
 }
 
+/** เพดานจำนวนตัวอักษรที่ช่องเบอร์โทรรับตอนวาง (มีตัวคั่น/รหัสประเทศ/ข้อความเบอร์ต่อ) — ให้ browser ไม่ตัดก่อนถึง {@link normalizePhoneInput} */
+export const PHONE_INPUT_MAX_LENGTH = 32
+/** ตัวเลขที่เก็บในช่องได้มากสุด — เกิน 10 ได้เพื่อให้ผู้ใช้**เห็น** error แทนการตัดทิ้งเงียบ */
+const PHONE_INPUT_MAX_DIGITS = 15
+const PHONE_MAX_DIGITS = 10
+
+/**
+ * ค่าที่พิมพ์/วางในช่องเบอร์โทร → ตัวเลขล้วน (preship R2-008)
+ * - รูปแบบสากล `+66 81-234-5678` / `66812345678` ⇒ `0812345678` (เดิมกลายเป็น `6681234567` แล้วผ่านเงียบ)
+ * - ตัดตัวคั่นทิ้ง แต่**ไม่ตัดความยาว** — ตัวเลขเกิน (เช่นวางเบอร์ต่อมาด้วย) ต้องขึ้น error ให้แก้ ไม่หายเงียบ
+ */
+export function normalizePhoneInput(raw: string): string {
+  const trimmed = raw.trim()
+  let digits = digitsOnly(trimmed)
+  const international = /^\+\s*66/.test(trimmed) || (digits.length === 11 && digits.startsWith('66'))
+  if (international) {
+    const local = digits.slice(2)
+    digits = local.startsWith('0') ? local : `0${local}`
+  }
+  return digits.slice(0, PHONE_INPUT_MAX_DIGITS)
+}
+
+/** error ระหว่างกรอก — แจ้งเฉพาะตัวเลขเกิน (สั้นกว่าระหว่างพิมพ์เป็นเรื่องปกติ ตรวจตอนบันทึก) */
+export function phoneInputError(value: string): string | null {
+  if (value.length <= PHONE_MAX_DIGITS) return null
+  return `ตัวเลขเกิน ${PHONE_MAX_DIGITS} หลัก — ใส่เฉพาะเบอร์หลัก (ไม่ต้องใส่เบอร์ต่อ)`
+}
+
 /** เลขบัตรประชาชนไทย — 13 หลักพอดี ตัวเลขล้วน (ไม่มี checksum ตามสเปค) */
 export function isValidNationalId(value: string): boolean {
   return value.length === 13 && DIGITS_ONLY.test(value)

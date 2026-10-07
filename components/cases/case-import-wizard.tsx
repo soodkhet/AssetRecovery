@@ -10,6 +10,7 @@ import {
   Modal,
   RefText,
   Select,
+  StatusBadge,
   TBody,
   THead,
   Table,
@@ -334,12 +335,10 @@ export function CaseImportWizard({
               <h3 className="text-sm font-bold text-slate-800">
                 {result.dryRun ? 'ผลการตรวจสอบ (ยังไม่บันทึก)' : 'ผลการนำเข้า'}
               </h3>
-              <Badge className="bg-slate-100 text-slate-600">ทั้งหมด {result.totalRows} แถว</Badge>
-              <Badge className="bg-emerald-50 text-emerald-700">
-                {result.dryRun ? 'ผ่าน' : 'สร้างแล้ว'} {result.createdCount}
-              </Badge>
+              <Badge>ทั้งหมด {result.totalRows} แถว</Badge>
+              <StatusBadge group="success" label={`${result.dryRun ? 'ผ่าน' : 'สร้างแล้ว'} ${result.createdCount}`} />
               {result.failedCount > 0 && (
-                <Badge className="bg-red-50 text-red-700">ไม่ผ่าน {result.failedCount}</Badge>
+                <StatusBadge group="critical" label={`ไม่ผ่าน ${result.failedCount}`} />
               )}
             </div>
 
@@ -367,9 +366,9 @@ export function CaseImportWizard({
                     </Td>
                     <Td>
                       {row.status === 'created' ? (
-                        <Badge className="bg-emerald-50 text-emerald-700">{result.dryRun ? 'พร้อมนำเข้า' : 'สร้างแล้ว'}</Badge>
+                        <StatusBadge group="success" label={result.dryRun ? 'พร้อมนำเข้า' : 'สร้างแล้ว'} />
                       ) : (
-                        <Badge className="bg-red-50 text-red-700">ไม่ผ่าน</Badge>
+                        <StatusBadge group="critical" label="ไม่ผ่าน" />
                       )}
                     </Td>
                     <Td>

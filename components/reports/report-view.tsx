@@ -7,6 +7,7 @@ import { KpiCardRow } from '@/components/reports/kpi-card'
 import { ReconciliationLines } from '@/components/reports/reconciliation-lines'
 import { ReportTable } from '@/components/reports/report-table'
 import { useReportData } from '@/components/reports/use-report-data'
+import { FetchTimeoutError, fetchWithTimeout } from '@/lib/api/fetch-with-timeout'
 import { readEnvelope } from '@/lib/api/envelope'
 import { fmtDateTime } from '@/lib/format/datetime'
 import { reportEmptyDescription, type ReportDefinition } from '@/lib/reports/catalog'
@@ -26,6 +27,9 @@ import type { ReportPayload } from '@/lib/reports/payload'
  * `filters`/`chart` รับได้ทั้ง node และฟังก์ชันที่รับ payload ปัจจุบัน — ตัวกรองแบบ drill-down
  * (F1) และกราฟ (F2) จึงอ่านจาก **payload ชุดเดียวกับตาราง** ไม่ต้องยิง API ซ้ำและไม่มีทางเพี้ยน
  */
+
+/** ส่งออกแบบทำสดรอได้ถึง 5 นาที (เท่ารอบงานเบื้องหลัง) — เกินนี้ถือว่าค้าง */
+const REPORT_EXPORT_TIMEOUT_MS = 300_000
 
 const EXPORT_LABEL: Readonly<Record<ReportExportFormat, string>> = {
   xlsx: 'ส่งออก Excel',
@@ -73,7 +77,8 @@ export function ReportView({
       setExporting(format)
       try {
         const query = reportRangeQuery(range)
-        const response = await fetch(`/api/reports/${report.id}/export`, {
+        // ส่งออกรายงานใหญ่ใช้เวลาได้นาน แต่ต้องไม่หมุนไม่จบ (preship R2-017)
+        const response = await fetchWithTimeout(`/api/reports/${report.id}/export`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
@@ -82,7 +87,7 @@ export function ReportView({
             ...(range.preset === 'custom' ? { from: query.get('from'), to: query.get('to') } : {}),
             params,
           }),
-        })
+        }, REPORT_EXPORT_TIMEOUT_MS)
 
         // ไฟล์ทำสด: ตอบเป็นไฟล์ตรง ๆ ไม่ใช่ envelope
         const contentType = response.headers.get('content-type') ?? ''
@@ -110,8 +115,12 @@ export function ReportView({
           title: 'รายงานใหญ่เกินกว่าจะสร้างทันที — ส่งเข้างานเบื้องหลังแล้ว',
           description: `${(envelope.data.rowCount ?? 0).toLocaleString('th-TH')} แถว · ดาวน์โหลดได้ที่หน้า "งานเบื้องหลัง" เมื่อทำเสร็จ`,
         })
-      } catch {
-        showToast({ tone: 'error', title: 'ส่งออกไม่สำเร็จ', description: 'ลองใหม่อีกครั้ง' })
+      } catch (error) {
+        showToast({
+          tone: 'error',
+          title: 'ส่งออกไม่สำเร็จ',
+          description: error instanceof FetchTimeoutError ? 'ระบบตอบช้าเกินไป กรุณาลองใหม่อีกครั้ง' : 'ลองใหม่อีกครั้ง',
+        })
       } finally {
         setExporting(null)
       }

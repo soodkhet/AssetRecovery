@@ -34,6 +34,8 @@ import {
   splitAssetIdentifier,
   isAcceptableAssetIdentifier,
   type CaseCompletenessInput,
+  normalizePhoneInput,
+  phoneInputError,
 } from '@/lib/cases/case'
 import { caseCreateSchema } from '@/lib/cases/schemas'
 
@@ -412,5 +414,31 @@ describe('ช่องที่อยู่บังคับ — FE/BE ชุ�
         expect(template?.requirement).toBe(expected)
       }
     }
+  })
+})
+
+describe('normalizePhoneInput / phoneInputError (preship R2-008)', () => {
+  it('ตัวคั่นถูกตัด · เบอร์ปกติเหลือ 10 หลัก', () => {
+    expect(normalizePhoneInput('081-234-5678')).toBe('0812345678')
+    expect(normalizePhoneInput('081 234 5678')).toBe('0812345678')
+  })
+
+  it('รูปแบบสากล +66 / 66 ⇒ ขึ้นต้น 0 (เดิมกลายเป็น 6681234567 แล้วผ่านเงียบ)', () => {
+    expect(normalizePhoneInput('+66 81-234-5678')).toBe('0812345678')
+    expect(normalizePhoneInput('+66812345678')).toBe('0812345678')
+    expect(normalizePhoneInput('66812345678')).toBe('0812345678')
+    expect(normalizePhoneInput('+66 081 234 5678')).toBe('0812345678')
+  })
+
+  it('เบอร์ต่อ/ตัวเลขเกิน ⇒ ไม่ตัดทิ้งเงียบ แต่ขึ้น error ให้แก้', () => {
+    const work = normalizePhoneInput('02-123-4567 ต่อ 123')
+    expect(work).toBe('021234567123')
+    expect(phoneInputError(work)).toMatch(/เกิน 10 หลัก/)
+  })
+
+  it('ระหว่างพิมพ์ (สั้นกว่า 10) ไม่เตือน', () => {
+    expect(phoneInputError('')).toBeNull()
+    expect(phoneInputError('081')).toBeNull()
+    expect(phoneInputError('0812345678')).toBeNull()
   })
 })

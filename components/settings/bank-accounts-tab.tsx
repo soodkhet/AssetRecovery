@@ -14,7 +14,6 @@ import {
   type StatusFilter,
 } from '@/components/settings/shared'
 import {
-  Badge,
   Button,
   Card,
   Field,
@@ -33,6 +32,7 @@ import {
   Tr,
   useToast,
 } from '@/components/ui'
+import type { StatusBadgeGroup } from '@/lib/ui/status-badge'
 import { THAI_BANK_CODES } from '@/lib/banks/thai-banks'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { toFieldErrors } from '@/lib/api/validation'
@@ -84,10 +84,11 @@ const EMPTY_FORM: FormState = {
   reason: '',
 }
 
-const USAGE_BADGE: Readonly<Record<BankAccountUsage, string>> = {
-  receive: 'bg-blue-100 text-blue-700',
-  pay: 'bg-purple-100 text-purple-700',
-  both: 'bg-slate-100 text-slate-700',
+/** สีป้ายประเภทบัญชีผ่าน mapper กลาง — ไม่ใส่คลาสสีเอง (preship R2-037) */
+const USAGE_BADGE_GROUP: Readonly<Record<BankAccountUsage, StatusBadgeGroup>> = {
+  receive: 'sent',
+  pay: 'cleared',
+  both: 'neutral',
 }
 
 export function BankAccountsTab() {
@@ -348,7 +349,7 @@ export function BankAccountsTab() {
                   </span>
                 </Td>
                 <Td>
-                  <Badge className={USAGE_BADGE[item.usage]}>{BANK_ACCOUNT_USAGE_OPTION[item.usage]}</Badge>
+                  <StatusBadge group={USAGE_BADGE_GROUP[item.usage]} label={BANK_ACCOUNT_USAGE_OPTION[item.usage]} />
                 </Td>
                 <Td>
                   <span className="font-mono text-xs text-slate-600">±{item.autoMatchToleranceDays} วัน</span>

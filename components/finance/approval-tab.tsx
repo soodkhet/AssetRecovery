@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { kpiValue } from '@/components/ui/kpi-value'
 import { usePermission } from '@/components/auth/permission-provider'
 import { AdvanceFormModal } from '@/components/finance/advance-form-modal'
 import { AdvanceReviewModal } from '@/components/finance/advance-review-modal'
@@ -100,27 +101,35 @@ export function ApprovalTab() {
   const visibleClaims =
     claimFilter === 'all' ? claims.items : claims.items.filter((item) => item.status === claimFilter)
   const overdueCount = countOverdue(advances)
+  // ระหว่างโหลด/โหลดไม่สำเร็จ KPI ต้องเป็น "—" ไม่ใช่ ฿0.00/0 ที่อ่านเหมือนไม่มียอดค้าง (preship R2-007)
+  const claimsReady = !claims.loading && claims.error === null
+  const advancesReady = !advLoading && advError === null
 
   return (
     <div className="space-y-6">
       <div className={cn('grid grid-cols-1 gap-4', canViewAdvances && 'sm:grid-cols-3')}>
         <StatCard
           label="เงินรออนุมัติ (Claim)"
-          value={fmtSatangSymbol(pendingClaimTotalSatang(claims.items))}
-          hint={`${fmtCount(claims.items.filter((item) => item.status === 'pending_approval' || item.status === 'pending_finance_approval').length)} รายการในคิว`}
+          value={kpiValue(claimsReady ? pendingClaimTotalSatang(claims.items) : null, fmtSatangSymbol)}
+          hint={`${kpiValue(
+            claimsReady
+              ? claims.items.filter((item) => item.status === 'pending_approval' || item.status === 'pending_finance_approval').length
+              : null,
+            fmtCount,
+          )} รายการในคิว`}
         />
         {canViewAdvances && (
           <>
             <StatCard
               label="เงินทดรองที่ยังไม่เคลียร์"
-              value={fmtCount(countAwaitingSettlement(advances))}
+              value={kpiValue(advancesReady ? countAwaitingSettlement(advances) : null, fmtCount)}
               hint="รวมที่อนุมัติแล้วและที่เลยกำหนด"
             />
             <StatCard
               label="เลยกำหนดเคลียร์ (Overdue)"
-              value={fmtCount(overdueCount)}
+              value={kpiValue(advancesReady ? overdueCount : null, fmtCount)}
               hint="ต้องตามเคลียร์ก่อนอนุมัติรอบใหม่"
-              className={overdueCount > 0 ? 'border-red-300 bg-red-50' : undefined}
+              className={advancesReady && overdueCount > 0 ? 'border-red-300 bg-red-50' : undefined}
             />
           </>
         )}

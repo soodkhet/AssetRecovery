@@ -6,6 +6,8 @@ import { useState, type ReactNode } from 'react'
 import { LogoutButton } from '@/components/auth/logout-button'
 import { PortalIcon, PortalLogo } from '@/components/portal/portal-icons'
 import { PortalScopeProvider } from '@/components/portal/portal-scope'
+import { LINK_PENDING_CORNER_CLASS, LinkPending } from '@/components/shell/link-pending'
+import { TOUCH_TARGET_CLASS } from '@/components/ui/button'
 import { cn } from '@/components/ui/cn'
 import type { PortalSection } from '@/lib/portal/access'
 import {
@@ -153,12 +155,14 @@ export function PortalTabs({ items, activeKey }: { items: readonly PortalNavItem
             href={item.href}
             aria-current={active ? 'page' : undefined}
             className={cn(
-              'focus-ring-inset flex items-center gap-2 border-b-2 py-2.5 text-sm font-semibold whitespace-nowrap transition-colors',
+              // `relative` ให้ spinner ระหว่างเปลี่ยนหน้าลอยมุม ไม่ดันความกว้าง (preship R2-024/R2-034)
+              'focus-ring-inset relative flex items-center gap-2 border-b-2 py-2.5 text-sm font-semibold whitespace-nowrap transition-colors',
               active ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-800',
             )}
           >
             <PortalIcon name={item.key} />
             {item.label}
+            <LinkPending className={LINK_PENDING_CORNER_CLASS} />
           </Link>
         )
       })}
@@ -223,7 +227,7 @@ function PortalMobileHeader({
                 type="button"
                 onClick={() => setOpen(false)}
                 aria-label="ปิดเมนู"
-                className="focus-ring rounded p-1.5 text-slate-400"
+                className={cn('focus-ring inline-flex items-center justify-center rounded p-1.5 text-slate-400', TOUCH_TARGET_CLASS)}
               >
                 <PortalIcon name="close" className="h-5 w-5" />
               </button>

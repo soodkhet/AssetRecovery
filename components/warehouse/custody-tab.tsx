@@ -242,8 +242,8 @@ export function CustodyTab({
                     </div>
                   </div>
                   <div className="mb-3 flex flex-wrap gap-2">
-                    <Badge className="bg-blue-50 text-blue-700">พร้อมส่ง {group.ready}</Badge>
-                    {group.inLot > 0 && <Badge className="bg-slate-100 text-slate-600">อยู่ในล็อต {group.inLot}</Badge>}
+                    <StatusBadge group="sent" label={`พร้อมส่ง ${group.ready}`} />
+                    {group.inLot > 0 && <StatusBadge group="neutral" label={`อยู่ในล็อต ${group.inLot}`} />}
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     {ASSET_CONDITIONS.filter((condition) => (group.byCondition[condition] ?? 0) > 0).map(

@@ -1,4 +1,5 @@
 import { OrganizationProfileTab } from '@/components/settings/organization-profile-tab'
+import { PageHeader } from '@/components/ui'
 import { requireMenuPage } from '@/lib/nav/menu-guard'
 
 /**
@@ -7,5 +8,14 @@ import { requireMenuPage } from '@/lib/nav/menu-guard'
  */
 export default async function SettingsOrganizationPage() {
   await requireMenuPage('settings.organization')
-  return <OrganizationProfileTab />
+  return (
+    <>
+      {/* หัวหน้าเพจ h1 แบบเดียวกับหน้าตั้งค่าอื่น (เดิมมีแค่ h2 ในการ์ด — preship R2-031) */}
+      <PageHeader
+        title="ข้อมูลองค์กร (Organization Profile)"
+        description="ข้อมูลนี้ใช้ออกใบกำกับภาษี / ใบเสร็จรับเงิน / ใบแจ้งหนี้ฝั่งผู้ขาย และพิมพ์เป็นหัวเอกสารของ PDF ทุกใบ"
+      />
+      <OrganizationProfileTab />
+    </>
+  )
 }

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { PortalIcon } from '@/components/portal/portal-icons'
 import { usePortalApiUrl } from '@/components/portal/portal-scope'
 import { InlineAlert } from '@/components/ui'
+import { TOUCH_TARGET_CLASS } from '@/components/ui/button'
 import { isTopModal, registerModal, unregisterModal } from '@/components/ui/modal-stack'
 import { portalAssetPhotoPath, wrapPhotoIndex } from '@/lib/portal/cases-view'
 
@@ -147,7 +148,13 @@ function PhotoLightbox({
         <span className="text-sm font-semibold">
           <span className="font-mono">{caseRef}</span> · รูปที่ {index + 1} / {count}
         </span>
-        <button type="button" onClick={onClose} aria-label="ปิด" className="focus-ring rounded-md p-1.5 text-white/80 hover:bg-white/10">
+        {/* preship R2-011 — ปุ่มปิด/ลูกศร lightbox พื้นที่แตะ ≥44px บนจอสัมผัส */}
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="ปิด"
+          className={`focus-ring inline-flex items-center justify-center rounded-md p-1.5 text-white/80 hover:bg-white/10 ${TOUCH_TARGET_CLASS}`}
+        >
           <PortalIcon name="close" className="h-5 w-5" />
         </button>
       </div>
@@ -187,7 +194,7 @@ function LightboxArrow({ direction, onClick }: { direction: 'prev' | 'next'; onC
         onClick()
       }}
       aria-label={direction === 'prev' ? 'รูปก่อนหน้า' : 'รูปถัดไป'}
-      className={`focus-ring absolute top-1/2 -translate-y-1/2 rounded-full bg-white/10 p-2 text-white hover:bg-white/20 ${
+      className={`focus-ring absolute top-1/2 inline-flex -translate-y-1/2 items-center justify-center rounded-full bg-white/10 p-2 text-white hover:bg-white/20 ${TOUCH_TARGET_CLASS} ${
         direction === 'prev' ? 'left-2' : 'right-2'
       }`}
     >

@@ -1,10 +1,11 @@
 'use client'
 
-import { LinkPending } from '@/components/shell/link-pending'
+import { LINK_PENDING_CORNER_CLASS, LinkPending } from '@/components/shell/link-pending'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { LogoutButton } from '@/components/auth/logout-button'
 import { NotificationBell } from '@/components/notifications/notification-bell'
+import { TOUCH_TARGET_CLASS } from '@/components/ui/button'
 import { cn } from '@/components/ui/cn'
 import type { MenuItem } from '@/lib/nav/menu-registry'
 import type { ClientSession } from '@/lib/auth/types'
@@ -27,12 +28,14 @@ export function TopNav({ menus, session }: { menus: readonly MenuItem[]; session
         href={menu.path}
         aria-current={active ? 'page' : undefined}
         className={cn(
-          'focus-ring-inset inline-flex items-center gap-1.5 rounded-md px-4 py-1.5 text-sm font-semibold whitespace-nowrap transition-colors',
+          // จอสัมผัส (iPad) สูง ≥ 44px — preship R2-030 · `relative` ให้ spinner ลอยมุม ไม่ดันความกว้าง (R2-034)
+          'focus-ring-inset relative inline-flex items-center justify-center rounded-md px-4 py-1.5 text-sm font-semibold whitespace-nowrap transition-colors',
+          TOUCH_TARGET_CLASS,
           active ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-200/60 hover:text-slate-900',
         )}
       >
         {menu.label}
-        <LinkPending />
+        <LinkPending className={LINK_PENDING_CORNER_CLASS} />
       </Link>
     )
   })

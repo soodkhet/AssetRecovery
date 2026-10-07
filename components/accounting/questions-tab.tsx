@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { kpiValue } from '@/components/ui/kpi-value'
 import { AnswerQuestionModal } from '@/components/accounting/answer-question-modal'
 import { QuestionFormModal } from '@/components/accounting/question-form-modal'
 import { useAccountantQuestions, type QuestionStatusFilter } from '@/components/accounting/use-questions'
@@ -47,6 +48,8 @@ export function QuestionsTab() {
 
   const [status, setStatus] = useState<QuestionStatusFilter>('all')
   const { data, loading, error, reload } = useAccountantQuestions(status)
+  // ระหว่างโหลด/โหลดไม่สำเร็จ KPI = "—" ไม่ใช่ ฿0.00/0 ที่อ่านเหมือนไม่มียอด (preship R2-007)
+  const ready = !loading && error === null
 
   const [creating, setCreating] = useState(false)
   const [opened, setOpened] = useState<AccountantQuestionDto | null>(null)
@@ -54,9 +57,9 @@ export function QuestionsTab() {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatCard label="ข้อซักถามทั้งหมด" value={fmtCount(data.summary.total)} hint="ตามตัวกรองปัจจุบัน" />
-        <StatCard label="ยังไม่ได้ตอบ" value={fmtCount(data.summary.open)} hint="ควรเคลียร์ก่อนปิดงวด" />
-        <StatCard label="ตอบแล้ว" value={fmtCount(data.summary.answered)} hint="เก็บเป็นหลักฐานการสื่อสาร" />
+        <StatCard label="ข้อซักถามทั้งหมด" value={kpiValue(ready ? data.summary.total : null, fmtCount)} hint="ตามตัวกรองปัจจุบัน" />
+        <StatCard label="ยังไม่ได้ตอบ" value={kpiValue(ready ? data.summary.open : null, fmtCount)} hint="ควรเคลียร์ก่อนปิดงวด" />
+        <StatCard label="ตอบแล้ว" value={kpiValue(ready ? data.summary.answered : null, fmtCount)} hint="เก็บเป็นหลักฐานการสื่อสาร" />
       </div>
 
       <div className="flex flex-wrap items-start justify-between gap-3">

@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from 'react'
 import { Button, Field, InlineAlert, Input, Modal, useToast } from '@/components/ui'
+import { buttonClass } from '@/components/ui/button'
 import { cn } from '@/components/ui/cn'
 import { FileViewerModal, type ViewableFile } from '@/components/cases/file-viewer-modal'
 import { apiPath } from '@/lib/api/contract'
@@ -250,7 +251,7 @@ function DocumentSlotField({
       >
         <div className="text-xs text-slate-500">{slot.hint}</div>
         <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
-          <label className="focus-ring cursor-pointer rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+          <label className={buttonClass('secondary', 'sm', 'cursor-pointer')}>
             {uploading ? 'กำลังอัปโหลด...' : slot.attached ? 'แนบไฟล์ใหม่แทน' : 'เลือกไฟล์'}
             <input
               type="file"

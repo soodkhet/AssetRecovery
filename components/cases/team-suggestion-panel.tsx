@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { Badge, Button, InlineAlert } from '@/components/ui'
+import { Badge, Button, InlineAlert, StatusBadge } from '@/components/ui'
+import { ROLE_GROUP_BADGE_CLASS } from '@/lib/ui/status-badge'
 import { matchTeamsByProvince } from '@/lib/cases/team-suggestion'
 import { describeTeamCost } from '@/lib/cases/team-cost'
 import type { CaseTeamOptionDto } from '@/lib/cases/types'
@@ -54,7 +55,7 @@ export function TeamSuggestionPanel({
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <Badge className="bg-emerald-600 text-white">ระบบเสนอ</Badge>
+              <StatusBadge group="success" label="ระบบเสนอ" />
               <div className="mt-1 text-sm font-bold text-slate-800">
                 {selected?.name ?? suggested?.name ?? '—'}
                 {selected !== null && suggested !== null && selected.id !== suggested.id && (
@@ -141,10 +142,10 @@ function TeamOptionCard({
         <div>
           <div className="text-sm font-semibold text-slate-800">
             {team.name}{' '}
-            <Badge className={team.side === 'inhouse' ? 'bg-sky-50 text-sky-700' : 'bg-violet-50 text-violet-700'}>
+            <Badge className={ROLE_GROUP_BADGE_CLASS[team.side]}>
               {team.side === 'inhouse' ? 'ทีมภายใน' : 'ทีมภายนอก'}
             </Badge>
-            {outOfArea && <Badge className="ml-1 bg-amber-50 text-amber-700">นอกพื้นที่</Badge>}
+            {outOfArea && <StatusBadge group="warning" label="นอกพื้นที่" className="ml-1" />}
           </div>
           <div className="text-[11px] text-slate-500">
             {team.supervisorName === null ? 'ยังไม่มีหัวหน้าทีม' : `หัวหน้าทีม ${team.supervisorName}`} ·{' '}

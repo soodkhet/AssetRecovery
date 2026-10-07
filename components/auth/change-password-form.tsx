@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useState, type FormEvent } from 'react'
+import { FetchTimeoutError, fetchWithTimeout } from '@/lib/api/fetch-with-timeout'
 import { userFacingIssueMessage } from '@/lib/api/validation'
 import { LogoutButton } from '@/components/auth/logout-button'
 import { changePasswordSchema, PASSWORD_MIN_LENGTH } from '@/lib/auth/schemas'
@@ -39,7 +40,8 @@ export function ChangePasswordForm({ forced, displayName }: { forced: boolean; d
 
     setSaving(true)
     try {
-      const response = await fetch('/api/auth/change-password', {
+      // preship R2-017 — มี timeout กันปุ่มค้าง "กำลังบันทึก…" เมื่อ server ไม่ตอบ
+      const response = await fetchWithTimeout('/api/auth/change-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(parsed.data),
@@ -51,8 +53,12 @@ export function ChangePasswordForm({ forced, displayName }: { forced: boolean; d
       }
       router.replace(extractRedirect(body) ?? '/')
       router.refresh()
-    } catch {
-      setError({ title: 'เชื่อมต่อไม่สำเร็จ', message: 'กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่' })
+    } catch (caught) {
+      setError(
+        caught instanceof FetchTimeoutError
+          ? { title: 'ระบบตอบช้าเกินไป', message: 'ยังไม่ทราบผลการบันทึก กรุณาลองใหม่อีกครั้ง' }
+          : { title: 'เชื่อมต่อไม่สำเร็จ', message: 'กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่' },
+      )
     } finally {
       setSaving(false)
     }
@@ -99,7 +105,7 @@ export function ChangePasswordForm({ forced, displayName }: { forced: boolean; d
                 value={currentPassword}
                 onChange={(event) => setCurrentPassword(event.target.value)}
                 placeholder="••••••••"
-                className="focus-ring w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                className="focus-ring w-full rounded-lg border border-slate-300 px-3 py-2 text-sm pointer-coarse:text-base"
               />
             </div>
 
@@ -117,12 +123,14 @@ export function ChangePasswordForm({ forced, displayName }: { forced: boolean; d
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   placeholder="••••••••"
-                  className="focus-ring w-full rounded-lg border border-slate-300 px-3 py-2 pr-16 text-sm"
+                  className="focus-ring w-full rounded-lg border border-slate-300 px-3 py-2 pr-16 text-sm pointer-coarse:pr-20 pointer-coarse:text-base"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword((value) => !value)}
-                  className="absolute top-1/2 right-2 -translate-y-1/2 rounded px-1.5 py-1 text-[11px] font-semibold text-slate-500 hover:text-slate-800"
+                  aria-pressed={showPassword}
+                  aria-label={showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}
+                  className="absolute top-1/2 right-2 inline-flex -translate-y-1/2 items-center justify-center rounded px-1.5 py-1 text-[11px] font-semibold text-slate-500 hover:text-slate-800 pointer-coarse:right-0 pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:text-xs"
                 >
                   {showPassword ? 'ซ่อน' : 'แสดง'}
                 </button>
@@ -142,14 +150,14 @@ export function ChangePasswordForm({ forced, displayName }: { forced: boolean; d
                 value={confirmPassword}
                 onChange={(event) => setConfirmPassword(event.target.value)}
                 placeholder="••••••••"
-                className="focus-ring w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                className="focus-ring w-full rounded-lg border border-slate-300 px-3 py-2 text-sm pointer-coarse:text-base"
               />
             </div>
 
             <button
               type="submit"
               disabled={saving}
-              className="focus-ring flex w-full items-center justify-center rounded-lg bg-slate-900 px-3 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+              className="focus-ring flex w-full items-center justify-center rounded-lg bg-slate-900 px-3 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 pointer-coarse:min-h-11"
             >
               {saving ? 'กำลังบันทึก…' : 'บันทึกรหัสผ่านใหม่'}
             </button>

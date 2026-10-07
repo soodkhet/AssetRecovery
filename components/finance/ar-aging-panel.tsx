@@ -11,7 +11,7 @@ import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
  * · มติ PO U96 #11 — ยอดตามเอกสารนิยามเดียวกับพอร์ทัล + ป้าย "รอใบลดหนี้/ใบเพิ่มหนี้"
  */
 export function ArAgingPanel({ companyId }: { companyId: string }) {
-  const { data, loading, error } = useArAging(companyId)
+  const { data, loading, error, reload } = useArAging(companyId)
   const bucketLabels = data.buckets.map((bucket) => bucket.label)
 
   return (
@@ -44,6 +44,7 @@ export function ArAgingPanel({ companyId }: { companyId: string }) {
             emptyTitle="ไม่มียอดค้างรับ"
             emptyDescription="ทุกรอบวางบิลที่ส่งแล้วได้รับชำระครบ"
             colSpan={bucketLabels.length + 2}
+            onRetry={() => void reload()}
           />
           <TBody>
             {!loading &&

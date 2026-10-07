@@ -5,7 +5,13 @@ import { IconFile } from '@/components/field/field-icons'
 import { Button, Field, Input, Modal, Select, Textarea, useToast } from '@/components/ui'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest } from '@/lib/api/types'
-import { HOTEL_NIGHTS_MAX, HOTEL_NIGHTS_MIN, hotelClaimFormError, parseHotelNightsInput } from '@/lib/field/hotel-claim'
+import {
+  HOTEL_CLAIM_NOTE_MAX_LENGTH,
+  HOTEL_NIGHTS_MAX,
+  HOTEL_NIGHTS_MIN,
+  hotelClaimFormError,
+  parseHotelNightsInput,
+} from '@/lib/field/hotel-claim'
 import { EXPENSE_RECEIPT_ACCEPT } from '@/lib/field/media-upload'
 import type { FieldExpenseDto, FieldTeammateDto } from '@/lib/field/types'
 import { FieldUploadError, uploadExpenseReceipt } from '@/lib/field/upload-client'
@@ -50,6 +56,8 @@ export function HotelClaimModal({
   const [noReceipt, setNoReceipt] = useState(false)
   const [substituteLines, setSubstituteLines] = useState<SubstituteLineDraft[]>([emptySubstituteLine('line-0')])
   const [error, setError] = useState<string | null>(null)
+  // error รายช่องจาก server (เช่นหมายเหตุยาวเกิน) — เดิมเห็นแค่ "ข้อมูลไม่ครบ" ไม่รู้ว่าช่องไหน (preship R2-025)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
@@ -108,10 +116,13 @@ export function HotelClaimModal({
         }),
       )
       if (response.error !== undefined || response.data === undefined) {
+        const fields = response.error?.fields ?? {}
+        setFieldErrors(fields)
+        const fieldMessages = Object.values(fields)
         showToast({
           tone: 'error',
           title: response.error?.title ?? 'ส่งคำขอเบิกไม่สำเร็จ',
-          description: response.error?.message,
+          description: fieldMessages.length > 0 ? fieldMessages.join(' · ') : response.error?.message,
         })
         return
       }
@@ -138,7 +149,7 @@ export function HotelClaimModal({
       onClose={onClose}
       title="เบิกค่าที่พัก"
       footer={
-        <Button onClick={() => void submit()} disabled={submitting} className="w-full justify-center py-3">
+        <Button onClick={() => void submit()} loading={submitting} className="w-full justify-center py-3">
           {submitting ? 'กำลังส่งคำขอ...' : 'ส่งคำขอเบิก'}
         </Button>
       }
@@ -220,8 +231,16 @@ export function HotelClaimModal({
 
         <ReceiptInCompanyNameCheckbox checked={receiptInCompanyName} onChange={setReceiptInCompanyName} />
 
-        <Field label="หมายเหตุ (ถ้ามี)">
-          <Textarea rows={2} value={note} onChange={(event) => setNote(event.target.value)} />
+        <Field label="หมายเหตุ (ถ้ามี)" error={fieldErrors.note}>
+          <Textarea
+            rows={2}
+            value={note}
+            maxLength={HOTEL_CLAIM_NOTE_MAX_LENGTH}
+            onChange={(event) => {
+              setNote(event.target.value)
+              setFieldErrors(({ note: _cleared, ...rest }) => rest)
+            }}
+          />
         </Field>
 
         <p className="text-[13px] text-slate-500">

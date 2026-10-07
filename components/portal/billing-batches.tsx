@@ -147,8 +147,9 @@ function BatchNumber({ value }: { value: string }) {
 function BillingInvoiceLink({ row }: { row: PortalBillingBatchDto }) {
   const apiUrl = usePortalApiUrl()
   return (
+    // preship R2-027 — พื้นที่แตะ ≥44px บนจอสัมผัส (แบบลิงก์เอกสารเงินทดรอง)
     <a
-      className="text-[11px] font-semibold text-blue-700 hover:underline"
+      className="focus-ring inline-flex items-center text-[11px] font-semibold text-blue-700 hover:underline pointer-coarse:min-h-11 pointer-coarse:px-1"
       href={apiUrl(`/api/portal/billing-batches/${encodeURIComponent(row.id)}/invoice-pdf`)}
       target="_blank"
       rel="noreferrer"

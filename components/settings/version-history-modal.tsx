@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from 'react'
 import {
-  Badge,
+  StatusBadge,
   Button,
   Modal,
   TBody,
@@ -49,6 +49,14 @@ export function VersionHistoryModal<T>({ open, onClose, title, url, toRow }: Ver
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  /** เพิ่มค่าเมื่อกด "ลองใหม่" หลังโหลดไม่สำเร็จ — บังคับ effect ยิงซ้ำ (preship R2-022) */
+  const [retryKey, setRetryKey] = useState(0)
+  const retry = (): void => {
+    setError(null)
+    setLoading(true)
+    setRetryKey((key) => key + 1)
+  }
+
   // ตั้ง state **หลัง** await เท่านั้น (กฎ `react-hooks/set-state-in-effect`)
   useEffect(() => {
     if (!open || url === null) return
@@ -68,7 +76,7 @@ export function VersionHistoryModal<T>({ open, onClose, title, url, toRow }: Ver
     return () => {
       cancelled = true
     }
-  }, [open, url, toRow])
+  }, [open, url, toRow, retryKey])
 
   const hasEffectiveRange = rows.some((row) => row.effectiveFrom !== undefined)
 
@@ -90,6 +98,7 @@ export function VersionHistoryModal<T>({ open, onClose, title, url, toRow }: Ver
           error={error === null ? null : { message: error }}
           isEmpty={rows.length === 0}
           emptyTitle="ยังไม่มีประวัติเวอร์ชัน"
+          onRetry={retry}
         />
 
         {!loading && error === null && rows.length > 0 && (
@@ -98,7 +107,7 @@ export function VersionHistoryModal<T>({ open, onClose, title, url, toRow }: Ver
               <Tr key={row.id}>
                 <Td>
                   <span className="font-mono text-xs font-bold text-slate-900">v{row.version}</span>
-                  {row.isCurrent && <Badge className="ml-2 bg-emerald-50 text-emerald-700">ปัจจุบัน</Badge>}
+                  {row.isCurrent && <StatusBadge group="success" label="ปัจจุบัน" className="ml-2" />}
                 </Td>
                 {hasEffectiveRange && (
                   <Td>

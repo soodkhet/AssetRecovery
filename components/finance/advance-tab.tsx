@@ -78,29 +78,31 @@ export function AdvanceTab() {
   const overdue = countOverdue(items)
   // โหลดไม่สำเร็จ ⇒ "—" ไม่ใช่ "0" ที่ดูเหมือนไม่มีข้อมูล (UAT R6-F)
   const failed = error !== null
+  // ระหว่างโหลดก็ยังไม่มีตัวเลขจริง ⇒ "—" เช่นกัน (preship R2-007)
+  const unavailable = loading || failed
 
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label="ยอดเงินทดรองที่ยังอยู่กับผู้เบิก"
-          value={failed ? '—' : fmtSatangSymbol(outstandingAdvanceSatang(items))}
+          value={unavailable ? '—' : fmtSatangSymbol(outstandingAdvanceSatang(items))}
           hint={failed ? 'โหลดข้อมูลไม่สำเร็จ' : 'นับจากยอดที่อนุมัติของรายการที่ยังไม่เคลียร์'}
         />
         <StatCard
           label="รายการที่รอเคลียร์ยอด"
-          value={failed ? '—' : fmtCount(awaiting)}
+          value={unavailable ? '—' : fmtCount(awaiting)}
           hint={failed ? 'โหลดข้อมูลไม่สำเร็จ' : 'รวมที่เลยกำหนดแล้ว'}
         />
         <StatCard
           label="เลยกำหนดเคลียร์ (Overdue)"
-          value={failed ? '—' : fmtCount(overdue)}
+          value={unavailable ? '—' : fmtCount(overdue)}
           hint={failed ? 'โหลดข้อมูลไม่สำเร็จ' : 'ระบบเปลี่ยนสถานะให้อัตโนมัติทุกวัน'}
-          className={overdue > 0 ? 'border-red-300 bg-red-50' : undefined}
+          className={!unavailable && overdue > 0 ? 'border-red-300 bg-red-50' : undefined}
         />
         <StatCard
           label="ยอดคืนเงินทดรองค้าง"
-          value={failed ? '—' : fmtSatangSymbol(totalReturnOutstandingSatang(items))}
+          value={unavailable ? '—' : fmtSatangSymbol(totalReturnOutstandingSatang(items))}
           hint={failed ? 'โหลดข้อมูลไม่สำเร็จ' : 'เคลียร์แล้วแต่ยังไม่ได้รับคืน/ยังไม่ถูกหักในรอบจ่าย'}
         />
       </div>

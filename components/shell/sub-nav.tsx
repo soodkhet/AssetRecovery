@@ -1,6 +1,6 @@
 'use client'
 
-import { LinkPending } from '@/components/shell/link-pending'
+import { LINK_PENDING_CORNER_CLASS, LinkPending } from '@/components/shell/link-pending'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/components/ui/cn'
@@ -25,9 +25,10 @@ export function SubNav({ menus, className }: { menus: readonly MenuItem[]; class
 
   return (
     <div className={cn('flex-shrink-0 border-b border-slate-200 bg-slate-50', className)}>
+      {/* แท็บขึ้นบรรทัดใหม่แทนเลื่อนแนวนอนแบบซ่อน scrollbar — tablet เคยมองไม่เห็น Audit Log/Job Log ท้ายแถว (preship R2-013) */}
       <nav
         aria-label="แท็บย่อย"
-        className="no-scrollbar mx-auto flex max-w-[1600px] items-center gap-2 overflow-x-auto px-4 py-2 sm:px-6 lg:px-8"
+        className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-2 px-4 py-2 sm:px-6 lg:px-8"
       >
         {items.map((item) => {
           const current = item.path === currentPath
@@ -51,14 +52,15 @@ export function SubNav({ menus, className }: { menus: readonly MenuItem[]; class
               href={item.path}
               aria-current={current ? 'page' : undefined}
               className={cn(
-                'focus-ring-inset inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold whitespace-nowrap transition-colors',
+                // `relative` ให้ spinner ลอยมุม ไม่ดันความกว้างลิงก์ระหว่างโหลด (preship R2-034)
+                'focus-ring-inset relative inline-flex items-center rounded-md px-3 py-1.5 text-xs font-semibold whitespace-nowrap transition-colors',
                 current
                   ? 'border border-slate-300 bg-white text-slate-900 shadow-sm'
                   : 'text-slate-500 hover:text-slate-800',
               )}
             >
               {item.label}
-              <LinkPending />
+              <LinkPending className={LINK_PENDING_CORNER_CLASS} />
             </Link>
           )
         })}

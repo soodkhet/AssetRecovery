@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { buttonClass } from '@/components/ui/button'
 import {
   Button,
   InlineAlert,
@@ -48,6 +49,14 @@ export function PayoutDetailModal({
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<{ title: string; message: string } | null>(null)
 
+  /** เพิ่มค่าเมื่อกด "ลองใหม่" หลังโหลดไม่สำเร็จ — บังคับ effect ยิงซ้ำ (preship R2-022) */
+  const [retryKey, setRetryKey] = useState(0)
+  const retry = (): void => {
+    setError(null)
+    setLoading(true)
+    setRetryKey((key) => key + 1)
+  }
+
   const batchId = batch?.id ?? null
 
   const fetchDetail = useCallback(
@@ -76,7 +85,7 @@ export function PayoutDetailModal({
     return () => {
       cancelled = true
     }
-  }, [batchId, fetchDetail])
+  }, [batchId, fetchDetail, retryKey])
 
   if (batch === null) return null
 
@@ -189,6 +198,7 @@ export function PayoutDetailModal({
               isEmpty={items.length === 0}
               emptyTitle="รอบนี้ยังไม่มีรายการ"
               colSpan={7}
+              onRetry={retry}
             />
             <TBody>
               {!loading &&
@@ -274,7 +284,7 @@ function DocLink({ href, children }: { href: string; children: React.ReactNode }
       href={href}
       target="_blank"
       rel="noreferrer"
-      className="focus-ring rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+      className={buttonClass('secondary')}
     >
       {children}
     </a>

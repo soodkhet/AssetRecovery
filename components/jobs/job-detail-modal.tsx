@@ -141,7 +141,7 @@ export function JobDetailModal({
                   placeholder="เช่น ปลายทางล่มชั่วคราว แก้ไขแล้วจึงสั่งทำใหม่"
                 />
               </Field>
-              <Button size="sm" disabled={submitting || reason.trim().length < 5} onClick={() => void submitRetry()}>
+              <Button size="sm" loading={submitting} disabled={reason.trim().length < 5} onClick={() => void submitRetry()}>
                 {submitting ? 'กำลังสั่งงาน...' : 'สั่งทำงานใหม่'}
               </Button>
             </div>

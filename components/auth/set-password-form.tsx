@@ -146,12 +146,14 @@ export function SetPasswordForm() {
                         value={password}
                         onChange={(event) => setPassword(event.target.value)}
                         placeholder="••••••••"
-                        className="focus-ring w-full rounded-lg border border-slate-300 px-3 py-2 pr-16 text-sm"
+                        className="focus-ring w-full rounded-lg border border-slate-300 px-3 py-2 pr-16 text-sm pointer-coarse:pr-20 pointer-coarse:text-base"
                       />
                       <button
                         type="button"
                         onClick={() => setShowPassword((value) => !value)}
-                        className="absolute top-1/2 right-2 -translate-y-1/2 rounded px-1.5 py-1 text-[11px] font-semibold text-slate-500 hover:text-slate-800"
+                        aria-pressed={showPassword}
+                        aria-label={showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}
+                        className="absolute top-1/2 right-2 inline-flex -translate-y-1/2 items-center justify-center rounded px-1.5 py-1 text-[11px] font-semibold text-slate-500 hover:text-slate-800 pointer-coarse:right-0 pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:text-xs"
                       >
                         {showPassword ? 'ซ่อน' : 'แสดง'}
                       </button>
@@ -171,14 +173,14 @@ export function SetPasswordForm() {
                       value={confirmPassword}
                       onChange={(event) => setConfirmPassword(event.target.value)}
                       placeholder="••••••••"
-                      className="focus-ring w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                      className="focus-ring w-full rounded-lg border border-slate-300 px-3 py-2 text-sm pointer-coarse:text-base"
                     />
                   </div>
 
                   <button
                     type="submit"
                     disabled={saving}
-                    className="focus-ring flex w-full items-center justify-center rounded-lg bg-slate-900 px-3 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="focus-ring flex w-full items-center justify-center rounded-lg bg-slate-900 px-3 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 pointer-coarse:min-h-11"
                   >
                     {saving ? 'กำลังบันทึก…' : 'ตั้งรหัสผ่าน'}
                   </button>

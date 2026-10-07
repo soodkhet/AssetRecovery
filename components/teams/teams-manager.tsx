@@ -1,6 +1,6 @@
 'use client'
 
-import { ROLE_GROUP_BADGE_CLASS } from '@/lib/ui/status-badge'
+import { ROLE_GROUP_BADGE_CLASS, TEAM_SIDE_LABEL } from '@/lib/ui/status-badge'
 import { useCallback, useEffect, useState } from 'react'
 import { Can } from '@/components/auth/permission-provider'
 import { TeamFormModal } from '@/components/teams/team-form-modal'
@@ -177,7 +177,7 @@ export function TeamsManager() {
                   : 'focus-ring-inset rounded-md px-4 py-1.5 text-sm font-medium text-slate-500 hover:text-slate-700'
               }
             >
-              {value === 'inhouse' ? 'Inhouse' : 'Outsource'}
+              {TEAM_SIDE_LABEL[value]}
             </button>
           ))}
         </div>
@@ -283,7 +283,7 @@ export function TeamsManager() {
                         <div className="text-sm font-semibold text-slate-800">{team.compensationPlanName}</div>
                         {team.compensationPlanSide !== null && (
                           <Badge className={`mt-0.5 ${ROLE_GROUP_BADGE_CLASS[team.compensationPlanSide]}`}>
-                            {team.compensationPlanSide}
+                            {TEAM_SIDE_LABEL[team.compensationPlanSide]}
                           </Badge>
                         )}
                       </>

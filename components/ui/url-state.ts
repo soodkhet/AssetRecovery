@@ -25,7 +25,9 @@ export function replaceUrlParams(updates: UrlParamUpdates): void {
   const query = mergeSearchParams(window.location.search, updates)
   const next = `${window.location.pathname}${query === '' ? '' : `?${query}`}${window.location.hash}`
   if (next !== `${window.location.pathname}${window.location.search}${window.location.hash}`) {
-    window.history.replaceState(window.history.state, '', next)
+    // state ต้องเป็น `null` ตามตัวอย่างของ Next — ส่ง `history.state` เดิม (มี `__NA`) แล้ว router ของ Next
+    // ไม่รับรู้ URL ใหม่ ⇒ ลิงก์แจ้งเตือนกลับไปค่าเดิมไม่ทำงาน และ re-render เขียน URL เก่าทับ (preship R2-009)
+    window.history.replaceState(null, '', next)
   }
 }
 

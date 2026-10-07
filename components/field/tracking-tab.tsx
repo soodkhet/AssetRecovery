@@ -1,6 +1,7 @@
 'use client'
 
-import { replaceUrlParams } from '@/components/ui/url-state'
+import { pickUuid, replaceUrlParams } from '@/components/ui/url-state'
+import { useSearchParamChange } from '@/components/ui/use-search-param-change'
 import { useState } from 'react'
 import { CloseCaseModal } from '@/components/field/close-case-modal'
 import { FieldCaseDetailModal } from '@/components/field/field-case-detail'
@@ -57,6 +58,12 @@ export function TrackingTab({ initialDetailCaseId = null }: { initialDetailCaseI
   const { showToast } = useToast()
   const { openReassignment, setPopupPaused } = useReassignment()
   const [detailCaseId, setDetailCaseId] = useState<string | null>(initialDetailCaseId)
+  // นำทางมา route เดิมด้วย `?case=` ใหม่ (เช่น กดแจ้งเตือนตอนอยู่หน้านี้) — เปิดรายละเอียดเคสนั้น (preship R2-009)
+  // ค่าว่าง (ปิด dialog แล้วลบ `?case=` ออกเอง) ไม่ต้องทำอะไร
+  useSearchParamChange('case', (value) => {
+    const caseId = pickUuid(value ?? undefined)
+    if (caseId !== null) setDetailCaseId(caseId)
+  })
   const [closeCaseId, setCloseCaseId] = useState<string | null>(null)
   const [dragging, setDragging] = useState<string | null>(null)
   const [savingDate, setSavingDate] = useState<string | null>(null)
@@ -269,6 +276,7 @@ export function TrackingTab({ initialDetailCaseId = null }: { initialDetailCaseI
         }}
         onRespondReassignment={(detail) => {
           setDetailCaseId(null)
+          replaceUrlParams({ case: null })
           openReassignment(detail.caseId)
         }}
       />

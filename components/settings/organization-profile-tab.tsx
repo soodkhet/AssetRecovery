@@ -354,12 +354,8 @@ export function OrganizationProfileTab() {
   return (
     <Card>
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-lg font-bold text-slate-900">ข้อมูลองค์กร (Organization Profile)</h2>
-          <p className="mt-0.5 text-xs text-slate-500">
-            ข้อมูลนี้ใช้ออกใบกำกับภาษี / ใบเสร็จรับเงิน / ใบแจ้งหนี้ฝั่งผู้ขาย และพิมพ์เป็นหัวเอกสารของ PDF ทุกใบ
-          </p>
-        </div>
+        {/* หัวข้อหลัก + คำอธิบายย้ายไป PageHeader ของ page แล้ว (preship R2-031) — ในการ์ดเหลือหัวข้อย่อย */}
+        <h2 className="text-sm font-bold text-slate-900">ข้อมูลผู้ขายบนเอกสาร</h2>
         <Can action="manage" resource={MANAGE_INVOICE_NUMBERING}>
           <Button
             onClick={() => {

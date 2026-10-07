@@ -103,9 +103,14 @@ export function JobsManager() {
         </div>
 
         <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
-          <p className="text-xs text-slate-500">
-            แสดง {fmtCount(from)}–{fmtCount(data.offset + shown)} จาก {fmtCount(data.total)} รายการ
-          </p>
+          {/* ระหว่างโหลด/โหลดไม่สำเร็จ ไม่แสดง "0–0 จาก 0 รายการ" คู่กับ error (preship R2-023) */}
+          {!loading && error === null ? (
+            <p className="text-xs text-slate-500">
+              แสดง {fmtCount(from)}–{fmtCount(data.offset + shown)} จาก {fmtCount(data.total)} รายการ
+            </p>
+          ) : (
+            <span aria-hidden="true" />
+          )}
           <div className="flex items-center gap-2">
             <Button variant="secondary" size="sm" onClick={() => setFilters(EMPTY_JOB_FILTERS)}>
               ล้างตัวกรอง
@@ -162,17 +167,18 @@ export function JobsManager() {
         )}
       </Table>
 
-      {(data.offset > 0 || data.hasMore) && (
+      {/* โหลดไม่สำเร็จ ⇒ ซ่อนตัวเลื่อนหน้า · ระหว่างโหลดคงไว้แต่กดไม่ได้ (กันหน้ากระโดด/กดซ้ำ) */}
+      {error === null && (data.offset > 0 || data.hasMore) && (
         <div className="flex items-center justify-end gap-2">
           <Button
             variant="secondary"
             size="sm"
-            disabled={data.offset === 0}
+            disabled={loading || data.offset === 0}
             onClick={() => setOffset(Math.max(0, data.offset - data.limit))}
           >
             ก่อนหน้า
           </Button>
-          <Button variant="secondary" size="sm" disabled={!data.hasMore} onClick={() => setOffset(data.offset + data.limit)}>
+          <Button variant="secondary" size="sm" disabled={loading || !data.hasMore} onClick={() => setOffset(data.offset + data.limit)}>
             ถัดไป
           </Button>
         </div>

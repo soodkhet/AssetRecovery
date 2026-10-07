@@ -49,6 +49,21 @@ function rowWarnings(
   return Object.keys(warnings).length === 0 ? null : warnings
 }
 
+/** เลขที่สัญญา (แบบ normalize) ของบริษัทนี้ที่มีเคสอยู่แล้ว — เฉพาะเลขที่อยู่ในไฟล์ */
+async function findExistingCaseRefs(
+  organizationId: string,
+  companyId: string,
+  rows: readonly { input: { caseRef: string } }[],
+): Promise<Set<string>> {
+  const normalized = [...new Set(rows.map((row) => normalizeCaseRef(row.input.caseRef)))]
+  if (normalized.length === 0) return new Set()
+  const existing = await prisma.case.findMany({
+    where: { organizationId, companyId, caseRefNormalized: { in: normalized } },
+    select: { caseRefNormalized: true },
+  })
+  return new Set(existing.map((row) => row.caseRefNormalized))
+}
+
 export async function importCases(
   input: CaseImportInput,
   context: CaseMutationContext,
@@ -91,6 +106,10 @@ export async function importCases(
     return { input, warning: decision.warning }
   }
 
+  // preview ต้องตรวจเลขที่สัญญาที่มีในฐานแล้วด้วย (preship R2-001 — เดิมตรวจแค่ซ้ำในไฟล์ ⇒ preview บอกผ่าน
+  // แต่ยืนยันแล้วแถวตก) · ค้นทีเดียวทั้งไฟล์ · ไม่กรอง `deleted_at` เหมือน `assertCaseRefAvailable()` (เคสที่ลบยังจองเลข)
+  const existingRefs = input.dryRun ? await findExistingCaseRefs(organizationId, input.financeCompanyId, plan.rows) : new Set<string>()
+
   const results: CaseImportRowResultDto[] = plan.errors.map((error) => ({
     rowNumber: error.rowNumber,
     caseRef: error.caseRef,
@@ -113,6 +132,21 @@ export async function importCases(
         caseId: null,
         errorCode: duplicate.code,
         errorMessage: 'เลขที่สัญญาซ้ำกับแถวก่อนหน้าในไฟล์เดียวกัน',
+        fields: null,
+        warnings: rowWarnings(row.input.assetImeiSerial, activeImeis, device.warning),
+      })
+      continue
+    }
+
+    if (input.dryRun && existingRefs.has(normalizeCaseRef(row.input.caseRef))) {
+      const duplicate = new CaseError('CASE_REF_DUPLICATE', { context: { caseRef: row.input.caseRef } })
+      results.push({
+        rowNumber: row.rowNumber,
+        caseRef: row.input.caseRef,
+        status: 'failed',
+        caseId: null,
+        errorCode: duplicate.code,
+        errorMessage: duplicate.userMessage,
         fields: null,
         warnings: rowWarnings(row.input.assetImeiSerial, activeImeis, device.warning),
       })

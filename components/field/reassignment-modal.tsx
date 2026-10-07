@@ -37,6 +37,8 @@ export function ReassignmentModal({
   const [reason, setReason] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [now, setNow] = useState<Date>(() => new Date())
+  /** เพิ่มค่าเมื่อกด "ลองใหม่" — แอปที่ติดตั้งบนมือถือ reload หน้าไม่ได้ (preship R2-022) */
+  const [retryKey, setRetryKey] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -52,7 +54,7 @@ export function ReassignmentModal({
     return () => {
       cancelled = true
     }
-  }, [caseId])
+  }, [caseId, retryKey])
 
   // นับถอยหลังเวลาหมดเขต — เดินทุก 30 วินาที (ไม่ตั้ง state ตรง ๆ ใน effect)
   useEffect(() => {
@@ -139,7 +141,15 @@ export function ReassignmentModal({
       }
     >
       {loadError !== null ? (
-        <ErrorState title={loadError.title} message={loadError.message} code={loadError.code} />
+        <ErrorState
+          title={loadError.title}
+          message={loadError.message}
+          code={loadError.code}
+          onRetry={() => {
+            setLoadError(null)
+            setRetryKey((key) => key + 1)
+          }}
+        />
       ) : detail === null ? (
         <LoadingState message="กำลังโหลดคำขอ..." />
       ) : pending === null ? (

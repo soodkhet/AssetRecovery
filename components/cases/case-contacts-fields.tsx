@@ -1,7 +1,7 @@
 'use client'
 
 import { Button, Field, Input } from '@/components/ui'
-import { digitsOnly } from '@/lib/cases/case'
+import { normalizePhoneInput, PHONE_INPUT_MAX_LENGTH, phoneInputError } from '@/lib/cases/case'
 import { emptyContact, type CaseContactForm } from '@/lib/cases/case-form'
 
 /**
@@ -79,17 +79,18 @@ export function CaseContactsFields({
                 id={`contact-phone-${contact.key}`}
                 label="เบอร์โทร"
                 required
-                error={errors[`contacts.${index}.contactPhone`]}
+                error={errors[`contacts.${index}.contactPhone`] ?? phoneInputError(contact.contactPhone) ?? undefined}
               >
                 <Input
                   id={`contact-phone-${contact.key}`}
                   className="font-mono"
                   value={contact.contactPhone}
                   inputMode="numeric"
-                  maxLength={10}
+                  // วางพร้อมตัวคั่น/+66 ได้ — แปลงเป็นตัวเลข ไม่ตัดความยาวเงียบ (preship R2-008)
+                  maxLength={PHONE_INPUT_MAX_LENGTH}
                   placeholder="10 หลัก"
-                  invalid={errors[`contacts.${index}.contactPhone`] !== undefined}
-                  onChange={(event) => patch(index, { contactPhone: digitsOnly(event.target.value).slice(0, 10) })}
+                  invalid={errors[`contacts.${index}.contactPhone`] !== undefined || phoneInputError(contact.contactPhone) !== null}
+                  onChange={(event) => patch(index, { contactPhone: normalizePhoneInput(event.target.value) })}
                 />
               </Field>
               <div className="flex items-end">

@@ -7,7 +7,6 @@ import { Can } from '@/components/auth/permission-provider'
 import { ReasonConfirmModal } from '@/components/settings/reason-confirm-modal'
 import { ACTIVE_BADGE_GROUP, MANAGE_SETTINGS, STATUS_FILTER_LABEL, type StatusFilter } from '@/components/settings/shared'
 import {
-  Badge,
   Button,
   Card,
   Field,
@@ -26,6 +25,7 @@ import {
   Tr,
   useToast,
 } from '@/components/ui'
+import type { StatusBadgeGroup } from '@/lib/ui/status-badge'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { toFieldErrors } from '@/lib/api/validation'
 import { fmtDate } from '@/lib/format/datetime'
@@ -93,9 +93,10 @@ const DUE_RULE_LABEL: Readonly<Record<DueRuleType, string>> = {
   month_end: 'สิ้นเดือน',
 }
 
-const TYPE_BADGE: Readonly<Record<'AR' | 'AP', { label: string; className: string }>> = {
-  AR: { label: 'AR — วางบิลลูกค้า', className: 'bg-blue-100 text-blue-700' },
-  AP: { label: 'AP — จ่ายเงินทีม', className: 'bg-purple-100 text-purple-700' },
+/** สีป้ายประเภทรอบผ่าน mapper กลาง — ไม่ใส่คลาสสีเอง (preship R2-037) */
+const TYPE_BADGE: Readonly<Record<'AR' | 'AP', { label: string; group: StatusBadgeGroup }>> = {
+  AR: { label: 'AR — วางบิลลูกค้า', group: 'sent' },
+  AP: { label: 'AP — จ่ายเงินทีม', group: 'cleared' },
 }
 
 const CUTOFF_DAYS = Array.from({ length: MAX_CUTOFF_DAY - MIN_CUTOFF_DAY + 1 }, (_, index) => MIN_CUTOFF_DAY + index)
@@ -367,7 +368,7 @@ export function CyclesTab() {
                   <div className="mt-0.5 text-[10px] text-slate-500">แก้ไขล่าสุด {fmtDate(item.updatedAt)}</div>
                 </Td>
                 <Td>
-                  <Badge className={TYPE_BADGE[item.type].className}>{TYPE_BADGE[item.type].label}</Badge>
+                  <StatusBadge group={TYPE_BADGE[item.type].group} label={TYPE_BADGE[item.type].label} />
                 </Td>
                 <Td>
                   <span className="text-xs text-slate-600">{describeCutoffRule(item)}</span>
