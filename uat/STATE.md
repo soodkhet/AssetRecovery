@@ -119,7 +119,7 @@ role agent ≤ 250k · fixer ≤ 200k · orchestrator ≤ 350k แล้ว hand
 ## ▶️ HANDOFF — 07/10/2569 (เช้า) → Final Test รอบสุดท้ายเสร็จ · รอผู้ใช้
 - **สรุป:** `uat/report/FINAL-SUMMARY.md` · ด่าน 1–6 + 7 + 7b ผ่าน · verify 394 ไฟล์ / 5,696 tests · `pnpm build` ผ่าน (ไม่มี warning) · seed-final verify 207/207 · ฐาน dev = สภาพหลังด่าน 7b (snapshot `after-stage7b`; seed สะอาด = `final-seeded-2` → `uat/bin/restore.sh`)
 - **รอผู้ใช้ทบทวน:** มติที่ตัดสินแทนตอนหลับ O75 (บิล paid + ใบเพิ่มหนี้ → partially_paid) · O76 (รุ่น TAC ไม่มีปีไม่แสดง) · O77 (polish ด่าน 7b)
-- **รอผู้ใช้ตัดสิน:** BUG-185 (ใบลดหนี้หลังชำระครบ → จ่ายเกิน · แนะนำ บล็อกใบลดหนี้ที่เกินยอดค้างตามเอกสาร + คืนเงินนอกระบบ)
+- ~~รอผู้ใช้ตัดสิน BUG-185~~ → มติ U171 บล็อกใบลดหนี้ที่เกินยอดค้าง · แก้แล้ว fixer JA `d7ad32f` (`CREDIT_NOTE_EXCEEDS_OUTSTANDING`) · verify 394/5,703 · ฐาน dev ผู้ใช้ restore เป็น `final-seeded-2` แล้ว
 - **ผู้ใช้ต้องทำ:** ลบ `RAPIDAPI_*` ใน .env.local/.env.example/Vercel แล้ว commit `.env.example` (ไฟล์ค้าง modified ใน working tree) → typecheck+test เต็ม → push staging → `PRISMA_ENV_FILE=.env.staging pnpm db:deploy` (migration ใหม่ 20 ตัว) → หน้า Model Phone กด "อัปเดตตอนนี้" (นำเข้า TAC ครั้งแรก ~36 วิ) → ทดสอบมือถือจริง → PR staging→main
 - **ไม่ได้ทำ:** ลบ worktree เก่าใน `.claude/worktrees/` (merge แล้วทั้งหมด — ลบได้เมื่อสะดวก) · CLAUDE.md ยังเขียน DEC-001…014 (มีถึง DEC-017)
 
