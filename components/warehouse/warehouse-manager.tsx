@@ -124,7 +124,8 @@ export function WarehouseManager() {
         />
       )}
       {(tab === 'pending_handover' || tab === 'handed_over') && (
-        <LotTab tab={tab} companies={companies} onChanged={refreshCounts} />
+        // key ตามแท็บ — สลับ "รอส่งมอบ" ↔ "ส่งมอบแล้ว" ต้องปิดล็อตที่เปิดค้าง/ล้างตัวกรองของอีกแท็บ (state ไม่ติดข้ามแท็บ)
+        <LotTab key={tab} tab={tab} companies={companies} onChanged={refreshCounts} />
       )}
 
       {scheduling !== null && (
