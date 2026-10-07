@@ -853,7 +853,10 @@ suite('Final Test ด่าน 3 — งวดส่งสำนักงาน�
     const failed = results.filter((row): row is PromiseRejectedResult => row.status === 'rejected')
     expect(ok).toHaveLength(1)
     expect(failed).toHaveLength(1)
-    expect(`${codeOf(failed[0]?.reason)} ${String(failed[0]?.reason)}`).toContain('CREDIT_NOTE_EXCEEDS_INVOICE')
+    // U171 — ตรวจยอดค้างของรอบ (ใน transaction หลังล็อกแถวรอบ) อาจชนก่อนเพดานใบกำกับ — ทั้งสองแบบคือปฏิเสธใบที่สอง
+    expect(`${codeOf(failed[0]?.reason)} ${String(failed[0]?.reason)}`).toMatch(
+      /CREDIT_NOTE_EXCEEDS_(INVOICE|OUTSTANDING)/,
+    )
     expect((await credit.sumCreditNotesForInvoice(seeded.invoiceId)).totalSatang).toBe(749_000)
   })
 
@@ -870,5 +873,71 @@ suite('Final Test ด่าน 3 — งวดส่งสำนักงาน�
       // อย่างน้อยหนึ่งฝั่งต้องสำเร็จ
       expect(invoice.status === 'cancelled' || activeNotes === 1).toBe(true)
     }
+  })
+})
+
+describe('มติ PO U171 (BUG-185) — ใบลดหนี้ต้องไม่เกินยอดค้างตามเอกสารของรอบวางบิล', () => {
+  /** รอบรับชำระครบตามใบแจ้งหนี้ (12,840.00) ⇒ paid · ยอดค้างตามเอกสาร = 0 */
+  async function seedPaid(): Promise<Seeded> {
+    const seeded = await seedInvoice()
+    await db().billingBatch.update({
+      where: { id: seeded.billingBatchId },
+      data: { status: 'paid', receivedSatang: 1_284_000 },
+    })
+    return seeded
+  }
+
+  /** ใบเพิ่มหนี้ 100.00 + VAT 7.00 หลังชำระครบ ⇒ ยอดค้าง 107.00 */
+  async function addDebitNote(seeded: Seeded) {
+    const increase = await seedAdjustment(seeded.revenueId, { type: 'increase', amount: 10_000 })
+    return credit.createCreditNote(ctx, input(seeded, { noteType: 'debit', amountBeforeVatSatang: 10_000, adjustmentId: increase }))
+  }
+
+  it('บิลรับชำระครบ (ไม่มียอดค้าง) ⇒ CREDIT_NOTE_EXCEEDS_OUTSTANDING + แนะนำคืนเงินนอกระบบ · ไม่มีใบถูกบันทึก', async () => {
+    const seeded = await seedPaid()
+    const error = await credit.createCreditNote(ctx, input(seeded)).catch((caught: unknown) => caught)
+    expect(codeOf(error)).toBe('CREDIT_NOTE_EXCEEDS_OUTSTANDING')
+    expect(String(error)).toContain('ไม่มียอดค้างชำระ')
+    expect(String(error)).toContain('สำนักงานบัญชีจัดการคืนเงินนอกระบบ')
+    expect(await db().creditNote.count({ where: { taxInvoiceId: seeded.invoiceId } })).toBe(0)
+    expect((await db().billingBatch.findUniqueOrThrow({ where: { id: seeded.billingBatchId } })).status).toBe('paid')
+  })
+
+  it('ยอดค้างจากใบเพิ่มหนี้ 107.00 ⇒ ลดได้ไม่เกิน 107.00 · เกิน 1 สตางค์ปฏิเสธพร้อมยอดที่ลดได้ · ยกเลิกใบเพิ่มหนี้ยังทำได้ตามเดิม', async () => {
+    const seeded = await seedPaid()
+    const dn = await addDebitNote(seeded)
+
+    const over = await credit
+      .createCreditNote(ctx, input(seeded, { amountBeforeVatSatang: 10_001 }))
+      .catch((caught: unknown) => caught)
+    expect(codeOf(over)).toBe('CREDIT_NOTE_EXCEEDS_OUTSTANDING')
+    expect(String(over)).toContain('฿107.00')
+
+    const cn = await credit.createCreditNote(ctx, input(seeded, { amountBeforeVatSatang: 10_000 }))
+    expect(cn.totalSatang).toBe(10_700)
+    expect((await db().billingBatch.findUniqueOrThrow({ where: { id: seeded.billingBatchId } })).status).toBe('paid')
+
+    // ยอดค้างเหลือ 0 แล้ว ⇒ ใบถัดไปปฏิเสธ
+    await expectCode(() => credit.createCreditNote(ctx, input(seeded, { amountBeforeVatSatang: 100 })), 'CREDIT_NOTE_EXCEEDS_OUTSTANDING')
+
+    // ยกเลิกใบเพิ่มหนี้ไม่ถูกบล็อก (กติกาเดิม)
+    const cancelled = await credit.cancelCreditNote(ctx, dn.id, { reason: 'สำนักงานบัญชียกเลิกเอกสาร' })
+    expect(cancelled.status).toBe('cancelled')
+  })
+
+  it('ยิงพร้อมกัน 2 ใบที่รวมแล้วเกินยอดค้าง 107.00 ⇒ ผ่านใบเดียว', async () => {
+    const seeded = await seedPaid()
+    await addDebitNote(seeded)
+    const results = await Promise.allSettled([
+      credit.createCreditNote(ctx, input(seeded, { amountBeforeVatSatang: 6_000 })),
+      credit.createCreditNote(ctx, input(seeded, { amountBeforeVatSatang: 6_000 })),
+    ])
+    const ok = results.filter((row) => row.status === 'fulfilled')
+    const failed = results.filter((row): row is PromiseRejectedResult => row.status === 'rejected')
+    expect(ok).toHaveLength(1)
+    expect(failed).toHaveLength(1)
+    expect(codeOf(failed[0]?.reason)).toBe('CREDIT_NOTE_EXCEEDS_OUTSTANDING')
+    expect(String(failed[0]?.reason)).toContain('฿42.80')
+    expect((await credit.sumCreditNotesForInvoice(seeded.invoiceId)).totalSatang).toBe(6_420)
   })
 })
