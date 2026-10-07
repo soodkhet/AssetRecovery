@@ -1,6 +1,7 @@
 'use client'
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { usePathname } from 'next/navigation'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, type ApiCallError } from '@/lib/api/types'
 import { EMPTY_FIELD_BADGE_COUNTS, type FieldBadgeCounts } from '@/lib/field/field-nav'
@@ -14,6 +15,8 @@ import type { FieldCaseListItemDto, FieldCaseListResultDto } from '@/lib/field/t
  * และสลับแท็บไม่ยิง API ซ้ำ (`41` §11 mobile/desktop ตรรกะเดียวกัน)
  *
  * ทุก mutation (รับงาน/จัดวัน/ลากสลับลำดับ) ต้องเรียก `reload()` ต่อท้าย
+ * โหลดไม่สำเร็จ (เน็ตหลุดกลางทาง) ⇒ ลองใหม่เองเมื่อเน็ตกลับ (`online`) · กลับมาที่แอป · สลับแท็บ
+ * — แอปที่ติดตั้งไม่มีปุ่ม reload ของเบราว์เซอร์ (preship PS-010)
  */
 
 interface FieldCasesValue {
@@ -62,6 +65,27 @@ export function FieldCasesProvider({ children }: { children: ReactNode }) {
       cancelled = true
     }
   }, [])
+
+  // ลองใหม่อัตโนมัติเฉพาะตอนที่ครั้งล่าสุดล้มเหลว — ปกติไม่ยิงซ้ำตอนสลับแท็บ (ตรรกะเดิมของ shell)
+  const errorRef = useRef<ApiCallError | null>(null)
+  useEffect(() => {
+    errorRef.current = error
+  }, [error])
+  const pathname = usePathname()
+  useEffect(() => {
+    if (errorRef.current !== null) void reload()
+  }, [pathname, reload])
+  useEffect(() => {
+    function retryIfFailed() {
+      if (errorRef.current !== null && document.visibilityState === 'visible') void reload()
+    }
+    window.addEventListener('online', retryIfFailed)
+    document.addEventListener('visibilitychange', retryIfFailed)
+    return () => {
+      window.removeEventListener('online', retryIfFailed)
+      document.removeEventListener('visibilitychange', retryIfFailed)
+    }
+  }, [reload])
 
   const value = useMemo<FieldCasesValue>(
     () => ({ items, loading, error, badges: countBadges(items), reload }),

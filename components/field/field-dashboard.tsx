@@ -46,7 +46,7 @@ function StatCell({ value, label, tone }: { value: number; label: string; tone: 
 
 export function FieldDashboard() {
   const session = useSession()
-  const { items: activeItems, loading, error } = useFieldCases()
+  const { items: activeItems, loading, error, reload } = useFieldCases()
   const [closedItems, setClosedItems] = useState<readonly FieldCaseListItemDto[]>([])
   const [allTime, setAllTime] = useState<FieldIncomeSummaryDto | null>(null)
   const [thisMonth, setThisMonth] = useState<FieldIncomeSummaryDto | null>(null)
@@ -73,7 +73,7 @@ export function FieldDashboard() {
   }, [todayIso])
 
   if (loading) return <LoadingState message="กำลังโหลดภาพรวมงานของคุณ..." />
-  if (error !== null) return <ErrorState title={error.title} message={error.message} code={error.code} />
+  if (error !== null) return <ErrorState title={error.title} message={error.message} code={error.code} onRetry={() => void reload()} />
 
   const model = buildFieldDashboard(activeItems, closedItems, todayIso)
   const trend = buildSevenDayTrend(
@@ -186,7 +186,8 @@ export function FieldDashboard() {
       href="/field/income"
       className="focus-ring block rounded-2xl border border-slate-200 bg-white p-4 text-center shadow-sm"
     >
-      <div className="text-[28px] font-extrabold text-emerald-600">
+      {/* ยอดหลักแสนไม่ล้นการ์ดครึ่งจอบนมือถือ 320–390px (preship PS-014) */}
+      <div className="text-xl font-extrabold break-all text-emerald-600 min-[400px]:text-[28px]">
         {fmtSatangSymbol(thisMonth?.commissionSatang ?? 0)}
       </div>
       <div className="text-[11px] font-bold text-slate-400">คอมมิชชั่นเดือนนี้</div>

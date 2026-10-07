@@ -357,6 +357,8 @@ export function FieldCaseDetailModal({
   )
   const [accepting, setAccepting] = useState(false)
   const [actionError, setActionError] = useState<ApiCallError | null>(null)
+  /** เพิ่มทีละ 1 เพื่อโหลดใหม่ (ปุ่มลองใหม่ — preship PS-010) */
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
     if (!open || caseId === null) return
@@ -369,7 +371,7 @@ export function FieldCaseDetailModal({
     return () => {
       cancelled = true
     }
-  }, [open, caseId])
+  }, [open, caseId, attempt])
 
   const current = loaded !== null && loaded.caseId === caseId ? loaded : null
   const detail = current?.detail ?? null
@@ -417,7 +419,14 @@ export function FieldCaseDetailModal({
       }
     >
       {loadError !== null ? (
-        <ErrorState title={loadError.title} message={loadError.message} />
+        <ErrorState
+          title={loadError.title}
+          message={loadError.message}
+          onRetry={() => {
+            setLoaded(null)
+            setAttempt((value) => value + 1)
+          }}
+        />
       ) : detail === null ? (
         <LoadingState message="กำลังโหลดรายละเอียดเคส..." />
       ) : (

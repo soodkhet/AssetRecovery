@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Spinner } from '@/components/ui/button'
+import { Button, Spinner } from '@/components/ui/button'
 import { cn } from '@/components/ui/cn'
 
 /**
@@ -60,6 +60,7 @@ export function ErrorState({
   message = 'เกิดข้อผิดพลาดระหว่างดึงข้อมูล กรุณาลองใหม่อีกครั้ง',
   code,
   action,
+  onRetry,
   className,
 }: {
   title?: string
@@ -70,8 +71,20 @@ export function ErrorState({
    */
   code?: string
   action?: ReactNode
+  /**
+   * ปุ่ม "ลองใหม่" มาตรฐาน — ใช้เมื่อไม่ได้ส่ง `action` เอง · หน้าที่ผู้ใช้กด reload เบราว์เซอร์ไม่ได้
+   * (Field Tracker ที่ติดตั้งเป็นแอป) ต้องส่งเสมอ ไม่งั้นติดหน้า error จนต้องปิดแอป (preship PS-010)
+   */
+  onRetry?: () => void
   className?: string
 }) {
+  const footer =
+    action ??
+    (onRetry === undefined ? undefined : (
+      <Button variant="secondary" onClick={onRetry}>
+        ลองใหม่
+      </Button>
+    ))
   return (
     <StateShell className={className}>
       <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-50 text-red-500">
@@ -84,7 +97,7 @@ export function ErrorState({
       </p>
       <p className="max-w-md text-xs text-slate-500">{message}</p>
       {code !== undefined && <span hidden data-error-code={code} />}
-      {action !== undefined && <div className="mt-1">{action}</div>}
+      {footer !== undefined && <div className="mt-1">{footer}</div>}
     </StateShell>
   )
 }

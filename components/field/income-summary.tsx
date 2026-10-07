@@ -23,6 +23,8 @@ export function IncomeSummary() {
   const [allTimeItems, setAllTimeItems] = useState<FieldIncomeSummaryDto['items']>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<ApiCallError | null>(null)
+  /** เพิ่มทีละ 1 เพื่อโหลดใหม่ (ปุ่มลองใหม่ — preship PS-010) */
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -41,7 +43,7 @@ export function IncomeSummary() {
     return () => {
       cancelled = true
     }
-  }, [month])
+  }, [month, attempt])
 
   const months = monthOptions(
     // `closedAt` เป็น instant UTC — ต้องแปลงเป็นเดือนตามเวลาไทยก่อน ไม่งั้นเคสที่ปิดช่วง 00:00–07:00 น.
@@ -72,7 +74,15 @@ export function IncomeSummary() {
       {loading ? (
         <LoadingState message="กำลังโหลดสรุปรายได้..." />
       ) : error !== null ? (
-        <ErrorState title={error.title} message={error.message} code={error.code} />
+        <ErrorState
+          title={error.title}
+          message={error.message}
+          code={error.code}
+          onRetry={() => {
+            setLoading(true)
+            setAttempt((value) => value + 1)
+          }}
+        />
       ) : (
         <>
           <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-3">

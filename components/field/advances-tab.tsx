@@ -65,7 +65,7 @@ export function AdvancesTab() {
       {loading ? (
         <LoadingState message="กำลังโหลดเงินทดรอง..." />
       ) : error !== null ? (
-        <ErrorState title={error.title} message={error.message} />
+        <ErrorState title={error.title} message={error.message} onRetry={() => void reload()} />
       ) : items.length === 0 ? (
         <EmptyState title="ยังไม่มีคำขอเงินทดรอง" description="กด “ขอเงินทดรอง” เพื่อส่งคำขอให้การเงินอนุมัติ" />
       ) : (

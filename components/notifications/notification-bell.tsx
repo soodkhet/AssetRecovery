@@ -85,7 +85,7 @@ export function NotificationBell({
         onClick={() => setOpen((current) => !current)}
         aria-label={`การแจ้งเตือน${badge === null ? '' : ` (ยังไม่อ่าน ${badge})`}`}
         aria-expanded={open}
-        className="focus-ring relative rounded-lg p-2 text-slate-700 hover:bg-slate-100"
+        className="focus-ring relative inline-flex items-center justify-center pointer-coarse:min-h-11 pointer-coarse:min-w-11 rounded-lg p-2 text-slate-700 hover:bg-slate-100"
       >
         <IconBell className="h-5 w-5" />
         {badge !== null && (

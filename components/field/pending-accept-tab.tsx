@@ -47,7 +47,7 @@ export function PendingAcceptTab() {
   }
 
   if (loading) return <LoadingState message="กำลังโหลดเคสที่รอรับงาน..." />
-  if (error !== null) return <ErrorState title={error.title} message={error.message} code={error.code} />
+  if (error !== null) return <ErrorState title={error.title} message={error.message} code={error.code} onRetry={() => void reload()} />
 
   return (
     <>

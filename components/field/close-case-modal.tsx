@@ -271,7 +271,8 @@ function MediaGrid({
               type="button"
               aria-label={`ลบ${section.title}ลำดับที่ ${index + 1}`}
               onClick={() => onRemove(index)}
-              className="focus-ring absolute -top-1.5 -right-1.5 rounded-full bg-slate-900 p-1 text-white"
+              // พื้นที่แตะ 44×44 ด้วย ::after โปร่งใส (ปุ่มที่เห็นยังเล็กเท่าเดิม ไม่ทับรูป — preship PS-017)
+              className="focus-ring absolute -top-1.5 -right-1.5 rounded-full bg-slate-900 p-1 text-white after:absolute after:-inset-3 after:content-['']"
             >
               <IconTrash className="h-3 w-3" />
             </button>
@@ -406,7 +407,17 @@ export function CloseCaseModal({
   const { showToast } = useToast()
   const [detail, setDetail] = useState<FieldCaseDetailDto | null>(null)
   const [loadError, setLoadError] = useState<ApiCallError | null>(null)
+  /** เพิ่มทีละ 1 เพื่อโหลดฟอร์มใหม่ (ปุ่มลองใหม่ — preship PS-010) */
+  const [loadAttempt, setLoadAttempt] = useState(0)
   const [form, setForm] = useState<CloseFormState>(EMPTY_CLOSE_FORM)
+  /**
+   * ฟอร์มล่าสุดเสมอ — งานที่ `await` (อัปโหลดไฟล์ช้าบนมือถือ) ต้องต่อยอดจากค่านี้ ไม่ใช่ `form` ตอนเริ่มกด
+   * ไม่งั้นผลลัพธ์/หมายเหตุที่ผู้ใช้แก้ระหว่างรออัปโหลดถูกทับกลับเป็นค่าเก่า แล้ว autosave บันทึกค่าเก่า (preship PS-004)
+   */
+  const formRef = useRef<CloseFormState>(EMPTY_CLOSE_FORM)
+  useEffect(() => {
+    formRef.current = form
+  }, [form])
   const [busy, setBusy] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [showMissing, setShowMissing] = useState(false)
@@ -514,7 +525,7 @@ export function CloseCaseModal({
     return () => {
       cancelled = true
     }
-  }, [caseId])
+  }, [caseId, loadAttempt])
 
   const mode = detail === null ? null : closeFormMode(detail)
   const missing = detail === null ? [] : closeFormMissing(form, detail)
@@ -522,9 +533,15 @@ export function CloseCaseModal({
   const canSubmit = detail !== null && canSubmitCloseForm(form, detail)
 
   function updateForm(next: CloseFormState): void {
+    formRef.current = next
     setForm(next)
     setShowMissing(false)
     void persistDraft(next, { revision: mode?.revision === true })
+  }
+
+  /** ใช้หลัง `await` — คำนวณค่าใหม่จากฟอร์มล่าสุด (`formRef`) แทน `form` ที่ค้างจากตอนเริ่ม */
+  function updateFormWith(change: (latest: CloseFormState) => CloseFormState): void {
+    updateForm(change(formRef.current))
   }
 
   function selectOutcome(outcome: CaseOutcome): void {
@@ -547,7 +564,7 @@ export function CloseCaseModal({
         }
       }
       if (uploaded.length === 0) return
-      updateForm({ ...form, [section.list]: appendMedia(form[section.list], uploaded) })
+      updateFormWith((latest) => ({ ...latest, [section.list]: appendMedia(latest[section.list], uploaded) }))
     } finally {
       setBusy(false)
     }
@@ -559,7 +576,7 @@ export function CloseCaseModal({
     setBusy(true)
     try {
       const path = await uploadFieldMedia(caseId, 'audio', file)
-      updateForm({ ...form, audioUrl: path })
+      updateFormWith((latest) => ({ ...latest, audioUrl: path }))
     } catch (error) {
       showToast({
         tone: 'error',
@@ -599,7 +616,8 @@ export function CloseCaseModal({
         })
         return
       }
-      setDetail({ ...detail, checkins: [...detail.checkins, response.data.checkin] })
+      const checkin = response.data.checkin
+      setDetail((latest) => (latest === null ? latest : { ...latest, checkins: [...latest.checkins, checkin] }))
       setShowMissing(false)
       showToast({ tone: 'success', title: 'เช็คอินตำแหน่งปัจจุบันแล้ว' })
     } catch (error) {
@@ -623,7 +641,8 @@ export function CloseCaseModal({
     try {
       const response = await callApi<FieldCloseDraftResultDto>(
         apiPath('field.closeDraft', { id: caseId }),
-        jsonRequest('POST', closeDraftPayload(form, { ...point, source })),
+        // ฟอร์มล่าสุด — ฟังก์ชันนี้ถูกเรียกหลังรอ GPS ได้ (PS-004)
+        jsonRequest('POST', closeDraftPayload(formRef.current, { ...point, source })),
       )
       if (response.error !== undefined || response.data === undefined) {
         showToast({
@@ -633,7 +652,8 @@ export function CloseCaseModal({
         })
         return
       }
-      setDetail({ ...detail, travelOrigin: response.data.travelOrigin })
+      const travelOrigin = response.data.travelOrigin
+      setDetail((latest) => (latest === null ? latest : { ...latest, travelOrigin }))
       setOriginError(null)
       setShowMissing(false)
     } finally {
@@ -754,7 +774,15 @@ export function CloseCaseModal({
       }
     >
       {loadError !== null ? (
-        <ErrorState title={loadError.title} message={loadError.message} code={loadError.code} />
+        <ErrorState
+          title={loadError.title}
+          message={loadError.message}
+          code={loadError.code}
+          onRetry={() => {
+            setLoadError(null)
+            setLoadAttempt((value) => value + 1)
+          }}
+        />
       ) : detail === null || mode === null ? (
         <LoadingState message="กำลังโหลดฟอร์มปิดงาน..." />
       ) : (

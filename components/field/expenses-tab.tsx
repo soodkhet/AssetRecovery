@@ -292,7 +292,7 @@ export function ExpensesTab({ initialView = 'caseBound' }: { initialView?: Expen
             type="button"
             onClick={() => switchView(tab.id)}
             className={cn(
-              'focus-ring flex-1 rounded-lg py-2.5 text-[13px] font-extrabold',
+              'focus-ring flex-1 rounded-lg py-2.5 text-[13px] font-extrabold pointer-coarse:min-h-11',
               view === tab.id ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500',
             )}
           >
@@ -304,7 +304,15 @@ export function ExpensesTab({ initialView = 'caseBound' }: { initialView?: Expen
       {loading ? (
         <LoadingState message="กำลังโหลดรายการเบิก..." />
       ) : error !== null ? (
-        <ErrorState title={error.title} message={error.message} code={error.code} />
+        <ErrorState
+          title={error.title}
+          message={error.message}
+          code={error.code}
+          onRetry={() => {
+            setLoading(true)
+            void load(view)
+          }}
+        />
       ) : (
         <div className="space-y-3">
           <NeedsRevisionBlock items={needsRevision} onFix={setFixing} onViewReceipt={setViewingReceipt} />

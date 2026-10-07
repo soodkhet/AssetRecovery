@@ -296,7 +296,7 @@ function TopBar({ title, onOpenMenu }: { title: string; onOpenMenu: () => void }
             type="button"
             onClick={onOpenMenu}
             aria-label="เปิดเมนู"
-            className="focus-ring rounded-lg p-2 text-slate-700 hover:bg-slate-100"
+            className="focus-ring inline-flex items-center justify-center pointer-coarse:min-h-11 pointer-coarse:min-w-11 rounded-lg p-2 text-slate-700 hover:bg-slate-100"
           >
             <IconMenu className="h-5 w-5" />
           </button>

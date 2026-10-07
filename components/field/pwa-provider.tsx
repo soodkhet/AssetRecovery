@@ -137,7 +137,7 @@ export function FieldPwaProvider() {
               window.localStorage.setItem(A2HS_DISMISS_KEY, '1')
               setA2hsDismissed(true)
             }}
-            className="focus-ring rounded p-1 text-blue-400 hover:bg-blue-100"
+            className="focus-ring inline-flex items-center justify-center pointer-coarse:min-h-11 pointer-coarse:min-w-11 rounded p-1 text-blue-400 hover:bg-blue-100"
           >
             <IconClose className="h-4 w-4" />
           </button>

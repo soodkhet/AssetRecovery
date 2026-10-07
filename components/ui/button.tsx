@@ -18,6 +18,12 @@ const VARIANT_CLASS: Readonly<Record<ButtonVariant, string>> = {
   ghost: 'text-slate-500 hover:bg-slate-100 hover:text-slate-800',
 }
 
+/**
+ * จอสัมผัส (มือถือ/แท็บเล็ต) ปุ่มต้องแตะได้อย่างน้อย 44×44px — ขนาด `sm` สูงแค่ 28–30px ทำให้แตะพลาดกลางแจ้ง
+ * (preship PS-015) · ใช้ `pointer-coarse` ไม่ใช่ความกว้างจอ ⇒ desktop ที่ใช้เมาส์หน้าตาเหมือนเดิมตาม mockup
+ */
+export const TOUCH_TARGET_CLASS = 'pointer-coarse:min-h-11 pointer-coarse:min-w-11'
+
 const SIZE_CLASS: Readonly<Record<ButtonSize, string>> = {
   sm: 'px-3 py-1.5 text-xs',
   md: 'px-4 py-2 text-sm',
@@ -30,6 +36,7 @@ const SIZE_CLASS: Readonly<Record<ButtonSize, string>> = {
 export function buttonClass(variant: ButtonVariant = 'primary', size: ButtonSize = 'sm', className?: string): string {
   return cn(
     'focus-ring inline-flex items-center justify-center gap-2 rounded-lg font-semibold transition-colors',
+    TOUCH_TARGET_CLASS,
     VARIANT_CLASS[variant],
     SIZE_CLASS[size],
     className,
@@ -65,6 +72,7 @@ export function Button({
       className={cn(
         'focus-ring inline-flex items-center justify-center gap-2 rounded-lg font-semibold transition-colors',
         'disabled:cursor-not-allowed disabled:opacity-50',
+        TOUCH_TARGET_CLASS,
         VARIANT_CLASS[variant],
         SIZE_CLASS[size],
         fullWidth && 'w-full',

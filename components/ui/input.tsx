@@ -9,8 +9,9 @@ import { cn } from '@/components/ui/cn'
  * ⚠️ ช่องกรอกเงินต้องเก็บค่าเป็น satang (จำนวนเต็ม) ก่อนส่ง API เสมอ
  */
 
+// จอสัมผัสใช้ 16px — iOS Safari ซูมทั้งหน้าทุกครั้งที่ focus ช่องที่เล็กกว่า 16px (preship PS-019)
 const FIELD_CLASS =
-  'focus-ring w-full rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400'
+  'focus-ring w-full rounded-lg border border-slate-300 px-3 py-2 text-sm pointer-coarse:text-base disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400'
 const ERROR_CLASS = 'border-red-300 bg-red-50'
 
 export function Label({

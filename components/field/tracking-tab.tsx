@@ -111,7 +111,7 @@ export function TrackingTab() {
   }
 
   if (loading) return <LoadingState message="กำลังโหลดงานที่กำลังติดตาม..." />
-  if (error !== null) return <ErrorState title={error.title} message={error.message} code={error.code} />
+  if (error !== null) return <ErrorState title={error.title} message={error.message} code={error.code} onRetry={() => void reload()} />
 
   return (
     <>
@@ -189,6 +189,7 @@ export function TrackingTab() {
                           }}
                           className="flex items-center gap-2.5 rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm"
                         >
+                          {/* ปุ่มเรียงลำดับ = วิธีเดียวบนมือถือที่ลากไม่ได้ — จอสัมผัสขยายเป็น 44×44 (preship PS-016) */}
                           <div className="flex flex-col items-center gap-0.5 text-slate-300">
                             <button
                               type="button"
@@ -197,7 +198,7 @@ export function TrackingTab() {
                               onClick={() => {
                                 if (previous !== undefined) moveTo(section.date, section.items, item.caseId, previous.caseId)
                               }}
-                              className="focus-ring rounded px-1 text-xs text-slate-400 hover:bg-slate-100 disabled:opacity-30"
+                              className="focus-ring inline-flex items-center justify-center rounded px-1 text-xs text-slate-400 hover:bg-slate-100 disabled:opacity-30 pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:text-base"
                             >
                               ▲
                             </button>
@@ -209,7 +210,7 @@ export function TrackingTab() {
                               onClick={() => {
                                 if (next !== undefined) moveTo(section.date, section.items, item.caseId, next.caseId)
                               }}
-                              className="focus-ring rounded px-1 text-xs text-slate-400 hover:bg-slate-100 disabled:opacity-30"
+                              className="focus-ring inline-flex items-center justify-center rounded px-1 text-xs text-slate-400 hover:bg-slate-100 disabled:opacity-30 pointer-coarse:min-h-11 pointer-coarse:min-w-11 pointer-coarse:text-base"
                             >
                               ▼
                             </button>

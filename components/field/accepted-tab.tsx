@@ -41,6 +41,8 @@ export function AcceptedTab({ currentUserId }: { currentUserId: string }) {
     error: ApiCallError | null
   } | null>(null)
 
+  /** เพิ่มทีละ 1 เพื่อโหลดรายการทีมใหม่ (ปุ่มลองใหม่) */
+  const [teamAttempt, setTeamAttempt] = useState(0)
   useEffect(() => {
     if (view !== 'team') return
     let cancelled = false
@@ -54,7 +56,7 @@ export function AcceptedTab({ currentUserId }: { currentUserId: string }) {
     return () => {
       cancelled = true
     }
-  }, [view])
+  }, [view, teamAttempt])
 
   const teamLoading = teamResult === null
   const teamItems = teamResult?.items ?? []
@@ -85,7 +87,7 @@ export function AcceptedTab({ currentUserId }: { currentUserId: string }) {
         loading ? (
           <LoadingState message="กำลังโหลดเคสที่รอจัดวันที่..." />
         ) : error !== null ? (
-          <ErrorState title={error.title} message={error.message} code={error.code} />
+          <ErrorState title={error.title} message={error.message} code={error.code} onRetry={() => void reload()} />
         ) : mine.length === 0 ? (
           <EmptyState title="ไม่มีเคสรอจัดวันที่" description='รับงานจากแท็บ "รอรับงาน" แล้วจะมาอยู่ที่นี่' />
         ) : (
@@ -127,7 +129,15 @@ export function AcceptedTab({ currentUserId }: { currentUserId: string }) {
       ) : teamLoading ? (
         <LoadingState message="กำลังโหลดเคสของทีม..." />
       ) : teamError !== null ? (
-        <ErrorState title={teamError.title} message={teamError.message} code={teamError.code} />
+        <ErrorState
+          title={teamError.title}
+          message={teamError.message}
+          code={teamError.code}
+          onRetry={() => {
+            setTeamResult(null)
+            setTeamAttempt((value) => value + 1)
+          }}
+        />
       ) : teamItems.length === 0 ? (
         <EmptyState title="ทีมยังไม่มีเคสรอจัดวันที่" description="ใช้ดูประกอบการวางแผนที่พัก/เส้นทางร่วมกัน" />
       ) : (

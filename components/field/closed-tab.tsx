@@ -94,6 +94,8 @@ export function ClosedTab() {
   const [filter, setFilter] = useState<ClosedFilter>('all')
   const [month, setMonth] = useState<string>(ALL_MONTHS)
   const [detailCaseId, setDetailCaseId] = useState<string | null>(null)
+  /** เพิ่มทีละ 1 เพื่อโหลดใหม่ (ปุ่มลองใหม่ — preship PS-010) */
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -109,13 +111,25 @@ export function ClosedTab() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [attempt])
 
   const months = monthOptions(closedMonthKeys(items))
   const visible = filterClosedCases(items, filter, month)
 
   if (loading) return <LoadingState message="กำลังโหลดงานที่จบแล้ว..." />
-  if (error !== null) return <ErrorState title={error.title} message={error.message} code={error.code} />
+  if (error !== null) {
+    return (
+      <ErrorState
+        title={error.title}
+        message={error.message}
+        code={error.code}
+        onRetry={() => {
+          setLoading(true)
+          setAttempt((value) => value + 1)
+        }}
+      />
+    )
+  }
 
   return (
     <>

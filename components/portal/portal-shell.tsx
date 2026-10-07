@@ -196,7 +196,7 @@ function PortalMobileHeader({
             onClick={() => setOpen(true)}
             aria-label="เปิดเมนู"
             aria-expanded={open}
-            className="focus-ring -mr-2 shrink-0 rounded-lg p-2 text-slate-700 active:bg-slate-100"
+            className="focus-ring inline-flex items-center justify-center pointer-coarse:min-h-11 pointer-coarse:min-w-11 -mr-2 shrink-0 rounded-lg p-2 text-slate-700 active:bg-slate-100"
           >
             <PortalIcon name="menu" className="h-6 w-6" />
           </button>

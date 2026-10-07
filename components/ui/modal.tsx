@@ -155,7 +155,8 @@ export function Modal({
             onClick={requestClose}
             disabled={isBusy}
             aria-label="ปิด"
-            className="focus-ring rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+            // จอสัมผัสขยายพื้นที่แตะเป็น 44×44 (เดิม 24×24 — preship PS-018)
+            className="focus-ring inline-flex items-center justify-center rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-40 pointer-coarse:-m-2.5 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
           >
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />

@@ -11,7 +11,9 @@ import { fmtSatangSymbol } from '@/lib/format/money'
  * สิทธิ์จริงตรวจที่ API (เจ้าของ/การเงิน · คนอื่น 404) — ที่นี่แค่ซ่อนลิงก์ของสถานะที่ยังพิมพ์ไม่ได้
  */
 
-const LINK_CLASS = 'focus-ring text-[11px] font-semibold text-emerald-700 underline'
+// จอสัมผัสขยายพื้นที่แตะเป็นสูง 44px (เดิม 14–17px — preship PS-029)
+const LINK_CLASS =
+  'focus-ring inline-flex items-center text-[11px] font-semibold text-emerald-700 underline pointer-coarse:min-h-11 pointer-coarse:px-1'
 
 /** ใบเบิกเงินทดรอง PDF — พิมพ์ได้หลังอนุมัติแล้ว */
 export function AdvanceRequestPdfLink({ advance }: { advance: Pick<AdvanceDto, 'id' | 'status'> }) {
