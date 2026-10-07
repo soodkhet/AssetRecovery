@@ -29,6 +29,8 @@ export const SALES_ERROR_CODES = [
   'CREDIT_NOTE_VAT_MISMATCH',
   'CREDIT_NOTE_DATE_BEFORE_INVOICE',
   'CREDIT_NOTE_ADJUSTMENT_MISMATCH',
+  // ใบลดหนี้เกินยอดค้างของรอบวางบิล (มติ PO 07/10/2569 U171 — `24` §6.8 v4.46)
+  'CREDIT_NOTE_EXCEEDS_OUTSTANDING',
   // ยกเลิกใบกำกับที่ยังมีใบลดหนี้/ใบเพิ่มหนี้ active (มติ PO 05/10/2569 U18 — `24` §6.8 v4.24)
   'TAX_INVOICE_HAS_ACTIVE_NOTES',
   // ใบเสร็จรับเงิน/ใบกำกับภาษีตอนรับเงิน (มติ PO 06/10/2569 U95 + U96 #3/#7 — `24` §6.8 v4.31)
@@ -61,6 +63,7 @@ const HTTP_STATUS: Record<SalesErrorCode, number> = {
   CREDIT_NOTE_VAT_MISMATCH: 400,
   CREDIT_NOTE_DATE_BEFORE_INVOICE: 400,
   CREDIT_NOTE_ADJUSTMENT_MISMATCH: 400,
+  CREDIT_NOTE_EXCEEDS_OUTSTANDING: 400,
   TAX_INVOICE_HAS_ACTIVE_NOTES: 400,
   TAX_INVOICE_NO_VAT_COMPANY: 400,
   TAX_INVOICE_DATE_IN_FUTURE: 400,
@@ -131,6 +134,11 @@ const MESSAGES: Record<SalesErrorCode, ErrorMessage> = {
     title: 'รายการปรับปรุงที่อ้างถึงใช้กับเอกสารนี้ไม่ได้',
     message:
       'รายการปรับปรุงต้องอนุมัติแล้ว เป็นชนิดที่ตรงกับเอกสาร (ใบลดหนี้ = ลดยอด · ใบเพิ่มหนี้ = เพิ่มยอด) ของรอบวางบิลเดียวกับใบกำกับภาษี และยังไม่มีเอกสารอื่นอ้างถึง',
+  },
+  CREDIT_NOTE_EXCEEDS_OUTSTANDING: {
+    title: 'ยอดใบลดหนี้เกินยอดค้างชำระ',
+    message:
+      'ใบลดหนี้ต้องไม่เกินยอดค้างชำระของรอบวางบิล ณ ตอนบันทึก — ถ้าลูกค้าชำระเกินและต้องคืนเงิน ขอให้สำนักงานบัญชีจัดการคืนเงินนอกระบบ',
   },
   TAX_INVOICE_HAS_ACTIVE_NOTES: {
     title: 'ยกเลิกใบกำกับภาษีไม่ได้',

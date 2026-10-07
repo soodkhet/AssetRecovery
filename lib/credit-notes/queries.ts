@@ -10,6 +10,7 @@ import {
   assertCreditNoteCancellable,
   assertInvoiceCreditable,
   assertIssueDateNotBeforeInvoice,
+  assertWithinBillingOutstanding,
   assertWithinInvoiceBalance,
   AWAITING_NOTE_LABEL,
   awaitingNoteType,
@@ -32,6 +33,7 @@ import { Prisma } from '@/lib/generated/prisma/client'
 import type { CreditNoteStatus, CreditNoteType } from '@/lib/generated/prisma/enums'
 import { formatBranch } from '@/lib/format/branch'
 import { fmtSatangSymbol } from '@/lib/format/money'
+import { documentedOutstandingByBatch } from '@/lib/portal/documented-amounts'
 import { prisma } from '@/lib/prisma'
 import { syncBillingStatusWithDocuments } from '@/lib/revenue/billing-status-sync'
 import { SalesError } from '@/lib/sales/errors'
@@ -47,6 +49,7 @@ import { verifyUploadedFile } from '@/lib/uploads/verify'
  *   ลดในเดือนที่ออกใบลดหนี้ · B1) ใช้ยามกลาง `assertPeriodOpenAt()` ตัวเดียวกับใบกำกับภาษี
  *   (งวด `sent_to_accountant` ก็ปฏิเสธเช่นกัน เพราะขยับยอดที่ส่งสำนักงานบัญชีแล้ว — `13` §6.11)
  * - ยอดห้ามเกินยอดคงเหลือของใบกำกับ — ตรวจที่นี่ (ข้อความดี) + trigger ระดับ DB ที่ล็อกแถวใบกำกับ (กันแข่งกัน)
+ * - มติ PO U171 — ใบลดหนี้ห้ามเกิน**ยอดค้างตามเอกสาร**ของรอบวางบิล (ล็อกแถวรอบใน transaction แล้วตรวจ ⇒ `CREDIT_NOTE_EXCEEDS_OUTSTANDING`)
  * - ยกเลิกต้องมีเหตุผล · ห้ามลบ (trigger) · audit before/after + reason ทุกครั้ง (หมวด `tax`)
  * - สิทธิ์: บันทึก/ยกเลิก = `manage_tax_invoice` (บัญชี) · ดู = `SALES_READ_CAPABILITIES` (การเงินดูได้) — ตรวจที่ route
  *
@@ -447,6 +450,39 @@ function translateDbError(error: unknown, input: { creditNoteNumber: string; adj
   return error
 }
 
+type CreditNoteTx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0]
+
+/** ล็อกแถวรอบวางบิล (`FOR UPDATE`) — คำขอใบลดหนี้/ยกเลิกใบเพิ่มหนี้/รับเงินของรอบเดียวกันเข้าคิว (U171) */
+async function lockBillingBatch(tx: CreditNoteTx, billingBatchId: string): Promise<void> {
+  await tx.$queryRaw`SELECT id FROM billing_batches WHERE id = ${billingBatchId}::uuid FOR UPDATE`
+}
+
+/**
+ * มติ PO U171 (BUG-185) — ใบลดหนี้ต้องไม่เกิน**ยอดค้างตามเอกสาร**ของรอบวางบิล ณ ตอนบันทึก ·
+ * เรียกใน transaction หลังล็อกแถวรอบแล้ว ⇒ ใบที่บันทึกพร้อมกันอ่านยอดหลังใบก่อนหน้าเสมอ (ไม่ทะลุรวมกัน)
+ * · ยอดค้างจาก `documentedOutstandingByBatch()` ตัวเดียวกับหน้ารายได้/พอร์ทัล (ห้ามเขียนสูตรซ้ำ)
+ */
+async function assertCreditWithinOutstanding(
+  tx: CreditNoteTx,
+  organizationId: string,
+  billingBatchId: string,
+  amounts: { amountBeforeVatSatang: number; vatSatang: number; totalSatang: number },
+): Promise<void> {
+  await lockBillingBatch(tx, billingBatchId)
+  const batch = await tx.billingBatch.findFirstOrThrow({
+    where: { id: billingBatchId, organizationId },
+    select: {
+      id: true,
+      totalSatang: true,
+      receivedSatang: true,
+      whtWithheldByCustomerSatang: true,
+      bankFeeWrittenOffSatang: true,
+    },
+  })
+  const outstanding = await documentedOutstandingByBatch(organizationId, [batch], tx)
+  assertWithinBillingOutstanding(outstanding.get(batch.id) ?? 0, amounts)
+}
+
 /**
  * `POST /api/accounting/credit-notes` — บันทึกใบลดหนี้/ใบเพิ่มหนี้ที่สำนักงานบัญชีออกแล้ว
  *
@@ -512,6 +548,10 @@ export async function createCreditNote(
 
   const created = await prisma
     .$transaction(async (tx) => {
+      // U171 — ใบลดหนี้ ≤ ยอดค้างตามเอกสารของรอบ (ใบเพิ่มหนี้ไม่มีเพดาน)
+      if (noteType === 'credit') {
+        await assertCreditWithinOutstanding(tx, organizationId, invoice.salesRecord.billingBatchId, amounts)
+      }
       const row = await tx.creditNote.create({
         data: {
           organizationId,
@@ -614,6 +654,12 @@ export async function cancelCreditNote(
   })
 
   const cancelled = await prisma.$transaction(async (tx) => {
+    // U171 — เข้าคิวกับการบันทึกใบลดหนี้ของรอบเดียวกัน (ยกเลิกใบเพิ่มหนี้ระหว่างตรวจยอดค้าง)
+    const invoiceOfNote = await tx.taxInvoice.findUniqueOrThrow({
+      where: { id: row.taxInvoiceId },
+      select: { salesRecord: { select: { billingBatchId: true } } },
+    })
+    await lockBillingBatch(tx, invoiceOfNote.salesRecord.billingBatchId)
     const claimed = await tx.creditNote.updateMany({
       where: { id: row.id, status: 'active' },
       data: { status: 'cancelled', cancelReason: reason, cancelledBy: ctx.actor.id, cancelledAt: now, updatedBy: ctx.actor.id },
@@ -648,10 +694,6 @@ export async function cancelCreditNote(
     )
 
     // มติ O75 — ยกเลิกเอกสารเปลี่ยนยอดตามเอกสาร ⇒ สถานะรอบตามยอดใหม่
-    const invoiceOfNote = await tx.taxInvoice.findUniqueOrThrow({
-      where: { id: row.taxInvoiceId },
-      select: { salesRecord: { select: { billingBatchId: true } } },
-    })
     await syncBillingStatusWithDocuments(tx, {
       organizationId: ctx.actor.organizationId,
       billingBatchId: invoiceOfNote.salesRecord.billingBatchId,

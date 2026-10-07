@@ -375,9 +375,11 @@ export async function withDocumentedArTotals<T extends { id: string; totalSatang
 export async function documentedOutstandingByBatch(
   organizationId: string,
   batches: readonly (BillingBatchAmounts & { id: string })[],
+  /** ส่ง `tx` เมื่อต้องอ่านใน transaction เดียวกับการบันทึก (เช่น ตรวจยอดค้างก่อนบันทึกใบลดหนี้ — U171) */
+  client: DocumentedReadClient = prisma,
 ): Promise<Map<string, number>> {
   const unique = [...new Map(batches.map((batch) => [batch.id, batch])).values()]
-  const documented = await withDocumentedArTotals(organizationId, unique)
+  const documented = await withDocumentedArTotals(organizationId, unique, client)
   return new Map(documented.map((batch) => [batch.id, arOutstandingSatang(batch)]))
 }
 

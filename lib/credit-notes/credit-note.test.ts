@@ -4,9 +4,11 @@ import {
   assertCreditNoteCancellable,
   assertInvoiceCreditable,
   assertIssueDateNotBeforeInvoice,
+  assertWithinBillingOutstanding,
   assertWithinInvoiceBalance,
   expectedCreditNoteVat,
   isAwaitingCreditNote,
+  maxCreditNoteTotalSatang,
   netInvoiceAmounts,
   requireCreditNoteCancelReason,
   resolveCreditNoteAmounts,
@@ -151,5 +153,40 @@ describe('เงื่อนไขการบันทึก/ยกเลิก
     expect(isAwaitingCreditNote({ ...base, hasActiveInvoice: false })).toBe(false)
     expect(isAwaitingCreditNote({ ...base, status: 'pending_approval' })).toBe(false)
     expect(isAwaitingCreditNote({ ...base, adjustmentType: 'increase' })).toBe(false)
+  })
+})
+
+describe('มติ PO U171 — เพดานยอดค้างตามเอกสารของรอบวางบิล', () => {
+  const amounts = (total: number) => ({ amountBeforeVatSatang: total, vatSatang: 0, totalSatang: total })
+
+  it('ยอดค้าง 0 (ชำระครบ) ⇒ ปฏิเสธทุกยอด + ข้อความบอกไม่มียอดค้าง และให้สำนักงานบัญชีคืนเงินนอกระบบ', () => {
+    expect(codeOf(() => assertWithinBillingOutstanding(0, amounts(1)))).toBe('CREDIT_NOTE_EXCEEDS_OUTSTANDING')
+    try {
+      assertWithinBillingOutstanding(0, amounts(10_700))
+    } catch (error) {
+      expect(String(error)).toContain('ไม่มียอดค้างชำระ')
+      expect(String(error)).toContain('คืนเงินนอกระบบ')
+    }
+  })
+
+  it('ยอดค้าง 107.00 ⇒ เท่ากันผ่าน · เกิน 1 สตางค์ปฏิเสธพร้อมยอดที่ลดได้', () => {
+    expect(() => assertWithinBillingOutstanding(10_700, amounts(10_700))).not.toThrow()
+    try {
+      assertWithinBillingOutstanding(10_700, amounts(10_701))
+      expect.unreachable()
+    } catch (error) {
+      expect((error as { code?: string }).code).toBe('CREDIT_NOTE_EXCEEDS_OUTSTANDING')
+      expect(String(error)).toContain('฿107.00')
+    }
+  })
+
+  it('ยอดค้างติดลบ (รับเกิน) ⇒ ปฏิเสธ · ยอดที่ลดได้ไม่ติดลบ', () => {
+    expect(codeOf(() => assertWithinBillingOutstanding(-10_700, amounts(1)))).toBe('CREDIT_NOTE_EXCEEDS_OUTSTANDING')
+    expect(maxCreditNoteTotalSatang(1_284_000, -10_700)).toBe(0)
+  })
+
+  it('ลดได้สูงสุด = ค่าน้อยกว่าระหว่างคงเหลือของใบกำกับกับยอดค้างของรอบ', () => {
+    expect(maxCreditNoteTotalSatang(1_284_000, 10_700)).toBe(10_700)
+    expect(maxCreditNoteTotalSatang(50_000, 1_284_000)).toBe(50_000)
   })
 })

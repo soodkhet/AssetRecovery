@@ -1,4 +1,5 @@
 import { pctOfSatang } from '@/lib/finance/satang'
+import { fmtSatangSymbol } from '@/lib/format/money'
 import type {
   AdjustmentStatus,
   AdjustmentType,
@@ -212,6 +213,36 @@ export function assertWithinInvoiceBalance(
       remainingBeforeVatSatang: remaining.totalBeforeVatSatang,
       remainingTotalSatang: remaining.totalSatang,
     },
+  })
+}
+
+// ── ยอดค้างของรอบวางบิล (มติ PO 07/10/2569 U171 · BUG-185) ─────────────────────
+
+/**
+ * ยอดรวมใบลดหนี้ที่บันทึกได้สูงสุด = ค่าน้อยกว่าระหว่าง "คงเหลือของใบกำกับ" กับ "ยอดค้างตามเอกสารของรอบวางบิล"
+ * (ไม่ติดลบ — บิลชำระครบ/จ่ายเกิน ⇒ `0`) · ใช้ทั้งฟอร์ม (แสดงยอดที่ลดได้) และ server (ตรวจ) ⇒ ตัวเลขตรงกันเสมอ
+ * · `billingOutstandingSatang` = `documentedOutstandingByBatch()` (ใบแจ้งหนี้ − ใบลดหนี้ + ใบเพิ่มหนี้ − รับแล้ว/ภาษีลูกค้าหัก/ค่าธรรมเนียม)
+ */
+export function maxCreditNoteTotalSatang(invoiceCreditableTotalSatang: number, billingOutstandingSatang: number): number {
+  return Math.max(0, Math.min(invoiceCreditableTotalSatang, billingOutstandingSatang))
+}
+
+/**
+ * มติ PO U171 — ใบลดหนี้ต้องไม่เกิน**ยอดค้างตามเอกสาร**ของรอบวางบิล ณ ตอนบันทึก (บิลชำระครบไม่มียอดค้าง ⇒ บันทึกไม่ได้)
+ * ระบบไม่มีที่เก็บเครดิตลูกค้า/การคืนเงิน ⇒ ส่วนที่เกินให้สำนักงานบัญชีจัดการคืนเงินนอกระบบ · ใบเพิ่มหนี้ไม่ต้องเรียก
+ */
+export function assertWithinBillingOutstanding(billingOutstandingSatang: number, next: CreditNoteAmounts): void {
+  if (next.totalSatang <= billingOutstandingSatang) return
+  const available = Math.max(0, billingOutstandingSatang)
+  throw new SalesError('CREDIT_NOTE_EXCEEDS_OUTSTANDING', {
+    detail: `ขอลด ${next.totalSatang} ยอดค้างของรอบ ${billingOutstandingSatang}`,
+    context: { billingOutstandingSatang, maxCreditNoteTotalSatang: available, requestedTotalSatang: next.totalSatang },
+    message:
+      available === 0
+        ? `รอบวางบิลนี้ไม่มียอดค้างชำระแล้ว จึงบันทึกใบลดหนี้ไม่ได้ (ขอลด ${fmtSatangSymbol(next.totalSatang)}) — ` +
+          'ถ้าต้องคืนเงินให้ลูกค้า ขอให้สำนักงานบัญชีจัดการคืนเงินนอกระบบ'
+        : `ยอดใบลดหนี้ ${fmtSatangSymbol(next.totalSatang)} เกินยอดค้างชำระของรอบวางบิล — ลดได้ไม่เกิน ${fmtSatangSymbol(available)} (รวมภาษี) · ` +
+          'ถ้าต้องคืนเงินส่วนที่ลูกค้าชำระเกิน ขอให้สำนักงานบัญชีจัดการคืนเงินนอกระบบ',
   })
 }
 

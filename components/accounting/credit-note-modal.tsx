@@ -22,7 +22,12 @@ import {
 } from '@/components/ui'
 import { PERIOD_CLOSED_CANCEL_HINT } from '@/lib/accounting/period'
 import { callApi, jsonRequest } from '@/lib/api/types'
-import { creditableInvoiceBalance, CREDIT_NOTE_TYPE_LABEL, netInvoiceAmounts } from '@/lib/credit-notes/credit-note'
+import {
+  creditableInvoiceBalance,
+  CREDIT_NOTE_TYPE_LABEL,
+  maxCreditNoteTotalSatang,
+  netInvoiceAmounts,
+} from '@/lib/credit-notes/credit-note'
 import type { CreditNoteType } from '@/lib/credit-notes/schemas'
 import type { AwaitingCreditNoteDto, CreditNoteCreateResultDto, CreditNoteDto } from '@/lib/credit-notes/types'
 import { fmtDate, toInputDate } from '@/lib/format/datetime'
@@ -38,11 +43,14 @@ import { signedFileUrl, StorageUploadError, uploadToStorage } from '@/lib/upload
  * - ยกเลิกใบที่บันทึกผิดพร้อมเหตุผล (ห้ามลบ)
  * - มติ PO U19: เลือกชนิด "ใบลดหนี้ / ใบเพิ่มหนี้" ในฟอร์มเดียวกัน (ใบเพิ่มหนี้ไม่มีเพดาน · ผูกได้เฉพาะ Adjustment เพิ่มยอด)
  * - มติ PO U21: ยอดไม่ตรงรายการปรับปรุงที่อ้างถึง ⇒ server บันทึกให้และคืน `warnings` ⇒ แสดง toast เตือน
+ * - มติ PO U171: แสดงยอดค้างของรอบ + ลดหนี้ได้สูงสุด (`maxCreditNoteTotalSatang()`) · ยอดค้าง 0 ⇒ เตือนให้คืนเงินนอกระบบ
  * ยอดสุทธิใช้ `netInvoiceAmounts()` (pure SSOT) — ไม่คำนวณเงินเองบนจอ (Rule 01)
  */
 
 export interface CreditNoteInvoice {
   id: string
+  /** รายการขายของรอบวางบิล — ใช้หายอดค้างของรอบ (U171) */
+  salesRecordId: string
   invoiceNumber: string
   invoiceDate: string
   companyName: string
@@ -53,6 +61,7 @@ export interface CreditNoteInvoice {
 
 export function CreditNoteModal({
   invoice,
+  billingOutstandingSatang,
   notes,
   awaiting,
   canManage,
@@ -60,6 +69,8 @@ export function CreditNoteModal({
   onChanged,
 }: {
   invoice: CreditNoteInvoice | null
+  /** ยอดค้างตามเอกสารของรอบวางบิล (`null` = ยังโหลดไม่เสร็จ) — ใบลดหนี้ห้ามเกินยอดนี้ (U171) */
+  billingOutstandingSatang: number | null
   notes: readonly CreditNoteDto[]
   awaiting: readonly AwaitingCreditNoteDto[]
   canManage: boolean
@@ -83,6 +94,9 @@ export function CreditNoteModal({
 
   const net = netInvoiceAmounts(invoice, notes)
   const creditable = creditableInvoiceBalance(invoice, notes)
+  // U171 — ลดได้สูงสุด (รวมภาษี) = ค่าน้อยกว่าของคงเหลือใบกำกับกับยอดค้างของรอบ · server ตรวจซ้ำเสมอ
+  const maxCreditTotal =
+    billingOutstandingSatang === null ? null : maxCreditNoteTotalSatang(creditable.totalSatang, billingOutstandingSatang)
   const typeLabel = CREDIT_NOTE_TYPE_LABEL[noteType]
   const isDebit = noteType === 'debit'
   const awaitingOfType = awaiting.filter((row) => row.noteType === noteType)
@@ -215,7 +229,22 @@ export function CreditNoteModal({
               <span className="text-slate-500">ภาษีขายตามเอกสาร</span>
               <span className="font-mono">{fmtSatangSymbol(net.vatSatang)}</span>
             </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">ยอดค้างชำระของรอบวางบิล</span>
+              <span className="font-mono">{fmtSatangSymbol(billingOutstandingSatang)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">ลดหนี้ได้สูงสุด (รวมภาษี)</span>
+              <span className="font-mono font-semibold text-slate-900">{fmtSatangSymbol(maxCreditTotal)}</span>
+            </div>
           </div>
+
+          {!isDebit && maxCreditTotal === 0 && (
+            <InlineAlert tone="warning" title="รอบวางบิลนี้ไม่มียอดค้างชำระ">
+              บันทึกใบลดหนี้ไม่ได้ เพราะใบลดหนี้ต้องไม่เกินยอดค้างชำระของรอบวางบิล — ถ้าต้องคืนเงินให้ลูกค้า
+              ขอให้สำนักงานบัญชีจัดการคืนเงินนอกระบบ
+            </InlineAlert>
+          )}
 
           {awaiting.some((row) => row.noteType === 'credit') && (
             <InlineAlert tone="warning" title="รอใบลดหนี้">
@@ -317,7 +346,9 @@ export function CreditNoteModal({
                 hint={
                   isDebit
                     ? 'ใบเพิ่มหนี้ — เพิ่มมูลค่าบริการหลังออกใบกำกับแล้ว (ผูกได้เฉพาะรายการปรับปรุงเพิ่มยอด)'
-                    : 'ใบลดหนี้ — ลดมูลค่าบริการหลังออกใบกำกับแล้ว (ยอดรวมต้องไม่เกินยอดใบกำกับ)'
+                    : `ใบลดหนี้ — ลดมูลค่าบริการหลังออกใบกำกับแล้ว (ยอดรวมต้องไม่เกินยอดใบกำกับ และไม่เกินยอดค้างชำระของรอบ${
+                        maxCreditTotal === null ? '' : ` — ลดได้สูงสุด ${fmtSatangSymbol(maxCreditTotal)} รวมภาษี`
+                      })`
                 }
               >
                 <Select

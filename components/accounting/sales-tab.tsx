@@ -74,6 +74,7 @@ export function SalesTab() {
     // ยอดของ**ใบที่อ้างถึง** (ใบเสร็จรับเงิน/ใบกำกับภาษีหลายใบต่อรอบได้ — U95)
     setCreditInvoice({
       id: invoice.id,
+      salesRecordId: row.id,
       invoiceNumber: invoice.invoiceNumber,
       invoiceDate: invoice.invoiceDate,
       companyName: row.companyName,
@@ -88,7 +89,8 @@ export function SalesTab() {
   }
 
   async function reloadCreditNotes(): Promise<void> {
-    await Promise.all([creditNotes.reload(), awaitingCreditNotes.reload()])
+    // ยอดค้างของรอบเปลี่ยนตามเอกสาร (U171 — ฟอร์มแสดงยอดที่ลดได้) ⇒ โหลดรายการขายใหม่ด้วย
+    await Promise.all([creditNotes.reload(), awaitingCreditNotes.reload(), reload()])
   }
 
   async function runCancel(): Promise<void> {
@@ -280,6 +282,9 @@ export function SalesTab() {
       <CreditNoteModal
         key={`credit-${creditInvoice?.id ?? 'none'}`}
         invoice={creditInvoice}
+        billingOutstandingSatang={
+          data.items.find((row) => row.id === creditInvoice?.salesRecordId)?.billingOutstandingSatang ?? null
+        }
         notes={creditInvoice === null ? [] : (creditNotes.byInvoice.get(creditInvoice.id) ?? [])}
         awaiting={awaitingCreditNotes.items.filter((item) => item.taxInvoiceId === creditInvoice?.id)}
         canManage={canManageInvoice}
