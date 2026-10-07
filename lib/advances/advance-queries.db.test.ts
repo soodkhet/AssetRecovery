@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SessionUser } from '@/lib/auth/types'
@@ -14,6 +15,8 @@ vi.mock('@/lib/uploads/verify', async () => (await import('@/tests/helpers/fake-
  * สวิตช์จำลอง "ขั้นส่งแจ้งเตือนล้ม" (DEC-015 · มติ PO U120) — ปิดไว้ = ส่งจริงตามปกติ
  * (เทสต์อื่นในไฟล์ไม่ได้รับผลกระทบ)
  */
+/** fake verify ใช้ hash ของ path · audit การเคลียร์ลบไม่ได้ ⇒ path ใบเสร็จต้องไม่ซ้ำต่อรอบเทสต์ (R5-001) */
+const RUN = randomUUID().slice(0, 8)
 const dispatchFault = vi.hoisted(() => ({ fail: false }))
 vi.mock('@/lib/notifications/dispatch', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/notifications/dispatch')>()
@@ -360,7 +363,7 @@ suite('เคลียร์ยอด (`15` §16 · `22` §6.13)', () => {
     await markPaid(created.id)
     const settled = await advances.settleAdvance(ctx(agent), created.id, {
       usedSatang: 420_000,
-      receiptFileUrl: 'expenses/receipt-33.pdf',
+      receiptFileUrl: `expenses/receipt-33-${RUN}.pdf`,
       note: null,
     })
     expect(settled.status).toBe('cleared')
@@ -410,7 +413,7 @@ suite('เคลียร์ยอด (`15` §16 · `22` §6.13)', () => {
     await markPaid(created.id)
     const settled = await advances.settleAdvance(ctx(agent), created.id, {
       usedSatang: 550_000,
-      receiptFileUrl: 'expenses/receipt-over.pdf',
+      receiptFileUrl: `expenses/receipt-over-${RUN}.pdf`,
       note: null,
     })
     expect(settled.status).toBe('cleared')
@@ -426,7 +429,7 @@ suite('เคลียร์ยอด (`15` §16 · `22` §6.13)', () => {
       calculationSource: 'manual',
       status: 'pending_approval',
       caseId: null,
-      receiptFileUrl: 'expenses/receipt-over.pdf',
+      receiptFileUrl: `expenses/receipt-over-${RUN}.pdf`,
     })
     expect(claim.revisionNote).toContain('เบิกส่วนเกินเงินทดรองอัตโนมัติ')
 

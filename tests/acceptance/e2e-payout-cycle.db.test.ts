@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SessionUser } from '@/lib/auth/types'
@@ -768,7 +769,8 @@ suite('Phase 8.1 — E2E เงินทดรอง 5 สถานะ (`29` §1
     // cleared — เคลียร์ยอด ยอดคืนมาจาก generated column ของ DB (ห้ามคำนวณเอง)
     const cleared = await advances.settleAdvance(ctx(finance), requested.id, {
       usedSatang: 180_000,
-      receiptFileUrl: 'https://test.local/receipt.pdf',
+      // fake verify ใช้ hash ของ path · audit การเคลียร์ลบไม่ได้ ⇒ path ต้องไม่ซ้ำต่อรอบ (R5-001)
+      receiptFileUrl: `https://test.local/receipt-${randomUUID().slice(0, 8)}.pdf`,
       note: 'คืนเงินสดส่วนที่เหลือแล้ว',
     })
     expect(cleared.status).toBe('cleared')

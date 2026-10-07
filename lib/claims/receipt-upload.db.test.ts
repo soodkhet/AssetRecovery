@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SessionUser } from '@/lib/auth/types'
@@ -21,6 +22,8 @@ vi.mock('@/lib/uploads/verify', async () => (await import('@/tests/helpers/fake-
  * ⚠️ ต้องตั้ง `DATABASE_URL = TEST_DATABASE_URL` **ก่อน** import service (กับดัก 2026-08-14)
  */
 
+/** audit ลบไม่ได้ (immutable) ⇒ ใบเสร็จที่ใช้เคลียร์เงินทดรองค้างข้ามรอบเทสต์ — เนื้อไฟล์ต้องไม่ซ้ำต่อรอบ (R5-001) */
+const RUN = randomUUID().slice(0, 8)
 const url = process.env.TEST_DATABASE_URL
 
 function assertLocalTestDatabase(connectionString: string): void {
@@ -383,7 +386,7 @@ suite('มติ PO U143 — เคลียร์เงินทดรอง: �
     )
 
     const path = receiptPathOf(AGENT_ID, 'advance.pdf')
-    const hash = uploadPdf(path, 'advance-receipt')
+    const hash = uploadPdf(path, `advance-receipt-${RUN}`)
     const settled = await advances.settleAdvance({ actor: agent, meta }, created.id, {
       usedSatang: 120_000,
       receiptFileUrl: path,
@@ -414,13 +417,60 @@ suite('มติ PO U143 — เคลียร์เงินทดรอง: �
     )
     await markAdvancePaidOut(db(), { organizationId: ORG_ID, advanceId: second.id, actorId: FINANCE_ID })
     const copyPath = receiptPathOf(AGENT_ID, 'advance-copy.pdf')
-    expect(uploadPdf(copyPath, 'advance-receipt')).toBe(hash)
+    expect(uploadPdf(copyPath, `advance-receipt-${RUN}`)).toBe(hash)
     await expectCode(
       () => advances.settleAdvance({ actor: agent, meta }, second.id, { usedSatang: 120_000, receiptFileUrl: copyPath, note: null }),
       'CLAIM_DUPLICATE_SUBMISSION',
     )
     const unchanged = await db().advance.findUniqueOrThrow({ where: { id: second.id }, select: { status: true } })
     expect(unchanged.status).not.toBe('cleared')
+  })
+})
+
+suite('preship R5-001 — ใบเสร็จที่ใช้เคลียร์เงินทดรอง (ไม่มีส่วนเกิน) ใช้ซ้ำไม่ได้', () => {
+  it('เคลียร์เงินทดรองด้วยใบเสร็จแล้ว ⇒ เบิกมือ/เคลียร์ก้อนอื่นด้วยใบเดิม (hash เดียวกัน) ได้ CLAIM_DUPLICATE_SUBMISSION', async () => {
+    const { markAdvancePaidOut } = await import('@/tests/helpers/advance-paid-out')
+    const paidAdvance = async (purpose: string) => {
+      const created = await advances.createAdvance({ actor: agent, meta }, {
+        requestedSatang: 100_000,
+        purpose,
+        dueClearDate: new Date('2026-12-31T00:00:00Z'),
+        payeeId: null,
+      })
+      await db().$executeRawUnsafe(
+        `UPDATE advances SET status = 'approved', approved_satang = 100000, approved_at = now() WHERE id = '${created.id}'`,
+      )
+      await markAdvancePaidOut(db(), { organizationId: ORG_ID, advanceId: created.id, actorId: FINANCE_ID })
+      return created.id
+    }
+
+    uploadTestState.realVerify = true
+    const firstId = await paidAdvance('ค่าเดินทางติดตามทรัพย์ R5-001')
+    const path = receiptPathOf(AGENT_ID, 'r5-001.pdf')
+    const hash = uploadPdf(path, `r5-001-receipt-${RUN}`)
+    const settled = await advances.settleAdvance({ actor: agent, meta }, firstId, { usedSatang: 80_000, receiptFileUrl: path, note: null })
+    expect(settled.excessClaimId).toBeNull()
+
+    const copyPath = receiptPathOf(AGENT_ID, 'r5-001-copy.pdf')
+    expect(uploadPdf(copyPath, `r5-001-receipt-${RUN}`)).toBe(hash)
+    await expectCode(
+      () =>
+        claims.createManualClaim({ actor: agent, meta }, {
+          claimType: 'receipt',
+          grossSatang: 80_000,
+          expenseDate: new Date('2026-10-05T00:00:00Z'),
+          payeeId: null,
+          receiptFileUrl: copyPath,
+          note: 'เบิกซ้ำด้วยใบเสร็จที่เคลียร์เงินทดรองแล้ว',
+        }),
+      'CLAIM_DUPLICATE_SUBMISSION',
+    )
+
+    const secondId = await paidAdvance('ค่าเดินทางติดตามทรัพย์ R5-001 ก้อนสอง')
+    await expectCode(
+      () => advances.settleAdvance({ actor: agent, meta }, secondId, { usedSatang: 80_000, receiptFileUrl: copyPath, note: null }),
+      'CLAIM_DUPLICATE_SUBMISSION',
+    )
   })
 })
 

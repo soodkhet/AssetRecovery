@@ -69,7 +69,14 @@ export async function assertNoDuplicateClaimSubmission(
  */
 export async function assertReceiptNotReused(
   tx: ExpenseTxClient,
-  input: { organizationId: string; payeeId: string; receiptFileHash: string | null; selfExpenseId?: string },
+  input: {
+    organizationId: string
+    payeeId: string
+    receiptFileHash: string | null
+    selfExpenseId?: string
+    /** เคลียร์เงินทดรองก้อนนี้อยู่ — ไม่นับ audit ของตัวเอง */
+    selfAdvanceId?: string
+  },
 ): Promise<void> {
   const hash = input.receiptFileHash
   if (hash === null || hash === '') return
@@ -88,4 +95,21 @@ export async function assertReceiptNotReused(
   })
   const reused = findReceiptReuse(hash, holders, input.selfExpenseId ?? null)
   if (reused !== undefined) throw new ClaimReceiptReusedError(reused.id, reused.payeeId === input.payeeId)
+
+  // preship R5-001 — ใบเสร็จที่ใช้เคลียร์เงินทดรองแล้ว (ตาราง `advances` ไม่มีคอลัมน์ไฟล์ — เก็บใน audit การเคลียร์ตาม `15` §13)
+  // นับเป็นการใช้ใบเสร็จนั้นแล้วเช่นกัน ⇒ เบิกค่าที่พัก/เบิกมือ/เคลียร์เงินทดรองก้อนอื่นด้วยใบเดิมไม่ได้
+  const settledAdvance = await tx.auditLog.findFirst({
+    where: {
+      organizationId: input.organizationId,
+      targetType: 'advances',
+      action: 'status_change',
+      afterData: { path: ['receipt_file_hash'], equals: hash },
+      ...(input.selfAdvanceId !== undefined ? { NOT: { targetId: input.selfAdvanceId } } : {}),
+    },
+    select: { targetId: true, actorId: true },
+    orderBy: { createdAt: 'asc' },
+  })
+  if (settledAdvance !== null) {
+    throw new ClaimReceiptReusedError(`advance:${settledAdvance.targetId ?? '-'}`, false)
+  }
 }
