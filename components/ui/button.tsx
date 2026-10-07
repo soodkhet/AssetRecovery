@@ -60,6 +60,8 @@ export function Button({
     <button
       type={type}
       disabled={disabled === true || loading}
+      // `<Modal>` อ่านค่านี้เพื่อกันปิดระหว่างบันทึก (`modal-close-guard.ts`)
+      aria-busy={loading || undefined}
       className={cn(
         'focus-ring inline-flex items-center justify-center gap-2 rounded-lg font-semibold transition-colors',
         'disabled:cursor-not-allowed disabled:opacity-50',

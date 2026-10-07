@@ -11,6 +11,8 @@ import type { ClientSession } from '@/lib/auth/types'
 /**
  * Top Nav 7 เมนู — โครง/คลาสตาม mockup `reference/app-shell.html` (`06` §8)
  * รายการเมนูมาจาก `visibleMenus()` ที่ฝั่ง server กรองตาม role มาแล้ว (`06` §7.2)
+ * จอต่ำกว่า xl (tablet/มือถือ) เมนูย้ายลงแถวที่สองเต็มความกว้างและขึ้นบรรทัดใหม่ได้ — เดิมแถวเดียวกับโลโก้
+ * ถูกบีบจนเมนูตกขอบ (exec ที่ 768px เห็น 2 จาก 7) โดยซ่อน scrollbar ไว้ (preship PS-002)
  * ⚠️ การซ่อนเมนูเป็น UX เท่านั้น — ทุก endpoint ยังตรวจสิทธิ์เองที่ API layer (DEC-002)
  */
 export function TopNav({ menus, session }: { menus: readonly MenuItem[]; session: ClientSession }) {
@@ -48,7 +50,7 @@ export function TopNav({ menus, session }: { menus: readonly MenuItem[]; session
               </span>
               <span className="text-lg font-bold tracking-tight text-slate-900">AssetRecovery</span>
             </Link>
-            <nav aria-label="เมนูหลัก" className="no-scrollbar hidden overflow-x-auto rounded-lg bg-slate-100 p-1 md:flex">
+            <nav aria-label="เมนูหลัก" className="no-scrollbar hidden overflow-x-auto rounded-lg bg-slate-100 p-1 xl:flex">
               {tabs}
             </nav>
           </div>
@@ -65,7 +67,7 @@ export function TopNav({ menus, session }: { menus: readonly MenuItem[]; session
           </div>
         </div>
 
-        <nav aria-label="เมนูหลัก (จอเล็ก)" className="no-scrollbar mb-2 flex gap-1 overflow-x-auto rounded-lg bg-slate-100 p-1 md:hidden">
+        <nav aria-label="เมนูหลัก (จอเล็ก)" className="mb-2 flex flex-wrap gap-1 rounded-lg bg-slate-100 p-1 xl:hidden">
           {tabs}
         </nav>
       </div>
