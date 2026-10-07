@@ -1,5 +1,6 @@
 'use client'
 
+import { buttonClass } from '@/components/ui/button'
 import { useState } from 'react'
 import { CancelWhtModal } from '@/components/accounting/cancel-wht-modal'
 import { MarkWhtFiledModal } from '@/components/accounting/mark-wht-filed-modal'
@@ -266,7 +267,7 @@ export function WhtTab() {
                     <Td className="text-right whitespace-nowrap">
                       <div className="inline-flex items-center gap-1.5">
                         <a
-                          className="focus-ring rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                          className={buttonClass('secondary')}
                           href={`/api/accounting/wht-certificates/${row.id}/pdf`}
                           target="_blank"
                           rel="noreferrer"

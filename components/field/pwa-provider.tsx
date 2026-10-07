@@ -1,5 +1,6 @@
 'use client'
 
+import { buttonClass } from '@/components/ui/button'
 import { useCallback, useEffect, useState } from 'react'
 import { IconClose, IconPlus } from '@/components/field/field-icons'
 import { useToast } from '@/components/ui'
@@ -151,7 +152,7 @@ export function FieldPwaProvider() {
             type="button"
             onClick={() => void enablePush()}
             disabled={working}
-            className="focus-ring shrink-0 rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
+            className={buttonClass('primary', 'sm', 'shrink-0 disabled:opacity-60')}
           >
             {working ? 'กำลังเปิด...' : 'เปิดการแจ้งเตือน'}
           </button>

@@ -101,7 +101,7 @@ export function DeliveredLotGroups({
           <Badge className="bg-slate-100 text-slate-700">{summary.totalLots} ล็อต</Badge>
           <Badge className="bg-slate-100 text-slate-700">{summary.totalAssets} เครื่อง</Badge>
           {summary.totalPendingLots > 0 && (
-            <Badge className="bg-amber-100 text-amber-800">รอเอกสาร {summary.totalPendingLots} ล็อต</Badge>
+            <StatusBadge group="pending" label={`รอเอกสาร ${summary.totalPendingLots} ล็อต`} />
           )}
         </div>
       )}
@@ -183,9 +183,9 @@ function GroupHeaderRow({
           <span className="text-xs text-slate-500">{group.lotCount} ล็อต</span>
           <span className="text-xs text-slate-500">{group.assetCount} เครื่อง</span>
           {group.pendingLotCount > 0 ? (
-            <Badge className="bg-amber-100 text-amber-800">รอเอกสาร {group.pendingLotCount} ล็อต</Badge>
+            <StatusBadge group="pending" label={`รอเอกสาร ${group.pendingLotCount} ล็อต`} />
           ) : (
-            <Badge className="bg-emerald-100 text-emerald-800">ยืนยันครบ</Badge>
+            <StatusBadge group="success" label="ยืนยันครบ" />
           )}
         </button>
       </td>

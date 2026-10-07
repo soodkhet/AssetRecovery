@@ -340,7 +340,7 @@ export function BankAccountsTab() {
                 </Td>
                 <Td>
                   <span className="font-mono text-xs text-slate-700">{item.accountNumberMasked}</span>
-                  {item.isPrimary && <Badge className="ml-2 bg-amber-100 text-amber-800">บัญชีหลัก</Badge>}
+                  {item.isPrimary && <StatusBadge group="pending" label="บัญชีหลัก" className="ml-2" />}
                 </Td>
                 <Td>
                   <span className="text-xs text-slate-600">

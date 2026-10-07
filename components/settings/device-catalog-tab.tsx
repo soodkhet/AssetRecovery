@@ -133,7 +133,7 @@ export function DeviceCatalogTab() {
     <Card>
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h2 className="text-sm font-bold text-slate-900">Model Phone</h2>
+          <h2 className="text-sm font-bold text-slate-900">ฐานรุ่นเครื่อง (TAC)</h2>
           <p className="mt-0.5 text-xs text-slate-500">
             แคตตาล็อกแบรนด์/รุ่นสำหรับฟอร์มรับเคส — กรอก IMEI แล้วระบบเติมยี่ห้อ/รุ่นจากฐาน TAC (8 หลักแรกของ IMEI)
             ระบบตรวจฐานข้อมูลทุกวันหลังเที่ยงคืน · การแสดงในตัวเลือกเป็นไปตามตัวกรอง เว้นแต่ตั้งด้วยมือ (ชนะเสมอ)

@@ -14,23 +14,24 @@ import { requireSession } from '@/lib/auth/session'
  * กระทำต่อบัญชีของผู้เรียกเองเท่านั้น (ไม่รับ user id จาก body) · ต้องยืนยันรหัสปัจจุบันเสมอ
  */
 export async function POST(request: NextRequest): Promise<Response> {
-  let payload: unknown
   try {
-    payload = await request.json()
-  } catch {
-    return Response.json(toAuthErrorBody('REQUIRED_MISSING'), { status: 400 })
-  }
-
-  const parsed = changePasswordSchema.safeParse(payload)
-  if (!parsed.success) {
-    return Response.json(
-      { ...toAuthErrorBody('REQUIRED_MISSING'), fieldErrors: parsed.error.flatten().fieldErrors },
-      { status: 400 },
-    )
-  }
-
-  try {
+    // ตรวจ session ก่อนอ่าน body — ผู้ไม่ได้ login ต้องได้ 401 ไม่ใช่ field errors ของ schema (preship PS-026)
     const user = await requireSession(new Date(), { allowPasswordChangePending: true })
+
+    let payload: unknown
+    try {
+      payload = await request.json()
+    } catch {
+      return Response.json(toAuthErrorBody('REQUIRED_MISSING'), { status: 400 })
+    }
+    const parsed = changePasswordSchema.safeParse(payload)
+    if (!parsed.success) {
+      return Response.json(
+        { ...toAuthErrorBody('REQUIRED_MISSING'), fieldErrors: parsed.error.flatten().fieldErrors },
+        { status: 400 },
+      )
+    }
+
     const redirectTo = await changeOwnPassword(user, parsed.data, getRequestMeta(request))
     return Response.json({ data: { redirectTo } })
   } catch (error) {

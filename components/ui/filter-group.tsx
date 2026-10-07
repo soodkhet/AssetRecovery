@@ -21,7 +21,8 @@ export function FilterGroup<T extends string>({
   className?: string
 }) {
   return (
-    <div className={cn('flex gap-1 rounded-lg bg-slate-100 p-1', className)}>
+    // ตัวเลือกเยอะ (สถานะรอบวางบิล) ขึ้นบรรทัดใหม่บนจอแคบแทนล้นจอ (preship PS-041)
+    <div className={cn('flex flex-wrap gap-1 rounded-lg bg-slate-100 p-1', className)}>
       {options.map((option) => (
         <button
           key={option.value}

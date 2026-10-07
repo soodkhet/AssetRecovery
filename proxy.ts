@@ -64,5 +64,7 @@ export default async function proxy(request: NextRequest): Promise<NextResponse>
 
 export const config = {
   // ข้าม static asset / รูป / favicon — ตามแนวทาง Supabase SSR
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'],
+  // + manifest / service worker / หน้า offline ของ PWA: หน้า login ลิงก์ถึงเสมอ ต้องได้ไฟล์จริงไม่ใช่ redirect ไป /login
+  //   (เดิม "เพิ่มลงหน้าจอโฮม" จากหน้า login ไม่ได้ manifest — preship PS-025)
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|offline.html|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'],
 }

@@ -23,6 +23,7 @@ import {
   Td,
   Th,
   Tr,
+  Select,
 } from '@/components/ui'
 import { cn } from '@/components/ui/cn'
 import {
@@ -113,18 +114,19 @@ export function AdjustmentTab() {
               value={status}
               onChange={(value) => setStatus(value as AdjustmentStatusFilter)}
             />
-            <select
+            <Select
               aria-label="กรองตามประเภทรายการต้นทาง"
               value={targetType}
               onChange={(event) => setTargetType(event.target.value as AdjustmentTargetFilter)}
-              className="focus-ring rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700"
+              // ตัวกรองใช้ Select ของ UI Kit (เดิมเขียน class เอง — preship PS-037)
+              className="w-auto bg-white py-1.5 text-xs font-semibold text-slate-700"
             >
               {ADJUSTMENT_TARGET_FILTERS.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
                 </option>
               ))}
-            </select>
+            </Select>
             {canCreate && (
               <Button size="sm" onClick={() => setCreateOpen(true)}>
                 + สร้าง Adjustment

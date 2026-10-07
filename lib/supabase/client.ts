@@ -1,5 +1,5 @@
 import { createBrowserClient } from '@supabase/ssr'
-import { getPublicEnv } from '@/lib/env'
+import { getPublicEnv } from '@/lib/env-public'
 
 /**
  * Supabase client ฝั่ง browser — ใช้เพื่อ Auth (JWT) และ signed URL ของ Storage เท่านั้น (DEC-001/003)

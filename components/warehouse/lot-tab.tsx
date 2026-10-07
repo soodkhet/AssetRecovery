@@ -1,5 +1,6 @@
 'use client'
 
+import { buttonClass } from '@/components/ui/button'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { usePermission } from '@/components/auth/permission-provider'
 import {
@@ -282,7 +283,7 @@ export function LotTab({
                 <>
                   <a
                     href={apiPath('lot.exportExcel', { id: openLot.id })}
-                    className="focus-ring rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                    className={buttonClass('secondary')}
                   >
                     Export Excel
                   </a>

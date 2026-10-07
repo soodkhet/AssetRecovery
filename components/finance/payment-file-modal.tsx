@@ -1,5 +1,6 @@
 'use client'
 
+import { buttonClass } from '@/components/ui/button'
 import { useCallback, useEffect, useState } from 'react'
 import { Button, Field, InlineAlert, Modal, RefText, Select, Textarea, useToast } from '@/components/ui'
 import { REASON_MIN_LENGTH } from '@/components/settings/reason-confirm-modal'
@@ -166,7 +167,7 @@ export function PaymentFileModal({
             </Button>
             <a
               href={`/api/payout-batches/${batch.id}/payment-file`}
-              className="focus-ring rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800"
+              className={buttonClass('primary')}
             >
               ดาวน์โหลดไฟล์โอน
             </a>

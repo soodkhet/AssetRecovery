@@ -1,4 +1,5 @@
 import { DeviceCatalogTab } from '@/components/settings/device-catalog-tab'
+import { PageHeader } from '@/components/ui'
 import { requireMenuPage } from '@/lib/nav/menu-guard'
 
 /**
@@ -7,5 +8,14 @@ import { requireMenuPage } from '@/lib/nav/menu-guard'
  */
 export default async function SettingsDeviceCatalogPage() {
   await requireMenuPage('settings.device-catalog')
-  return <DeviceCatalogTab />
+  return (
+    <>
+      {/* หัวหน้าเพจแบบเดียวกับหน้าตั้งค่าอื่น (เดิมมีแค่ h2 ในการ์ด — preship PS-036) */}
+      <PageHeader
+        title="Model Phone"
+        description="แคตตาล็อกแบรนด์/รุ่นสำหรับฟอร์มรับเคส — กรอก IMEI แล้วระบบเติมยี่ห้อ/รุ่นจากฐาน TAC"
+      />
+      <DeviceCatalogTab />
+    </>
+  )
 }

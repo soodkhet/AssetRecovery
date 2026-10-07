@@ -24,6 +24,7 @@ import {
   Th,
   Tr,
   useToast,
+  Select,
 } from '@/components/ui'
 import { cn } from '@/components/ui/cn'
 import { callApi, jsonRequest } from '@/lib/api/types'
@@ -156,11 +157,12 @@ export function RevenueTab() {
               value={view}
               onChange={(value) => setView(value === 'aging' ? 'aging' : 'batches')}
             />
-            <select
+            <Select
               aria-label="กรองตามบริษัทไฟแนนซ์"
               value={companyId}
               onChange={(event) => setCompanyId(event.target.value)}
-              className="focus-ring rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700"
+              // ตัวกรองใช้ Select ของ UI Kit (เดิมเขียน class เอง — preship PS-037)
+              className="w-auto bg-white py-1.5 text-xs font-semibold text-slate-700"
             >
               <option value="">ทุกบริษัท</option>
               {companyOptions.map(([id, name]) => (
@@ -168,7 +170,7 @@ export function RevenueTab() {
                   {name}
                 </option>
               ))}
-            </select>
+            </Select>
             {view === 'batches' && (
               <FilterGroup
                 options={BILLING_STATUS_FILTERS}

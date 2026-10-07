@@ -1,5 +1,6 @@
 'use client'
 
+import { ROLE_GROUP_BADGE_CLASS } from '@/lib/ui/status-badge'
 import { useCallback, useEffect, useState } from 'react'
 import { Can } from '@/components/auth/permission-provider'
 import { CompensationPlanFormModal } from '@/components/compensation/compensation-plan-form-modal'
@@ -218,11 +219,7 @@ export function CompensationPlansManager() {
                   <div>
                     <div className="text-base font-bold text-slate-900">{plan.name}</div>
                     <div className="mt-1 flex items-center gap-1.5">
-                      <Badge
-                        className={
-                          plan.side === 'inhouse' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'
-                        }
-                      >
+                      <Badge className={ROLE_GROUP_BADGE_CLASS[plan.side]}>
                         {plan.side}
                       </Badge>
                       <span className="font-mono text-[10px] text-slate-400">
@@ -259,9 +256,7 @@ export function CompensationPlansManager() {
 
                 <div className="mb-3 flex flex-wrap items-center gap-2">
                   {plan.whtPct > 0 ? (
-                    <Badge className="border border-amber-200 bg-amber-100 text-amber-800">
-                      ⚠️ หัก ณ ที่จ่าย {fmtPercent(plan.whtPct)} อัตโนมัติ
-                    </Badge>
+                    <StatusBadge group="pending" label={`⚠️ หัก ณ ที่จ่าย ${fmtPercent(plan.whtPct)} อัตโนมัติ`} />
                   ) : (
                     <Badge className="border border-slate-200 bg-slate-50 text-slate-400">ไม่หัก WHT</Badge>
                   )}

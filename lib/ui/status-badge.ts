@@ -124,3 +124,14 @@ export function statusBadgeClass(status: string | null | undefined): string {
 export function knownBadgeStatuses(): readonly string[] {
   return Object.keys(STATUS_GROUP)
 }
+
+/**
+ * สีป้ายกลุ่มผู้ใช้ / ฝั่งทีม (ไม่ใช่สถานะ) — ที่เดียวทั้งระบบ (preship PS-034 · เดิม map ซ้ำ 3 ไฟล์เฉดไม่ตรงกัน)
+ * ใช้เฉดเดียวกับ `STATUS_BADGE_CLASS` (พื้น -100 · ตัวอักษร -800)
+ */
+export const ROLE_GROUP_BADGE_CLASS: Readonly<Record<'system' | 'inhouse' | 'outsource' | 'finance_company', string>> = {
+  system: 'bg-slate-100 text-slate-700',
+  inhouse: 'bg-blue-100 text-blue-800',
+  outsource: 'bg-purple-100 text-purple-800',
+  finance_company: 'bg-amber-100 text-amber-800',
+}

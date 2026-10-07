@@ -49,7 +49,7 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex justify-between gap-4 border-b border-slate-100 py-2.5 last:border-0">
       <dt className="shrink-0 text-xs text-slate-400">{label}</dt>
-      <dd className="text-right text-sm font-semibold break-words text-slate-800">{children}</dd>
+      <dd className="min-w-0 text-right text-sm font-semibold break-words text-slate-800">{children}</dd>
     </div>
   )
 }
@@ -72,7 +72,8 @@ function ProfileRows({ profile }: { profile: PortalCompanyProfileDto }) {
       <Row label="ชื่อบริษัท">{profile.name}</Row>
       <Row label="เลขประจำตัวผู้เสียภาษี">
         <RefText className="text-sm font-semibold text-slate-800">{profile.taxId}</RefText>
-        <span className="ml-2 text-sm text-slate-600">{profile.branchLabel}</span>
+        {/* จอแคบ (320px) สาขาขึ้นบรรทัดใหม่ — เดิมเลข 13 หลัก + สาขาล้นจอ (preship PS-040) */}
+        <span className="block text-sm text-slate-600 sm:ml-2 sm:inline">{profile.branchLabel}</span>
       </Row>
       <Row label="ที่อยู่จดทะเบียน">{orDash(profile.address)}</Row>
       <Row label="ผู้ติดต่อประจำวัน">{contact}</Row>

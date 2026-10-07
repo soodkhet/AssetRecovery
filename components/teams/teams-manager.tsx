@@ -1,5 +1,6 @@
 'use client'
 
+import { ROLE_GROUP_BADGE_CLASS } from '@/lib/ui/status-badge'
 import { useCallback, useEffect, useState } from 'react'
 import { Can } from '@/components/auth/permission-provider'
 import { TeamFormModal } from '@/components/teams/team-form-modal'
@@ -45,11 +46,6 @@ const STATUS_LABEL: Record<StatusFilter, string> = {
   all: 'สถานะ: ทั้งหมด',
   active: 'ใช้งานปกติ (Active)',
   inactive: 'ปิดใช้งาน (Inactive)',
-}
-
-const SIDE_BADGE: Record<TeamSide, string> = {
-  inhouse: 'bg-blue-100 text-blue-700',
-  outsource: 'bg-purple-100 text-purple-700',
 }
 
 export function TeamsManager() {
@@ -286,7 +282,7 @@ export function TeamsManager() {
                       <>
                         <div className="text-sm font-semibold text-slate-800">{team.compensationPlanName}</div>
                         {team.compensationPlanSide !== null && (
-                          <Badge className={`mt-0.5 ${SIDE_BADGE[team.compensationPlanSide]}`}>
+                          <Badge className={`mt-0.5 ${ROLE_GROUP_BADGE_CLASS[team.compensationPlanSide]}`}>
                             {team.compensationPlanSide}
                           </Badge>
                         )}

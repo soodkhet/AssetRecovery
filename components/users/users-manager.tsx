@@ -1,5 +1,6 @@
 'use client'
 
+import { ROLE_GROUP_BADGE_CLASS } from '@/lib/ui/status-badge'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Can, useSession } from '@/components/auth/permission-provider'
 import { RoleGroupTabs } from '@/components/roles/role-group-tabs'
@@ -51,13 +52,6 @@ const STATUS_LABEL: Record<StatusFilter, string> = {
   all: 'สถานะ: ทั้งหมด',
   active: 'ใช้งาน (Active)',
   suspended: 'ระงับ (Suspended)',
-}
-
-const GROUP_BADGE: Record<RoleGroup, string> = {
-  system: 'bg-slate-100 text-slate-700',
-  inhouse: 'bg-blue-100 text-blue-700',
-  outsource: 'bg-purple-100 text-purple-700',
-  finance_company: 'bg-amber-100 text-amber-800',
 }
 
 type PendingAction = { user: UserDto; action: 'suspend' | 'reactivate' | 'delete' }
@@ -323,7 +317,7 @@ export function UsersManager() {
                   </Td>
                   <Td>
                     <div className="text-xs font-medium text-slate-700">{user.roleName}</div>
-                    <Badge className={`mt-1 ${GROUP_BADGE[user.roleGroup]}`}>{ROLE_GROUP_LABEL[user.roleGroup]}</Badge>
+                    <Badge className={`mt-1 ${ROLE_GROUP_BADGE_CLASS[user.roleGroup]}`}>{ROLE_GROUP_LABEL[user.roleGroup]}</Badge>
                   </Td>
                   <Td>
                     <div className="text-xs text-slate-600">{user.teamName ?? user.companyName ?? '—'}</div>

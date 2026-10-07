@@ -1,5 +1,6 @@
 'use client'
 
+import { buttonClass } from '@/components/ui/button'
 import { useState } from 'react'
 import { usePermission } from '@/components/auth/permission-provider'
 import { CancelPayoutModal } from '@/components/finance/cancel-payout-modal'
@@ -252,7 +253,7 @@ export function PayoutTab() {
                         {canDownloadFile && canDownloadPaymentFile(batch) && (
                           <a
                             href={`/api/payout-batches/${batch.id}/payment-file`}
-                            className="focus-ring rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                            className={buttonClass('secondary')}
                           >
                             ดาวน์โหลดไฟล์โอน
                           </a>

@@ -1,5 +1,6 @@
 'use client'
 
+import { buttonClass } from '@/components/ui/button'
 import { useState } from 'react'
 import { useSession } from '@/components/auth/permission-provider'
 import { requestJobRetry, useJobDetail } from '@/components/jobs/use-jobs'
@@ -100,7 +101,7 @@ export function JobDetailModal({
               <div className="mt-2 flex flex-wrap items-center gap-3">
                 <a
                   href={detail.output.href}
-                  className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white"
+                  className={buttonClass('primary')}
                 >
                   ดาวน์โหลด{detail.output.label}
                 </a>

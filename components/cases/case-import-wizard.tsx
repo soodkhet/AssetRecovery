@@ -1,5 +1,6 @@
 'use client'
 
+import { buttonClass } from '@/components/ui/button'
 import { useState } from 'react'
 import {
   Badge,
@@ -226,7 +227,7 @@ export function CaseImportWizard({
             <p className="mt-1 text-xs text-slate-500">
               แถวแรกต้องเป็นหัวคอลัมน์ · ระบบรู้จักหัวคอลัมน์ทั้งภาษาไทยและอังกฤษ · สูงสุด 1,000 แถวต่อครั้ง
             </p>
-            <label className="focus-ring mt-3 inline-block cursor-pointer rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white">
+            <label className={buttonClass('primary', 'sm', 'mt-3 cursor-pointer')}>
               เลือกไฟล์
               <input
                 type="file"

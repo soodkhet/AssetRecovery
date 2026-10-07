@@ -280,9 +280,7 @@ export function ServiceFeeTemplatesManager() {
                   <div className="mb-3 flex flex-wrap items-center gap-2">
                     {/* มติ PO U165 — กรณีไม่สำเร็จเป็นยอดแยกได้ทุกโมเดล */}
                     {chargesOnFail ? (
-                      <Badge className="border border-amber-200 bg-amber-100 text-amber-800">
-                        ⚠️ เรียกเก็บกรณีไม่สำเร็จด้วย (ยอดแยก)
-                      </Badge>
+                      <StatusBadge group="pending" label="⚠️ เรียกเก็บกรณีไม่สำเร็จด้วย (ยอดแยก)" />
                     ) : (
                       <Badge className="border border-slate-200 bg-slate-50 text-slate-400">
                         เรียกเก็บเฉพาะเคสสำเร็จ
