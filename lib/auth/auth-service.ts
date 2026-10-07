@@ -13,7 +13,8 @@ import {
 import type { RequestMeta } from '@/lib/auth/request-meta'
 import type { LoginInput } from '@/lib/auth/schemas'
 import { padLoginFailure, realLoginTimingClock, type LoginTimingClock } from '@/lib/auth/login-timing'
-import { loginThrottled } from '@/lib/auth/login-throttle-queries'
+import { loginThrottleKey, UNAUDITABLE_IDENTIFIER } from '@/lib/auth/login-throttle'
+import { LOGIN_ATTEMPT_BUSY, loginThrottled, withLoginAttemptLock } from '@/lib/auth/login-throttle-queries'
 import { invalidateSessionCache, setCachedSession } from '@/lib/auth/session-cache'
 import { getAuthenticatedUid, loadSessionUser } from '@/lib/auth/session'
 import type { SessionUser } from '@/lib/auth/types'
@@ -33,6 +34,7 @@ import { getAuthEmail, setAuthPassword, verifyPassword } from '@/lib/users/provi
  */
 
 interface LoginAccount {
+  id: string
   organizationId: string
   supabaseUid: string | null
 }
@@ -44,7 +46,7 @@ async function findLoginAccount(identifier: LoginIdentifier): Promise<LoginAccou
       identifier.kind === 'email'
         ? { email: identifier.email, deletedAt: null }
         : { username: identifier.username, deletedAt: null },
-    select: { organizationId: true, supabaseUid: true },
+    select: { id: true, organizationId: true, supabaseUid: true },
     orderBy: { createdAt: 'asc' },
   })
 }
@@ -90,7 +92,13 @@ async function auditLoginFailed(
     targetType: 'users',
     targetId: null,
     // ไม่มี enum `login_failed` ใน `02` §3 — บันทึกเป็น action `login` + ผลลัพธ์ใน after (event `auth.login.failed`)
-    after: { result: 'failed', code, identifier: auditableIdentifier(identifier) },
+    after: {
+      result: 'failed',
+      code,
+      identifier: auditableIdentifier(identifier),
+      // กุญแจนับครั้งที่ผิดรายบัญชี (`login-throttle.ts`) — อีเมล/username ของคนเดียวกันนับร่วม
+      throttle_key: loginThrottleKey(account?.id ?? null, auditableIdentifier(identifier)),
+    },
     ipAddress: meta.ipAddress,
     userAgent: meta.userAgent,
   })
@@ -119,43 +127,64 @@ export async function login(
   }
 }
 
-async function authenticate(input: LoginInput, meta: RequestMeta): Promise<LoginResult> {
-  const identifier = parseLoginIdentifier(input.identifier)
-  const account = await findLoginAccount(identifier)
-
-  // preship PS-009 — ผิดซ้ำเกินเพดาน ⇒ พักก่อนแตะ Supabase (ไม่ตรวจรหัสผ่านเลย แม้รหัสครั้งนี้ถูก)
+/**
+ * ตรวจเพดานครั้งที่ผิด → ตรวจรหัสกับ Supabase → ลง audit ครั้งที่ผิด อยู่ใต้ล็อกต่อบัญชี (R2-002)
+ * คืน Supabase uid เมื่อรหัสถูก · ผิด/พัก ⇒ throw `AuthError`
+ */
+async function verifyCredentials(input: LoginInput, account: LoginAccount | null, meta: RequestMeta): Promise<string> {
   const auditOrganizationId = await resolveAuditOrganizationId(account)
-  if (
-    auditOrganizationId !== null &&
-    (await loginThrottled({
-      organizationId: auditOrganizationId,
-      identifier: auditableIdentifier(input.identifier),
-      ipAddress: meta.ipAddress,
-    }))
-  ) {
+  const throttleKey = loginThrottleKey(account?.id ?? null, auditableIdentifier(input.identifier))
+
+  const rateLimited = async (): Promise<never> => {
     await auditLoginFailed(input.identifier, account, 'LOGIN_RATE_LIMITED', meta)
     throw new AuthError('LOGIN_RATE_LIMITED', 'too many failed logins')
   }
 
-  // ไม่พบผู้ใช้ / ยังไม่มีบัญชี Auth = ตอบเหมือนรหัสผิดทุกประการ (ห้าม leak ว่ามีตัวตนนี้ในระบบ — `05` §10)
-  // ไม่พบบัญชี → ยังเรียกอ่านบัญชี Auth ด้วย uid หลอก 1 ครั้ง ให้จำนวนครั้งที่เรียก Auth เท่าทางที่มีบัญชีจริง (BUG-140)
-  const authEmail = await getAuthEmail(account?.supabaseUid ?? LOGIN_TIMING_DUMMY_UID)
-  if (authEmail === null || !account?.supabaseUid) {
-    await verifyPassword(LOGIN_TIMING_DUMMY_EMAIL, input.password)
-    await auditLoginFailed(input.identifier, account, 'INVALID_CREDENTIALS', meta)
-    throw new AuthError('INVALID_CREDENTIALS', 'identifier not resolved')
+  const attempt = async (): Promise<string> => {
+    // preship PS-009 — ผิดซ้ำเกินเพดาน ⇒ พักก่อนแตะ Supabase (ไม่ตรวจรหัสผ่านเลย แม้รหัสครั้งนี้ถูก)
+    if (
+      auditOrganizationId !== null &&
+      (await loginThrottled({
+        organizationId: auditOrganizationId,
+        throttleKey,
+        accountId: account?.id ?? null,
+        ipAddress: meta.ipAddress,
+      }))
+    ) {
+      return rateLimited()
+    }
+
+    // ไม่พบผู้ใช้ / ยังไม่มีบัญชี Auth = ตอบเหมือนรหัสผิดทุกประการ (ห้าม leak ว่ามีตัวตนนี้ในระบบ — `05` §10)
+    // ไม่พบบัญชี → ยังเรียกอ่านบัญชี Auth ด้วย uid หลอก 1 ครั้ง ให้จำนวนครั้งที่เรียก Auth เท่าทางที่มีบัญชีจริง (BUG-140)
+    const authEmail = await getAuthEmail(account?.supabaseUid ?? LOGIN_TIMING_DUMMY_UID)
+    if (authEmail === null || !account?.supabaseUid) {
+      await verifyPassword(LOGIN_TIMING_DUMMY_EMAIL, input.password)
+      await auditLoginFailed(input.identifier, account, 'INVALID_CREDENTIALS', meta)
+      throw new AuthError('INVALID_CREDENTIALS', 'identifier not resolved')
+    }
+
+    const supabase = await createSupabaseServerClient()
+    const { data, error } = await supabase.auth.signInWithPassword({ email: authEmail, password: input.password })
+
+    if (error || !data.user) {
+      await auditLoginFailed(input.identifier, account, 'INVALID_CREDENTIALS', meta)
+      throw new AuthError('INVALID_CREDENTIALS', error?.message)
+    }
+    return data.user.id
   }
 
-  const supabase = await createSupabaseServerClient()
-  const { data, error } = await supabase.auth.signInWithPassword({ email: authEmail, password: input.password })
+  if (throttleKey === null) return attempt()
+  const result = await withLoginAttemptLock(throttleKey, attempt)
+  // คำขอของบัญชีเดียวกันกำลังตรวจอยู่ (ยิงซ้อน) ⇒ ไม่ตรวจรหัสซ้ำ — ตอบแบบถูกพัก ไม่นับเป็นครั้งที่ผิด
+  return result === LOGIN_ATTEMPT_BUSY ? rateLimited() : result
+}
 
-  if (error || !data.user) {
-    await auditLoginFailed(input.identifier, account, 'INVALID_CREDENTIALS', meta)
-    throw new AuthError('INVALID_CREDENTIALS', error?.message)
-  }
-
-  const uid = data.user.id
+async function authenticate(input: LoginInput, meta: RequestMeta): Promise<LoginResult> {
+  const identifier = parseLoginIdentifier(input.identifier)
+  const account = await findLoginAccount(identifier)
+  const uid = await verifyCredentials(input, account, meta)
   invalidateSessionCache(uid)
+  const supabase = await createSupabaseServerClient()
 
   const sessionAccount = await loadSessionUser(uid)
   if (!sessionAccount) {
@@ -249,6 +278,41 @@ export async function logout(meta: RequestMeta): Promise<void> {
 }
 
 /**
+ * ยืนยันรหัสปัจจุบันก่อนเปลี่ยนรหัสเสมอ — session ที่ถูกขโมยไปเปลี่ยนรหัสยึดบัญชีไม่ได้
+ * ใช้เพดานครั้งที่ผิดร่วมกับ login (R2-020) และลง audit ทุกครั้งที่ผิด — ไม่งั้นใช้ session ที่ขโมยมาเดารหัสได้ไม่จำกัด
+ */
+async function verifyCurrentPassword(user: SessionUser, currentPassword: string, meta: RequestMeta): Promise<string> {
+  const throttleKey = loginThrottleKey(user.id, UNAUDITABLE_IDENTIFIER)
+  const auditFailure = (code: AuthErrorCode) =>
+    emitAudit({
+      organizationId: user.organizationId,
+      actorId: user.id,
+      actorRole: user.roleName,
+      action: 'update',
+      targetType: 'users',
+      targetId: user.id,
+      after: { result: 'failed', code, context: 'change_password', throttle_key: throttleKey },
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
+    })
+
+  const result = await withLoginAttemptLock(throttleKey ?? `user:${user.id}`, async () => {
+    if (await loginThrottled({ organizationId: user.organizationId, throttleKey, accountId: user.id, ipAddress: meta.ipAddress })) {
+      await auditFailure('LOGIN_RATE_LIMITED')
+      throw new AuthError('LOGIN_RATE_LIMITED', `change-password throttled user=${user.id}`)
+    }
+    const authEmail = await getAuthEmail(user.supabaseUid)
+    if (authEmail === null || !(await verifyPassword(authEmail, currentPassword))) {
+      await auditFailure('INVALID_CREDENTIALS')
+      throw new AuthError('INVALID_CREDENTIALS', `change-password current mismatch user=${user.id}`)
+    }
+    return authEmail
+  })
+  if (result === LOGIN_ATTEMPT_BUSY) throw new AuthError('LOGIN_RATE_LIMITED', `change-password concurrent user=${user.id}`)
+  return result
+}
+
+/**
  * ผู้ใช้เปลี่ยนรหัสผ่านของตัวเอง (`POST /api/auth/change-password` — มติ PO 03/10/2569)
  * บังคับใช้หลังผู้ดูแลตั้ง/รีเซ็ตรหัสให้ (`must_change_password`) และเปลี่ยนเองได้ทุกเมื่อ
  * ตั้งผ่าน service role ฝั่ง server แล้วล้างธงในธุรกรรมเดียวกับ audit · audit ไม่มีรหัสผ่าน
@@ -261,11 +325,7 @@ export async function changeOwnPassword(
   input: { currentPassword: string; password: string },
   meta: RequestMeta,
 ): Promise<string> {
-  // ยืนยันรหัสปัจจุบันก่อนเสมอ — session ที่ถูกขโมยไปเปลี่ยนรหัสยึดบัญชีไม่ได้
-  const authEmail = await getAuthEmail(user.supabaseUid)
-  if (authEmail === null || !(await verifyPassword(authEmail, input.currentPassword))) {
-    throw new AuthError('INVALID_CREDENTIALS', `change-password current mismatch user=${user.id}`)
-  }
+  const authEmail = await verifyCurrentPassword(user, input.currentPassword, meta)
 
   await setAuthPassword(user.supabaseUid, input.password)
 

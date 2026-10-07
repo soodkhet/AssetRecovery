@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { getPublicEnv, getServerEnv } from '@/lib/env'
+import { DEPLOYMENT_ENV_NAMES, deploymentEnvWarnings, getPublicEnv, getServerEnv } from '@/lib/env'
 import { BUDDHIST_YEAR_OFFSET, DISPLAY_TIMEZONE } from '@/lib/constants'
 
 const KEYS = [
@@ -71,5 +71,23 @@ describe('constants', () => {
   it('ตรึงค่าเวลาแสดงผลตาม Rule 01', () => {
     expect(DISPLAY_TIMEZONE).toBe('Asia/Bangkok')
     expect(BUDDHIST_YEAR_OFFSET).toBe(543)
+  })
+})
+
+describe('deploymentEnvWarnings (R2-004)', () => {
+  it('เครื่อง dev (ไม่มี VERCEL_ENV) ⇒ ไม่เตือน', () => {
+    expect(deploymentEnvWarnings({})).toEqual([])
+  })
+
+  it('บน Vercel ⇒ คืนชื่อที่ยังไม่ได้ตั้ง (ค่าว่างนับว่าไม่ตั้ง)', () => {
+    const missing = deploymentEnvWarnings({ VERCEL_ENV: 'preview', CRON_SECRET: 'x', VAPID_PUBLIC_KEY: ' ' })
+    expect(missing).toContain('VAPID_PUBLIC_KEY')
+    expect(missing).toContain('GOOGLE_MAPS_API_KEY')
+    expect(missing).not.toContain('CRON_SECRET')
+  })
+
+  it('ตั้งครบ ⇒ ไม่เตือน', () => {
+    const all = Object.fromEntries(DEPLOYMENT_ENV_NAMES.map((name) => [name, 'set']))
+    expect(deploymentEnvWarnings({ VERCEL_ENV: 'production', ...all })).toEqual([])
   })
 })

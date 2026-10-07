@@ -340,6 +340,7 @@ export const ERROR_CATALOG = {
   // ── 24 §6.13 ระบบ / API กลาง (preship PS-006 · PS-022 — `lib/api/unexpected-error.ts`) ─────
   INVALID_ID_FORMAT: { status: 400, severity: 'reject', source: '24 §6.13' },
   INTERNAL_ERROR: { status: 500, severity: 'reject', source: '24 §6.13' },
+  API_ROUTE_NOT_FOUND: { status: 404, severity: 'reject', source: '24 §6.13' },
 } as const satisfies Record<string, ErrorCodeContract>
 
 export type ApiErrorCode = keyof typeof ERROR_CATALOG

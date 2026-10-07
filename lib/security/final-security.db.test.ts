@@ -631,8 +631,8 @@ const GUARDS = [
   'requireInternalSession(',
   'requirePortalAccess(',
 ]
-/** ข้อยกเว้นที่บันทึกไว้: auth (ก่อน login) + cron (secret) — ตรวจแยกในเทสต์ของโมดูลนั้น */
-const PUBLIC_ROUTES = new Set(['auth/login', 'auth/logout', 'auth/session', 'auth/change-password', 'cron/jobs'])
+/** ข้อยกเว้นที่บันทึกไว้: auth (ก่อน login) + cron (secret) + catch-all 404 ของ /api (ไม่มีข้อมูล) — ตรวจแยกในเทสต์ของโมดูลนั้น */
+const PUBLIC_ROUTES = new Set(['auth/login', 'auth/logout', 'auth/session', 'auth/change-password', 'cron/jobs', '[...slug]'])
 
 describe('ทุก route ใน app/api ผ่านชั้นสิทธิ์ (static)', () => {
   const files = walk(API_ROOT)

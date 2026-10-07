@@ -103,7 +103,10 @@ export function isAuthError(error: unknown): error is AuthError {
   return error instanceof AuthError
 }
 
+/** envelope กลาง `{ success, data, error }` เหมือน route อื่น (R2-015 — เดิมมีแค่ `{ error }`) */
 export interface AuthErrorBody {
+  success: false
+  data: null
   error: {
     code: AuthErrorCode
     title: string
@@ -112,13 +115,12 @@ export interface AuthErrorBody {
 }
 
 export function toAuthErrorBody(code: AuthErrorCode): AuthErrorBody {
-  return { error: { code, ...MESSAGES[code] } }
+  return { success: false, data: null, error: { code, ...MESSAGES[code] } }
 }
 
 /**
  * แปลง `AuthError` → Response มาตรฐาน — error ชนิดอื่นไม่ถูกกลืนเป็น 401/403 ปลอม แต่ได้ 500 `INTERNAL_ERROR`
  * (หรือ 400 `INVALID_ID_FORMAT` เมื่อ id ใน path ไม่ใช่ UUID) ผ่าน `unexpectedErrorResponse()`
- * TODO(Phase 2.1): ย้ายไปใช้ response envelope กลางของไฟล์ `45` เมื่อ API Contract Infra พร้อม
  */
 export function toAuthErrorResponse(error: unknown): Response {
   // error ที่ไม่ใช่ของ auth ⇒ envelope 500/400 กลาง (เดิมโยนต่อเป็น 500 ไม่มี body — preship PS-006)

@@ -1,6 +1,7 @@
 import type { NextRequest } from 'next/server'
 import { apiFailure, apiSuccess } from '@/lib/api/envelope'
 import { authErrorMessage } from '@/lib/auth/errors'
+import { isCronAuthorized } from '@/lib/jobs/cron-auth'
 import { enqueueScheduledJobs, reclaimStaleJobs, runDueJobs } from '@/lib/jobs/engine'
 import { runSweeperJobs } from '@/lib/jobs/registry'
 import type { JobRunSummaryDto } from '@/lib/jobs/types'
@@ -33,7 +34,7 @@ export const maxDuration = 300
  * นอก production เพื่อให้ทดสอบบนเครื่องได้ ส่วน production ปฏิเสธเสมอ (ไม่เปิดช่องยิงงานฟรี)
  */
 export async function GET(request: NextRequest): Promise<Response> {
-  if (!isCronAuthorized(request)) {
+  if (!isCronAuthorized(request.headers.get('authorization'))) {
     return apiFailure({ code: 'UNAUTHENTICATED', ...authErrorMessage('UNAUTHENTICATED') }, 401)
   }
 
@@ -49,10 +50,4 @@ export async function GET(request: NextRequest): Promise<Response> {
     ...tally,
   }
   return apiSuccess({ ...summary, reclaimed, sweepers, ranAt: now.toISOString() })
-}
-
-function isCronAuthorized(request: NextRequest): boolean {
-  const secret = process.env.CRON_SECRET?.trim()
-  if (secret === undefined || secret === '') return process.env.NODE_ENV !== 'production'
-  return request.headers.get('authorization') === `Bearer ${secret}`
 }

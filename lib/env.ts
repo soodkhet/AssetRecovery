@@ -29,5 +29,32 @@ export function getServerEnv(): ServerEnv {
   return parseOrThrow(serverEnvSchema, process.env, 'server env')
 }
 
+/**
+ * env ที่ deployment บน Vercel (staging/production) ต้องตั้ง แต่ระบบยังทำงานต่อได้ถ้าขาด (R2-004)
+ * ขาดแล้วฟีเจอร์นั้นเงียบหาย ⇒ เตือนตอน boot ({@link deploymentEnvWarnings}) · ชื่อทั้งหมดต้องมีใน `.env.example`
+ * - `CRON_SECRET` — ขาดบน Vercel ⇒ `/api/cron/jobs` ปฏิเสธทุกคำขอ (fail closed — `app/api/cron/jobs/route.ts`)
+ * - `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` / `NEXT_PUBLIC_VAPID_PUBLIC_KEY` — ขาด ⇒ ไม่มี Web Push
+ * - `GOOGLE_MAPS_API_KEY` — ขาด ⇒ คำนวณระยะทางภาคสนามไม่ได้
+ */
+export const DEPLOYMENT_ENV_NAMES = [
+  'CRON_SECRET',
+  'VAPID_PUBLIC_KEY',
+  'VAPID_PRIVATE_KEY',
+  'VAPID_SUBJECT',
+  'NEXT_PUBLIC_VAPID_PUBLIC_KEY',
+  'GOOGLE_MAPS_API_KEY',
+] as const
+
+/** อยู่บน deployment ของ Vercel (preview/staging/production) — เครื่อง dev ไม่มี `VERCEL_ENV` */
+export function isVercelDeployment(source: Record<string, string | undefined> = process.env): boolean {
+  return (source.VERCEL_ENV ?? '').trim() !== ''
+}
+
+/** ชื่อ env ที่ deployment ยังไม่ได้ตั้ง (บอกแค่ชื่อ ห้ามมีค่า) — เครื่อง dev คืนว่างเสมอ */
+export function deploymentEnvWarnings(source: Record<string, string | undefined> = process.env): string[] {
+  if (!isVercelDeployment(source)) return []
+  return DEPLOYMENT_ENV_NAMES.filter((name) => (source[name] ?? '').trim() === '')
+}
+
 // ฝั่ง client อยู่ที่ `lib/env-public.ts` (แยกไฟล์เพื่อไม่ให้ schema ฝั่ง server ไปถึง browser) — re-export ให้ผู้เรียกเดิม
 export { getPublicEnv, type PublicEnv } from '@/lib/env-public'

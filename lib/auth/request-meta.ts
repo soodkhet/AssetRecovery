@@ -19,8 +19,14 @@ export function normalizeIpAddress(raw: string | null): string | null {
   return null
 }
 
+/**
+ * IP ของผู้ใช้ — เรียงจาก header ที่ client ปลอมไม่ได้ก่อน (R2-016)
+ * Vercel เขียน `x-vercel-forwarded-for` / `x-real-ip` เองและไม่ส่งต่อค่าที่ client ใส่มา · `x-forwarded-for`
+ * ใช้เป็นทางสุดท้าย (dev/proxy อื่น) — ค่านี้ใช้ทั้งใน audit และเพดาน login ราย IP จึงห้ามเชื่อค่าที่ปลอมได้ก่อน
+ */
 export function getRequestMeta(request: Request): RequestMeta {
-  const forwarded = request.headers.get('x-forwarded-for') ?? request.headers.get('x-real-ip')
+  const forwarded =
+    request.headers.get('x-vercel-forwarded-for') ?? request.headers.get('x-real-ip') ?? request.headers.get('x-forwarded-for')
   return {
     ipAddress: normalizeIpAddress(forwarded),
     userAgent: request.headers.get('user-agent'),

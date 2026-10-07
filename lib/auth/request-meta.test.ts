@@ -26,6 +26,17 @@ describe('getRequestMeta', () => {
     expect(getRequestMeta(request)).toEqual({ ipAddress: '203.0.113.9', userAgent: 'vitest' })
   })
 
+  it('header ของ Vercel ชนะ x-forwarded-for ที่ client ปลอมมาได้ (R2-016)', () => {
+    const vercel = new Request('https://example.com/api/auth/login', {
+      headers: { 'x-forwarded-for': '198.51.100.1', 'x-vercel-forwarded-for': '203.0.113.9' },
+    })
+    expect(getRequestMeta(vercel).ipAddress).toBe('203.0.113.9')
+    const realIp = new Request('https://example.com/api/auth/login', {
+      headers: { 'x-forwarded-for': '198.51.100.1', 'x-real-ip': '203.0.113.10' },
+    })
+    expect(getRequestMeta(realIp).ipAddress).toBe('203.0.113.10')
+  })
+
   it('ไม่มี header = null ทั้งคู่ (audit ยังบันทึกได้)', () => {
     const request = new Request('https://example.com/api/auth/login')
     expect(getRequestMeta(request)).toEqual({ ipAddress: null, userAgent: null })

@@ -41,9 +41,16 @@ vi.mock('@/lib/auth/company-status', () => ({
 
 // preship PS-009 — ค่าเริ่มต้นไม่ถูกพัก · เทสต์ของการพักตั้งค่าเอง
 const loginThrottledMock = vi.hoisted(() => vi.fn(async () => false))
-vi.mock('@/lib/auth/login-throttle-queries', () => ({ loginThrottled: loginThrottledMock }))
+const LOGIN_ATTEMPT_BUSY = vi.hoisted(() => Symbol('busy'))
+// ค่าเริ่มต้นล็อกได้เสมอ (รัน fn ตรง) · เทสต์ยิงซ้อนตั้งให้คืน BUSY เอง
+const withLoginAttemptLockMock = vi.hoisted(() => vi.fn(async (_key: string, fn: () => Promise<unknown>) => fn()))
+vi.mock('@/lib/auth/login-throttle-queries', () => ({
+  loginThrottled: loginThrottledMock,
+  withLoginAttemptLock: withLoginAttemptLockMock,
+  LOGIN_ATTEMPT_BUSY,
+}))
 
-const { login } = await import('@/lib/auth/auth-service')
+const { login, changeOwnPassword } = await import('@/lib/auth/auth-service')
 const { LOGIN_FAILURE_MIN_DURATION_MS, remainingLoginDelayMs } = await import('@/lib/auth/login-timing')
 
 const ORG = '00000000-0000-4000-8000-0000000000aa'
@@ -238,9 +245,12 @@ describe('login — พักเมื่อผิดซ้ำเกินเพ
     expect(error.status).toBe(429)
     expect(getAuthEmailMock).not.toHaveBeenCalled()
     expect(signInMock).not.toHaveBeenCalled()
+    const accountId = account().id
+    expect(withLoginAttemptLockMock).toHaveBeenCalledWith(`user:${accountId}`, expect.any(Function))
     expect(loginThrottledMock).toHaveBeenCalledWith({
       organizationId: ORG,
-      identifier: 'manager@finance.example',
+      throttleKey: `user:${accountId}`,
+      accountId,
       ipAddress: META.ipAddress,
     })
     expect(emitAuditMock).toHaveBeenCalledWith(
@@ -257,5 +267,69 @@ describe('login — พักเมื่อผิดซ้ำเกินเพ
 
     expect(error.code).toBe('LOGIN_RATE_LIMITED')
     expect(signInMock).not.toHaveBeenCalled()
+  })
+
+  it('คำขอของบัญชีเดียวกันยิงซ้อนขณะอีกคำขอกำลังตรวจรหัส ⇒ พักทันที ไม่ตรวจรหัสซ้ำ (R2-002)', async () => {
+    prismaMock.user.findFirst.mockResolvedValue(account())
+    withLoginAttemptLockMock.mockResolvedValueOnce(LOGIN_ATTEMPT_BUSY)
+
+    const error = await loginError()
+
+    expect(error.code).toBe('LOGIN_RATE_LIMITED')
+    expect(signInMock).not.toHaveBeenCalled()
+    expect(emitAuditMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        after: expect.objectContaining({ code: 'LOGIN_RATE_LIMITED', throttle_key: `user:${account().id}` }),
+      }),
+    )
+  })
+
+  it('รหัสผิด ⇒ audit ลง throttle_key ของบัญชี (อีเมล/username นับร่วม)', async () => {
+    prismaMock.user.findFirst.mockResolvedValue(account())
+    getAuthEmailMock.mockResolvedValue('manager@finance.example')
+    signInMock.mockResolvedValue({ data: { user: null }, error: { message: 'Invalid login credentials' } })
+
+    const error = await loginError()
+
+    expect(error.code).toBe('INVALID_CREDENTIALS')
+    expect(emitAuditMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        after: expect.objectContaining({ code: 'INVALID_CREDENTIALS', throttle_key: `user:${account().id}` }),
+      }),
+    )
+  })
+})
+
+describe('changeOwnPassword — รหัสปัจจุบันผิดใช้เพดานร่วมกับ login (R2-020)', () => {
+  it('รหัสปัจจุบันผิด ⇒ INVALID_CREDENTIALS + audit ครั้งที่ผิดพร้อม throttle_key ของบัญชี', async () => {
+    getAuthEmailMock.mockResolvedValue('manager@finance.example')
+    verifyPasswordMock.mockResolvedValue(false)
+
+    const error = await changeOwnPassword(account(), { currentPassword: 'wrong', password: 'NewPass#2569' }, META).then(
+      () => null,
+      (e: unknown) => e,
+    )
+
+    expect(error).toBeInstanceOf(AuthError)
+    expect((error as AuthError).code).toBe('INVALID_CREDENTIALS')
+    expect(emitAuditMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'update',
+        targetId: account().id,
+        after: expect.objectContaining({ result: 'failed', code: 'INVALID_CREDENTIALS', throttle_key: `user:${account().id}` }),
+      }),
+    )
+  })
+
+  it('ถูกพัก ⇒ LOGIN_RATE_LIMITED และไม่ตรวจรหัสกับ Supabase', async () => {
+    loginThrottledMock.mockResolvedValueOnce(true)
+
+    const error = await changeOwnPassword(account(), { currentPassword: 'x', password: 'NewPass#2569' }, META).then(
+      () => null,
+      (e: unknown) => e,
+    )
+
+    expect((error as AuthError).code).toBe('LOGIN_RATE_LIMITED')
+    expect(verifyPasswordMock).not.toHaveBeenCalled()
   })
 })

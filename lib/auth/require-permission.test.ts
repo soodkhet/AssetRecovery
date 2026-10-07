@@ -75,9 +75,11 @@ describe('withPermission — เรียก endpoint ตรงโดยไม�
     requireSessionMock.mockResolvedValue(sessionUser())
     const response = await handler(request, undefined)
     expect(response.status).toBe(403)
-    const body = (await response.json()) as { error: { code: string }; data?: unknown }
+    const body = (await response.json()) as { success: boolean; error: { code: string }; data?: unknown }
     expect(body.error.code).toBe('PERMISSION_DENIED')
-    expect(body.data).toBeUndefined()
+    // envelope กลาง (R2-015) — data ต้องเป็น null เสมอ ไม่มีข้อมูลหลุด
+    expect(body.success).toBe(false)
+    expect(body.data).toBeNull()
   })
 
   it('Field Agent (scope self) เรียก endpoint เดียวกัน → 403', async () => {
