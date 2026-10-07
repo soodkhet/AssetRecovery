@@ -58,7 +58,8 @@ export function caseDecisionMessage(
     eventCode: event,
     title: CASE_DECISION_TITLE[event],
     body: withReason(`เคส ${input.caseRef}`, input.reason),
-    linkPath: '/cases/submit',
+    // เปิดรายละเอียดเคสนั้นเลย ไม่ต้องค้นหาเอง (preship PS-032)
+    linkPath: `/cases/submit?case=${input.caseId}`,
   }
 }
 
@@ -295,7 +296,8 @@ export function evidenceRejectedMessage(input: { caseId: string; caseRef: string
     eventCode: 'case.evidence_rejected',
     title: 'หลักฐานปิดงานถูกตีกลับ',
     body: withReason(`เคส ${input.caseRef}`, input.reason),
-    linkPath: '/field/tracking',
+    // เปิดรายละเอียดเคสนั้นในแท็บเลย (preship PS-032)
+    linkPath: `/field/tracking?case=${input.caseId}`,
   }
 }
 

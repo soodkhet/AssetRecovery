@@ -1,5 +1,6 @@
 'use client'
 
+import { LinkPending } from '@/components/shell/link-pending'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { LogoutButton } from '@/components/auth/logout-button'
@@ -26,11 +27,12 @@ export function TopNav({ menus, session }: { menus: readonly MenuItem[]; session
         href={menu.path}
         aria-current={active ? 'page' : undefined}
         className={cn(
-          'focus-ring-inset rounded-md px-4 py-1.5 text-sm font-semibold whitespace-nowrap transition-colors',
+          'focus-ring-inset inline-flex items-center gap-1.5 rounded-md px-4 py-1.5 text-sm font-semibold whitespace-nowrap transition-colors',
           active ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-200/60 hover:text-slate-900',
         )}
       >
         {menu.label}
+        <LinkPending />
       </Link>
     )
   })

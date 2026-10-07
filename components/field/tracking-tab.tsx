@@ -1,5 +1,6 @@
 'use client'
 
+import { replaceUrlParams } from '@/components/ui/url-state'
 import { useState } from 'react'
 import { CloseCaseModal } from '@/components/field/close-case-modal'
 import { FieldCaseDetailModal } from '@/components/field/field-case-detail'
@@ -51,11 +52,11 @@ function CardButton({ action, onClick }: { action: FieldCardAction; onClick: () 
   )
 }
 
-export function TrackingTab() {
+export function TrackingTab({ initialDetailCaseId = null }: { initialDetailCaseId?: string | null }) {
   const { items, loading, error, reload } = useFieldCases()
   const { showToast } = useToast()
   const { openReassignment, setPopupPaused } = useReassignment()
-  const [detailCaseId, setDetailCaseId] = useState<string | null>(null)
+  const [detailCaseId, setDetailCaseId] = useState<string | null>(initialDetailCaseId)
   const [closeCaseId, setCloseCaseId] = useState<string | null>(null)
   const [dragging, setDragging] = useState<string | null>(null)
   const [savingDate, setSavingDate] = useState<string | null>(null)
@@ -259,7 +260,10 @@ export function TrackingTab() {
       <FieldCaseDetailModal
         open={detailCaseId !== null}
         caseId={detailCaseId}
-        onClose={() => setDetailCaseId(null)}
+        onClose={() => {
+          setDetailCaseId(null)
+          replaceUrlParams({ case: null })
+        }}
         onChanged={() => {
           void reload()
         }}

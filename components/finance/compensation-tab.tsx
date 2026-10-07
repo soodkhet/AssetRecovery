@@ -43,7 +43,7 @@ import { SubstituteReceiptPanel } from '@/components/substitute-receipts/substit
  */
 
 export function CompensationTab() {
-  const { items, loading, error, busyId, canApprove, approve, reject } = useApprovalActions('/api/compensation')
+  const { items, loading, error, isBusy, canApprove, approve, reject } = useApprovalActions('/api/compensation')
 
   const [formulaTarget, setFormulaTarget] = useState<CompensationApprovalDto | null>(null)
   // มติ PO U152 — กดแถวเห็นหมายเหตุ/คำชี้แจง/ใบเสร็จ/ผู้พักร่วมก่อนอนุมัติ
@@ -145,7 +145,7 @@ export function CompensationTab() {
                           <Button
                             size="sm"
                             variant="secondary"
-                            loading={busyId === item.id}
+                            loading={isBusy(item.id)}
                             onClick={() => void approve(item)}
                           >
                             อนุมัติขั้น {item.approvalStepCurrent}
@@ -155,6 +155,7 @@ export function CompensationTab() {
                           <Button
                             size="sm"
                             variant="ghost"
+                            disabled={isBusy(item.id)}
                             onClick={() => {
                               setRejectTarget(item)
                               setRejectReason('')
@@ -185,7 +186,7 @@ export function CompensationTab() {
         title="ตีกลับรายการเบิกให้แก้ไข"
         description="รายการจะกลับไปสถานะ “ต้องแก้ไข” และเริ่มขั้นอนุมัติที่ 1 ใหม่ทั้งหมด — ใช้กับเอกสาร/ใบเสร็จที่ไม่ถูกต้องเท่านั้น ถ้าสงสัยหลักฐานปิดงาน ต้องแจ้งเจ้าหน้าที่อนุมัติเคส"
         confirmLabel="ตีกลับรายการ"
-        loading={rejectTarget !== null && busyId === rejectTarget.id}
+        loading={rejectTarget !== null && isBusy(rejectTarget.id)}
         reason={rejectReason}
         onReasonChange={setRejectReason}
         onClose={() => setRejectTarget(null)}

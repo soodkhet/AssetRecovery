@@ -1,5 +1,6 @@
 'use client'
 
+import { LinkPending } from '@/components/shell/link-pending'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState, type ReactNode } from 'react'
@@ -96,6 +97,7 @@ function BottomNav({ badges, activeId }: { badges: FieldBadgeCounts; activeId: F
               )}
               <Icon className="h-5 w-5" />
               <span className="text-[11px] font-bold leading-none">{item.label}</span>
+              <LinkPending className="absolute top-1 left-[22%]" />
             </Link>
           )
         })}
@@ -131,6 +133,7 @@ function MenuRow({
       <Icon className={cn('h-5 w-5', active ? 'text-white' : 'text-slate-400')} />
       <span className="flex-1 text-sm font-semibold">{item.menuLabel}</span>
       {count !== null && item.badgeTone !== null && <NavBadge count={count} tone={item.badgeTone} />}
+      <LinkPending />
       <IconChevronRight className={cn('h-4 w-4', active ? 'text-white/70' : 'text-slate-300')} />
     </Link>
   )

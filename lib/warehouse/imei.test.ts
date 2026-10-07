@@ -11,6 +11,8 @@ import {
   isImeiLikeIdentifier,
   isValidImei,
   parseImei,
+  embeddedImeiCandidate,
+  IMEI_EMBEDDED_WARNING_MESSAGE,
 } from '@/lib/warehouse/imei'
 
 /**
@@ -214,5 +216,28 @@ describe('looksLikeMistypedImei / assetIdentifierWarning (U54)', () => {
 
   it('ข้อความเตือนตรงมติ และไม่มีเลขอ้างอิงสเปค', () => {
     expect(IMEI_TYPO_WARNING_MESSAGE).toBe('ดูเหมือน IMEI ที่มีตัวอักษรปน — ตรวจอีกครั้ง')
+  })
+})
+
+describe('embeddedImeiCandidate / assetIdentifierWarning — IMEI ปนข้อความ (preship PS-005)', () => {
+  it('พบ IMEI 15 หลักชุดเดียวในข้อความ (label นำหน้า / หมายเหตุต่อท้าย / มีตัวคั่น)', () => {
+    expect(embeddedImeiCandidate('IMEI: 356938035643809')).toBe('356938035643809')
+    expect(embeddedImeiCandidate('356938035643809 (เครื่องลูกค้า)')).toBe('356938035643809')
+    expect(embeddedImeiCandidate('IMEI 35-693803-564380-9')).toBe('356938035643809')
+  })
+
+  it('ไม่เสนอเมื่อไม่ใช่ Serial / ไม่มีเลข 15 หลักพอดี / มีหลายชุด', () => {
+    expect(embeddedImeiCandidate('356938035643809')).toBeNull()
+    expect(embeddedImeiCandidate('SN: C02XK1ABJG5J')).toBeNull()
+    expect(embeddedImeiCandidate('IMEI 35693803564380')).toBeNull()
+    expect(embeddedImeiCandidate('IMEI1 356938035643809 IMEI2 356938035643817')).toBeNull()
+    expect(embeddedImeiCandidate('')).toBeNull()
+    expect(embeddedImeiCandidate(null)).toBeNull()
+  })
+
+  it('เตือนไม่บล็อก — ค่ายังเป็น Serial ตามที่กรอก (ไม่ตัดให้เงียบ ๆ)', () => {
+    expect(assetIdentifierWarning('IMEI: 356938035643809')).toBe(IMEI_EMBEDDED_WARNING_MESSAGE)
+    expect(assetIdentifierWarning('SN: C02XK1ABJG5J')).toBeNull()
+    expect(isImeiLikeIdentifier('IMEI: 356938035643809')).toBe(false)
   })
 })

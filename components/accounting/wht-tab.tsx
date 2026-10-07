@@ -129,6 +129,7 @@ export function WhtTab() {
               </Tr>
             </THead>
             <TableState
+              onRetry={() => void reload()}
               loading={loading}
               error={error}
               isEmpty={filings.items.length === 0}
@@ -223,6 +224,7 @@ export function WhtTab() {
               </Tr>
             </THead>
             <TableState
+              onRetry={() => void reload()}
               loading={loading}
               error={error}
               isEmpty={certificates.items.length === 0}

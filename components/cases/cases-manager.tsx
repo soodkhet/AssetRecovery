@@ -1,5 +1,6 @@
 'use client'
 
+import { replaceUrlParams } from '@/components/ui/url-state'
 import { kpiValue } from '@/components/ui/kpi-value'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Can, usePermission } from '@/components/auth/permission-provider'
@@ -71,13 +72,15 @@ const KPI_STATUSES = [
   { status: 'approved', label: 'รับเคสแล้ว', hint: 'ส่งต่อมอบหมายทีมแล้ว' },
 ] as const
 
-interface Filters {
+export interface CaseListFilters {
   search: string
   status: string
   sourceChannel: string
   financeCompanyId: string
   province: string
 }
+
+type Filters = CaseListFilters
 
 const EMPTY_FILTERS: Filters = {
   search: '',
@@ -97,15 +100,35 @@ function buildListPath(filters: Filters, page: number): string {
   return apiPath('case.list', undefined, query)
 }
 
-export function CasesManager() {
+export function CasesManager({
+  initialFilters = EMPTY_FILTERS,
+  initialPage = 1,
+  initialDetailCaseId = null,
+}: {
+  initialFilters?: CaseListFilters
+  initialPage?: number
+  /** `?case=<id>` จากลิงก์แจ้งเตือน — เปิดรายละเอียดเคสนั้นทันที */
+  initialDetailCaseId?: string | null
+}) {
   const { showToast } = useToast()
 
   const [result, setResult] = useState<CaseListResultDto | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<ApiCallError | null>(null)
 
-  const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS)
-  const [page, setPage] = useState(1)
+  const [filters, setFilters] = useState<Filters>(initialFilters)
+  const [page, setPage] = useState(initialPage)
+  // ตัวกรอง/หน้า อยู่ใน URL — refresh/Back กลับมาที่รายการเดิม (preship PS-013) · ค่าเริ่มต้นไม่ใส่ (URL สั้น)
+  useEffect(() => {
+    replaceUrlParams({
+      search: filters.search.trim(),
+      status: filters.status === 'all' ? null : filters.status,
+      source: filters.sourceChannel === 'all' ? null : filters.sourceChannel,
+      company: filters.financeCompanyId === 'all' ? null : filters.financeCompanyId,
+      province: filters.province === 'all' ? null : filters.province,
+      page: page === 1 ? null : page,
+    })
+  }, [filters, page])
 
   /** ยังไม่โหลด = ไม่มีคีย์ · โหลดไม่สำเร็จ = `null` ⇒ การ์ดแสดง "—" ไม่ใช่ 0 (preship PS-012) */
   const [counts, setCounts] = useState<Readonly<Record<string, number | null>>>({})
@@ -113,7 +136,7 @@ export function CasesManager() {
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<CaseDetailDto | null>(null)
   const [openingCaseId, setOpeningCaseId] = useState<string | null>(null)
-  const [detailCaseId, setDetailCaseId] = useState<string | null>(null)
+  const [detailCaseId, setDetailCaseId] = useState<string | null>(initialDetailCaseId)
   const [importOpen, setImportOpen] = useState(false)
   /** เคสที่กำลังเปลี่ยนสถานะจากปุ่มบนแถว (ส่งตรวจสอบ / กลับไปแก้ไข) */
   const [rowBusyId, setRowBusyId] = useState<string | null>(null)
@@ -489,35 +512,38 @@ export function CasesManager() {
             ))}
         </div>
 
-        <div className="mt-4 flex items-center justify-between text-xs text-slate-500">
-          <span>
-            แสดง {items.length} จาก {total} รายการ (หน้า {page}/{lastPage})
-          </span>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={page <= 1 || loading}
-              onClick={() => {
-                setLoading(true)
-                setPage((current) => Math.max(1, current - 1))
-              }}
-            >
-              ก่อนหน้า
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={page >= lastPage || loading}
-              onClick={() => {
-                setLoading(true)
-                setPage((current) => current + 1)
-              }}
-            >
-              ถัดไป
-            </Button>
+        {/* โหลดไม่สำเร็จ ⇒ ไม่โชว์ "แสดง 0 จาก 0 รายการ" ใต้ข้อความ error (preship PS-027) */}
+        {error === null && (
+          <div className="mt-4 flex items-center justify-between text-xs text-slate-500">
+            <span>
+              แสดง {items.length} จาก {total} รายการ (หน้า {page}/{lastPage})
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={page <= 1 || loading}
+                onClick={() => {
+                  setLoading(true)
+                  setPage((current) => Math.max(1, current - 1))
+                }}
+              >
+                ก่อนหน้า
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={page >= lastPage || loading}
+                onClick={() => {
+                  setLoading(true)
+                  setPage((current) => current + 1)
+                }}
+              >
+                ถัดไป
+              </Button>
+            </div>
           </div>
-        </div>
+        )}
       </Card>
 
       <CaseFormModal
@@ -541,7 +567,10 @@ export function CasesManager() {
       <CaseDetailModal
         open={detailCaseId !== null}
         caseId={detailCaseId}
-        onClose={() => setDetailCaseId(null)}
+        onClose={() => {
+          setDetailCaseId(null)
+          replaceUrlParams({ case: null })
+        }}
         onChanged={() => {
           setLoading(true)
           void reload()

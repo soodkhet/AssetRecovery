@@ -113,6 +113,7 @@ export function Pager({
   total,
   shown,
   loading,
+  hidden = false,
   onPage,
 }: {
   page: number
@@ -120,8 +121,11 @@ export function Pager({
   total: number
   shown: number
   loading: boolean
+  /** โหลดไม่สำเร็จ ⇒ ซ่อน (ไม่โชว์ "แสดง 0 จาก 0 รายการ" ใต้ข้อความ error — preship PS-027) */
+  hidden?: boolean
   onPage: (next: number) => void
 }) {
+  if (hidden) return null
   const lastPage = Math.max(1, Math.ceil(total / pageSize))
   return (
     <div className="mt-4 flex items-center justify-between text-xs text-slate-500">
@@ -371,6 +375,7 @@ export function DeviceBrandList({
         </TBody>
       </Table>
       <Pager
+        hidden={error !== null}
         page={page}
         pageSize={PAGE_SIZE}
         total={data.total}
@@ -723,6 +728,7 @@ export function DeviceModelList({
         </TBody>
       </Table>
       <Pager
+        hidden={error !== null}
         page={page}
         pageSize={PAGE_SIZE}
         total={data.total}

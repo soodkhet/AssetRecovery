@@ -21,7 +21,11 @@ export interface ApprovalActions {
   items: readonly CompensationApprovalDto[]
   loading: boolean
   error: { title: string; message: string } | null
-  busyId: string | null
+  /**
+   * แถวที่กำลังทำงาน — คงไว้จนโหลดคิวใหม่เสร็จ (เดิมปลดก่อน reload ⇒ ปุ่มกดได้อีกด้วยขั้นเก่า · กดหลายแถวพร้อมกัน
+   * แถวแรกหลุดสถานะ busy — preship PS-030)
+   */
+  isBusy: (id: string) => boolean
   canApprove: boolean
   reload: () => Promise<void>
   approve: (item: CompensationApprovalDto) => Promise<void>
@@ -39,7 +43,16 @@ export function useApprovalActions(endpoint: '/api/compensation' | '/api/claims'
   const [items, setItems] = useState<readonly CompensationApprovalDto[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<{ title: string; message: string } | null>(null)
-  const [busyId, setBusyId] = useState<string | null>(null)
+  const [busyIds, setBusyIds] = useState<ReadonlySet<string>>(() => new Set())
+  const markBusy = useCallback((id: string, busy: boolean) => {
+    setBusyIds((current) => {
+      const next = new Set(current)
+      if (busy) next.add(id)
+      else next.delete(id)
+      return next
+    })
+  }, [])
+  const isBusy = useCallback((id: string) => busyIds.has(id), [busyIds])
 
   // ตัวดึงข้อมูล **ไม่มี setState ในตัวเอง** — เรียกจาก effect ได้โดยไม่ชนกฎ `react-hooks/set-state-in-effect`
   const fetchItems = useCallback(
@@ -80,71 +93,80 @@ export function useApprovalActions(endpoint: '/api/compensation' | '/api/claims'
 
   const approve = useCallback(
     async (item: CompensationApprovalDto) => {
-      setBusyId(item.id)
-      const result = await callApi(
-        `${endpoint}/${item.id}/approve`,
-        jsonRequest('PATCH', { step: item.approvalStepCurrent }),
-      )
-      setBusyId(null)
-      if (result.error !== undefined) {
-        const toast = approvalErrorToast(result.error)
-        showToast({ tone: 'error', title: toast.title, description: toast.message })
-        // หน้าค้าง (BUG-105) — โหลดคิวใหม่ให้ทันที สถานะบนจอจะได้ตรงกับฐานข้อมูล
-        if (toast.stale) await reload()
-        return
+      markBusy(item.id, true)
+      try {
+        const result = await callApi(
+          `${endpoint}/${item.id}/approve`,
+          jsonRequest('PATCH', { step: item.approvalStepCurrent }),
+        )
+        if (result.error !== undefined) {
+          const toast = approvalErrorToast(result.error)
+          showToast({ tone: 'error', title: toast.title, description: toast.message })
+          // หน้าค้าง (BUG-105) — โหลดคิวใหม่ให้ทันที สถานะบนจอจะได้ตรงกับฐานข้อมูล
+          if (toast.stale) await reload()
+          return
+        }
+        showToast({
+          tone: 'success',
+          title: 'อนุมัติแล้ว',
+          description: `${item.payeeName} — ${EXPENSE_TYPE_LABEL[item.expenseType]}`,
+        })
+        await reload()
+      } finally {
+        markBusy(item.id, false)
       }
-      showToast({
-        tone: 'success',
-        title: 'อนุมัติแล้ว',
-        description: `${item.payeeName} — ${EXPENSE_TYPE_LABEL[item.expenseType]}`,
-      })
-      await reload()
     },
-    [endpoint, reload, showToast],
+    [endpoint, markBusy, reload, showToast],
   )
 
   const reject = useCallback(
     async (item: CompensationApprovalDto, reason: string) => {
-      setBusyId(item.id)
-      const result = await callApi(`${endpoint}/${item.id}/reject`, jsonRequest('PATCH', { reason: reason.trim() }))
-      setBusyId(null)
-      if (result.error !== undefined) {
-        showToast({ tone: 'error', title: result.error.title, description: result.error.message })
-        return false
+      markBusy(item.id, true)
+      try {
+        const result = await callApi(`${endpoint}/${item.id}/reject`, jsonRequest('PATCH', { reason: reason.trim() }))
+        if (result.error !== undefined) {
+          showToast({ tone: 'error', title: result.error.title, description: result.error.message })
+          return false
+        }
+        showToast({
+          tone: 'success',
+          title: 'ตีกลับให้แก้ไขแล้ว',
+          description: 'รายการกลับไปเริ่มที่ขั้น 1 ใหม่ทั้งหมด',
+        })
+        await reload()
+        return true
+      } finally {
+        markBusy(item.id, false)
       }
-      showToast({
-        tone: 'success',
-        title: 'ตีกลับให้แก้ไขแล้ว',
-        description: 'รายการกลับไปเริ่มที่ขั้น 1 ใหม่ทั้งหมด',
-      })
-      await reload()
-      return true
     },
-    [endpoint, reload, showToast],
+    [endpoint, markBusy, reload, showToast],
   )
 
   const rejectPermanent = useCallback(
     async (item: CompensationApprovalDto, reason: string) => {
-      setBusyId(item.id)
-      const result = await callApi(
-        `/api/claims/${item.id}/reject-permanent`,
-        jsonRequest('PATCH', { reason: reason.trim() }),
-      )
-      setBusyId(null)
-      if (result.error !== undefined) {
-        showToast({ tone: 'error', title: result.error.title, description: result.error.message })
-        return false
+      markBusy(item.id, true)
+      try {
+        const result = await callApi(
+          `/api/claims/${item.id}/reject-permanent`,
+          jsonRequest('PATCH', { reason: reason.trim() }),
+        )
+        if (result.error !== undefined) {
+          showToast({ tone: 'error', title: result.error.title, description: result.error.message })
+          return false
+        }
+        showToast({
+          tone: 'success',
+          title: 'ปฏิเสธรายการเบิกแล้ว',
+          description: `${item.payeeName} — ${EXPENSE_TYPE_LABEL[item.expenseType]} (ส่งใหม่ไม่ได้)`,
+        })
+        await reload()
+        return true
+      } finally {
+        markBusy(item.id, false)
       }
-      showToast({
-        tone: 'success',
-        title: 'ปฏิเสธรายการเบิกแล้ว',
-        description: `${item.payeeName} — ${EXPENSE_TYPE_LABEL[item.expenseType]} (ส่งใหม่ไม่ได้)`,
-      })
-      await reload()
-      return true
     },
-    [reload, showToast],
+    [markBusy, reload, showToast],
   )
 
-  return { items, loading, error, busyId, canApprove, reload, approve, reject, rejectPermanent }
+  return { items, loading, error, isBusy, canApprove, reload, approve, reject, rejectPermanent }
 }

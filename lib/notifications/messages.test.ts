@@ -45,7 +45,7 @@ import {
  */
 
 const ALL: readonly NotificationMessage[] = [
-  caseDecisionMessage('case.approved', { caseId: 'c1', caseRef: 'CASE-26-0001', reason: 'ครบเอกสาร' }),
+  caseDecisionMessage('case.approved', { caseId: '00000000-0000-4000-8000-0000000000c1', caseRef: 'CASE-26-0001', reason: 'ครบเอกสาร' }),
   reassignmentRequestedMessage({ caseRef: 'CASE-26-0002', reason: 'ลาป่วย', expiresAt: new Date('2026-08-20T10:00:00Z') }),
   reassignmentTimeoutMessage({ caseRef: 'CASE-26-0003', pendingReassignmentId: 'p1' }, 'new_agent'),
   reassignmentTimeoutMessage({ caseRef: 'CASE-26-0003', pendingReassignmentId: 'p1' }, 'previous_agent'),
@@ -108,7 +108,7 @@ const ALL: readonly NotificationMessage[] = [
   expenseRejectedMessage({ grossSatang: 80000, reason: 'ใบเสร็จไม่ชัด', caseBound: false }),
   payoutBatchCompletedMessage({ batchId: 'b1', batchName: 'รอบจ่าย Outsource', netSatang: 9900000, source: 'manual' }),
   advanceOverdueMessage({ advanceId: 'a1', dueClearDate: new Date('2026-08-10T00:00:00Z') }, 'payee'),
-  evidenceRejectedMessage({ caseId: 'c9', caseRef: 'CASE-26-0009', reason: 'รูปไม่ชัด' }),
+  evidenceRejectedMessage({ caseId: '00000000-0000-4000-8000-0000000000c9', caseRef: 'CASE-26-0009', reason: 'รูปไม่ชัด' }),
   exceptionCreatedMessage({ title: 'ใบกำกับหาย', periodLabel: 'สิงหาคม 2569' }),
   whtFilingDueMessage({
     summaryId: 's1',
@@ -146,16 +146,21 @@ describe('ข้อความแจ้งเตือนทุกตัว', (
     }
   })
 
+  const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
   it('ทุกลิงก์ชี้หน้าที่มีอยู่จริงใน app/ และ ?tab=/?view= เป็นค่าที่หน้านั้นรู้จัก (UAT BUG-096/099)', () => {
     // route group `(app)` ไม่อยู่ใน URL ⇒ ลองทั้งสองที่
     const pageExists = (urlPath: string): boolean =>
       ['app', path.join('app', '(app)')].some((root) =>
         existsSync(path.join(process.cwd(), root, ...urlPath.split('/').filter(Boolean), 'page.tsx')),
       )
-    const knownQuery: Readonly<Record<string, { key: string; values: readonly string[] }>> = {
+    const knownQuery: Readonly<Record<string, { key: string; values: readonly string[] | RegExp }>> = {
       '/finance': { key: 'tab', values: FINANCE_OPERATION_TABS.map((tab) => tab.id) },
       '/accounting': { key: 'tab', values: ACCOUNTING_TABS.map((tab) => tab.id) },
       '/field/expenses': { key: 'view', values: EXPENSE_VIEW_TYPES },
+      // preship PS-032 — เปิดรายละเอียดเคสจากลิงก์แจ้งเตือน (page อ่าน `?case=` ผ่าน `pickUuid()`)
+      '/cases/submit': { key: 'case', values: UUID },
+      '/field/tracking': { key: 'case', values: UUID },
     }
     for (const message of ALL) {
       const [urlPath = '', query] = (message.linkPath ?? '').split('?')
@@ -165,7 +170,9 @@ describe('ข้อความแจ้งเตือนทุกตัว', (
       expect(rule, `${message.eventCode} → ${message.linkPath} ใช้ query ที่หน้านี้ไม่อ่าน`).toBeDefined()
       const params = new URLSearchParams(query)
       expect([...params.keys()], message.linkPath ?? '').toEqual([rule?.key])
-      expect(rule?.values, message.linkPath ?? '').toContain(params.get(rule?.key ?? ''))
+      const value = params.get(rule?.key ?? '') ?? ''
+      if (rule?.values instanceof RegExp) expect(value, message.linkPath ?? '').toMatch(rule.values)
+      else expect(rule?.values, message.linkPath ?? '').toContain(value)
     }
   })
 
@@ -416,5 +423,17 @@ describe('job รายวันเจองวดปิดแล้ว (มต�
     expect(accounting.body).toContain('ฝ่ายการเงินจะสร้างรายการเบิกย้อนหลังลงในงวดที่เปิดอยู่')
     expect(accounting.linkPath).toBe('/accounting?tab=closing')
     expect(accounting.dedupeKey).toBe(fieldAllowancePeriodLockedMessage(input, 'finance').dedupeKey)
+  })
+})
+
+describe('ลิงก์แจ้งเตือนเปิดเคสที่อ้างถึง (preship PS-032)', () => {
+  const caseId = '00000000-0000-4000-8000-000000000032'
+  it('ผลพิจารณาเคส → รายละเอียดเคสในหน้ารับเคส', () => {
+    expect(caseDecisionMessage('case.need_info_requested', { caseId, caseRef: 'X', reason: 'y' }).linkPath).toBe(
+      `/cases/submit?case=${caseId}`,
+    )
+  })
+  it('หลักฐานถูกตีกลับ → รายละเอียดเคสในแท็บกำลังติดตาม', () => {
+    expect(evidenceRejectedMessage({ caseId, caseRef: 'X', reason: 'y' }).linkPath).toBe(`/field/tracking?case=${caseId}`)
   })
 })

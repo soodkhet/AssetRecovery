@@ -1,5 +1,6 @@
 'use client'
 
+import { replaceUrlParams } from '@/components/ui/url-state'
 import { useCallback, useEffect, useState } from 'react'
 import { usePermission } from '@/components/auth/permission-provider'
 import { PageHeader } from '@/components/ui'
@@ -33,13 +34,17 @@ import type { AssetListDto, AssetListItemDto, LotListDto } from '@/lib/warehouse
  * - Company User เห็นทุกอย่างแบบอ่านอย่างเดียวโดยอัตโนมัติ: ปุ่ม action ผูกกับ capability และ scope
  *   ระดับแถวถูกบังคับที่ API (`assetScopeWhere()` — DEC-002)
  */
-export function WarehouseManager() {
+export function WarehouseManager({ initialTab = 'intake' }: { initialTab?: AssetTab }) {
   const { session, can } = usePermission()
   const isCompanyViewer = session?.scope.kind === 'company'
   // endpoint ↔ capability: `/api/finance-companies` + `/api/teams` = view_master_data · `/api/users` = manage_users (view)
   const canLoadMasterData = !isCompanyViewer && can('view', 'view_master_data')
   const canLoadUsers = !isCompanyViewer && can('view', 'manage_users')
-  const [tab, setTab] = useState<AssetTab>('intake')
+  const [tab, setTab] = useState<AssetTab>(initialTab)
+  // แท็บอยู่ใน URL — refresh/Back กลับมาที่แท็บเดิม (preship PS-013)
+  useEffect(() => {
+    replaceUrlParams({ tab })
+  }, [tab])
   const [counts, setCounts] = useState<WarehouseTabCounts>(EMPTY_TAB_COUNTS)
   const [countsVersion, setCountsVersion] = useState(0)
 

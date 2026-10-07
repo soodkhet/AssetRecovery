@@ -158,6 +158,7 @@ export function ApprovalTab() {
               </Tr>
             </THead>
             <TableState
+              onRetry={() => void claims.reload()}
               loading={claims.loading}
               error={claims.error}
               isEmpty={visibleClaims.length === 0}
@@ -239,7 +240,7 @@ export function ApprovalTab() {
                             <Button
                               size="sm"
                               variant="secondary"
-                              loading={claims.busyId === item.id}
+                              loading={claims.isBusy(item.id)}
                               onClick={() => void claims.approve(item)}
                             >
                               อนุมัติขั้น {item.approvalStepCurrent}
@@ -249,6 +250,7 @@ export function ApprovalTab() {
                             <Button
                               size="sm"
                               variant="ghost"
+                              disabled={claims.isBusy(item.id)}
                               onClick={() => {
                                 setRejectTarget(item)
                                 setRejectReason('')
@@ -259,6 +261,7 @@ export function ApprovalTab() {
                           )}
                           {actions.includes('reject_permanent') && (
                             <Button
+                              disabled={claims.isBusy(item.id)}
                               size="sm"
                               variant="ghost"
                               className="text-rose-700"
@@ -321,6 +324,7 @@ export function ApprovalTab() {
                 </Tr>
               </THead>
               <TableState
+                onRetry={() => void reloadAdvances()}
                 loading={advLoading}
                 error={advError}
                 isEmpty={advances.length === 0}
@@ -428,7 +432,7 @@ export function ApprovalTab() {
         title="ตีกลับรายการเบิกให้แก้ไข"
         description="รายการจะกลับไปสถานะ “ต้องแก้ไข” และเริ่มขั้นอนุมัติที่ 1 ใหม่ทั้งหมด — ใช้กับเอกสาร/ใบเสร็จที่ไม่ถูกต้องเท่านั้น ถ้าสงสัยหลักฐานปิดงาน ต้องแจ้งเจ้าหน้าที่อนุมัติเคส"
         confirmLabel="ตีกลับรายการ"
-        loading={rejectTarget !== null && claims.busyId === rejectTarget.id}
+        loading={rejectTarget !== null && claims.isBusy(rejectTarget.id)}
         reason={rejectReason}
         onReasonChange={setRejectReason}
         onClose={() => setRejectTarget(null)}
@@ -449,7 +453,7 @@ export function ApprovalTab() {
         title="ปฏิเสธใบเบิกค่าที่พัก"
         description="ปฏิเสธถาวร — ผู้เบิกแก้ไขแล้วส่งใหม่ไม่ได้ และใบรับรองแทนใบเสร็จที่ผูกกับใบเบิกนี้จะไม่นับเพดานต่อเดือนอีก ถ้าต้องการให้แก้เอกสาร ให้ใช้ “ตีกลับ” แทน"
         confirmLabel="ปฏิเสธรายการ"
-        loading={permanentTarget !== null && claims.busyId === permanentTarget.id}
+        loading={permanentTarget !== null && claims.isBusy(permanentTarget.id)}
         reason={permanentReason}
         onReasonChange={setPermanentReason}
         onClose={() => setPermanentTarget(null)}

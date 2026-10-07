@@ -146,6 +146,7 @@ export function ClosingTab() {
             </Tr>
           </THead>
           <TableState
+            onRetry={() => void reload()}
             loading={loading}
             error={error}
             isEmpty={items.length === 0}

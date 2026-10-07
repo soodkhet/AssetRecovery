@@ -144,6 +144,7 @@ export function AuditLogsManager() {
           </Tr>
         </THead>
         <TableState
+          onRetry={() => void reload()}
           colSpan={5}
           loading={loading}
           error={error}

@@ -350,6 +350,9 @@ export async function listAssets(user: SessionUser, query: AssetListQuery): Prom
                 // IMEI ค้นแบบ exact เท่านั้น (`44` §6.5 — ห้าม fuzzy) · คำค้นมีตัวคั่นได้ (มติ PO U24)
                 { imeiContract: imeiSearchKey(query.search) },
                 { imeiActual: imeiSearchKey(query.search) },
+                // Serial (เครื่องที่ไม่มี IMEI เช่นแท็บเล็ต) exact เหมือน IMEI — เดิมค้นได้แค่ใน drill-down (preship PS-033)
+                { serialContract: query.search.trim() },
+                { serialActual: query.search.trim() },
               ],
             }),
       },

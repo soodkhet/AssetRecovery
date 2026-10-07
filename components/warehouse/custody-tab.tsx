@@ -185,7 +185,7 @@ export function CustodyTab({
           <div className="mb-4 flex flex-wrap gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
             <Input
               className="min-w-[16rem] flex-1"
-              placeholder="ค้นหา IMEI / ชื่อลูกหนี้ / เลขสัญญา"
+              placeholder="ค้นหา IMEI (ครบ 15 หลัก) / Serial / ชื่อลูกหนี้ / เลขสัญญา"
               aria-label="ค้นหา"
               value={filters.search}
               onChange={(event) => updateFilter({ search: event.target.value })}
@@ -303,7 +303,7 @@ export function CustodyTab({
         <div className="mb-4 flex flex-wrap gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
           <Input
             className="min-w-[16rem] flex-1"
-            placeholder="ค้นหา IMEI / ชื่อลูกหนี้ / เลขสัญญา"
+            placeholder="ค้นหา IMEI (ครบ 15 หลัก) / Serial / ชื่อลูกหนี้ / เลขสัญญา"
             aria-label="ค้นหาในรายการ"
             value={detailSearch}
             onChange={(event) => setDetailSearch(event.target.value)}
@@ -339,6 +339,7 @@ export function CustodyTab({
             </Tr>
           </THead>
           <TableState
+            onRetry={() => void reload()}
             colSpan={7}
             loading={loading}
             error={error === null ? null : { title: error.title, message: error.message, code: error.code }}

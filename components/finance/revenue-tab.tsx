@@ -201,6 +201,7 @@ export function RevenueTab() {
                 </Tr>
               </THead>
               <TableState
+                onRetry={() => void batches.reload()}
                 loading={batches.loading}
                 error={batches.error}
                 isEmpty={batches.data.length === 0}
@@ -328,6 +329,7 @@ export function RevenueTab() {
               </Tr>
             </THead>
             <TableState
+              onRetry={() => void revenues.reload()}
               loading={revenues.loading}
               error={revenues.error}
               isEmpty={revenues.data.length === 0}

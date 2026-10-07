@@ -127,6 +127,7 @@ export function ProfitTab() {
             </Tr>
           </THead>
           <TableState
+            onRetry={() => void reload()}
             loading={loading}
             error={error}
             isEmpty={data.rows.length === 0}

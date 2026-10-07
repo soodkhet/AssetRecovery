@@ -102,6 +102,7 @@ export function DashboardTab() {
               </Tr>
             </THead>
             <TableState
+              onRetry={() => void exceptions.reload()}
               loading={exceptions.loading}
               error={exceptions.error}
               isEmpty={exceptions.data.rows.length === 0}

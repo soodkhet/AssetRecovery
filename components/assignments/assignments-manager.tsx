@@ -395,35 +395,38 @@ export function AssignmentsManager({
             ))}
         </div>
 
-        <div className="mt-4 flex items-center justify-between text-xs text-slate-500">
-          <span>
-            แสดง {items.length} จาก {total} รายการ (หน้า {page}/{lastPage})
-          </span>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={page <= 1 || loading}
-              onClick={() => {
-                setLoading(true)
-                setPage((current) => Math.max(1, current - 1))
-              }}
-            >
-              ก่อนหน้า
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={page >= lastPage || loading}
-              onClick={() => {
-                setLoading(true)
-                setPage((current) => current + 1)
-              }}
-            >
-              ถัดไป
-            </Button>
+        {/* โหลดไม่สำเร็จ ⇒ ไม่โชว์ "แสดง 0 จาก 0 รายการ" ใต้ข้อความ error (preship PS-027) */}
+        {error === null && (
+          <div className="mt-4 flex items-center justify-between text-xs text-slate-500">
+            <span>
+              แสดง {items.length} จาก {total} รายการ (หน้า {page}/{lastPage})
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={page <= 1 || loading}
+                onClick={() => {
+                  setLoading(true)
+                  setPage((current) => Math.max(1, current - 1))
+                }}
+              >
+                ก่อนหน้า
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={page >= lastPage || loading}
+                onClick={() => {
+                  setLoading(true)
+                  setPage((current) => current + 1)
+                }}
+              >
+                ถัดไป
+              </Button>
+            </div>
           </div>
-        </div>
+        )}
       </Card>
 
       <AssignmentModal

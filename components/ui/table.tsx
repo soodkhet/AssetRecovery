@@ -98,7 +98,8 @@ export function TableState({
   isEmpty?: boolean
   emptyTitle?: string
   emptyDescription?: ReactNode
-  onRetry?: ReactNode
+  /** ฟังก์ชันโหลดใหม่ (แสดงปุ่ม "ลองใหม่" มาตรฐาน) หรือปุ่มที่สร้างเอง — preship PS-028 */
+  onRetry?: ReactNode | (() => void)
 }) {
   if (!loading && !error && !isEmpty) return null
 
@@ -109,7 +110,12 @@ export function TableState({
           {loading ? (
             <LoadingState />
           ) : error ? (
-            <ErrorState title={error.title} message={error.message} code={error.code} action={onRetry} />
+            <ErrorState
+              title={error.title}
+              message={error.message}
+              code={error.code}
+              {...(typeof onRetry === 'function' ? { onRetry } : { action: onRetry })}
+            />
           ) : (
             <EmptyState title={emptyTitle} description={emptyDescription} />
           )}

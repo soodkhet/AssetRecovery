@@ -1,7 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { replaceUrlParams } from '@/components/ui/url-state'
 import { CustomerWhtTab } from '@/components/accounting/customer-wht-tab'
 import { AdjustmentTab } from '@/components/finance/adjustment-tab'
 import { AdvanceTab } from '@/components/finance/advance-tab'
@@ -27,6 +28,10 @@ import { UNDER_DEVELOPMENT_TEXT } from '@/lib/nav/menu-registry'
  */
 export function FinanceShell({ initialTab }: { initialTab: string }) {
   const [tab, setTab] = useState(initialTab)
+  // แท็บอยู่ใน URL — refresh/Back กลับมาที่แท็บเดิม (preship PS-013)
+  useEffect(() => {
+    replaceUrlParams({ tab })
+  }, [tab])
   const session = useSession()
   // แท็บที่ผู้ใช้ไม่มีสิทธิ์อ่าน **ซ่อน** (ไม่ใช่โชว์ตารางว่าง) — ผู้จัดการทีมเห็นเฉพาะคิวอนุมัติค่าตอบแทน
   // (มติ PO 03/10/2569 — UAT R6-A) · API ตรวจสิทธิ์ซ้ำทุก endpoint (DEC-002)

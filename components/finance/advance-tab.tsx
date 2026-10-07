@@ -148,6 +148,7 @@ export function AdvanceTab() {
               </Tr>
             </THead>
             <TableState
+              onRetry={() => void reload()}
               loading={loading}
               error={error}
               isEmpty={items.length === 0}
@@ -195,7 +196,8 @@ export function AdvanceTab() {
                     >
                       {fmtSatangSymbol(advance.returnSatang)}
                       {advance.returnState !== 'none' && (
-                        <div className="mt-1 space-y-0.5 text-right">
+                        // ประวัติการคืนตัดบรรทัดได้ — เดิมยาวบรรทัดเดียวจนคอลัมน์กว้าง ~400px ตารางล้นที่ 1440px (preship PS-016)
+                        <div className="mt-1 ml-auto max-w-[200px] space-y-0.5 text-right whitespace-normal">
                           <StatusBadge
                             status={advance.returnState}
                             group={advanceReturnStateBadgeGroup(advance.returnState)}

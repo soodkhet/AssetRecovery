@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { replaceUrlParams } from '@/components/ui/url-state'
 import { useSession } from '@/components/auth/permission-provider'
 import { BankReconTab } from '@/components/accounting/bank-recon-tab'
 import { ClosingTab } from '@/components/accounting/closing-tab'
@@ -26,6 +27,10 @@ import { UNDER_DEVELOPMENT_TEXT } from '@/lib/nav/menu-registry'
  */
 export function AccountingShell({ initialTab }: { initialTab: string }) {
   const [tab, setTab] = useState(initialTab)
+  // แท็บอยู่ใน URL — refresh/Back กลับมาที่แท็บเดิม (preship PS-013)
+  useEffect(() => {
+    replaceUrlParams({ tab })
+  }, [tab])
   const session = useSession()
   // แท็บที่ผู้ใช้ไม่มีสิทธิ์อ่าน **ซ่อน** (BUG-158 — เดิมบริหารเห็นแท็บกระทบยอด การ์ด ฿0.00 + ตาราง "ไม่มีสิทธิ์ใช้งาน")
   // · API ตรวจสิทธิ์ซ้ำทุก endpoint (DEC-002)

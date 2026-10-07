@@ -322,7 +322,7 @@ export function LotTab({
 
           <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
             <Input
-              placeholder="ค้นหา IMEI / ชื่อลูกหนี้ / เลขสัญญา"
+              placeholder="ค้นหา IMEI (ครบ 15 หลัก) / Serial / ชื่อลูกหนี้ / เลขสัญญา"
               aria-label="ค้นหาในรายการเครื่อง"
               value={detailSearch}
               onChange={(event) => setDetailSearch(event.target.value)}
@@ -340,6 +340,7 @@ export function LotTab({
               </Tr>
             </THead>
             <TableState
+              onRetry={() => void reload()}
               colSpan={5}
               loading={false}
               error={null}

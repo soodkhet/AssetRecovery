@@ -129,6 +129,7 @@ export function JobsManager() {
           </Tr>
         </THead>
         <TableState
+          onRetry={() => void reload()}
           colSpan={6}
           loading={loading}
           error={error}

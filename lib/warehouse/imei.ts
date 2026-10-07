@@ -102,9 +102,31 @@ export function looksLikeMistypedImei(value: string | null | undefined): boolean
   return digits >= IMEI_LENGTH - 2 && digits <= IMEI_LENGTH - 1
 }
 
+/** ชุดตัวเลขที่อาจเป็น IMEI ในข้อความ — ตัวเลขติดกันที่คั่นได้ด้วยช่องว่าง/ขีด/จุด (ตัวคั่นชุดเดียวกับ `parseImei()`) */
+const DIGIT_RUN = /\d(?:[\s.-]*\d)*/g
+
+/**
+ * IMEI 15 หลักที่ฝังอยู่ในค่าที่ถูกจัดเป็น **Serial** (มีตัวอักษร) — เช่นวางมาจาก SMS/สัญญา `IMEI: 356938035643809`
+ * หรือ `356938035643809 (เครื่องลูกค้า)` (preship PS-005)
+ * คืนเลข 15 หลักเมื่อพบชุดตัวเลขที่ `parseImei()` ผ่าน **ชุดเดียวพอดี** · ไม่พบ/พบหลายชุด = `null`
+ * ⚠️ ใช้เพื่อ**เสนอ**ให้ผู้ใช้กดยืนยันเท่านั้น — ห้ามตัดข้อความทิ้งเองเงียบ ๆ (CLAUDE.md ข้อ 10 · มติ PO U24/U54)
+ */
+export function embeddedImeiCandidate(value: string | null | undefined): string | null {
+  const trimmed = value?.trim() ?? ''
+  if (trimmed === '' || isImeiLikeIdentifier(trimmed)) return null
+  const candidates = (trimmed.match(DIGIT_RUN) ?? []).map(parseImei).filter((imei): imei is string => imei !== null)
+  return candidates.length === 1 ? (candidates[0] ?? null) : null
+}
+
+/** ข้อความเตือน (ไม่บล็อก) เมื่อมี IMEI 15 หลักปนอยู่กับข้อความอื่น — ระบบจะบันทึกเป็น Serial ตามที่กรอก */
+export const IMEI_EMBEDDED_WARNING_MESSAGE =
+  'มีเลข IMEI 15 หลักปนอยู่กับข้อความ — ระบบจะบันทึกทั้งหมดเป็น Serial ถ้าเป็น IMEI ให้กรอกเฉพาะตัวเลข'
+
 /** ข้อความเตือนของช่อง "IMEI หรือ Serial" — `null` = ไม่มีอะไรต้องเตือน (ใช้ร่วมฟอร์ม/นำเข้าไฟล์/API) */
 export function assetIdentifierWarning(value: string | null | undefined): string | null {
-  return looksLikeMistypedImei(value) ? IMEI_TYPO_WARNING_MESSAGE : null
+  if (looksLikeMistypedImei(value)) return IMEI_TYPO_WARNING_MESSAGE
+  if (embeddedImeiCandidate(value) !== null) return IMEI_EMBEDDED_WARNING_MESSAGE
+  return null
 }
 
 export type AssetIdentityField = 'imei' | 'serial'

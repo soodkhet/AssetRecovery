@@ -155,6 +155,7 @@ export function CustomerWhtTab() {
             </Tr>
           </THead>
           <TableState
+            onRetry={() => void reload()}
             loading={loading}
             error={error}
             isEmpty={data.items.length === 0}

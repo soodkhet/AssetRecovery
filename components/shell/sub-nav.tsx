@@ -1,5 +1,6 @@
 'use client'
 
+import { LinkPending } from '@/components/shell/link-pending'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/components/ui/cn'
@@ -50,13 +51,14 @@ export function SubNav({ menus, className }: { menus: readonly MenuItem[]; class
               href={item.path}
               aria-current={current ? 'page' : undefined}
               className={cn(
-                'focus-ring-inset rounded-md px-3 py-1.5 text-xs font-semibold whitespace-nowrap transition-colors',
+                'focus-ring-inset inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold whitespace-nowrap transition-colors',
                 current
                   ? 'border border-slate-300 bg-white text-slate-900 shadow-sm'
                   : 'text-slate-500 hover:text-slate-800',
               )}
             >
               {item.label}
+              <LinkPending />
             </Link>
           )
         })}
