@@ -13,6 +13,7 @@ import {
 import type { RequestMeta } from '@/lib/auth/request-meta'
 import type { LoginInput } from '@/lib/auth/schemas'
 import { padLoginFailure, realLoginTimingClock, type LoginTimingClock } from '@/lib/auth/login-timing'
+import { loginThrottled } from '@/lib/auth/login-throttle-queries'
 import { invalidateSessionCache, setCachedSession } from '@/lib/auth/session-cache'
 import { getAuthenticatedUid, loadSessionUser } from '@/lib/auth/session'
 import type { SessionUser } from '@/lib/auth/types'
@@ -121,6 +122,21 @@ export async function login(
 async function authenticate(input: LoginInput, meta: RequestMeta): Promise<LoginResult> {
   const identifier = parseLoginIdentifier(input.identifier)
   const account = await findLoginAccount(identifier)
+
+  // preship PS-009 — ผิดซ้ำเกินเพดาน ⇒ พักก่อนแตะ Supabase (ไม่ตรวจรหัสผ่านเลย แม้รหัสครั้งนี้ถูก)
+  const auditOrganizationId = await resolveAuditOrganizationId(account)
+  if (
+    auditOrganizationId !== null &&
+    (await loginThrottled({
+      organizationId: auditOrganizationId,
+      identifier: auditableIdentifier(input.identifier),
+      ipAddress: meta.ipAddress,
+    }))
+  ) {
+    await auditLoginFailed(input.identifier, account, 'LOGIN_RATE_LIMITED', meta)
+    throw new AuthError('LOGIN_RATE_LIMITED', 'too many failed logins')
+  }
+
   // ไม่พบผู้ใช้ / ยังไม่มีบัญชี Auth = ตอบเหมือนรหัสผิดทุกประการ (ห้าม leak ว่ามีตัวตนนี้ในระบบ — `05` §10)
   // ไม่พบบัญชี → ยังเรียกอ่านบัญชี Auth ด้วย uid หลอก 1 ครั้ง ให้จำนวนครั้งที่เรียก Auth เท่าทางที่มีบัญชีจริง (BUG-140)
   const authEmail = await getAuthEmail(account?.supabaseUid ?? LOGIN_TIMING_DUMMY_UID)

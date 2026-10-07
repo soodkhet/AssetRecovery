@@ -1,5 +1,6 @@
 'use client'
 
+import { kpiValue } from '@/components/ui/kpi-value'
 import { useCallback, useEffect, useState } from 'react'
 import { useSession } from '@/components/auth/permission-provider'
 import { FileViewerModal } from '@/components/cases/file-viewer-modal'
@@ -46,11 +47,20 @@ import { SubstituteReceiptPanel } from '@/components/substitute-receipts/substit
  * - ยอดสรุปหัวจอมาจาก BE (ยอดของทั้งชุด ไม่ใช่ยอดหลังกรอง) ตาม §7.9
  */
 
-function SummaryBox({ label, amountSatang, tone }: { label: string; amountSatang: number; tone: 'pending' | 'approved' }) {
+/** `amountSatang = null` = ยังโหลดไม่เสร็จ/โหลดไม่สำเร็จ ⇒ "—" (preship PS-012) */
+function SummaryBox({
+  label,
+  amountSatang,
+  tone,
+}: {
+  label: string
+  amountSatang: number | null
+  tone: 'pending' | 'approved'
+}) {
   return (
     <div className={cn('rounded-xl p-3 text-center', tone === 'pending' ? 'bg-amber-50' : 'bg-emerald-50')}>
       <div className={cn('text-lg font-extrabold', tone === 'pending' ? 'text-amber-700' : 'text-emerald-700')}>
-        {fmtSatangSymbol(amountSatang)}
+        {kpiValue(amountSatang, fmtSatangSymbol)}
       </div>
       <div className={cn('text-[11px] font-bold', tone === 'pending' ? 'text-amber-600' : 'text-emerald-600')}>
         {label}
@@ -262,12 +272,12 @@ export function ExpensesTab({ initialView = 'caseBound' }: { initialView?: Expen
       >
         <span className="text-xs font-semibold text-slate-600">รอดำเนินการรวมทุกแท็บ</span>
         <span className="text-base font-extrabold text-amber-700">
-          {fmtSatangSymbol(data?.pendingAllTabsSatang ?? 0)}
+          {kpiValue(data?.pendingAllTabsSatang, fmtSatangSymbol)}
         </span>
       </div>
       <div className="mb-4 grid grid-cols-2 gap-2.5 lg:max-w-[480px]">
-        <SummaryBox label="รอดำเนินการในแท็บนี้" amountSatang={data?.pendingSatang ?? 0} tone="pending" />
-        <SummaryBox label="อนุมัติแล้ว" amountSatang={data?.approvedSatang ?? 0} tone="approved" />
+        <SummaryBox label="รอดำเนินการในแท็บนี้" amountSatang={data?.pendingSatang ?? null} tone="pending" />
+        <SummaryBox label="อนุมัติแล้ว" amountSatang={data?.approvedSatang ?? null} tone="approved" />
       </div>
 
       <div className="mb-4 flex rounded-xl bg-slate-100 p-1 lg:max-w-[320px]">

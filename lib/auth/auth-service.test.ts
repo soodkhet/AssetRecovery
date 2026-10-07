@@ -39,6 +39,10 @@ vi.mock('@/lib/auth/company-status', () => ({
   isCompanyActive: (status: string | null) => status === 'active',
 }))
 
+// preship PS-009 — ค่าเริ่มต้นไม่ถูกพัก · เทสต์ของการพักตั้งค่าเอง
+const loginThrottledMock = vi.hoisted(() => vi.fn(async () => false))
+vi.mock('@/lib/auth/login-throttle-queries', () => ({ loginThrottled: loginThrottledMock }))
+
 const { login } = await import('@/lib/auth/auth-service')
 const { LOGIN_FAILURE_MIN_DURATION_MS, remainingLoginDelayMs } = await import('@/lib/auth/login-timing')
 
@@ -220,5 +224,38 @@ describe('login — เวลาตอบไม่บอกใบ้ว่าบ
   it('remainingLoginDelayMs ไม่ติดลบ', () => {
     expect(remainingLoginDelayMs(0, 100, 800)).toBe(700)
     expect(remainingLoginDelayMs(0, 900, 800)).toBe(0)
+  })
+})
+
+describe('login — พักเมื่อผิดซ้ำเกินเพดาน (preship PS-009)', () => {
+  it('ถูกพัก ⇒ LOGIN_RATE_LIMITED 429 · ไม่เรียก Supabase เลย · audit ลง code นี้', async () => {
+    prismaMock.user.findFirst.mockResolvedValue(account())
+    loginThrottledMock.mockResolvedValueOnce(true)
+
+    const error = await loginError()
+
+    expect(error.code).toBe('LOGIN_RATE_LIMITED')
+    expect(error.status).toBe(429)
+    expect(getAuthEmailMock).not.toHaveBeenCalled()
+    expect(signInMock).not.toHaveBeenCalled()
+    expect(loginThrottledMock).toHaveBeenCalledWith({
+      organizationId: ORG,
+      identifier: 'manager@finance.example',
+      ipAddress: META.ipAddress,
+    })
+    expect(emitAuditMock).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'login', after: expect.objectContaining({ result: 'failed', code: 'LOGIN_RATE_LIMITED' }) }),
+    )
+  })
+
+  it('บัญชีที่ไม่มีจริงก็ถูกพักด้วยข้อความเดียวกัน (ไม่ leak ว่ามีบัญชีไหม)', async () => {
+    prismaMock.user.findFirst.mockResolvedValue(null)
+    prismaMock.organization.findFirst.mockResolvedValue({ id: ORG })
+    loginThrottledMock.mockResolvedValueOnce(true)
+
+    const error = await loginError()
+
+    expect(error.code).toBe('LOGIN_RATE_LIMITED')
+    expect(signInMock).not.toHaveBeenCalled()
   })
 })

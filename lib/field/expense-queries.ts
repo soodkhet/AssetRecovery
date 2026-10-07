@@ -1,4 +1,5 @@
 import { assertPeriodOpenAt, periodStatusAt } from '@/lib/accounting/period-guard'
+import { assertNoDuplicateClaimSubmission } from '@/lib/claims/duplicate-submission-queries'
 import { emitAudit } from '@/lib/audit/audit'
 import type { RequestMeta } from '@/lib/auth/request-meta'
 import type { SessionUser } from '@/lib/auth/types'
@@ -922,6 +923,20 @@ export async function submitHotelClaim(
       organizationId: user.organizationId,
       userId: user.id,
       actorId: context.actor.id,
+    })
+
+    // preship PS-003 — retry/ส่งซ้ำของใบเดียวกันไม่สร้างใบเบิกค่าที่พักใหม่
+    await assertNoDuplicateClaimSubmission(tx as ExpenseTxClient, {
+      organizationId: user.organizationId,
+      payeeId,
+      expenseType: 'hotel',
+      grossSatang: input.amountSatang,
+      expenseDate: input.expenseDate,
+      receiptFileHash: receipt?.sha256 ?? null,
+      revisionNote: input.note ?? null,
+      hotelNights: input.hotelNights,
+      sharedWithUserId: input.sharedWithUserId ?? null,
+      receiptInCompanyName: input.receiptInCompanyName,
     })
 
     const row = await tx.expense.create({

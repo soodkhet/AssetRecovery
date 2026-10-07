@@ -131,6 +131,8 @@ export const ERROR_CATALOG = {
   REJECT_REASON_REQUIRED: { status: 400, severity: 'reject', source: '24 §6.4' },
   APPROVAL_STEP_OUT_OF_ORDER: { status: 400, severity: 'reject', source: '24 §6.4' },
   SEGREGATION_OF_DUTIES_VIOLATION: { status: 403, severity: 'reject', source: '24 §6.4' },
+  // preship PS-003 — กันส่งใบเบิกเดิมซ้ำภายใน 10 นาที (`lib/claims/duplicate-submission.ts`)
+  CLAIM_DUPLICATE_SUBMISSION: { status: 409, severity: 'reject', source: '24 §6.4' },
 
   // ── 24 §6.5 Payout/Payee ───────────────────────────────────────────────
   UNVERIFIED_PAYEE_IN_PAYOUT: { status: 400, severity: 'reject', source: '24 §6.5' },
@@ -231,6 +233,8 @@ export const ERROR_CATALOG = {
   PERMISSION_DENIED: { status: 403, severity: 'reject', source: '24 §6.9' },
   LAST_SUPERADMIN_REMOVAL: { status: 400, severity: 'reject', source: '24 §6.9' },
   PASSWORD_CHANGE_REQUIRED: { status: 403, severity: 'reject', source: '24 §6.9' },
+  // preship PS-009 — login ผิดซ้ำเกินเพดาน
+  LOGIN_RATE_LIMITED: { status: 429, severity: 'reject', source: '24 §6.9' },
   SEED_ROLE_DELETE: { status: 400, severity: 'reject', source: '24 §6.9' },
   SEED_ROLE_RENAME: { status: 400, severity: 'reject', source: '24 §6.9' },
   ROLE_NOT_EDITABLE: { status: 400, severity: 'reject', source: '24 §6.9' },
@@ -332,6 +336,10 @@ export const ERROR_CATALOG = {
   LOT_NOT_FOUND: { status: 404, severity: 'reject', source: '44 §12' },
   // มติ PO U129 — เติมเข้า `44` §12 + บันทึกใน `24` (Rule 04 — doc + code คอมมิตเดียวกัน)
   IMEI_DUPLICATE_ACTIVE_ASSET: { status: 400, severity: 'reject', source: '44 §12' },
+
+  // ── 24 §6.13 ระบบ / API กลาง (preship PS-006 · PS-022 — `lib/api/unexpected-error.ts`) ─────
+  INVALID_ID_FORMAT: { status: 400, severity: 'reject', source: '24 §6.13' },
+  INTERNAL_ERROR: { status: 500, severity: 'reject', source: '24 §6.13' },
 } as const satisfies Record<string, ErrorCodeContract>
 
 export type ApiErrorCode = keyof typeof ERROR_CATALOG

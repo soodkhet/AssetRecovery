@@ -1,5 +1,6 @@
 'use client'
 
+import { kpiValue } from '@/components/ui/kpi-value'
 import { useEffect, useState } from 'react'
 import { ReceiveCustomerWhtModal } from '@/components/accounting/receive-customer-wht-modal'
 import { useCustomerWht } from '@/components/accounting/use-customer-wht'
@@ -68,6 +69,8 @@ export function CustomerWhtTab() {
     ...(age === 'all' ? {} : { age }),
     ...(companyId === '' ? {} : { companyId }),
   })
+  // กำลังโหลด/โหลดไม่สำเร็จ ⇒ การ์ดสรุปแสดง "—" ไม่ใช่ ฿0.00 (preship PS-012)
+  const ready = !loading && error === null
 
   useEffect(() => {
     let cancelled = false
@@ -94,17 +97,17 @@ export function CustomerWhtTab() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard
           label="รอ 50 ทวิ จากลูกค้า"
-          value={fmtSatangSymbol(data.summary.pendingSatang)}
-          hint={`${fmtCount(data.summary.pendingCount)} รายการ`}
+          value={kpiValue(ready ? data.summary.pendingSatang : null, fmtSatangSymbol)}
+          hint={`${kpiValue(ready ? data.summary.pendingCount : null, fmtCount)} รายการ`}
         />
         <StatCard
           label="ได้รับหนังสือแล้ว"
-          value={fmtSatangSymbol(data.summary.receivedSatang)}
-          hint={`${fmtCount(data.summary.receivedCount)} รายการ`}
+          value={kpiValue(ready ? data.summary.receivedSatang : null, fmtSatangSymbol)}
+          hint={`${kpiValue(ready ? data.summary.receivedCount : null, fmtCount)} รายการ`}
         />
         <StatCard
           label="ลูกค้าที่ยังค้างหนังสือ"
-          value={fmtCount(data.byCompany.length)}
+          value={kpiValue(ready ? data.byCompany.length : null, fmtCount)}
           hint="นับทุกงวด"
         />
       </div>

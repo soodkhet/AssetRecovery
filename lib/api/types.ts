@@ -57,14 +57,77 @@ export function withContextSuffix(message: string, payload: Partial<Record<strin
   return message
 }
 
+/** เวลารอสูงสุดของคำขอหนึ่งครั้ง — เกินแล้วหยุดรอและบอกผู้ใช้ (preship PS-007) · งานยาว (PDF/export) ส่งค่าเองได้ */
+export const DEFAULT_API_TIMEOUT_MS = 60_000
+
+export interface CallApiOptions {
+  timeoutMs?: number
+}
+
+type FailureKind = 'timeout' | 'network' | 'server' | 'client' | 'invalid_response'
+
+/**
+ * ข้อความเมื่อเรียก API ไม่สำเร็จโดยไม่มี error envelope จาก server (preship PS-006/PS-007)
+ * แยก "เน็ตหลุด" ออกจาก "ระบบขัดข้อง" — เดิมรวมเป็น "เชื่อมต่อระบบไม่สำเร็จ" ทั้งหมด ผู้ใช้ไปตรวจ Wi-Fi ทั้งที่ระบบล่ม
+ * คำขอที่เขียนข้อมูล (ไม่ใช่ GET) อาจสำเร็จที่ server แล้วแต่คำตอบหาย ⇒ เตือนให้ตรวจรายการก่อนส่งซ้ำ (PS-003)
+ */
+export function describeApiFailure(kind: FailureKind, method: string, status?: number): ApiCallError {
+  const mutating = method.toUpperCase() !== 'GET'
+  const checkFirst = mutating ? ' — ถ้ากดบันทึกไปแล้ว ให้ตรวจในรายการก่อนส่งซ้ำ' : ''
+  switch (kind) {
+    case 'timeout':
+      return { title: 'ระบบตอบช้าเกินไป', message: `รอนานเกินกำหนดจึงหยุดรอ กรุณาลองใหม่${checkFirst}` }
+    case 'network':
+      return { title: 'เชื่อมต่อระบบไม่สำเร็จ', message: `ตรวจสอบอินเทอร์เน็ตแล้วลองใหม่${checkFirst}` }
+    case 'server':
+      return {
+        title: 'ระบบขัดข้องชั่วคราว',
+        message: `ระบบทำรายการไม่สำเร็จ (HTTP ${status ?? 500}) กรุณาลองใหม่ — ถ้ายังไม่ได้ให้แจ้งผู้ดูแลระบบ`,
+      }
+    case 'client':
+      return { title: 'ทำรายการไม่สำเร็จ', message: `ระบบปฏิเสธคำขอ (HTTP ${status ?? 400}) กรุณาโหลดหน้าใหม่แล้วลองอีกครั้ง` }
+    case 'invalid_response':
+      return { title: 'ข้อมูลตอบกลับไม่ถูกต้อง', message: 'กรุณาโหลดหน้าใหม่แล้วลองอีกครั้ง' }
+  }
+}
+
 /**
  * เรียก API ของโมดูลแล้วคืนผลแบบ discriminated — **ไม่มี setState ในตัวเอง**
  * เพื่อให้เรียกจาก `useEffect` ได้โดยไม่ชนกฎ `react-hooks/set-state-in-effect` (กับดักใน REUSE_INDEX)
+ * มี timeout ในตัว ({@link DEFAULT_API_TIMEOUT_MS}) · `init.signal` ของผู้เรียก (เช่นยกเลิกตอน unmount) ยังใช้ได้ตามเดิม
  */
-export async function callApi<T>(input: string, init?: RequestInit): Promise<ApiCallResult<T>> {
+export async function callApi<T>(input: string, init?: RequestInit, options?: CallApiOptions): Promise<ApiCallResult<T>> {
+  const method = init?.method ?? 'GET'
+  const controller = new AbortController()
+  let timedOut = false
+  const timer = setTimeout(() => {
+    timedOut = true
+    controller.abort()
+  }, options?.timeoutMs ?? DEFAULT_API_TIMEOUT_MS)
+  const callerSignal = init?.signal ?? null
+  const forwardAbort = () => controller.abort()
+  if (callerSignal?.aborted) controller.abort()
+  callerSignal?.addEventListener('abort', forwardAbort)
+
   try {
-    const response = await fetch(input, init)
-    const body: unknown = await response.json()
+    let response: Response
+    try {
+      response = await fetch(input, { ...init, signal: controller.signal })
+    } catch {
+      return { error: describeApiFailure(timedOut ? 'timeout' : 'network', method) }
+    }
+
+    let body: unknown
+    try {
+      body = await response.json()
+    } catch {
+      // ไม่มี envelope (เช่น 502/504 จาก proxy) — บอกตามสถานะจริง ไม่ใช่ "เชื่อมต่อไม่สำเร็จ"
+      if (timedOut) return { error: describeApiFailure('timeout', method) }
+      if (response.status >= 500) return { error: describeApiFailure('server', method, response.status) }
+      if (!response.ok) return { error: describeApiFailure('client', method, response.status) }
+      return { error: describeApiFailure('invalid_response', method) }
+    }
+
     const envelope = readEnvelope<T>(body, response.ok)
     if (!envelope.success) {
       const { code, title, message, fields } = envelope.error
@@ -81,8 +144,9 @@ export async function callApi<T>(input: string, init?: RequestInit): Promise<Api
     return envelope.warning === undefined
       ? { data: envelope.data }
       : { data: envelope.data, warning: envelope.warning }
-  } catch {
-    return { error: { title: 'เชื่อมต่อระบบไม่สำเร็จ', message: 'กรุณาลองใหม่' } }
+  } finally {
+    clearTimeout(timer)
+    callerSignal?.removeEventListener('abort', forwardAbort)
   }
 }
 

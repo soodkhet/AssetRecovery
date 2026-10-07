@@ -1,9 +1,16 @@
 import type { NextConfig } from 'next'
+import { securityHeaders } from './lib/security-headers'
 
 const isProd = process.env.NODE_ENV === 'production'
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // ไม่เปิดเผย framework (preship PS-008)
+  poweredByHeader: false,
+  // security headers ทุก path — รายละเอียด/เหตุผลอยู่ที่ `lib/security-headers.ts`
+  async headers() {
+    return [{ source: '/:path*', headers: securityHeaders({ production: isProd }) }]
+  },
   typescript: {
     // build ต้องล้มถ้ามี type error (กติกา CLAUDE.md ข้อ 13 — TypeScript strict ห้าม any)
     ignoreBuildErrors: false,

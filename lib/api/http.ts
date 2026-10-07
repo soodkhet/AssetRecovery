@@ -10,7 +10,8 @@ import { toFieldErrors } from '@/lib/api/validation'
 
 /**
  * ตัวห่อ route handler กลาง — ตรวจสิทธิ์ที่ API layer เสมอ (DEC-002) แล้วแปลง error ของโมดูล
- * เป็น response มาตรฐาน · error ชนิดอื่นถูกโยนต่อให้กลายเป็น 500 จริง (ห้ามกลืนเป็น 400/403 ปลอม)
+ * เป็น response มาตรฐาน · error ชนิดอื่นได้ 500 `INTERNAL_ERROR` แบบ envelope (ห้ามกลืนเป็น 400/403 ปลอม —
+ * `lib/api/unexpected-error.ts`)
  *
  * ย้ายออกมาจาก `lib/roles/http.ts` (Phase 1.6) ตอน Phase 1.7 เพื่อให้ทุกโมดูลใช้ตัวเดียวกัน
  * ตั้งแต่ Phase 2.1 ทุก response ที่ออกจากตัวห่อนี้ใช้ envelope กลาง (`lib/api/envelope.ts`)

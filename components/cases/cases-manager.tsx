@@ -1,5 +1,6 @@
 'use client'
 
+import { kpiValue } from '@/components/ui/kpi-value'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Can, usePermission } from '@/components/auth/permission-provider'
 import { CaseDetailModal } from '@/components/cases/case-detail-modal'
@@ -106,7 +107,8 @@ export function CasesManager() {
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS)
   const [page, setPage] = useState(1)
 
-  const [counts, setCounts] = useState<Readonly<Record<string, number>>>({})
+  /** ยังไม่โหลด = ไม่มีคีย์ · โหลดไม่สำเร็จ = `null` ⇒ การ์ดแสดง "—" ไม่ใช่ 0 (preship PS-012) */
+  const [counts, setCounts] = useState<Readonly<Record<string, number | null>>>({})
 
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<CaseDetailDto | null>(null)
@@ -128,7 +130,7 @@ export function CasesManager() {
       KPI_STATUSES.map(async (item) => {
         const path = apiPath('case.list', undefined, { status: item.status, page: 1, limit: 1 })
         const response = await callApi<CaseListResultDto>(path)
-        return [item.status, response.data?.total ?? 0] as const
+        return [item.status, response.data?.total ?? null] as const
       }),
     )
     return Object.fromEntries(results)
@@ -265,7 +267,7 @@ export function CasesManager() {
 
       <div className="mb-5 grid grid-cols-2 gap-4 md:grid-cols-4">
         {KPI_STATUSES.map((item) => (
-          <StatCard key={item.status} label={item.label} value={counts[item.status] ?? 0} hint={item.hint} />
+          <StatCard key={item.status} label={item.label} value={kpiValue(counts[item.status])} hint={item.hint} />
         ))}
       </div>
 

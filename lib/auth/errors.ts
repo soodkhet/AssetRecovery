@@ -1,3 +1,5 @@
+import { unexpectedErrorResponse } from '@/lib/api/unexpected-error'
+
 /**
  * Error code หมวด Auth & Access Control — SSOT อยู่ที่ `docs/24-finance-validation-rules.md` §6.9
  * ⚠️ ห้ามตั้ง code ใหม่ที่นี่โดยไม่เพิ่มลงไฟล์ 24 ใน commit เดียวกัน (Rule 04)
@@ -14,6 +16,8 @@ export const AUTH_ERROR_CODES = [
   'LAST_SUPERADMIN_REMOVAL',
   'REQUIRED_MISSING',
   'PASSWORD_CHANGE_REQUIRED',
+  // preship PS-009 — login ผิดซ้ำเกินเพดาน (`lib/auth/login-throttle.ts`)
+  'LOGIN_RATE_LIMITED',
 ] as const
 
 export type AuthErrorCode = (typeof AUTH_ERROR_CODES)[number]
@@ -30,6 +34,7 @@ const HTTP_STATUS: Record<AuthErrorCode, number> = {
   LAST_SUPERADMIN_REMOVAL: 400,
   REQUIRED_MISSING: 400,
   PASSWORD_CHANGE_REQUIRED: 403,
+  LOGIN_RATE_LIMITED: 429,
 }
 
 /**
@@ -62,6 +67,11 @@ const MESSAGES: Record<AuthErrorCode, { title: string; message: string }> = {
   PASSWORD_CHANGE_REQUIRED: {
     title: 'ต้องเปลี่ยนรหัสผ่านก่อนใช้งาน',
     message: 'ผู้ดูแลระบบตั้งรหัสผ่านให้บัญชีนี้ — กรุณาตั้งรหัสผ่านใหม่ของคุณเองก่อนใช้งานต่อ',
+  },
+  // ไม่บอกว่าบัญชีมีจริงหรือไม่ — ข้อความเดียวกันทั้งพักรายบัญชีและราย IP
+  LOGIN_RATE_LIMITED: {
+    title: 'ลองเข้าสู่ระบบหลายครั้งเกินไป',
+    message: 'เข้าสู่ระบบไม่สำเร็จหลายครั้งติดกัน กรุณารอ 15 นาทีแล้วลองใหม่ หรือติดต่อผู้ดูแลระบบให้ตั้งรหัสผ่านใหม่',
   },
 }
 
@@ -106,10 +116,12 @@ export function toAuthErrorBody(code: AuthErrorCode): AuthErrorBody {
 }
 
 /**
- * แปลง `AuthError` → Response มาตรฐาน — error ชนิดอื่น throw ต่อ (ต้องกลายเป็น 500 ไม่ใช่ 401/403 ปลอม)
+ * แปลง `AuthError` → Response มาตรฐาน — error ชนิดอื่นไม่ถูกกลืนเป็น 401/403 ปลอม แต่ได้ 500 `INTERNAL_ERROR`
+ * (หรือ 400 `INVALID_ID_FORMAT` เมื่อ id ใน path ไม่ใช่ UUID) ผ่าน `unexpectedErrorResponse()`
  * TODO(Phase 2.1): ย้ายไปใช้ response envelope กลางของไฟล์ `45` เมื่อ API Contract Infra พร้อม
  */
 export function toAuthErrorResponse(error: unknown): Response {
-  if (!isAuthError(error)) throw error
+  // error ที่ไม่ใช่ของ auth ⇒ envelope 500/400 กลาง (เดิมโยนต่อเป็น 500 ไม่มี body — preship PS-006)
+  if (!isAuthError(error)) return unexpectedErrorResponse(error)
   return Response.json(toAuthErrorBody(error.code), { status: error.status })
 }

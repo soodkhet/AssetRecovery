@@ -86,8 +86,11 @@ describe('PATCH /api/settings/functional-permissions — error ของโม�
     expect(((await res.json()) as Envelope).error?.code).toBe('AUDIT_REASON_REQUIRED')
   })
 
-  it('error ชนิดอื่นยังถูกโยนต่อ (ไม่กลืนเป็น 4xx ปลอม)', async () => {
+  it('error ชนิดอื่นได้ 500 INTERNAL_ERROR (ไม่กลืนเป็น 4xx ปลอม · preship PS-006)', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
     writeMock.applyFunctionalMatrixChanges.mockRejectedValue(new Error('db down'))
-    await expect(route.PATCH(patch(BODY), undefined)).rejects.toThrow('db down')
+    const res = await route.PATCH(patch(BODY), undefined)
+    expect(res.status).toBe(500)
+    expect(((await res.json()) as Envelope).error?.code).toBe('INTERNAL_ERROR')
   })
 })

@@ -622,3 +622,59 @@ suite('มติ PO U150 — เอกสารยืนยันตัวตน
     expect(await access.payeeIdOfIdDocument(ORG_ID, path)).toBe(payeeId)
   })
 })
+
+suite('preship PS-003 — กันส่งใบเบิกเดิมซ้ำ (retry/กดซ้ำ)', () => {
+  const line = (amountSatang: number) => ({
+    lineDate: new Date('2026-10-05T00:00:00Z'),
+    description: 'ค่าเรือข้ามฟาก',
+    amountSatang,
+    note: null,
+  })
+  const noReceipt = {
+    claimType: 'receipt' as const,
+    grossSatang: 30_000,
+    expenseDate: new Date('2026-10-05T00:00:00Z'),
+    payeeId: null,
+    receiptFileUrl: null,
+    note: 'ค่าเรือข้ามฟาก',
+    substituteReceipt: { lines: [line(30_000)] },
+  }
+
+  async function countClaims(): Promise<number> {
+    return db().expense.count({ where: { organizationId: ORG_ID, caseId: null, revisionNote: noReceipt.note } })
+  }
+
+  it('ส่งรายการเดิมซ้ำทันที ⇒ CLAIM_DUPLICATE_SUBMISSION · มีใบเบิกใบเดียว', async () => {
+    await claims.createManualClaim({ actor: agent, meta }, noReceipt)
+    await expectCode(() => claims.createManualClaim({ actor: agent, meta }, noReceipt), 'CLAIM_DUPLICATE_SUBMISSION')
+    expect(await countClaims()).toBe(1)
+  })
+
+  it('ส่งพร้อมกัน 2 request ⇒ สำเร็จ 1 ซ้ำ 1 (advisory lock)', async () => {
+    const results = await Promise.allSettled([
+      claims.createManualClaim({ actor: agent, meta }, noReceipt),
+      claims.createManualClaim({ actor: agent, meta }, noReceipt),
+    ])
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1)
+    const rejected = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+    expect(rejected.map((result) => codeOf(result.reason))).toEqual(['CLAIM_DUPLICATE_SUBMISSION'])
+    expect(await countClaims()).toBe(1)
+  })
+
+  it('ยอดต่าง / ผู้รับเงินต่าง ⇒ ไม่ถือว่าซ้ำ', async () => {
+    await claims.createManualClaim({ actor: agent, meta }, noReceipt)
+    const otherAmount = { ...noReceipt, grossSatang: 30_100, substituteReceipt: { lines: [line(30_100)] } }
+    await claims.createManualClaim({ actor: agent, meta }, otherAmount)
+    await claims.createManualClaim({ actor: agent2, meta }, noReceipt)
+    expect(await countClaims()).toBe(3)
+  })
+
+  it('ใบเดิมถูกตีกลับ หรือสร้างเกิน 10 นาทีแล้ว ⇒ ส่งใหม่ได้', async () => {
+    const first = await claims.createManualClaim({ actor: agent, meta }, noReceipt)
+    await db().expense.update({ where: { id: first.id }, data: { status: 'rejected' } })
+    const second = await claims.createManualClaim({ actor: agent, meta }, noReceipt)
+    await db().expense.update({ where: { id: second.id }, data: { createdAt: new Date(Date.now() - 11 * 60 * 1000) } })
+    await claims.createManualClaim({ actor: agent, meta }, noReceipt)
+    expect(await countClaims()).toBe(3)
+  })
+})

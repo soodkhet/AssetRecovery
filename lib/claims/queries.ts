@@ -7,6 +7,7 @@ import {
   MANUAL_CLAIM_CALCULATION_SOURCE,
   MANUAL_CLAIM_INITIAL_STATUS,
 } from '@/lib/claims/claim'
+import { assertNoDuplicateClaimSubmission } from '@/lib/claims/duplicate-submission-queries'
 import type { ClaimCreateInput } from '@/lib/claims/schemas'
 import { AuthError } from '@/lib/auth/errors'
 import { ensureAgentPayeeId, type ExpenseTxClient } from '@/lib/field/expense-queries'
@@ -93,6 +94,20 @@ export async function createManualClaim(
             actorId: user.id,
           })
         : await assertPayeeInOrganization(tx as ExpenseTxClient, user.organizationId, input.payeeId)
+
+    // preship PS-003 — retry/ส่งซ้ำของใบเดียวกันไม่สร้างใบเบิกใหม่ (เฉพาะฟอร์มเบิกมือ ไม่ใช่คำขอส่วนเกินอัตโนมัติ)
+    await assertNoDuplicateClaimSubmission(tx as ExpenseTxClient, {
+      organizationId: user.organizationId,
+      payeeId,
+      expenseType: input.claimType,
+      grossSatang: input.grossSatang,
+      expenseDate: input.expenseDate,
+      receiptFileHash: receipt?.sha256 ?? null,
+      revisionNote: input.note,
+      hotelNights: null,
+      sharedWithUserId: null,
+      receiptInCompanyName: false,
+    })
 
     const claim = await insertManualClaim(tx as ExpenseTxClient, context, {
       payeeId,

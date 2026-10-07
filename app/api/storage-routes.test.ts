@@ -413,8 +413,13 @@ describe('POST /api/storage/download-url', () => {
     it('เขียน audit ไม่สำเร็จ → ไม่คืน URL', async () => {
       requireSessionMock.mockResolvedValue(ADMIN)
       auditMock.emitAudit.mockRejectedValueOnce(new Error('db down'))
-      // error ที่ไม่ใช่ของโมดูลถูกโยนต่อให้ framework ตอบ 500 — ไม่มี URL หลุดออกไป
-      await expect(postDownloadUrl(downloadReq(`cases/${CASE_ID}/national_id_doc/u.jpg`))).rejects.toThrow('db down')
+      // error ที่ไม่ใช่ของโมดูล ⇒ 500 INTERNAL_ERROR (preship PS-006) — ไม่มี URL หลุดออกไป
+      vi.spyOn(console, 'error').mockImplementation(() => undefined)
+      const response = await postDownloadUrl(downloadReq(`cases/${CASE_ID}/national_id_doc/u.jpg`))
+      expect(response.status).toBe(500)
+      const body = await response.text()
+      expect(body).toContain('INTERNAL_ERROR')
+      expect(body).not.toContain('storage.test/signed')
     })
   })
 

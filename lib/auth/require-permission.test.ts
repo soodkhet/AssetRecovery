@@ -112,8 +112,11 @@ describe('withPermission — เรียก endpoint ตรงโดยไม�
     expect(response.status).toBe(200)
   })
 
-  it('error ที่ไม่ใช่ AuthError ต้องไม่ถูกกลืนเป็น 401/403', async () => {
+  it('error ที่ไม่ใช่ AuthError ต้องไม่ถูกกลืนเป็น 401/403 — ได้ 500 INTERNAL_ERROR (preship PS-006)', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => undefined)
     requireSessionMock.mockRejectedValue(new Error('DB ล่ม'))
-    await expect(handler(request, undefined)).rejects.toThrowError('DB ล่ม')
+    const response = await handler(request, undefined)
+    expect(response.status).toBe(500)
+    expect((await response.json()).error.code).toBe('INTERNAL_ERROR')
   })
 })

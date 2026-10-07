@@ -91,6 +91,8 @@ export function DeviceCatalogTab() {
       const result = await callApi<DeviceCatalogSyncRequestDto>(
         '/api/settings/device-catalog/tac-update',
         jsonRequest('POST', { force }),
+        // route ทำงานได้ถึง 300 วินาที (`maxDuration`) — รอให้เท่ากัน
+        { timeoutMs: 300_000 },
       )
       if (result.error !== undefined) {
         showToast({ tone: 'error', title: result.error.title, description: result.error.message })
@@ -110,6 +112,7 @@ export function DeviceCatalogTab() {
       const result = await callApi<DeviceCatalogSyncRequestDto>(
         '/api/settings/device-catalog/tac-import',
         jsonRequest('POST', { path }),
+        { timeoutMs: 300_000 },
       )
       if (result.error !== undefined) {
         showToast({ tone: 'error', title: result.error.title, description: result.error.message })
