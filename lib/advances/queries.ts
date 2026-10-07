@@ -36,6 +36,7 @@ import { hasCapability } from '@/lib/auth/permission'
 import type { RequestMeta } from '@/lib/auth/request-meta'
 import type { SessionUser } from '@/lib/auth/types'
 import { bangkokBusinessDate, ensureAgentPayeeId, type ExpenseTxClient } from '@/lib/field/expense-queries'
+import { assertReceiptNotReused } from '@/lib/claims/duplicate-submission-queries'
 import { insertManualClaim } from '@/lib/claims/queries'
 import { advanceSettlement } from '@/lib/finance/advance-calc'
 import { advanceReturnOutstandingSatang } from '@/lib/finance/advance-offset-calc'
@@ -595,6 +596,13 @@ export async function settleAdvance(
           })
 
     const row = await tx.advance.findUniqueOrThrow({ where: { id: advanceId }, select: advanceSelect })
+
+    // ใบเสร็จที่ใช้กับใบเบิกอื่นที่ยังมีผลแล้ว ห้ามใช้เคลียร์เงินทดรอง/เบิกส่วนเกินซ้ำ (preship R4 ต่อจาก R3-004 — เสี่ยงจ่ายซ้ำ)
+    await assertReceiptNotReused(tx as ExpenseTxClient, {
+      organizationId: user.organizationId,
+      payeeId: current.payeeId,
+      receiptFileHash: receipt?.sha256 ?? null,
+    })
 
     const excessClaim = preview.needsExtraClaim
       ? await insertManualClaim(tx as ExpenseTxClient, context, {

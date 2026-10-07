@@ -401,6 +401,26 @@ suite('มติ PO U143 — เคลียร์เงินทดรอง: �
       select: { afterData: true },
     })
     expect(audit.afterData).toMatchObject({ receipt_file_url: path, receipt_file_hash: hash })
+
+    // ใบเสร็จเดิม (hash เดียวกัน) ใช้เคลียร์เงินทดรองอีกก้อนไม่ได้ — ใบเบิกส่วนเกินถือใบเสร็จนี้อยู่ (preship R4 ต่อจาก R3-004)
+    const second = await advances.createAdvance({ actor: agent, meta }, {
+      requestedSatang: 100_000,
+      purpose: 'เดินทางไปติดตามทรัพย์ต่างจังหวัด รอบสอง',
+      dueClearDate: new Date('2026-12-31T00:00:00Z'),
+      payeeId: null,
+    })
+    await db().$executeRawUnsafe(
+      `UPDATE advances SET status = 'approved', approved_satang = 100000, approved_at = now() WHERE id = '${second.id}'`,
+    )
+    await markAdvancePaidOut(db(), { organizationId: ORG_ID, advanceId: second.id, actorId: FINANCE_ID })
+    const copyPath = receiptPathOf(AGENT_ID, 'advance-copy.pdf')
+    expect(uploadPdf(copyPath, 'advance-receipt')).toBe(hash)
+    await expectCode(
+      () => advances.settleAdvance({ actor: agent, meta }, second.id, { usedSatang: 120_000, receiptFileUrl: copyPath, note: null }),
+      'CLAIM_DUPLICATE_SUBMISSION',
+    )
+    const unchanged = await db().advance.findUniqueOrThrow({ where: { id: second.id }, select: { status: true } })
+    expect(unchanged.status).not.toBe('cleared')
   })
 })
 
