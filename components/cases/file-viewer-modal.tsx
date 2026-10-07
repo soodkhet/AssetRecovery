@@ -20,6 +20,21 @@ export interface ViewableFile {
 }
 
 /**
+ * ตัวแสดง PDF ของ browser ดึง focus เข้า iframe หลังโหลด ⇒ คีย์ Esc ไปค้างใน iframe ไม่ถึงตัวปิดของ Modal
+ * (preship R5-010) — คืน focus ให้แผง modal ถ้า focus ยังอยู่ใน iframe นั้น (ผู้ใช้คลิกเข้าไปเลื่อนเองทีหลังได้ตามปกติ)
+ * ตัวแสดงบางตัวดึง focus ช้ากว่า load เล็กน้อย จึงตรวจซ้ำอีกสองครั้งในช่วงสั้น ๆ
+ */
+function returnFocusFromViewer(frame: HTMLIFrameElement): void {
+  const panel = frame.closest<HTMLElement>('[role="dialog"]')
+  if (panel === null) return
+  const restore = () => {
+    if (frame.isConnected && window.document.activeElement === frame) panel.focus()
+  }
+  restore()
+  for (const delay of [150, 600]) window.setTimeout(restore, delay)
+}
+
+/**
  * ตัวเปิดดูไฟล์แนบ (`38` §7.5 — "เอกสารแนบต้องเปิดดูได้จริง")
  * PDF เปิดใน viewer ในตัว · รูปภาพเปิดแบบ lightbox เต็มจอ · วิดีโอ/เสียงเล่นในหน้า · ชนิดอื่นให้ดาวน์โหลด
  *
@@ -100,7 +115,12 @@ export function FileViewerModal({
       ) : url === null ? (
         <LoadingState message="กำลังเตรียมไฟล์..." />
       ) : isPdfMime(document.mimeType) ? (
-        <iframe src={url} title={document.originalName} className="h-[70vh] w-full rounded-lg border border-slate-200" />
+        <iframe
+          src={url}
+          title={document.originalName}
+          onLoad={(event) => returnFocusFromViewer(event.currentTarget)}
+          className="h-[70vh] w-full rounded-lg border border-slate-200"
+        />
       ) : document.mimeType.startsWith('video/') ? (
         // หลักฐานวิดีโอปิดงาน (UAT BUG-045) — เล่นในหน้าได้เลย
         <video src={url} controls className="mx-auto max-h-[70vh] w-full rounded-lg bg-black" />

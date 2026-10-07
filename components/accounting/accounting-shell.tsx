@@ -14,6 +14,7 @@ import { QuestionsTab } from '@/components/accounting/questions-tab'
 import { ReceiptsTab } from '@/components/accounting/receipts-tab'
 import { SalesTab } from '@/components/accounting/sales-tab'
 import { WhtTab } from '@/components/accounting/wht-tab'
+import { ScrollStrip } from '@/components/shell/scroll-strip'
 import { Card, EmptyState, PageHeader } from '@/components/ui'
 import { cn } from '@/components/ui/cn'
 import { resolveAccountingTab, visibleAccountingTabs } from '@/lib/accounting/accounting-tabs'
@@ -44,49 +45,51 @@ export function AccountingShell({ initialTab }: { initialTab: string }) {
 
   return (
     <>
-      <PageHeader
-        title="บัญชี (Accounting)"
-        description="รวบรวมหลักฐาน ปิดงบ กระทบยอด และประสานงานสำนักงานบัญชี"
-      />
+      <PageHeader title="บัญชี (Accounting)" description="รวบรวมหลักฐาน ปิดงบ กระทบยอด และประสานงานสำนักงานบัญชี" />
 
       <Card>
-        {/* แท็บขึ้นบรรทัดใหม่แทนการเลื่อนแนวนอนแบบซ่อน scrollbar — จอ tablet เคยมองไม่เห็นแท็บท้ายแถว (preship R2-013) */}
-        <nav
-          aria-label="แท็บงานบัญชี"
-          className="mb-6 flex flex-wrap gap-x-6 border-b border-slate-200"
-        >
-          {tabs.map((item) => {
-            if (!item.available) {
+        {/* sm ขึ้นไป: แท็บขึ้นบรรทัดใหม่แทนเลื่อนแบบซ่อน scrollbar — tablet เคยมองไม่เห็นแท็บท้ายแถว (preship R2-013)
+            มือถือ (< sm): แถวเดียวเลื่อนได้ + ขอบจาง — แบบขึ้นบรรทัดใหม่สูง 4 แถวดันเนื้อหาลง (preship R5-005) */}
+        <div className="mb-6">
+          <ScrollStrip
+            label="แท็บงานบัญชี"
+            activeKey={current?.id ?? null}
+            fadeClassName="from-white"
+            className="flex flex-wrap gap-x-6 border-b border-slate-200"
+          >
+            {tabs.map((item) => {
+              if (!item.available) {
+                return (
+                  <span
+                    key={item.id}
+                    title={UNDER_DEVELOPMENT_TEXT}
+                    className="cursor-not-allowed border-b-2 border-transparent py-2.5 text-sm font-semibold whitespace-nowrap text-slate-300"
+                  >
+                    {item.label}
+                  </span>
+                )
+              }
+
+              const active = item.id === current?.id
               return (
-                <span
+                <button
                   key={item.id}
-                  title={UNDER_DEVELOPMENT_TEXT}
-                  className="cursor-not-allowed border-b-2 border-transparent py-2.5 text-sm font-semibold whitespace-nowrap text-slate-300"
+                  type="button"
+                  onClick={() => setTab(item.id)}
+                  aria-current={active ? 'page' : undefined}
+                  className={cn(
+                    'focus-ring-inset border-b-2 py-2.5 text-sm font-semibold whitespace-nowrap transition-colors',
+                    active
+                      ? 'border-slate-900 text-slate-900'
+                      : 'border-transparent text-slate-500 hover:text-slate-800',
+                  )}
                 >
                   {item.label}
-                </span>
+                </button>
               )
-            }
-
-            const active = item.id === current?.id
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => setTab(item.id)}
-                aria-current={active ? 'page' : undefined}
-                className={cn(
-                  'focus-ring-inset border-b-2 py-2.5 text-sm font-semibold whitespace-nowrap transition-colors',
-                  active
-                    ? 'border-slate-900 text-slate-900'
-                    : 'border-transparent text-slate-500 hover:text-slate-800',
-                )}
-              >
-                {item.label}
-              </button>
-            )
-          })}
-        </nav>
+            })}
+          </ScrollStrip>
+        </div>
 
         {current?.id === 'closing' && <ClosingTab />}
         {current?.id === 'sales' && <SalesTab />}

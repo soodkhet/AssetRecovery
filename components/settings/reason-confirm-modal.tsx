@@ -23,6 +23,7 @@ export function ReasonConfirmModal({
   onClose,
   onConfirm,
   placeholder,
+  maxLength,
   children,
 }: {
   open: boolean
@@ -36,6 +37,8 @@ export function ReasonConfirmModal({
   onClose: () => void
   onConfirm: () => void
   placeholder?: string
+  /** ตรงกับ `.max()` ของ Zod schema ที่ endpoint ใช้ — กันพิมพ์เกินแล้วค่อยเจอ error หลังกดยืนยัน (preship R5-011) */
+  maxLength?: number
   children?: React.ReactNode
 }) {
   return (
@@ -56,6 +59,7 @@ export function ReasonConfirmModal({
           id="settings-reason"
           value={reason}
           onChange={(event) => onReasonChange(event.target.value)}
+          maxLength={maxLength}
           placeholder={placeholder ?? 'เช่น ปรับตามมติที่ประชุมการเงิน 14/08/2569'}
         />
       </Field>

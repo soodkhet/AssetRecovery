@@ -31,7 +31,7 @@ import {
   useToast,
 } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
-import { toFieldErrors } from '@/lib/api/validation'
+import { REASON_MAX, toFieldErrors } from '@/lib/api/validation'
 import { fmtDate } from '@/lib/format/datetime'
 import { THAI_BANK_CODES } from '@/lib/banks/thai-banks'
 import type { BankFilePurpose } from '@/lib/generated/prisma/enums'
@@ -622,6 +622,7 @@ export function BankFileFormatsTab() {
       </Modal>
 
       <ReasonConfirmModal
+        maxLength={REASON_MAX}
         open={testTarget !== null}
         title={`ทดสอบรูปแบบไฟล์ "${testTarget?.bankName ?? ''}"`}
         description={
@@ -640,6 +641,7 @@ export function BankFileFormatsTab() {
       />
 
       <ReasonConfirmModal
+        maxLength={REASON_MAX}
         open={deleteTarget !== null}
         title={`ปิดใช้งานรูปแบบไฟล์ "${deleteTarget?.bankName ?? ''}"`}
         description="รูปแบบที่บัญชีธนาคารยังอ้างอยู่ปิดใช้งานไม่ได้ — เปลี่ยนรูปแบบของบัญชีก่อน · ไฟล์ที่สร้างไปแล้วยังอ้างรูปแบบเดิมได้"

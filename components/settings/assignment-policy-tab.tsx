@@ -6,7 +6,7 @@ import { ReasonConfirmModal } from '@/components/settings/reason-confirm-modal'
 import { MANAGE_SETTINGS } from '@/components/settings/shared'
 import { Button, Card, ErrorState, Field, InlineAlert, Input, LoadingState, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
-import { toFieldErrors } from '@/lib/api/validation'
+import { REASON_MAX, toFieldErrors } from '@/lib/api/validation'
 import { fmtDate } from '@/lib/format/datetime'
 import {
   DEFAULT_ASSIGNMENT_POLICY_VALUES,
@@ -298,6 +298,7 @@ export function AssignmentPolicyTab() {
       </div>
 
       <ReasonConfirmModal
+        maxLength={REASON_MAX}
         open={confirmOpen}
         title="ยืนยันบันทึกนโยบายการมอบหมายงาน"
         description="การเปลี่ยนค่านี้กระทบสิทธิ์ของหัวหน้าทีม — ต้องระบุเหตุผลเพื่อบันทึกลงประวัติการใช้งาน"

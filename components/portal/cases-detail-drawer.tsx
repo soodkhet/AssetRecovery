@@ -7,6 +7,7 @@ import { PortalIcon } from '@/components/portal/portal-icons'
 import { usePortalData } from '@/components/portal/use-portal-data'
 import { Button, ErrorState, LoadingState, RefText } from '@/components/ui'
 import { TOUCH_TARGET_CLASS } from '@/components/ui/button'
+import { guardModalHistory } from '@/components/ui/modal-history'
 import { isTopModal, registerModal, unregisterModal } from '@/components/ui/modal-stack'
 import { fmtDate } from '@/lib/format/datetime'
 import { portalCaseDetailApiPath, portalServiceFeeRows } from '@/lib/portal/cases-view'
@@ -41,12 +42,18 @@ export function PortalCaseDetailDrawer({
     function handleKey(event: KeyboardEvent) {
       if (event.key === 'Escape' && isTopModal(token)) onCloseRef.current()
     }
+    // ปุ่ม Back ของ browser = ปิด drawer อยู่หน้ารายการเดิม (ตัวกรอง/หน้าไม่หาย) แบบเดียวกับ Modal กลาง — preship R5-009
+    const releaseHistory = guardModalHistory({
+      onBack: () => (isTopModal(token) ? 'close' : 'stay'),
+      onClose: () => onCloseRef.current(),
+    })
     const previousOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     document.addEventListener('keydown', handleKey)
     panelRef.current?.focus()
     return () => {
       unregisterModal(token)
+      releaseHistory()
       document.body.style.overflow = previousOverflow
       document.removeEventListener('keydown', handleKey)
     }

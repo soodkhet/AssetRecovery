@@ -9,6 +9,7 @@ import { BillingDetailModal } from '@/components/finance/billing-detail-modal'
 import { CreateBillingModal } from '@/components/finance/create-billing-modal'
 import { useBillingBatches, useRevenues } from '@/components/finance/use-billing'
 import { ReasonConfirmModal, REASON_MIN_LENGTH } from '@/components/settings/reason-confirm-modal'
+import { REASON_MAX } from '@/lib/api/validation'
 import {
   Button,
   Card,
@@ -400,6 +401,7 @@ export function RevenueTab() {
       />
 
       <ReasonConfirmModal
+        maxLength={REASON_MAX}
         open={action !== null}
         title={action?.kind === 'delete' ? 'ลบรอบวางบิล (Draft)' : 'ส่งบิลให้บริษัทไฟแนนซ์'}
         description={action === null ? undefined : `${action.batch.batchNumber} · ${action.batch.companyName} งวด ${action.batch.period}`}

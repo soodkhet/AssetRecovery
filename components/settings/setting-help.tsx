@@ -28,7 +28,7 @@ export function SettingHelp({
         help.assumption === undefined ? className : undefined,
       )}
     >
-      <summary className="focus-ring flex cursor-pointer list-none items-center gap-2 rounded-lg px-3 py-2 font-semibold text-slate-700 hover:bg-slate-100 [&::-webkit-details-marker]:hidden">
+      <summary className="focus-ring flex cursor-pointer list-none items-center gap-2 rounded-lg px-3 py-2 font-semibold text-slate-700 hover:bg-slate-100 pointer-coarse:min-h-11 [&::-webkit-details-marker]:hidden">
         <span
           aria-hidden="true"
           className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-slate-400 font-serif text-[10px] italic text-slate-500"

@@ -297,6 +297,7 @@ export function SalesTab() {
       />
 
       <ReasonConfirmModal
+        maxLength={1000}
         open={cancelling !== null && activeInvoice !== null}
         title={`ยกเลิก${activeInvoice?.docTitle ?? ''}เลขที่ ${activeInvoice?.invoiceNumber ?? ''}`}
         description="ใช้เฉพาะกรณีออกผิดพลาดจริง — เลขที่เดิมจะไม่ถูกนำกลับมาใช้ และต้องออกใบแทน (ใบใหม่พิมพ์เลขเดิมและเหตุผล)"

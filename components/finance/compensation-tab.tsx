@@ -6,6 +6,7 @@ import { ExpenseDetailModal } from '@/components/finance/expense-detail-modal'
 import { useApprovalActions } from '@/components/finance/use-approval-actions'
 import { PaymentInfoIncompleteBadge } from '@/components/payees/payment-info-incomplete-badge'
 import { ReasonConfirmModal } from '@/components/settings/reason-confirm-modal'
+import { REASON_MAX } from '@/lib/api/validation'
 import {
   Badge,
   Button,
@@ -99,7 +100,10 @@ export function CompensationTab() {
                     onClick={() => setDetailTarget(item)}
                   >
                     <Td>
-                      <p className="font-mono text-xs font-semibold text-slate-700">{item.caseRef ?? '— ไม่ผูกเคส'}</p>
+                      {/* เลขเคสไม่ตัดบรรทัดที่ขีด (preship R5-002) */}
+                      <p>
+                        <RefText className="font-semibold">{item.caseRef ?? '— ไม่ผูกเคส'}</RefText>
+                      </p>
                       <p className="text-xs text-slate-500">{item.payeeName}</p>
                       {item.agentName !== null && <p className="text-[10px] text-slate-400">ผู้ปฏิบัติงาน: {item.agentName}</p>}
                       {item.payeeInfoIncomplete && (
@@ -110,7 +114,8 @@ export function CompensationTab() {
                     </Td>
                     <Td>{EXPENSE_TYPE_LABEL[item.expenseType]}</Td>
                     <Td>
-                      <RefText>{item.basisText}</RefText>
+                      {/* สูตรยาวตัดบรรทัดในกรอบ ไม่ดันตารางล้นจนคอลัมน์จัดการหลุดจอที่ 1280 (preship R5-002) */}
+                      <p className="max-w-xs min-w-40 font-mono text-xs break-words text-slate-700">{item.basisText}</p>
                       {/* มติ PO U103 — ป้าย "ใบรับรองแทนใบเสร็จ CRT-…" + สถานะฉบับเซ็น (ต้องเซ็นแล้วจึงอนุมัติได้) */}
                       {item.substituteReceipt !== null && (
                         <div onClick={(event) => event.stopPropagation()}>
@@ -121,8 +126,10 @@ export function CompensationTab() {
                     <Td numeric>
                       <p className="font-semibold text-slate-800">{fmtSatangSymbol(item.grossSatang)}</p>
                       <p className="text-[11px] text-slate-500">
-                        {whtAmountLabel(item)}: {fmtSatangSymbol(item.whtSatang)} → Net:{' '}
-                        <span className="font-semibold text-emerald-700">{fmtSatangSymbol(item.netSatang)}</span>
+                        {whtAmountLabel(item)}: {fmtSatangSymbol(item.whtSatang)}
+                      </p>
+                      <p className="text-[11px] text-slate-500">
+                        → Net: <span className="font-semibold text-emerald-700">{fmtSatangSymbol(item.netSatang)}</span>
                       </p>
                     </Td>
                     <Td>
@@ -183,6 +190,7 @@ export function CompensationTab() {
       <ExpenseDetailModal item={detailTarget} onClose={() => setDetailTarget(null)} />
 
       <ReasonConfirmModal
+        maxLength={REASON_MAX}
         open={rejectTarget !== null}
         title="ตีกลับรายการเบิกให้แก้ไข"
         description="รายการจะกลับไปสถานะ “ต้องแก้ไข” และเริ่มขั้นอนุมัติที่ 1 ใหม่ทั้งหมด — ใช้กับเอกสาร/ใบเสร็จที่ไม่ถูกต้องเท่านั้น ถ้าสงสัยหลักฐานปิดงาน ต้องแจ้งเจ้าหน้าที่อนุมัติเคส"

@@ -48,15 +48,16 @@ export function TopNav({ menus, session }: { menus: readonly MenuItem[]; session
       <div className="mx-auto max-w-[1600px] px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between gap-4">
           <div className="flex min-w-0 items-center gap-6">
-            <Link href="/dashboard" className="focus-ring flex flex-shrink-0 items-center gap-3 rounded pointer-coarse:min-h-11">
-              <span className="rounded bg-slate-900 p-2 text-white">
+            {/* จอ < 360px ซ่อนชื่อระบบ (screen reader ยังอ่านได้) — เดิมกระดิ่งทับตัวอักษรที่ 320–340 (preship R5-004) */}
+            <Link href="/dashboard" className="focus-ring flex min-w-0 items-center gap-3 rounded pointer-coarse:min-h-11">
+              <span className="flex-shrink-0 rounded bg-slate-900 p-2 text-white">
                 <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M20 13c0 5-3.5 7.5-7.66 9.7a1 1 0 0 1-.68 0C7.5 20.5 4 18 4 13V6a1 1 0 0 1 .76-.97l8-2a1 1 0 0 1 .48 0l8 2c.42.1.76.47.76.97Z" />
                   <path d="M12 8v4" />
                   <path d="M12 16h.01" />
                 </svg>
               </span>
-              <span className="text-lg font-bold tracking-tight text-slate-900">AssetRecovery</span>
+              <span className="truncate text-lg font-bold tracking-tight text-slate-900 max-[359px]:sr-only">AssetRecovery</span>
             </Link>
             <nav aria-label="เมนูหลัก" className="no-scrollbar hidden overflow-x-auto rounded-lg bg-slate-100 p-1 xl:flex">
               {tabs}

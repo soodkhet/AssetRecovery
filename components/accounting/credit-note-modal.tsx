@@ -449,6 +449,7 @@ export function CreditNoteModal({
       </Modal>
 
       <ReasonConfirmModal
+        maxLength={1000}
         open={cancelling !== null}
         title={`ยกเลิก${cancelling?.noteTypeLabel ?? 'เอกสาร'}เลขที่ ${cancelling?.creditNoteNumber ?? ''}`}
         description="ใช้เมื่อบันทึกผิดหรือสำนักงานบัญชียกเลิกเอกสาร — ยอดจะกลับไปเป็นของใบกำกับตามเดิม"

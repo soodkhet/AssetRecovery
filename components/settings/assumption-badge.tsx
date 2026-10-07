@@ -99,6 +99,7 @@ function PendingAssumption({ assumptionKey }: { assumptionKey: SettingAssumption
         </button>
       )}
       <ReasonConfirmModal
+        maxLength={1000}
         open={open}
         title={`ยืนยันค่าตั้ง "${meta.label}"`}
         description={`นักบัญชียืนยันแล้วว่า: ${meta.question}`}

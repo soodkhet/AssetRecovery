@@ -22,7 +22,7 @@ import {
 } from '@/components/ui'
 import { EMPTY_ADDRESS, type AddressValue } from '@/lib/address/address-value'
 import { callApi, jsonRequest } from '@/lib/api/types'
-import { toFieldErrors } from '@/lib/api/validation'
+import { REASON_MAX, toFieldErrors } from '@/lib/api/validation'
 import { formatTaxId } from '@/lib/finance-companies/company'
 import { branchCodeFromForm, branchKindOf, isHeadOfficeBranch, type BranchKind } from '@/lib/format/branch'
 import {
@@ -723,6 +723,7 @@ export function OrganizationProfileTab() {
       </Modal>
 
       <ReasonConfirmModal
+        maxLength={REASON_MAX}
         open={removeKind !== null}
         title={removeKind === null ? '' : IMAGE_CONFIG[removeKind].removeTitle}
         description={removeKind === null ? '' : IMAGE_CONFIG[removeKind].removeDescription}

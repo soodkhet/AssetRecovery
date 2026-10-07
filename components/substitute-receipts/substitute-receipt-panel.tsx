@@ -4,6 +4,7 @@ import { useRef, useState } from 'react'
 import { NoReceiptLinesEditor } from '@/components/substitute-receipts/no-receipt-lines'
 import { Button, ConfirmModal, Field, InlineAlert, Modal, StatusBadge, Textarea, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
+import { REASON_MAX } from '@/lib/api/validation'
 import { EXPENSE_RECEIPT_ACCEPT } from '@/lib/field/media-upload'
 import { fmtDateTime } from '@/lib/format/datetime'
 import { fmtSatangSymbol } from '@/lib/format/money'
@@ -287,6 +288,7 @@ export function SubstituteReceiptPanel({
         <Field id={`cancel-reason-${receipt.id}`} label="เหตุผลการยกเลิก (บังคับ)">
           <Textarea
             id={`cancel-reason-${receipt.id}`}
+            maxLength={REASON_MAX}
             value={cancelReason}
             onChange={(event) => setCancelReason(event.target.value)}
             rows={3}

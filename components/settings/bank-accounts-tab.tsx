@@ -35,7 +35,7 @@ import {
 } from '@/components/ui'
 import { THAI_BANK_CODES } from '@/lib/banks/thai-banks'
 import { callApi, jsonRequest } from '@/lib/api/types'
-import { toFieldErrors } from '@/lib/api/validation'
+import { REASON_MAX, toFieldErrors } from '@/lib/api/validation'
 import { fmtDate } from '@/lib/format/datetime'
 import type { BankAccountUsage } from '@/lib/generated/prisma/enums'
 import {
@@ -533,6 +533,7 @@ export function BankAccountsTab() {
           <Field id="bank-account-reason" label="เหตุผล" required error={errors.reason}>
             <Textarea
               id="bank-account-reason"
+              maxLength={REASON_MAX}
               value={form.reason}
               onChange={(event) => set('reason', event.target.value)}
               placeholder="เช่น เปิดบัญชีใหม่สำหรับรับเงินวางบิลปี 2569"
@@ -546,6 +547,7 @@ export function BankAccountsTab() {
       </Modal>
 
       <ReasonConfirmModal
+        maxLength={REASON_MAX}
         open={deleteTarget !== null}
         title={`ปิดใช้งานบัญชี "${deleteTarget?.accountNumberMasked ?? ''}"`}
         description="บัญชีที่มีรายการรับ/จ่ายผูกอยู่ปิดไม่ได้ — รายการเดินบัญชีเก่ายังอ้างบัญชีนี้ได้"

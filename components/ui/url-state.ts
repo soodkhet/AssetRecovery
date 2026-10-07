@@ -6,6 +6,8 @@
  * ไม่เพิ่ม history ทุกครั้งที่พิมพ์ค้นหา) แล้วให้ page อ่าน `searchParams` เป็นค่าเริ่มต้น
  */
 
+import { modalGuardHistoryState } from '@/components/ui/modal-history'
+
 /** ค่า `null`/`''`/ค่าเริ่มต้น = ลบ key ออกจาก URL (URL สั้น อ่านง่าย) */
 export type UrlParamUpdates = Readonly<Record<string, string | number | null>>
 
@@ -25,9 +27,10 @@ export function replaceUrlParams(updates: UrlParamUpdates): void {
   const query = mergeSearchParams(window.location.search, updates)
   const next = `${window.location.pathname}${query === '' ? '' : `?${query}`}${window.location.hash}`
   if (next !== `${window.location.pathname}${window.location.search}${window.location.hash}`) {
-    // state ต้องเป็น `null` ตามตัวอย่างของ Next — ส่ง `history.state` เดิม (มี `__NA`) แล้ว router ของ Next
-    // ไม่รับรู้ URL ใหม่ ⇒ ลิงก์แจ้งเตือนกลับไปค่าเดิมไม่ทำงาน และ re-render เขียน URL เก่าทับ (preship R2-009)
-    window.history.replaceState(null, '', next)
+    // state ห้ามมี `__NA` — ส่ง `history.state` เดิมทั้งก้อนแล้ว router ของ Next ไม่รับรู้ URL ใหม่ ⇒ ลิงก์แจ้งเตือน
+    // กลับไปค่าเดิมไม่ทำงาน และ re-render เขียน URL เก่าทับ (preship R2-009) · คงเฉพาะเครื่องหมาย sentinel ของ
+    // modal ที่เปิดอยู่ (ไม่มี = `null` ตามตัวอย่างของ Next) ไม่งั้น entry นั้นค้างใน history แยกไม่ออก (R5-008)
+    window.history.replaceState(modalGuardHistoryState(), '', next)
   }
 }
 
@@ -50,4 +53,14 @@ export function pickPage(value: string | string[] | undefined): number {
   const single = Array.isArray(value) ? value[0] : value
   const page = Number(single)
   return Number.isInteger(page) && page >= 1 ? page : 1
+}
+
+/**
+ * ค่าเริ่มต้นของ state ที่ผูกกับ `?key=<uuid>` (เช่นเปิดรายละเอียดเคสจาก `?case=`) — อ่านจาก URL จริงของ browser
+ * prop จาก server (`fallback`) ใช้เฉพาะตอน render ฝั่ง server เท่านั้น: Back/Forward กลับมา entry ที่เคยลบ `?case=`
+ * ด้วย `replaceUrlParams` แล้ว Next ใช้ payload เก่าที่ยังมี `?case=` ⇒ เดิมรายละเอียดเคสเด้งเปิดเอง (preship R5-007)
+ */
+export function initialUrlUuid(key: string, fallback: string | null): string | null {
+  if (typeof window === 'undefined') return fallback
+  return pickUuid(new URLSearchParams(window.location.search).get(key) ?? undefined)
 }

@@ -14,6 +14,7 @@ import { PayoutTab } from '@/components/finance/payout-tab'
 import { ProfitTab } from '@/components/finance/profit-tab'
 import { RevenueTab } from '@/components/finance/revenue-tab'
 import { PayeeTab } from '@/components/settings/payee-tab'
+import { ScrollStrip } from '@/components/shell/scroll-strip'
 import { Card, EmptyState, PageHeader } from '@/components/ui'
 import { cn } from '@/components/ui/cn'
 import { useSession } from '@/components/auth/permission-provider'
@@ -52,56 +53,61 @@ export function FinanceShell({ initialTab }: { initialTab: string }) {
       />
 
       <Card>
-        {/* แท็บขึ้นบรรทัดใหม่แทนการเลื่อนแนวนอนแบบซ่อน scrollbar — จอ tablet เคยมองไม่เห็นแท็บท้ายแถว (preship R2-013) */}
-        <nav
-          aria-label="แท็บงานการเงิน"
-          className="mb-6 flex flex-wrap gap-x-4 border-b border-slate-200 xl:gap-x-6"
-        >
-          {tabs.map((item) => {
-            // หน้าจริงอยู่คนละ route — ลิงก์ข้ามไป (ปัจจุบันไม่มีแท็บแบบนี้ เก็บไว้รองรับในอนาคต)
-            if (item.href !== undefined) {
+        {/* sm ขึ้นไป: แท็บขึ้นบรรทัดใหม่แทนเลื่อนแบบซ่อน scrollbar — tablet เคยมองไม่เห็นแท็บท้ายแถว (preship R2-013)
+            มือถือ (< sm): แถวเดียวเลื่อนได้ + ขอบจาง — แบบขึ้นบรรทัดใหม่สูง 4 แถวดันเนื้อหาลง (preship R5-005) */}
+        <div className="mb-6">
+          <ScrollStrip
+            label="แท็บงานการเงิน"
+            activeKey={current?.id ?? null}
+            fadeClassName="from-white"
+            className="flex flex-wrap gap-x-4 border-b border-slate-200 xl:gap-x-6"
+          >
+            {tabs.map((item) => {
+              // หน้าจริงอยู่คนละ route — ลิงก์ข้ามไป (ปัจจุบันไม่มีแท็บแบบนี้ เก็บไว้รองรับในอนาคต)
+              if (item.href !== undefined) {
+                return (
+                  <Link
+                    key={item.id}
+                    href={item.href}
+                    className="focus-ring-inset border-b-2 border-transparent py-2.5 text-sm font-semibold whitespace-nowrap text-slate-500 transition-colors hover:text-slate-800"
+                  >
+                    {item.label}
+                  </Link>
+                )
+              }
+
+              if (!item.available) {
+                return (
+                  <span
+                    key={item.id}
+                    title={UNDER_DEVELOPMENT_TEXT}
+                    className="cursor-not-allowed border-b-2 border-transparent py-2.5 text-sm font-semibold whitespace-nowrap text-slate-300"
+                  >
+                    {item.label}
+                  </span>
+                )
+              }
+
+              const active = item.id === current?.id
               return (
-                <Link
+                <button
                   key={item.id}
-                  href={item.href}
-                  className="focus-ring-inset border-b-2 border-transparent py-2.5 text-sm font-semibold whitespace-nowrap text-slate-500 transition-colors hover:text-slate-800"
+                  type="button"
+                  onClick={() => setTab(item.id)}
+                  aria-current={active ? 'page' : undefined}
+                  className={cn(
+                    'focus-ring-inset border-b-2 py-2.5 text-sm font-semibold whitespace-nowrap transition-colors',
+                    active
+                      ? 'border-slate-900 text-slate-900'
+                      : 'border-transparent text-slate-500 hover:text-slate-800',
+                  )}
                 >
                   {item.label}
-                </Link>
+                </button>
               )
-            }
-
-            if (!item.available) {
-              return (
-                <span
-                  key={item.id}
-                  title={UNDER_DEVELOPMENT_TEXT}
-                  className="cursor-not-allowed border-b-2 border-transparent py-2.5 text-sm font-semibold whitespace-nowrap text-slate-300"
-                >
-                  {item.label}
-                </span>
-              )
-            }
-
-            const active = item.id === current?.id
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => setTab(item.id)}
-                aria-current={active ? 'page' : undefined}
-                className={cn(
-                  'focus-ring-inset border-b-2 py-2.5 text-sm font-semibold whitespace-nowrap transition-colors',
-                  active
-                    ? 'border-slate-900 text-slate-900'
-                    : 'border-transparent text-slate-500 hover:text-slate-800',
-                )}
-              >
-                {item.label}
-              </button>
-            )
-          })}
-        </nav>
+            })}
+          </ScrollStrip>
+        </div>
 
         {current?.id === 'dashboard' && <DashboardTab />}
         {current?.id === 'approval' && <ApprovalTab />}

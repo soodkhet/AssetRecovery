@@ -1,6 +1,6 @@
 'use client'
 
-import { pickUuid, replaceUrlParams } from '@/components/ui/url-state'
+import { initialUrlUuid, pickUuid, replaceUrlParams } from '@/components/ui/url-state'
 import { useSearchParamChange } from '@/components/ui/use-search-param-change'
 import { useState } from 'react'
 import { CloseCaseModal } from '@/components/field/close-case-modal'
@@ -57,7 +57,8 @@ export function TrackingTab({ initialDetailCaseId = null }: { initialDetailCaseI
   const { items, loading, error, reload } = useFieldCases()
   const { showToast } = useToast()
   const { openReassignment, setPopupPaused } = useReassignment()
-  const [detailCaseId, setDetailCaseId] = useState<string | null>(initialDetailCaseId)
+  // อ่าน `?case=` จาก URL ปัจจุบัน — prop จาก server อาจเป็นของ entry เก่า (Forward แล้วเด้งเปิดเอง · R5-007)
+  const [detailCaseId, setDetailCaseId] = useState<string | null>(() => initialUrlUuid('case', initialDetailCaseId))
   // นำทางมา route เดิมด้วย `?case=` ใหม่ (เช่น กดแจ้งเตือนตอนอยู่หน้านี้) — เปิดรายละเอียดเคสนั้น (preship R2-009)
   // ค่าว่าง (ปิด dialog แล้วลบ `?case=` ออกเอง) ไม่ต้องทำอะไร
   useSearchParamChange('case', (value) => {

@@ -8,7 +8,8 @@ import { z } from 'zod'
  */
 
 const REASON_MIN = 5
-const REASON_MAX = 500
+/** ความยาวสูงสุดของ `reasonSchema` — ใช้เป็น `maxLength` ของช่องเหตุผลฝั่ง UI ด้วย (preship R5-011) */
+export const REASON_MAX = 500
 
 /** `reason` ของ mutation ที่กระทบเงิน/สิทธิ์/ธนาคาร/ภาษี/lock period (`90` §13) */
 export const reasonSchema = z

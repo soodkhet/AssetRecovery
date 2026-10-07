@@ -26,7 +26,7 @@ import {
 } from '@/components/ui'
 import { ACTIVE_BADGE_GROUP, MANAGE_SETTINGS, STATUS_FILTER_LABEL, type StatusFilter } from '@/components/settings/shared'
 import { callApi, jsonRequest } from '@/lib/api/types'
-import { toFieldErrors } from '@/lib/api/validation'
+import { REASON_MAX, toFieldErrors } from '@/lib/api/validation'
 import { fmtDate } from '@/lib/format/datetime'
 import { costCenterCreateSchema } from '@/lib/settings/schemas'
 import type { CostCenterDto } from '@/lib/settings/types'
@@ -345,6 +345,7 @@ export function CostCentersTab() {
       </Modal>
 
       <ReasonConfirmModal
+        maxLength={REASON_MAX}
         open={deleteTarget !== null}
         title={`ปิดใช้งานศูนย์ต้นทุน "${deleteTarget?.code ?? ''}"`}
         description="ศูนย์ต้นทุนที่มีรายการค่าใช้จ่ายผูกอยู่ปิดไม่ได้ — เอกสารเก่ายังอ้างชื่อเดิมได้เสมอ"

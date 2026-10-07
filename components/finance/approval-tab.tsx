@@ -14,6 +14,7 @@ import { useAdvances } from '@/components/finance/use-advances'
 import { useApprovalActions } from '@/components/finance/use-approval-actions'
 import { PaymentInfoIncompleteBadge } from '@/components/payees/payment-info-incomplete-badge'
 import { ReasonConfirmModal } from '@/components/settings/reason-confirm-modal'
+import { REASON_MAX } from '@/lib/api/validation'
 import {
   Badge,
   Button,
@@ -437,6 +438,7 @@ export function ApprovalTab() {
       <CalcDetailModal item={formulaTarget} onClose={() => setFormulaTarget(null)} />
 
       <ReasonConfirmModal
+        maxLength={REASON_MAX}
         open={rejectTarget !== null}
         title="ตีกลับรายการเบิกให้แก้ไข"
         description="รายการจะกลับไปสถานะ “ต้องแก้ไข” และเริ่มขั้นอนุมัติที่ 1 ใหม่ทั้งหมด — ใช้กับเอกสาร/ใบเสร็จที่ไม่ถูกต้องเท่านั้น ถ้าสงสัยหลักฐานปิดงาน ต้องแจ้งเจ้าหน้าที่อนุมัติเคส"
@@ -458,6 +460,7 @@ export function ApprovalTab() {
       />
 
       <ReasonConfirmModal
+        maxLength={REASON_MAX}
         open={permanentTarget !== null}
         title="ปฏิเสธใบเบิกค่าที่พัก"
         description="ปฏิเสธถาวร — ผู้เบิกแก้ไขแล้วส่งใหม่ไม่ได้ และใบรับรองแทนใบเสร็จที่ผูกกับใบเบิกนี้จะไม่นับเพดานต่อเดือนอีก ถ้าต้องการให้แก้เอกสาร ให้ใช้ “ตีกลับ” แทน"

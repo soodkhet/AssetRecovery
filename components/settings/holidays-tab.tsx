@@ -25,7 +25,7 @@ import {
   useToast,
 } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
-import { toFieldErrors } from '@/lib/api/validation'
+import { REASON_MAX, toFieldErrors } from '@/lib/api/validation'
 import { buddhistYear, fmtDate } from '@/lib/format/datetime'
 import { MAX_HOLIDAY_IMPORT_ROWS, parseHolidayImport } from '@/lib/settings/holidays'
 import { holidayCreateSchema, holidayImportSchema } from '@/lib/settings/schemas'
@@ -459,6 +459,7 @@ export function HolidaysTab() {
       </Modal>
 
       <ReasonConfirmModal
+        maxLength={REASON_MAX}
         open={deleteTarget !== null}
         title={`ลบวันหยุด ${deleteTarget === null ? '' : fmtDate(deleteTarget.holidayDate)}`}
         description="ลบแล้วกำหนดยื่นภาษีของรอบที่ยังไม่ยื่นซึ่งเคยเลื่อนเพราะวันนี้จะกลับไปคิดใหม่"

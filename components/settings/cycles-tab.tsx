@@ -27,7 +27,7 @@ import {
   useToast,
 } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
-import { toFieldErrors } from '@/lib/api/validation'
+import { REASON_MAX, toFieldErrors } from '@/lib/api/validation'
 import { fmtDate } from '@/lib/format/datetime'
 import {
   CYCLE_SCOPE_KINDS_BY_TYPE,
@@ -289,7 +289,8 @@ export function CyclesTab() {
             รอบ AR = วางบิลบริษัทไฟแนนซ์ · รอบ AP = จ่ายค่าตอบแทนทีม — ใช้กำหนดวันตัดรอบและวันครบกำหนดชำระ
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        {/* ตัวกรอง+ปุ่มขึ้นบรรทัดใหม่ได้ — ที่ 768 เคยล้นขอบการ์ดจนหน้าเลื่อนแนวนอน */}
+        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
           <div className="w-40">
             <Select
               aria-label="กรองตามชนิดรอบ"
@@ -620,6 +621,7 @@ export function CyclesTab() {
       </Modal>
 
       <ReasonConfirmModal
+        maxLength={REASON_MAX}
         open={deleteTarget !== null}
         title={`ปิดใช้งานรอบ "${deleteTarget?.name ?? ''}"`}
         description="ปิดใช้งานเป็น soft delete — เอกสารและงวดเก่ายังอ้างชื่อรอบนี้ได้ตามปกติ"

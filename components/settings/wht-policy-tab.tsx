@@ -24,7 +24,7 @@ import {
   useToast,
 } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
-import { toFieldErrors } from '@/lib/api/validation'
+import { REASON_MAX, toFieldErrors } from '@/lib/api/validation'
 import { EXPENSE_TYPE_LABEL } from '@/lib/field/expense-ui'
 import { fmtDate, fromInputDate, nowDate, toInputDate } from '@/lib/format/datetime'
 import type { ExpenseType } from '@/lib/generated/prisma/enums'
@@ -565,6 +565,7 @@ export function WhtPolicyTab() {
             <Field id="wht-policy-reason" label="เหตุผล" required error={errors.reason}>
               <Textarea
                 id="wht-policy-reason"
+                maxLength={REASON_MAX}
                 value={form.reason}
                 onChange={(event) => set('reason', event.target.value)}
                 placeholder="เช่น สำนักงานบัญชียืนยันประเภทเงินได้ตามสัญญาจ้าง"

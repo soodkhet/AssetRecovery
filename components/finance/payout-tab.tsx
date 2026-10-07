@@ -9,6 +9,7 @@ import { PaymentFileModal } from '@/components/finance/payment-file-modal'
 import { PayoutDetailModal } from '@/components/finance/payout-detail-modal'
 import { usePayoutBatches } from '@/components/finance/use-payout-batches'
 import { ReasonConfirmModal, REASON_MIN_LENGTH } from '@/components/settings/reason-confirm-modal'
+import { REASON_MAX } from '@/lib/api/validation'
 import {
   Button,
   Card,
@@ -309,6 +310,7 @@ export function PayoutTab() {
       />
 
       <ReasonConfirmModal
+        maxLength={REASON_MAX}
         open={completeTarget !== null}
         title="ยืนยันการจ่ายเงินสำเร็จ (Mark Completed)"
         description={completeTarget?.name}

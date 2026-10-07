@@ -177,7 +177,8 @@ export function RolesManager() {
         <div className="space-y-4 p-4 sm:p-6">
           <CardHeader
             title={ROLE_GROUP_LABEL[visibleGroup]}
-            description={`${visibleRoles.length} บทบาท — Superadmin มีสิทธิ์ทุกรายการโดยนิยาม (ไม่เก็บ record)`}
+            // กำลังโหลด/โหลดไม่สำเร็จ แสดง '—' ไม่ใช่ 0 (preship R5-015)
+            description={`${state.loading || state.error !== null ? '—' : visibleRoles.length} บทบาท — Superadmin มีสิทธิ์ทุกรายการโดยนิยาม (ไม่เก็บ record)`}
           />
 
           <Table>

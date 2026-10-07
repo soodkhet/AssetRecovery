@@ -6,6 +6,7 @@ import { FieldEvidenceSection } from '@/components/cases/field-evidence-section'
 import { FileViewerModal, type ViewableFile } from '@/components/cases/file-viewer-modal'
 import { TeamSuggestionPanel } from '@/components/cases/team-suggestion-panel'
 import { ReasonConfirmModal } from '@/components/settings/reason-confirm-modal'
+import { REASON_MAX } from '@/lib/api/validation'
 import {
   Badge,
   Button,
@@ -425,6 +426,7 @@ export function CaseDetailModal({
       </ConfirmModal>
 
       <ReasonConfirmModal
+        maxLength={REASON_MAX}
         open={teamPick !== null}
         title={`เปลี่ยนทีมเป็น “${teamPick?.name ?? ''}”`}
         description="การเปลี่ยนทีมจากที่ระบบเสนอถูกบันทึกไว้ในประวัติเคส — ระบุเหตุผลก่อนยืนยัน"
@@ -442,6 +444,7 @@ export function CaseDetailModal({
       />
 
       <ReasonConfirmModal
+        maxLength={1000}
         open={rejectEvidenceOpen}
         title={`ตีกลับหลักฐานปิดงาน — ${detail?.caseRef ?? ''}`}
         description="เคสจะถูกส่งกลับให้พนักงานแก้ไขหลักฐานในหน้าติดตามภาคสนาม — เช็คอินและผลการติดตามล็อกไว้ตามเดิม แก้ได้เฉพาะรูป/วิดีโอ/เสียง/รูปสินค้า"

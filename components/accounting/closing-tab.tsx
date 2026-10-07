@@ -273,6 +273,7 @@ export function ClosingTab() {
       />
 
       <ReasonConfirmModal
+        maxLength={1000}
         open={pending !== null}
         title={
           pending === null

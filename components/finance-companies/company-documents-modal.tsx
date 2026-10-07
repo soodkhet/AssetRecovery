@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Can } from '@/components/auth/permission-provider'
 import { FileViewerModal, type ViewableFile } from '@/components/cases/file-viewer-modal'
 import { REASON_MIN_LENGTH } from '@/components/settings/reason-confirm-modal'
@@ -76,6 +76,11 @@ export function CompanyDocumentsModal({
   const [error, setError] = useState<string | null>(null)
   const [form, setForm] = useState<UploadForm | null>(null)
   const [saving, setSaving] = useState(false)
+  /** ช่วงอัปโหลดไฟล์ (ก่อน POST) — ยกเลิกได้จริงด้วย AbortController แบบเดียวกับฟอร์มเบิก (preship R5-014) */
+  const [uploading, setUploading] = useState(false)
+  const uploadAbortRef = useRef<AbortController | null>(null)
+  // ปิด modal/ออกจากหน้าระหว่างอัปโหลด ⇒ ยกเลิก request ที่ค้าง
+  useEffect(() => () => uploadAbortRef.current?.abort(), [])
   const [viewing, setViewing] = useState<ViewableFile | null>(null)
   const [historyOpen, setHistoryOpen] = useState<ReadonlySet<string>>(new Set())
 
@@ -153,18 +158,26 @@ export function CompanyDocumentsModal({
     setSaving(true)
     try {
       let path: string
+      const controller = new AbortController()
+      uploadAbortRef.current = controller
+      setUploading(true)
       try {
         path = await uploadToStorage(
           { kind: 'company_document', companyId: company.id, documentType: form.documentType },
           form.file,
+          { signal: controller.signal },
         )
       } catch (uploadError) {
-        showToast({
-          tone: 'error',
-          title: 'อัปโหลดไม่สำเร็จ',
-          description: uploadError instanceof Error ? uploadError.message : 'ลองใหม่อีกครั้ง',
-        })
+        const message = uploadError instanceof Error ? uploadError.message : 'ลองใหม่อีกครั้ง'
+        showToast(
+          controller.signal.aborted
+            ? { tone: 'info', title: 'ยกเลิกการอัปโหลดแล้ว', description: message }
+            : { tone: 'error', title: 'อัปโหลดไม่สำเร็จ', description: message },
+        )
         return
+      } finally {
+        uploadAbortRef.current = null
+        setUploading(false)
       }
       const result = await callApi<CompanyDocumentDto>(
         `/api/finance-companies/${company.id}/documents`,
@@ -207,16 +220,26 @@ export function CompanyDocumentsModal({
         open
         onClose={onClose}
         // ปุ่มบันทึกอยู่ใน body ⇒ บอก modal ตรงๆ ว่ากำลังบันทึก (preship R4-006 — เดิมปิด/ทิ้งได้แต่คำขอยังถูกส่ง)
-        busy={saving}
+        // ช่วงอัปโหลดไฟล์ใช้ `lockClose` (ไม่ใช่ `busy` ที่ล็อกทั้ง footer) ⇒ ปุ่ม "ยกเลิกการอัปโหลด" กดได้ (R5-014)
+        busy={saving && !uploading}
+        lockClose={uploading}
         size="lg"
         title={`เอกสารบริษัท — ${company.name}`}
         description="เก็บทุกเวอร์ชัน ไม่มีการลบ — แนบใหม่จะเป็นเวอร์ชันใหม่และไฟล์เดิมยังเปิดดูได้"
         footer={
-          <Button variant="secondary" onClick={onClose}>
-            ปิด
-          </Button>
+          uploading ? (
+            <Button variant="secondary" onClick={() => uploadAbortRef.current?.abort()}>
+              ยกเลิกการอัปโหลด
+            </Button>
+          ) : (
+            <Button variant="secondary" onClick={onClose}>
+              ปิด
+            </Button>
+          )
         }
       >
+        {/* ล็อกช่องกรอก/ปุ่มทั้งหมดระหว่างอัปโหลด — เหลือปุ่มยกเลิกการอัปโหลดใน footer */}
+        <fieldset disabled={uploading} className="m-0 min-w-0 border-0 p-0">
         <div className="space-y-4">
           {loading && <LoadingState />}
           {!loading && error !== null && (
@@ -423,15 +446,20 @@ export function CompanyDocumentsModal({
                     <Button variant="secondary" onClick={() => setForm(null)} disabled={saving}>
                       ยกเลิก
                     </Button>
-                    <Button loading={saving} disabled={formProblem !== null} onClick={() => void submit()}>
-                      {form.replaces === null ? 'แนบเอกสาร' : 'แนบเวอร์ชันใหม่'}
-                    </Button>
+                    {uploading ? (
+                      <Button disabled>กำลังอัปโหลดไฟล์...</Button>
+                    ) : (
+                      <Button loading={saving} disabled={formProblem !== null} onClick={() => void submit()}>
+                        {form.replaces === null ? 'แนบเอกสาร' : 'แนบเวอร์ชันใหม่'}
+                      </Button>
+                    )}
                   </div>
                 </div>
               )}
             </>
           )}
         </div>
+        </fieldset>
       </Modal>
 
       <FileViewerModal open={viewing !== null} document={viewing} onClose={() => setViewing(null)} />

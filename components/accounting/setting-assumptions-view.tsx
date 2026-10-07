@@ -214,6 +214,7 @@ export function SettingAssumptionsView({ links }: { links: Readonly<Record<Setti
       </Card>
 
       <ReasonConfirmModal
+        maxLength={1000}
         open={target !== null}
         title={target === null ? '' : `ยืนยันค่าตั้ง "${target.label}"`}
         description={target === null ? undefined : `นักบัญชียืนยันแล้วว่า: ${target.question} (ค่าที่ใช้อยู่: ${target.currentValue})`}

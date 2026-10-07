@@ -5,6 +5,7 @@ import { usePermission } from '@/components/auth/permission-provider'
 import { Badge, Button, ErrorState, Field, InlineAlert, LoadingState, Modal, Select, Textarea, useToast } from '@/components/ui'
 import { MATRIX_LEVELS, MATRIX_LEVEL_LABEL, type MatrixLevel, type MatrixSection } from '@/lib/roles/matrix'
 import { callApi, jsonRequest } from '@/lib/api/types'
+import { REASON_MAX } from '@/lib/api/validation'
 import type { RoleDetail, RolePermissionsPayload } from '@/lib/roles/types'
 
 /**
@@ -229,6 +230,7 @@ export function PermissionMatrixModal({
             >
               <Textarea
                 id="permission-reason"
+                maxLength={REASON_MAX}
                 value={reason}
                 onChange={(event) => setReason(event.target.value)}
                 placeholder="เช่น มอบสิทธิ์ดูรายงานให้ทีมตรวจสอบตามมติที่ประชุม 14/08/2569"

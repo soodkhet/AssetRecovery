@@ -3,7 +3,7 @@
 import { LinkPending } from '@/components/shell/link-pending'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react'
 import { PermissionProvider } from '@/components/auth/permission-provider'
 import { FieldCasesProvider, useFieldCases } from '@/components/field/field-cases-provider'
 import {
@@ -26,6 +26,7 @@ import { NotificationBell } from '@/components/notifications/notification-bell'
 import { FieldPwaProvider } from '@/components/field/pwa-provider'
 import { FieldReassignmentProvider } from '@/components/field/reassignment-provider'
 import { ToastProvider } from '@/components/ui'
+import { afterModalHistorySettled, guardModalHistory } from '@/components/ui/modal-history'
 import { requestLogout } from '@/lib/auth/logout-client'
 import { LOGIN_PATH } from '@/lib/auth/constants'
 import type { ClientSession } from '@/lib/auth/types'
@@ -116,7 +117,7 @@ function MenuRow({
   item: FieldNavItem
   badges: FieldBadgeCounts
   activeId: FieldNavId | null
-  onNavigate?: () => void
+  onNavigate?: (event: MouseEvent<HTMLAnchorElement>) => void
 }) {
   const Icon = NAV_ICON[item.id]
   const count = fieldBadgeCount(item, badges)
@@ -166,7 +167,7 @@ function LogoutRow({ compact = false }: { compact?: boolean }) {
         onClick={handleLogout}
         disabled={loading}
         className={cn(
-          'focus-ring flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-red-600 hover:bg-red-50 disabled:opacity-60',
+          'focus-ring flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-red-600 hover:bg-red-50 disabled:opacity-60 pointer-coarse:min-h-11',
           compact && 'py-2.5',
         )}
       >
@@ -248,13 +249,37 @@ function HamburgerDrawer({
   activeId: FieldNavId | null
   onClose: () => void
 }) {
+  const router = useRouter()
+  // `onClose` เป็น arrow ใหม่ทุก render — เก็บใน ref ให้ effect ผูกครั้งเดียว (ไม่งั้น sentinel ของ Back ถูกถอน/วางใหม่ทุก render)
+  const onCloseRef = useRef(onClose)
+  useEffect(() => {
+    onCloseRef.current = onClose
+  }, [onClose])
+  /** แถวเมนูที่กด — นำทางหลังถอย sentinel ของเมนูเสร็จ (ไม่งั้นหน้าใหม่ทับ sentinel แล้ว Back ต้องกดสองครั้ง) */
+  const navigateToRef = useRef<string | null>(null)
+
   useEffect(() => {
     function handleKey(event: KeyboardEvent) {
-      if (event.key === 'Escape') onClose()
+      if (event.key === 'Escape') onCloseRef.current()
     }
+    // ปุ่ม Back / ปัดย้อนกลับของมือถือ = ปิดเมนู อยู่หน้าเดิม (แบบเดียวกับ Modal กลาง — preship R5-009)
+    const releaseHistory = guardModalHistory({ onBack: () => 'close', onClose: () => onCloseRef.current() })
     document.addEventListener('keydown', handleKey)
-    return () => document.removeEventListener('keydown', handleKey)
-  }, [onClose])
+    return () => {
+      document.removeEventListener('keydown', handleKey)
+      releaseHistory()
+      const href = navigateToRef.current
+      if (href !== null) afterModalHistorySettled(() => router.push(href))
+    }
+  }, [router])
+
+  function navigateFromMenu(event: MouseEvent<HTMLAnchorElement>, href: string) {
+    // เปิดแท็บใหม่ (ctrl/cmd/shift/ปุ่มกลาง) ให้ browser ทำตามปกติ
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+    event.preventDefault()
+    navigateToRef.current = href
+    onCloseRef.current()
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex lg:hidden">
@@ -281,7 +306,13 @@ function HamburgerDrawer({
               </div>
               <div className="space-y-0.5">
                 {section.items.map((item) => (
-                  <MenuRow key={item.id} item={item} badges={badges} activeId={activeId} onNavigate={onClose} />
+                  <MenuRow
+                    key={item.id}
+                    item={item}
+                    badges={badges}
+                    activeId={activeId}
+                    onNavigate={(event) => navigateFromMenu(event, item.href)}
+                  />
                 ))}
               </div>
             </div>

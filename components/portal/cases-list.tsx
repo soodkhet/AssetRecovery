@@ -6,6 +6,7 @@ import { PortalCaseDetailDrawer } from '@/components/portal/cases-detail-drawer'
 import { PortalStatusBadge } from '@/components/portal/cases-status-badge'
 import { usePortalPageHref } from '@/components/portal/portal-scope'
 import { usePortalData } from '@/components/portal/use-portal-data'
+import { replaceUrlParams } from '@/components/ui/url-state'
 import {
   Button,
   Card,
@@ -242,7 +243,9 @@ export function PortalCasesList({ canViewPhotos }: { canViewPhotos: boolean }) {
           key={filters.caseId}
           caseId={filters.caseId}
           canViewPhotos={canViewPhotos}
-          onClose={() => navigate({ ...filters, caseId: null })}
+          // ลบ `?case=` แบบ sync (ไม่ใช่ router.replace) — ปิดด้วยปุ่ม Back แล้ว router ของ Next อ่าน URL ใหม่ทันใน
+          // popstate เดียวกัน ไม่งั้น drawer เด้งกลับมาเปิด (R5-009)
+          onClose={() => replaceUrlParams({ case: null })}
         />
       )}
     </div>

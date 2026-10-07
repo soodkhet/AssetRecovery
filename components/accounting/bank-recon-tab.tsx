@@ -169,7 +169,8 @@ export function BankReconTab() {
                   <Td numeric className="font-bold text-rose-600">
                     {row.amountSatang < 0 ? `-${fmtSatangSymbol(Math.abs(row.amountSatang))}` : '—'}
                   </Td>
-                  <Td className="font-mono text-xs text-slate-600">{row.matchedRef ?? '—'}</Td>
+                  {/* เลขรอบจ่าย/เอกสารไม่ตัดบรรทัดที่ขีด (preship R5-002) */}
+                  <Td className="font-mono text-xs whitespace-nowrap text-slate-600">{row.matchedRef ?? '—'}</Td>
                   <Td
                     className="max-w-[160px] truncate text-xs text-slate-500"
                     title={row.matchNote ?? row.refundNote ?? row.suspenseNote ?? ''}

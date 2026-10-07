@@ -33,7 +33,7 @@ import {
   useToast,
 } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
-import { toFieldErrors } from '@/lib/api/validation'
+import { REASON_MAX, toFieldErrors } from '@/lib/api/validation'
 import { formatBranch } from '@/lib/format/branch'
 import { fmtDate } from '@/lib/format/datetime'
 import { fmtSatangSymbol } from '@/lib/format/money'
@@ -463,6 +463,7 @@ export function PayeeTab() {
       </Modal>
 
       <ReasonConfirmModal
+        maxLength={REASON_MAX}
         open={verifyTarget !== null}
         onClose={() => setVerifyTarget(null)}
         title={`ยืนยันผู้รับเงิน — ${verifyTarget?.name ?? ''}`}

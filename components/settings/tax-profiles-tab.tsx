@@ -31,7 +31,7 @@ import {
   useToast,
 } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
-import { toFieldErrors } from '@/lib/api/validation'
+import { REASON_MAX, toFieldErrors } from '@/lib/api/validation'
 import { fmtDate } from '@/lib/format/datetime'
 import { fmtSatang, parseBahtInput, toBahtInput } from '@/lib/format/money'
 import type { TaxProfileIncomeType, WhtFilingForm } from '@/lib/generated/prisma/enums'
@@ -477,6 +477,7 @@ export function TaxProfilesTab() {
       </Modal>
 
       <ReasonConfirmModal
+        maxLength={REASON_MAX}
         open={deleteTarget !== null}
         title={`ปิดใช้งาน Tax Profile "${deleteTarget?.name ?? ''}"`}
         description="ปิดใช้งานเป็น soft delete — เอกสารและรอบจ่ายเดิมยังอ้าง profile นี้ได้ตามปกติ"
