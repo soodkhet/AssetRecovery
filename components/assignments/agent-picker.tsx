@@ -42,6 +42,8 @@ export function AgentPicker({
   const [result, setResult] = useState<TeamAgentsResultDto | null>(null)
   const [error, setError] = useState<ApiCallError | null>(null)
   const [loading, setLoading] = useState(true)
+  // ปุ่ม "ลองใหม่" บน ErrorState — เพิ่มตัวนับให้ effect โหลดซ้ำ (R3-027)
+  const [retryKey, setRetryKey] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -55,10 +57,21 @@ export function AgentPicker({
     return () => {
       cancelled = true
     }
-  }, [teamId])
+  }, [teamId, retryKey])
 
   if (loading) return <LoadingState message="กำลังโหลดรายชื่อพนักงานในทีม..." />
-  if (error !== null) return <ErrorState title={error.title} message={error.message} />
+  if (error !== null) {
+    return (
+      <ErrorState
+        title={error.title}
+        message={error.message}
+        onRetry={() => {
+          setLoading(true)
+          setRetryKey((key) => key + 1)
+        }}
+      />
+    )
+  }
   if (result === null || result.agents.length === 0) {
     return (
       <EmptyState

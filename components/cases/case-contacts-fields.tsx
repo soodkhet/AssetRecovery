@@ -1,7 +1,7 @@
 'use client'
 
 import { Button, Field, Input } from '@/components/ui'
-import { normalizePhoneInput, PHONE_INPUT_MAX_LENGTH, phoneInputError } from '@/lib/cases/case'
+import { normalizePhoneInputWithCaret, PHONE_INPUT_MAX_LENGTH, phoneInputError } from '@/lib/cases/case'
 import { emptyContact, type CaseContactForm } from '@/lib/cases/case-form'
 
 /**
@@ -90,7 +90,7 @@ export function CaseContactsFields({
                   maxLength={PHONE_INPUT_MAX_LENGTH}
                   placeholder="10 หลัก"
                   invalid={errors[`contacts.${index}.contactPhone`] !== undefined || phoneInputError(contact.contactPhone) !== null}
-                  onChange={(event) => patch(index, { contactPhone: normalizePhoneInput(event.target.value) })}
+                  onChange={(event) => patch(index, { contactPhone: normalizePhoneEvent(event.target) })}
                 />
               </Field>
               <div className="flex items-end">
@@ -109,4 +109,16 @@ export function CaseContactsFields({
       )}
     </section>
   )
+}
+
+/**
+ * ค่าที่พิมพ์ในช่องเบอร์โทร → ตัวเลขล้วน แล้ววาง cursor กลับตำแหน่งเดิม (preship R3-030) — ไม่งั้นพิมพ์ขีดกลางเบอร์
+ * แล้ว React เขียนค่าใหม่ทับ cursor จะกระโดดไปท้ายช่อง
+ */
+export function normalizePhoneEvent(input: HTMLInputElement): string {
+  const { value, caret } = normalizePhoneInputWithCaret(input.value, input.selectionStart)
+  requestAnimationFrame(() => {
+    if (document.activeElement === input) input.setSelectionRange(caret, caret)
+  })
+  return value
 }

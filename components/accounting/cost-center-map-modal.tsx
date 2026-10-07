@@ -64,7 +64,7 @@ export function CostCenterMapModal({
       description="เลือกศูนย์ต้นทุนของรายการจ่ายนี้ เพื่อให้บัญชีแยกวิเคราะห์ต้นทุนตามหน่วยงานได้"
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="secondary" onClick={onClose}>
             ยกเลิก
           </Button>
           <Button loading={saving} disabled={!ready} onClick={() => void submit()}>

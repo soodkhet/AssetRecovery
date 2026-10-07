@@ -894,7 +894,7 @@ export function CloseCaseModal({
                     type="button"
                     onClick={retryOrigin}
                     disabled={busy}
-                    className="focus-ring text-xs font-extrabold text-rose-600 underline disabled:opacity-50"
+                    className="focus-ring text-xs font-extrabold text-rose-600 underline disabled:opacity-50 pointer-coarse:min-h-11"
                   >
                     ลองดึงตำแหน่งอีกครั้ง
                   </button>
@@ -958,7 +958,7 @@ export function CloseCaseModal({
                       type="button"
                       onClick={retryOrigin}
                       disabled={busy}
-                      className="focus-ring rounded-lg bg-blue-50 px-2.5 py-1.5 text-[11px] font-extrabold text-blue-600 disabled:opacity-50"
+                      className="focus-ring rounded-lg bg-blue-50 px-2.5 py-1.5 text-[11px] font-extrabold text-blue-600 disabled:opacity-50 pointer-coarse:min-h-11"
                     >
                       ดึง GPS ใหม่
                     </button>

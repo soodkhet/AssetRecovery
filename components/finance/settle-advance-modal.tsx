@@ -142,7 +142,7 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
       description={advance.purpose}
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="secondary" onClick={onClose}>
             ยกเลิก
           </Button>
           <Button loading={saving} disabled={!validUsed} onClick={() => void submit()}>

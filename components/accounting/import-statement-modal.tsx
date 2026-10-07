@@ -126,7 +126,7 @@ export function ImportStatementModal({
       description="ระบบจะจับคู่อัตโนมัติให้เฉพาะรายการที่ยอดตรงและมีคู่ที่เป็นไปได้เพียงรายการเดียว"
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="secondary" onClick={onClose}>
             ยกเลิก
           </Button>
           <Button loading={saving} disabled={!ready} onClick={() => void submit()}>

@@ -15,6 +15,8 @@ import {
   embeddedImeiCandidates,
   IMEI_MULTIPLE_WARNING_MESSAGE,
   IMEI_EMBEDDED_WARNING_MESSAGE,
+  imeiPickerCandidates,
+  multipleImeiInputCandidates,
 } from '@/lib/warehouse/imei'
 
 /**
@@ -266,5 +268,46 @@ describe('embeddedImeiCandidates — เครื่องสองซิม (pr
   it('หลายเลข ⇒ เตือนให้เลือกเลขหลัก (ไม่บล็อก ไม่เลือกให้)', () => {
     expect(assetIdentifierWarning('IMEI1: 356938035643809 IMEI2: 356938035643817')).toBe(IMEI_MULTIPLE_WARNING_MESSAGE)
     expect(embeddedImeiCandidate('IMEI1: 356938035643809 IMEI2: 356938035643817')).toBeNull()
+  })
+})
+
+describe('multipleImeiInputCandidates — คู่ IMEI ตัวเลขล้วน (preship R3-031)', () => {
+  const pair = ['356938035643809', '356938035643817']
+
+  it('คั่นด้วยช่องว่าง / ทับ / จุลภาค / ขึ้นบรรทัด ⇒ เสนอทั้งสองเลข', () => {
+    expect(multipleImeiInputCandidates('356938035643809 356938035643817')).toEqual(pair)
+    expect(multipleImeiInputCandidates('356938035643809/356938035643817')).toEqual(pair)
+    expect(multipleImeiInputCandidates('356938035643809 / 356938035643817')).toEqual(pair)
+    expect(multipleImeiInputCandidates('356938035643809, 356938035643817')).toEqual(pair)
+    expect(multipleImeiInputCandidates('356938035643809\n356938035643817')).toEqual(pair)
+    expect(multipleImeiInputCandidates('35-693803-564380-9 / 35-693803-564381-7')).toEqual(pair)
+  })
+
+  it('ทุกท่อนต้องผ่าน parseImei() พอดี — ไม่ครบ/เกิน/มีอักขระอื่น = ไม่เสนอ (CLAUDE.md ข้อ 10)', () => {
+    expect(multipleImeiInputCandidates('35693803564380 356938035643817')).toEqual([])
+    expect(multipleImeiInputCandidates('3569380356438091 356938035643817')).toEqual([])
+    expect(multipleImeiInputCandidates('356938035643809 / 35693803564381#')).toEqual([])
+    expect(multipleImeiInputCandidates('356938035643809/')).toEqual([])
+  })
+
+  it('IMEI เลขเดียว (มีตัวคั่น) / ว่าง / มีตัวอักษร ⇒ ไม่ใช่กรณีนี้', () => {
+    expect(multipleImeiInputCandidates('35 693803 564380 9')).toEqual([])
+    expect(multipleImeiInputCandidates('356938035643809')).toEqual([])
+    expect(multipleImeiInputCandidates('')).toEqual([])
+    expect(multipleImeiInputCandidates(null)).toEqual([])
+    expect(multipleImeiInputCandidates('IMEI1 356938035643809 IMEI2 356938035643817')).toEqual([])
+  })
+
+  it('เลขซ้ำกันนับครั้งเดียว · ทุกตัวเลือกเป็น IMEI ที่ normalize แล้ว', () => {
+    expect(multipleImeiInputCandidates('356938035643809 356938035643809')).toEqual(['356938035643809'])
+    for (const imei of multipleImeiInputCandidates('35.693803.564380.9, 35.693803.564381.7')) {
+      expect(parseImei(imei)).toBe(imei)
+    }
+  })
+
+  it('imeiPickerCandidates รวมทั้งแบบปนข้อความและแบบตัวเลขล้วน', () => {
+    expect(imeiPickerCandidates('IMEI1: 356938035643809 IMEI2: 356938035643817')).toEqual(pair)
+    expect(imeiPickerCandidates('356938035643809/356938035643817')).toEqual(pair)
+    expect(imeiPickerCandidates('356938035643809')).toEqual([])
   })
 })

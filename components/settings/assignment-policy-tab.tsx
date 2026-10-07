@@ -92,6 +92,8 @@ export function AssignmentPolicyTab() {
   const [form, setForm] = useState<FormState | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<{ title: string; message: string } | null>(null)
+  // ปุ่ม "ลองใหม่" บน ErrorState — เพิ่มตัวนับให้ effect โหลดซ้ำ (R3-027)
+  const [retryKey, setRetryKey] = useState(0)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [reason, setReason] = useState('')
@@ -123,7 +125,7 @@ export function AssignmentPolicyTab() {
     return () => {
       cancelled = true
     }
-  }, [fetchPolicy])
+  }, [fetchPolicy, retryKey])
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]): void {
     setForm((current) => (current === null ? current : { ...current, [key]: value }))
@@ -177,8 +179,14 @@ export function AssignmentPolicyTab() {
     }
   }
 
+  const retryLoad = () => {
+    setError(null)
+    setLoading(true)
+    setRetryKey((key) => key + 1)
+  }
+
   if (loading) return <Card><LoadingState message="กำลังโหลดนโยบายการมอบหมายงาน" /></Card>
-  if (error !== null) return <Card><ErrorState title={error.title} message={error.message} /></Card>
+  if (error !== null) return <Card><ErrorState title={error.title} message={error.message} onRetry={retryLoad} /></Card>
   if (form === null || policy === null) return null
 
   const changes = changesOf(policy, valuesOf(form))

@@ -117,7 +117,7 @@ export function FieldReassignmentProvider({ children }: { children: ReactNode })
                   current.includes(popupCase.caseId) ? current : [...current, popupCase.caseId],
                 )
               }
-              className="focus-ring w-full py-2.5 text-xs font-bold text-slate-400 hover:text-slate-600"
+              className="focus-ring w-full py-2.5 text-xs font-bold text-slate-400 hover:text-slate-600 pointer-coarse:min-h-11"
             >
               ดูทีหลัง
             </button>

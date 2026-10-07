@@ -65,7 +65,7 @@ export function CancelPayoutModal({
       description="ยกเลิกได้เฉพาะรอบที่ยังไม่ได้โอนเงินจริง รายการทั้งหมดจะกลับไปรอจ่าย"
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="secondary" onClick={onClose}>
             ปิด
           </Button>
           <Button variant="danger" loading={saving} disabled={!ready} onClick={() => void submit()}>

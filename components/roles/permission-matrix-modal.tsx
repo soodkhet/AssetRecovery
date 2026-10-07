@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { usePermission } from '@/components/auth/permission-provider'
-import { Badge, Button, Field, InlineAlert, LoadingState, Modal, Select, Textarea, useToast } from '@/components/ui'
+import { Badge, Button, ErrorState, Field, InlineAlert, LoadingState, Modal, Select, Textarea, useToast } from '@/components/ui'
 import { MATRIX_LEVELS, MATRIX_LEVEL_LABEL, type MatrixLevel, type MatrixSection } from '@/lib/roles/matrix'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import type { RoleDetail, RolePermissionsPayload } from '@/lib/roles/types'
@@ -21,6 +21,8 @@ const REASON_MIN_LENGTH = 5
 interface LoadState {
   loading: boolean
   error: string | null
+  /** โหลด matrix ไม่สำเร็จ (ต่างจาก error ตอนบันทึก) ⇒ แสดง ErrorState + ปุ่ม "ลองใหม่" (R3-027) */
+  loadFailed?: boolean
 }
 
 export function PermissionMatrixModal({
@@ -42,6 +44,8 @@ export function PermissionMatrixModal({
   const [reason, setReason] = useState('')
   const [state, setState] = useState<LoadState>({ loading: true, error: null })
   const [saving, setSaving] = useState(false)
+  // ปุ่ม "ลองใหม่" — เพิ่มตัวนับให้ effect โหลด matrix ซ้ำ (R3-027)
+  const [retryKey, setRetryKey] = useState(0)
 
   const roleId = role?.id ?? null
 
@@ -60,7 +64,7 @@ export function PermissionMatrixModal({
       if (cancelled) return
 
       if (result.error !== undefined || result.data === undefined) {
-        setState({ loading: false, error: result.error?.message ?? 'โหลดสิทธิ์ไม่สำเร็จ กรุณาลองใหม่' })
+        setState({ loading: false, error: result.error?.message ?? 'โหลดสิทธิ์ไม่สำเร็จ กรุณาลองใหม่', loadFailed: true })
         return
       }
 
@@ -79,7 +83,7 @@ export function PermissionMatrixModal({
     return () => {
       cancelled = true
     }
-  }, [open, roleId])
+  }, [open, roleId, retryKey])
 
   const changed = useMemo(
     () =>
@@ -148,6 +152,15 @@ export function PermissionMatrixModal({
     >
       {state.loading ? (
         <LoadingState message="กำลังโหลดรายการสิทธิ์..." />
+      ) : state.loadFailed === true ? (
+        <ErrorState
+          title="โหลดรายการสิทธิ์ไม่สำเร็จ"
+          message={state.error ?? 'โหลดสิทธิ์ไม่สำเร็จ กรุณาลองใหม่'}
+          onRetry={() => {
+            setState({ loading: true, error: null })
+            setRetryKey((key) => key + 1)
+          }}
+        />
       ) : (
         <div className="space-y-4">
           {state.error !== null && <InlineAlert tone="error">{state.error}</InlineAlert>}

@@ -55,7 +55,7 @@ export function QuestionFormModal({
       description="เก็บคำถามที่สำนักงานบัญชีส่งกลับมาให้เป็นหลักฐาน พร้อมติดตามว่าตอบไปแล้วหรือยัง"
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="secondary" onClick={onClose}>
             ยกเลิก
           </Button>
           <Button loading={saving} disabled={!ready} onClick={() => void submit()}>

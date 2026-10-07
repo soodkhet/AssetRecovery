@@ -148,7 +148,7 @@ export function PaymentFileModal({
       footer={
         generated === null ? (
           <>
-            <Button variant="ghost" onClick={close}>
+            <Button variant="secondary" onClick={close}>
               ยกเลิก
             </Button>
             <Button
@@ -162,7 +162,7 @@ export function PaymentFileModal({
           </>
         ) : (
           <>
-            <Button variant="ghost" onClick={close}>
+            <Button variant="secondary" onClick={close}>
               ปิด
             </Button>
             <a

@@ -81,7 +81,7 @@ export function IssueTaxInvoiceModal({
       description={description}
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="secondary" onClick={onClose}>
             ยกเลิก
           </Button>
           <Button loading={saving} onClick={() => void submit()}>

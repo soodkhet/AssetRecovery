@@ -84,6 +84,8 @@ function SampleViewerModal({ item, onClose }: { item: DocumentSampleListItemDto;
   const [state, setState] = useState<{ url: string; blob: Blob } | { error: { title: string; message: string } } | null>(
     null,
   )
+  // ปุ่ม "ลองใหม่" บน ErrorState — เพิ่มตัวนับให้ effect สร้างตัวอย่างซ้ำ (R3-027)
+  const [retryKey, setRetryKey] = useState(0)
   const type = item.type
 
   useEffect(() => {
@@ -103,7 +105,7 @@ function SampleViewerModal({ item, onClose }: { item: DocumentSampleListItemDto;
       cancelled = true
       if (objectUrl !== null) URL.revokeObjectURL(objectUrl)
     }
-  }, [type])
+  }, [type, retryKey])
 
   const ready = state !== null && 'url' in state ? state : null
 
@@ -133,7 +135,14 @@ function SampleViewerModal({ item, onClose }: { item: DocumentSampleListItemDto;
       {state === null ? (
         <LoadingState message="กำลังสร้างตัวอย่างเอกสาร..." />
       ) : 'error' in state ? (
-        <ErrorState title={state.error.title} message={state.error.message} />
+        <ErrorState
+          title={state.error.title}
+          message={state.error.message}
+          onRetry={() => {
+            setState(null)
+            setRetryKey((key) => key + 1)
+          }}
+        />
       ) : (
         <iframe
           src={state.url}

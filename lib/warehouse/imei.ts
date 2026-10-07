@@ -133,6 +133,42 @@ export function embeddedImeiCandidate(value: string | null | undefined): string 
   return candidates.length === 1 ? (candidates[0] ?? null) : null
 }
 
+/** ตัวคั่นระหว่าง IMEI สองเลขของเครื่องสองซิมที่วางมาเป็นตัวเลขล้วน — `/` `,` `;` ขึ้นบรรทัดใหม่ (ไม่ใช่ตัวคั่นภายใน IMEI) */
+const IMEI_LIST_SEPARATOR = /[/,;\r\n]+/
+
+/**
+ * ค่าในช่อง "IMEI หรือ Serial" ที่เป็น**ตัวเลขล้วน** (ไม่มีตัวอักษร) แต่มี IMEI มากกว่าหนึ่งเลข — วางคู่ IMEI
+ * ของเครื่องสองซิม เช่น `356938035643809 356938035643817` · `356938035643809/356938035643817` ·
+ * `356938035643809, 356938035643817` หรือคนละบรรทัด (preship R3-031) · เรียงตามที่พบ ไม่ซ้ำ
+ *
+ * - แยกด้วย `/` `,` `;` ขึ้นบรรทัด ก่อน (แต่ละท่อนมีตัวคั่น IMEI ภายในได้ เช่น `35-693803-564380-9 / …`)
+ *   ไม่มีตัวคั่นเหล่านี้ ⇒ แยกตามช่องว่าง · **ทุกท่อน**ต้องผ่าน `parseImei()` พอดี มิฉะนั้นคืน `[]`
+ * - ค่าที่เป็น IMEI เลขเดียวอยู่แล้ว (`35 693803 564380 9`) = `[]`
+ * ⚠️ ใช้เพื่อ**เสนอ**ให้ผู้ใช้กดเลือกเท่านั้น — ช่องยังไม่ผ่านจนกว่าผู้ใช้เลือกเลขเดียว (CLAUDE.md ข้อ 10 · ไม่ตัดให้เงียบ)
+ */
+export function multipleImeiInputCandidates(value: string | null | undefined): string[] {
+  const trimmed = value?.trim() ?? ''
+  if (trimmed === '' || !isImeiLikeIdentifier(trimmed) || parseImei(trimmed) !== null) return []
+  const listed = trimmed.split(IMEI_LIST_SEPARATOR).map((part) => part.trim()).filter((part) => part !== '')
+  const parts = listed.length > 1 ? listed : trimmed.split(/\s+/)
+  if (parts.length < 2) return []
+  const imeis = parts.map(parseImei)
+  if (!imeis.every((imei) => imei !== null)) return []
+  return [...new Set(imeis as string[])]
+}
+
+/**
+ * IMEI ที่ให้ผู้ใช้กดเลือกในช่อง "IMEI หรือ Serial" — รวม IMEI ที่ปนข้อความ ({@link embeddedImeiCandidates})
+ * และคู่ IMEI ตัวเลขล้วน ({@link multipleImeiInputCandidates}) ใช้คู่กับ UI ปุ่ม "ใช้ … เป็น IMEI" ชุดเดียว
+ */
+export function imeiPickerCandidates(value: string | null | undefined): string[] {
+  const embedded = embeddedImeiCandidates(value)
+  return embedded.length > 0 ? embedded : multipleImeiInputCandidates(value)
+}
+
+/** ข้อความเมื่อวางคู่ IMEI ตัวเลขล้วน — ช่องรับได้เลขเดียว ต้องกดเลือกเอง (ยังบันทึกไม่ได้จนกว่าจะเลือก) */
+export const IMEI_MULTIPLE_INPUT_MESSAGE = 'พบเลข IMEI มากกว่าหนึ่งเลข (เครื่องสองซิม) — ช่องนี้รับได้เลขเดียว กดเลือกเลขหลักด้านล่าง'
+
 /** ข้อความเตือน (ไม่บล็อก) เมื่อมี IMEI 15 หลักปนอยู่กับข้อความอื่น — ระบบจะบันทึกเป็น Serial ตามที่กรอก */
 export const IMEI_EMBEDDED_WARNING_MESSAGE =
   'มีเลข IMEI 15 หลักปนอยู่กับข้อความ — ระบบจะบันทึกทั้งหมดเป็น Serial ถ้าเป็น IMEI ให้กรอกเฉพาะตัวเลข'

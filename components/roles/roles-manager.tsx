@@ -169,91 +169,94 @@ export function RolesManager() {
       />
 
       <Card padded={false}>
-        <div className="px-6 pt-5">
+        <div className="px-4 pt-5 sm:px-6">
           <RoleGroupTabs tab={tab} onTabChange={setTab} subGroup={subGroup} onSubGroupChange={setSubGroup} />
         </div>
 
-        <CardHeader
-          title={ROLE_GROUP_LABEL[visibleGroup]}
-          description={`${visibleRoles.length} บทบาท — Superadmin มีสิทธิ์ทุกรายการโดยนิยาม (ไม่เก็บ record)`}
-        />
-
-        <Table>
-          <THead>
-            <Tr>
-              <Th>ชื่อบทบาท</Th>
-              <Th>จำนวนผู้ใช้</Th>
-              <Th>สิทธิ์ที่ได้รับ</Th>
-              <Th>สถานะ</Th>
-              <Th align="right">จัดการสิทธิ์</Th>
-            </Tr>
-          </THead>
-
-          <TableState
-            colSpan={5}
-            loading={state.loading}
-            error={state.error === null ? null : { message: state.error }}
-            isEmpty={visibleRoles.length === 0}
-            emptyTitle="ยังไม่มีบทบาทในกลุ่มนี้"
-            onRetry={
-              <Button variant="secondary" onClick={() => void load()}>
-                ลองใหม่
-              </Button>
-            }
+        {/* หัวกลุ่ม + ตารางเว้นขอบการ์ด ไม่ชิดขอบบนจอแคบ (preship R3-037) */}
+        <div className="space-y-4 p-4 sm:p-6">
+          <CardHeader
+            title={ROLE_GROUP_LABEL[visibleGroup]}
+            description={`${visibleRoles.length} บทบาท — Superadmin มีสิทธิ์ทุกรายการโดยนิยาม (ไม่เก็บ record)`}
           />
 
-          {!state.loading && state.error === null && visibleRoles.length > 0 && (
-            <TBody>
-              {visibleRoles.map((role) => (
-                <Tr key={role.id}>
-                  <Td>
-                    <span className="font-semibold text-slate-900">{role.name}</span>
-                  </Td>
-                  <Td>{role.userCount} คน</Td>
-                  <Td>
-                    <span className="text-xs text-slate-500">
-                      ✅ {role.grants.manage} · 👁️ {role.grants.view}
-                    </span>
-                  </Td>
-                  <Td>
-                    {/* สีจาก mapper กลาง — ไม่ใส่คลาสสีเอง (preship R2-037) */}
-                    {role.isSeed ? (
-                      <StatusBadge group="info" label="🔒 Seed" />
-                    ) : (
-                      <StatusBadge group="neutral" label="Custom" />
-                    )}
-                  </Td>
-                  <Td align="right">
-                    <div className="inline-flex items-center gap-1">
-                      <Button variant="secondary" onClick={() => setPermissionRole(role)}>
-                        กำหนดสิทธิ์
-                      </Button>
-                      <Can action="manage" resource={MANAGE_RESOURCE}>
-                        <Button
-                          variant="danger"
-                          disabled={role.isSeed || role.userCount > 0}
-                          title={
-                            role.isSeed
-                              ? 'Seed Role ลบไม่ได้'
-                              : role.userCount > 0
-                                ? 'ยังมีผู้ใช้ผูกอยู่กับบทบาทนี้'
-                                : undefined
-                          }
-                          onClick={() => {
-                            setDeleteTarget(role)
-                            setDeleteReason('')
-                          }}
-                        >
-                          ลบ
+          <Table>
+            <THead>
+              <Tr>
+                <Th>ชื่อบทบาท</Th>
+                <Th>จำนวนผู้ใช้</Th>
+                <Th>สิทธิ์ที่ได้รับ</Th>
+                <Th>สถานะ</Th>
+                <Th align="right">จัดการสิทธิ์</Th>
+              </Tr>
+            </THead>
+
+            <TableState
+              colSpan={5}
+              loading={state.loading}
+              error={state.error === null ? null : { message: state.error }}
+              isEmpty={visibleRoles.length === 0}
+              emptyTitle="ยังไม่มีบทบาทในกลุ่มนี้"
+              onRetry={
+                <Button variant="secondary" onClick={() => void load()}>
+                  ลองใหม่
+                </Button>
+              }
+            />
+
+            {!state.loading && state.error === null && visibleRoles.length > 0 && (
+              <TBody>
+                {visibleRoles.map((role) => (
+                  <Tr key={role.id}>
+                    <Td>
+                      <span className="font-semibold text-slate-900">{role.name}</span>
+                    </Td>
+                    <Td>{role.userCount} คน</Td>
+                    <Td>
+                      <span className="text-xs text-slate-500">
+                        ✅ {role.grants.manage} · 👁️ {role.grants.view}
+                      </span>
+                    </Td>
+                    <Td>
+                      {/* สีจาก mapper กลาง — ไม่ใส่คลาสสีเอง (preship R2-037) */}
+                      {role.isSeed ? (
+                        <StatusBadge group="info" label="🔒 Seed" />
+                      ) : (
+                        <StatusBadge group="neutral" label="Custom" />
+                      )}
+                    </Td>
+                    <Td align="right">
+                      <div className="inline-flex items-center gap-1">
+                        <Button variant="secondary" onClick={() => setPermissionRole(role)}>
+                          กำหนดสิทธิ์
                         </Button>
-                      </Can>
-                    </div>
-                  </Td>
-                </Tr>
-              ))}
-            </TBody>
-          )}
-        </Table>
+                        <Can action="manage" resource={MANAGE_RESOURCE}>
+                          <Button
+                            variant="danger"
+                            disabled={role.isSeed || role.userCount > 0}
+                            title={
+                              role.isSeed
+                                ? 'Seed Role ลบไม่ได้'
+                                : role.userCount > 0
+                                  ? 'ยังมีผู้ใช้ผูกอยู่กับบทบาทนี้'
+                                  : undefined
+                            }
+                            onClick={() => {
+                              setDeleteTarget(role)
+                              setDeleteReason('')
+                            }}
+                          >
+                            ลบ
+                          </Button>
+                        </Can>
+                      </div>
+                    </Td>
+                  </Tr>
+                ))}
+              </TBody>
+            )}
+          </Table>
+        </div>
       </Card>
 
       <PermissionMatrixModal

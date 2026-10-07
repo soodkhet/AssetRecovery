@@ -278,6 +278,8 @@ function CaseRow({ item, onOpen }: { item: PortalCaseListItemDto; onOpen: (id: s
       <Td className="text-right">
         <Button
           variant="secondary"
+          // ไม่ให้ข้อความไทยหักเป็น 2 บรรทัดที่จอ 1024 (preship R3-040)
+          className="whitespace-nowrap"
           onClick={(event) => {
             event.stopPropagation()
             onOpen(item.id)

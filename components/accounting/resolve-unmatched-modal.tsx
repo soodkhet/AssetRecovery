@@ -60,7 +60,7 @@ export function ResolveUnmatchedModal({
       description="ใช้กับรายการที่ไม่ใช่รายรับ-รายจ่ายของระบบ เช่น ค่าธรรมเนียมธนาคาร ดอกเบี้ยรับ"
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="secondary" onClick={onClose}>
             ยกเลิก
           </Button>
           <Button variant="danger" loading={saving} disabled={!ready} onClick={() => void submit()}>

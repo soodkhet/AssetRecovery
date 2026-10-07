@@ -91,7 +91,7 @@ export function ExceptionFormModal({
       description="ข้อยกเว้นผูกกับรอบบัญชีเสมอ และไม่สืบทอดข้ามรอบ — เดือนถัดไปที่ยังเจอปัญหาเดิมต้องบันทึกใหม่"
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="secondary" onClick={onClose}>
             ยกเลิก
           </Button>
           <Button loading={saving} disabled={!ready} onClick={() => void submit()}>

@@ -56,12 +56,12 @@ export function AnswerQuestionModal({
       description={`รอบบัญชี ${question.periodLabel}`}
       footer={
         readOnly ? (
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="secondary" onClick={onClose}>
             ปิดหน้าต่าง
           </Button>
         ) : (
           <>
-            <Button variant="ghost" onClick={onClose}>
+            <Button variant="secondary" onClick={onClose}>
               ยกเลิก
             </Button>
             <Button loading={saving} disabled={!ready} onClick={() => void submit()}>

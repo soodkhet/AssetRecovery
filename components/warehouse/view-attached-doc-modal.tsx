@@ -35,7 +35,7 @@ export function ViewAttachedDocModal({
         title={`เอกสารที่แนบ — ${lot.lotNumber}`}
         description={`${lot.companyName} · ${HANDOVER_TYPE_LABEL[lot.type]}`}
         footer={
-          <Button variant="primary" onClick={onClose}>
+          <Button variant="secondary" onClick={onClose}>
             ปิด
           </Button>
         }

@@ -53,7 +53,7 @@ export function SubNav({ menus, className }: { menus: readonly MenuItem[]; class
               aria-current={current ? 'page' : undefined}
               className={cn(
                 // `relative` ให้ spinner ลอยมุม ไม่ดันความกว้างลิงก์ระหว่างโหลด (preship R2-034)
-                'focus-ring-inset relative inline-flex items-center rounded-md px-3 py-1.5 text-xs font-semibold whitespace-nowrap transition-colors',
+                'focus-ring-inset relative inline-flex items-center rounded-md px-3 py-1.5 text-xs font-semibold whitespace-nowrap transition-colors pointer-coarse:min-h-11',
                 current
                   ? 'border border-slate-300 bg-white text-slate-900 shadow-sm'
                   : 'text-slate-500 hover:text-slate-800',

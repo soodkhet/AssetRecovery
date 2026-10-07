@@ -61,7 +61,7 @@ export function ChangeReturnMethodModal({
       description={`${advance.payeeName} · ยอดคืนค้าง ${fmtSatangSymbol(advance.returnOutstandingSatang)}`}
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="secondary" onClick={onClose}>
             ยกเลิก
           </Button>
           <Button loading={saving} disabled={!reasonOk} onClick={() => void submit()}>
@@ -149,7 +149,7 @@ export function RecordSeparateReturnModal({
       description={`${advance.payeeName} · ยอดคืนค้าง ${fmtSatangSymbol(advance.returnOutstandingSatang)}`}
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="secondary" onClick={onClose}>
             ยกเลิก
           </Button>
           <Button loading={saving} disabled={!canSubmit} onClick={() => void submit()}>

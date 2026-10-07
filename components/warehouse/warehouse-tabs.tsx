@@ -33,7 +33,8 @@ export function WarehouseTabs({
 }) {
   return (
     <div
-      className={cn('flex gap-6 overflow-x-auto border-b border-slate-200', className)}
+      // มือถือ: ช่องไฟ/ตัวอักษรเล็กลงให้ 4 แท็บพอดีแถวเดียว · จอแคบมากขึ้นบรรทัดใหม่แทนเลื่อนแนวนอนจนแท็บท้ายถูกตัด (preship R3-036)
+      className={cn('flex flex-wrap gap-x-3 border-b border-slate-200 sm:gap-x-6', className)}
       role="tablist"
       aria-label="แท็บคลังสินค้า"
     >
@@ -48,7 +49,7 @@ export function WarehouseTabs({
             aria-selected={active}
             onClick={() => onTabChange(item)}
             className={cn(
-              'focus-ring-inset flex items-center gap-1.5 border-b-2 py-2.5 text-sm font-medium whitespace-nowrap transition-colors',
+              'focus-ring-inset flex items-center gap-1.5 border-b-2 py-2.5 text-[13px] font-medium whitespace-nowrap transition-colors sm:text-sm',
               active ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-800',
             )}
           >

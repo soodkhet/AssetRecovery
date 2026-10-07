@@ -55,7 +55,7 @@ export function FinanceShell({ initialTab }: { initialTab: string }) {
         {/* แท็บขึ้นบรรทัดใหม่แทนการเลื่อนแนวนอนแบบซ่อน scrollbar — จอ tablet เคยมองไม่เห็นแท็บท้ายแถว (preship R2-013) */}
         <nav
           aria-label="แท็บงานการเงิน"
-          className="mb-6 flex flex-wrap gap-x-6 border-b border-slate-200"
+          className="mb-6 flex flex-wrap gap-x-4 border-b border-slate-200 xl:gap-x-6"
         >
           {tabs.map((item) => {
             // หน้าจริงอยู่คนละ route — ลิงก์ข้ามไป (ปัจจุบันไม่มีแท็บแบบนี้ เก็บไว้รองรับในอนาคต)

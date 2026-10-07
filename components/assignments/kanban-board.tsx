@@ -52,6 +52,8 @@ export function KanbanBoard({
   const [board, setBoard] = useState<KanbanBoardDto | null>(null)
   const [error, setError] = useState<ApiCallError | null>(null)
   const [loading, setLoading] = useState(true)
+  // ปุ่ม "ลองใหม่" บน ErrorState — เพิ่มตัวนับให้ effect โหลดซ้ำ (R3-027)
+  const [retryKey, setRetryKey] = useState(0)
 
   const boardPath = useMemo(() => {
     if (teamId === '') return null
@@ -64,8 +66,9 @@ export function KanbanBoard({
   const fetchBoard = useCallback(async () => {
     if (boardPath === null) return { data: undefined, error: undefined }
     void reloadToken
+    void retryKey
     return await callApi<KanbanBoardDto>(boardPath)
-  }, [boardPath, reloadToken])
+  }, [boardPath, reloadToken, retryKey])
 
   useEffect(() => {
     let cancelled = false
@@ -170,7 +173,16 @@ export function KanbanBoard({
       </div>
 
       {loading && <LoadingState message="กำลังโหลดภาพรวมทีม..." />}
-      {!loading && error !== null && <ErrorState title={error.title} message={error.message} />}
+      {!loading && error !== null && (
+        <ErrorState
+          title={error.title}
+          message={error.message}
+          onRetry={() => {
+            setLoading(true)
+            setRetryKey((key) => key + 1)
+          }}
+        />
+      )}
       {!loading && error === null && columns.length === 0 && (
         <p className="py-10 text-center text-sm text-slate-400">ไม่มีพนักงานในทีมนี้</p>
       )}

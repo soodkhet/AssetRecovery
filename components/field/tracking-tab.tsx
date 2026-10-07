@@ -47,7 +47,7 @@ function CardButton({ action, onClick }: { action: FieldCardAction; onClick: () 
   return toneClass === undefined ? (
     <Button onClick={onClick}>{action.label}</Button>
   ) : (
-    <button type="button" onClick={onClick} className={cn('focus-ring rounded-lg px-3 py-2 text-xs font-bold', toneClass)}>
+    <button type="button" onClick={onClick} className={cn('focus-ring rounded-lg px-3 py-2 text-xs font-bold pointer-coarse:min-h-11', toneClass)}>
       {action.label}
     </button>
   )

@@ -19,7 +19,7 @@ export function ExpenseDetailModal({ record, onClose }: { record: ExpenseRecordD
       onClose={onClose}
       title={`รายละเอียดค่าใช้จ่าย — ${record.payeeName}`}
       footer={
-        <Button variant="ghost" onClick={onClose}>
+        <Button variant="secondary" onClick={onClose}>
           ปิดหน้าต่าง
         </Button>
       }

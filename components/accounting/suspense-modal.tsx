@@ -88,7 +88,7 @@ export function SuspenseModal({
       }
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="secondary" onClick={onClose}>
             ยกเลิก
           </Button>
           <Button variant={isRefund ? 'danger' : 'primary'} loading={saving} disabled={!ready} onClick={() => void submit()}>

@@ -12,11 +12,12 @@ import {
   hotelClaimFormError,
   parseHotelNightsInput,
 } from '@/lib/field/hotel-claim'
-import { EXPENSE_RECEIPT_ACCEPT } from '@/lib/field/media-upload'
+import { checkExpenseReceiptCandidate, EXPENSE_RECEIPT_ACCEPT } from '@/lib/field/media-upload'
 import type { FieldExpenseDto, FieldTeammateDto } from '@/lib/field/types'
-import { FieldUploadError, uploadExpenseReceipt } from '@/lib/field/upload-client'
+import { toInputDate } from '@/lib/format/datetime'
 import { parseBahtInput, toBahtInput } from '@/lib/format/money'
 import { NoReceiptLinesEditor, NoReceiptToggle } from '@/components/substitute-receipts/no-receipt-lines'
+import { StorageUploadError, uploadToStorage } from '@/lib/uploads/client'
 import {
   emptySubstituteLine,
   substituteDraftPayload,
@@ -44,7 +45,8 @@ export function HotelClaimModal({
   const { showToast } = useToast()
   const fileRef = useRef<HTMLInputElement>(null)
   const [teammates, setTeammates] = useState<FieldTeammateDto[]>([])
-  const [expenseDate, setExpenseDate] = useState('')
+  // ค่าเริ่มต้น = วันนี้ตามเวลาไทย (ส่วนใหญ่เบิกวันที่พักจริง) — เดิมว่างแล้วรายการ "ไม่มีใบเสร็จ" แถวแรกไม่มีวันที่ (preship R3-032)
+  const [expenseDate, setExpenseDate] = useState(() => toInputDate(new Date()))
   const [amountBaht, setAmountBaht] = useState('')
   const [nightsText, setNightsText] = useState('1')
   const [sharedWithUserId, setSharedWithUserId] = useState('')
@@ -54,11 +56,47 @@ export function HotelClaimModal({
   const [receiptInCompanyName, setReceiptInCompanyName] = useState(false)
   // มติ PO U103 — ไม่มีใบเสร็จ ⇒ กรอกรายการ แล้วระบบออกใบรับรองแทนใบเสร็จ (ยอดเบิก = ยอดรวมรายการ)
   const [noReceipt, setNoReceipt] = useState(false)
-  const [substituteLines, setSubstituteLines] = useState<SubstituteLineDraft[]>([emptySubstituteLine('line-0')])
+  const [substituteLines, setSubstituteLines] = useState<SubstituteLineDraft[]>(() => [
+    emptySubstituteLine('line-0', expenseDate),
+  ])
   const [error, setError] = useState<string | null>(null)
   // error รายช่องจาก server (เช่นหมายเหตุยาวเกิน) — เดิมเห็นแค่ "ข้อมูลไม่ครบ" ไม่รู้ว่าช่องไหน (preship R2-025)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [submitting, setSubmitting] = useState(false)
+  // อัปโหลดใบเสร็จ (อาจนานบนเน็ตภาคสนาม) — ยกเลิกได้ ไม่ล็อก modal ทั้งก้อนจนหมดเวลา (preship R3-026)
+  const [uploading, setUploading] = useState(false)
+  const uploadAbortRef = useRef<AbortController | null>(null)
+  // ใบเสร็จที่อัปโหลดสำเร็จแล้ว — ส่งไม่ผ่านแล้วกดส่งใหม่ด้วยไฟล์เดิมไม่ต้องอัปโหลดซ้ำ (preship R3-033)
+  const uploadedReceiptRef = useRef<{ file: File; path: string } | null>(null)
+
+  useEffect(() => () => uploadAbortRef.current?.abort(), [])
+
+  /** วันที่เข้าพักเปลี่ยน ⇒ แถว "ไม่มีใบเสร็จ" ที่ยังว่าง/ยังเป็นวันเดิมตามไปด้วย (ผู้ใช้แก้วันแถวเองแล้วไม่ทับ) */
+  function changeExpenseDate(next: string): void {
+    setSubstituteLines((lines) =>
+      lines.map((line) => (line.lineDate === '' || line.lineDate === expenseDate ? { ...line, lineDate: next } : line)),
+    )
+    setExpenseDate(next)
+  }
+
+  /** path ของใบเสร็จ — ไฟล์เดิมที่อัปโหลดสำเร็จแล้วใช้ path เดิม (R3-033) · ยกเลิก/หมดเวลา = throw ข้อความพร้อมแสดง */
+  async function receiptPath(file: File): Promise<string> {
+    const cached = uploadedReceiptRef.current
+    if (cached !== null && cached.file === file) return cached.path
+    const problem = checkExpenseReceiptCandidate({ name: file.name, type: file.type, size: file.size })
+    if (problem !== null) throw new StorageUploadError(problem)
+    const controller = new AbortController()
+    uploadAbortRef.current = controller
+    setUploading(true)
+    try {
+      const path = await uploadToStorage({ kind: 'expense_receipt' }, file, { signal: controller.signal })
+      uploadedReceiptRef.current = { file, path }
+      return path
+    } finally {
+      uploadAbortRef.current = null
+      setUploading(false)
+    }
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -101,7 +139,7 @@ export function HotelClaimModal({
     setSubmitting(true)
     setError(null)
     try {
-      const receiptFileUrl = noReceipt || receipt === null ? null : await uploadExpenseReceipt(receipt)
+      const receiptFileUrl = noReceipt || receipt === null ? null : await receiptPath(receipt)
       const response = await callApi<FieldExpenseDto>(
         apiPath('field.hotelClaim'),
         jsonRequest('POST', {
@@ -137,7 +175,7 @@ export function HotelClaimModal({
       onCreated(response.data)
       onClose()
     } catch (uploadError) {
-      setError(uploadError instanceof FieldUploadError ? uploadError.message : 'อัปโหลดใบเสร็จไม่สำเร็จ')
+      setError(uploadError instanceof StorageUploadError ? uploadError.message : 'อัปโหลดใบเสร็จไม่สำเร็จ')
     } finally {
       setSubmitting(false)
     }
@@ -148,15 +186,30 @@ export function HotelClaimModal({
       open
       onClose={onClose}
       title="เบิกค่าที่พัก"
+      // ระหว่างอัปโหลดไม่ใช้ `loading` (ซึ่งล็อกทั้ง footer) — ให้ปุ่ม "ยกเลิกการอัปโหลด" กดได้ (R3-026)
+      lockClose={uploading}
       footer={
-        <Button onClick={() => void submit()} loading={submitting} className="w-full justify-center py-3">
-          {submitting ? 'กำลังส่งคำขอ...' : 'ส่งคำขอเบิก'}
-        </Button>
+        uploading ? (
+          <div className="flex w-full gap-2">
+            <Button variant="secondary" onClick={() => uploadAbortRef.current?.abort()} className="justify-center py-3">
+              ยกเลิกการอัปโหลด
+            </Button>
+            <Button disabled className="flex-1 justify-center py-3">
+              กำลังอัปโหลดใบเสร็จ...
+            </Button>
+          </div>
+        ) : (
+          <Button onClick={() => void submit()} loading={submitting} className="w-full justify-center py-3">
+            {submitting ? 'กำลังส่งคำขอ...' : 'ส่งคำขอเบิก'}
+          </Button>
+        )
       }
     >
+      {/* ล็อกช่องกรอกระหว่างอัปโหลด — ค่าที่ส่งคือค่าตอนกดส่ง แก้ระหว่างนี้จะไม่ถูกส่ง */}
+      <fieldset disabled={uploading} className="m-0 min-w-0 border-0 p-0">
       <div className="space-y-3">
         <Field label="วันที่เข้าพัก" required>
-          <Input type="date" value={expenseDate} onChange={(event) => setExpenseDate(event.target.value)} />
+          <Input type="date" value={expenseDate} onChange={(event) => changeExpenseDate(event.target.value)} />
         </Field>
 
         <Field label="จำนวนคืน" hint="ใบเสร็จใบเดียวครอบหลายคืนได้ — ไม่กรอก = 1 คืน">
@@ -249,6 +302,7 @@ export function HotelClaimModal({
 
         {error !== null && <p className="text-xs font-semibold text-red-600">{error}</p>}
       </div>
+      </fieldset>
     </Modal>
   )
 }

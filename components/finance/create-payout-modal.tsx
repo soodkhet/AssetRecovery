@@ -111,7 +111,7 @@ export function CreatePayoutModal({
       description="ระบบรวบรวมรายการที่อนุมัติแล้วภายในวันตัดรอบให้อัตโนมัติ"
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="secondary" onClick={onClose}>
             ยกเลิก
           </Button>
           <Button loading={saving} disabled={cutoffDate === ''} onClick={() => void submit()}>

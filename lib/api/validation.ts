@@ -73,9 +73,13 @@ const INPUT_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
  * (`TIMESTAMPTZ`) เท่านั้น
  */
 export function dateOnlySchema(label: string) {
+  // ข้อความที่ผู้ใช้เห็นต้องไม่มีศัพท์รูปแบบ (YYYY-MM-DD) — ยังไม่เลือก = "กรุณาเลือก…" แบบเดียวกับ dropdown
+  // ค่าที่ส่งมาแต่ผิดรูป = บอกให้เลือกจากปฏิทินใหม่ (preship R3-032)
+  const required = `กรุณาเลือก${label}`
   return z
-    .string()
-    .regex(INPUT_DATE_PATTERN, `${label} ต้องเป็นรูปแบบ YYYY-MM-DD`)
+    .string({ error: () => required })
+    .min(1, required)
+    .regex(INPUT_DATE_PATTERN, `${label}ไม่ถูกต้อง กรุณาเลือกวันที่จากปฏิทินอีกครั้ง`)
     .transform((value, ctx) => {
       const parts = value.split('-').map((part) => Number.parseInt(part, 10))
       const [year = 0, month = 0, day = 0] = parts

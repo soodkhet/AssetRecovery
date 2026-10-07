@@ -62,7 +62,9 @@ export function HandoverLotDetailModal({
               />
             </div>
           ) : null}
-          <Button onClick={onClose}>ปิด</Button>
+          <Button variant="secondary" onClick={onClose}>
+            ปิด
+          </Button>
         </>
       }
     >

@@ -98,7 +98,7 @@ export function ReceiveCustomerWhtModal({
       description="กรอกตามหนังสือที่ลูกค้าออกให้ และแนบไฟล์สแกน"
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="secondary" onClick={onClose}>
             ยกเลิก
           </Button>
           <Button loading={saving} disabled={!ready} onClick={() => void submit()}>

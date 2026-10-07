@@ -90,7 +90,7 @@ export function ExceptionActionModal({
       description={`${exception.periodLabel} · ${exceptionModuleLabel(exception.sourceModule)}`}
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="secondary" onClick={onClose}>
             ยกเลิก
           </Button>
           <Button

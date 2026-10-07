@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import { periodReasonSchema } from '@/lib/accounting/schemas'
-import { requiredIdSchema, toFieldErrors } from '@/lib/api/validation'
+import { dateOnlySchema, requiredIdSchema, toFieldErrors } from '@/lib/api/validation'
 import { financeCompanyFieldsSchema } from '@/lib/finance-companies/schemas'
 import { payeeCreateSchema } from '@/lib/payees/schemas'
 import { teamFieldsSchema } from '@/lib/teams/schemas'
@@ -79,5 +79,30 @@ describe('toFieldErrors() — ข้อความไทยเสมอ', () =>
     const parsed = schema.safeParse(input)
     if (parsed.success) throw new Error('ต้อง fail')
     expect(toFieldErrors(parsed.error).a).toBe(expected)
+  })
+})
+
+describe('dateOnlySchema — ข้อความไม่มีศัพท์รูปแบบ (preship R3-032)', () => {
+  const schema = z.object({ lineDate: dateOnlySchema('วันที่') })
+  const messageOf = (input: unknown) => {
+    const parsed = schema.safeParse(input)
+    return parsed.success ? null : toFieldErrors(parsed.error).lineDate
+  }
+
+  it('ว่าง / ไม่ส่งมา ⇒ "กรุณาเลือก…"', () => {
+    expect(messageOf({ lineDate: '' })).toBe('กรุณาเลือกวันที่')
+    expect(messageOf({})).toBe('กรุณาเลือกวันที่')
+  })
+
+  it('ส่งมาแต่ผิดรูป ⇒ บอกให้เลือกจากปฏิทิน ไม่มี YYYY-MM-DD', () => {
+    const message = messageOf({ lineDate: '08/10/2569' })
+    expect(message).toMatch(/เลือกวันที่จากปฏิทิน/)
+    expect(message).not.toMatch(/YYYY/)
+  })
+
+  it('วันที่ไม่มีจริงยังถูกปฏิเสธ · วันที่ถูกต้องแปลงเป็นเที่ยงคืน UTC', () => {
+    expect(messageOf({ lineDate: '2026-02-30' })).toMatch(/ไม่ใช่วันที่ที่มีอยู่จริง/)
+    const parsed = schema.parse({ lineDate: '2026-10-08' })
+    expect(parsed.lineDate.toISOString()).toBe('2026-10-08T00:00:00.000Z')
   })
 })

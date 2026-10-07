@@ -36,6 +36,8 @@ import {
   isAcceptableAssetIdentifier,
   type CaseCompletenessInput,
   normalizePhoneInput,
+  normalizePhoneInputWithCaret,
+  toAsciiDigits,
   phoneInputError,
 } from '@/lib/cases/case'
 import { caseCreateSchema } from '@/lib/cases/schemas'
@@ -463,5 +465,35 @@ describe('assertCaseNotModifiedSince — แก้เคสพร้อมกั
     expect(caught).toBeInstanceOf(CaseError)
     expect((caught as CaseError).code).toBe('CASE_EDIT_CONFLICT')
     expect((caught as CaseError).status).toBe(409)
+  })
+})
+
+describe('เลขไทย/เลขเต็มความกว้างในช่องเบอร์โทร + ตำแหน่ง cursor (preship R3-030)', () => {
+  it('toAsciiDigits — ๐-๙ / ０-９ / ＋ → ASCII · อักขระอื่นคงเดิม ความยาวเท่าเดิม', () => {
+    expect(toAsciiDigits('๐๑๒๓๔๕๖๗๘๙')).toBe('0123456789')
+    expect(toAsciiDigits('０８１－２３４')).toBe('081－234')
+    expect(toAsciiDigits('＋๖๖')).toBe('+66')
+    expect(toAsciiDigits('abc-1')).toBe('abc-1')
+  })
+
+  it('เบอร์ที่พิมพ์เป็นเลขไทย/เต็มความกว้างไม่หายเงียบ', () => {
+    expect(normalizePhoneInput('๐๘๑-๒๓๔-๕๖๗๘')).toBe('0812345678')
+    expect(normalizePhoneInput('０８１２３４５６７８')).toBe('0812345678')
+    expect(normalizePhoneInput('＋๖๖ ๘๑ ๒๓๔ ๕๖๗๘')).toBe('0812345678')
+  })
+
+  it('พิมพ์ขีดกลางเบอร์ ⇒ cursor อยู่ที่เดิม ไม่กระโดดไปท้าย', () => {
+    // ค่าเดิม 0812345678 · พิมพ์ "-" หลัง 081 (cursor อยู่หลังขีด = ตำแหน่ง 4)
+    expect(normalizePhoneInputWithCaret('081-2345678', 4)).toEqual({ value: '0812345678', caret: 3 })
+    // พิมพ์ตัวเลขแทรกกลาง
+    expect(normalizePhoneInputWithCaret('08912345678', 3)).toEqual({ value: '08912345678', caret: 3 })
+    // เลขไทยแทรกกลาง
+    expect(normalizePhoneInputWithCaret('08๙1234567', 3)).toEqual({ value: '0891234567', caret: 3 })
+  })
+
+  it('cursor หลังแปลง +66 / ไม่มีตำแหน่ง', () => {
+    expect(normalizePhoneInputWithCaret('+66 81 234 5678', 15)).toEqual({ value: '0812345678', caret: 10 })
+    expect(normalizePhoneInputWithCaret('+66 81 234 5678', 0)).toEqual({ value: '0812345678', caret: 0 })
+    expect(normalizePhoneInputWithCaret('0812345678', null)).toEqual({ value: '0812345678', caret: 10 })
   })
 })

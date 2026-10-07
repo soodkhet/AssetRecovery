@@ -73,7 +73,7 @@ export function ExportPackModal({
       description="ระบบสร้างไฟล์ CSV/XLSX ตามรูปแบบที่กำหนด แล้วรวมเป็นไฟล์ .zip พร้อมหน้าปกและ SHA-256"
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="secondary" onClick={onClose}>
             ปิด
           </Button>
           <Button loading={saving} disabled={targetId === ''} onClick={() => void submit()}>

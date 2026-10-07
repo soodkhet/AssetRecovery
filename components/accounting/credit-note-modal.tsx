@@ -200,7 +200,7 @@ export function CreditNoteModal({
         description={`${invoice.companyName} · ออกเมื่อ ${fmtDate(invoice.invoiceDate)}`}
         footer={
           <>
-            <Button variant="ghost" onClick={onClose}>
+            <Button variant="secondary" onClick={onClose}>
               ปิด
             </Button>
             {canManage && (

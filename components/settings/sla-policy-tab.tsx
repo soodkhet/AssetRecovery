@@ -52,6 +52,8 @@ export function SlaPolicyTab() {
   const [form, setForm] = useState<FormState | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<{ title: string; message: string } | null>(null)
+  // ปุ่ม "ลองใหม่" บน ErrorState — เพิ่มตัวนับให้ effect โหลดซ้ำ (R3-027)
+  const [retryKey, setRetryKey] = useState(0)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
 
@@ -78,7 +80,7 @@ export function SlaPolicyTab() {
     return () => {
       cancelled = true
     }
-  }, [fetchPolicy])
+  }, [fetchPolicy, retryKey])
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]): void {
     setForm((current) => (current === null ? current : { ...current, [key]: value }))
@@ -114,8 +116,14 @@ export function SlaPolicyTab() {
     }
   }
 
+  const retryLoad = () => {
+    setError(null)
+    setLoading(true)
+    setRetryKey((key) => key + 1)
+  }
+
   if (loading) return <Card><LoadingState message="กำลังโหลดเกณฑ์ SLA" /></Card>
-  if (error !== null) return <Card><ErrorState title={error.title} message={error.message} /></Card>
+  if (error !== null) return <Card><ErrorState title={error.title} message={error.message} onRetry={retryLoad} /></Card>
   if (form === null || policy === null) return null
 
   const typed = Number(form.slaAlertHours)

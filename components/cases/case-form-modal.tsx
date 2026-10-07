@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { AddressFields } from '@/components/address/address-fields'
 import { CaseAttachmentsFields, type StagedFile } from '@/components/cases/case-attachments-fields'
-import { CaseContactsFields } from '@/components/cases/case-contacts-fields'
+import { CaseContactsFields, normalizePhoneEvent } from '@/components/cases/case-contacts-fields'
 import { DeviceAttributeSelect } from '@/components/cases/device-attribute-select'
 import { DeviceModelPicker } from '@/components/cases/device-model-picker'
 import { useDeviceAttributeOptions } from '@/components/cases/use-device-attribute-options'
@@ -17,7 +17,6 @@ import {
   DEBTOR_NATIONALITIES,
   DEBTOR_NATIONALITY_LABEL,
   digitsOnly,
-  normalizePhoneInput,
   PHONE_INPUT_MAX_LENGTH,
   phoneInputError,
   DOCUMENT_SLOT_LABEL,
@@ -40,7 +39,12 @@ import { ASSET_TYPE_LABEL } from '@/lib/cases/status-display'
 import type { CaseDetailDto, CaseDocumentDto, CaseTeamOptionDto, CaseTeamOptionsDto } from '@/lib/cases/types'
 import { uploadCaseFile } from '@/lib/cases/upload-client'
 import { parseBahtInput } from '@/lib/format/money'
-import { assetIdentifierWarning, embeddedImeiCandidates } from '@/lib/warehouse/imei'
+import {
+  assetIdentifierWarning,
+  IMEI_MULTIPLE_INPUT_MESSAGE,
+  imeiPickerCandidates,
+  multipleImeiInputCandidates,
+} from '@/lib/warehouse/imei'
 
 /** ความยาวช่องเบอร์โทรขณะกรอก — ยาวกว่า 10 หลักเพื่อให้วางเบอร์ที่มีขีด/ช่องว่างได้ไม่ถูกตัดกลางเลข */
 
@@ -469,7 +473,7 @@ export function CaseFormModal({
                 maxLength={PHONE_INPUT_MAX_LENGTH}
                 placeholder="10 หลัก"
                 invalid={fieldErrors.debtorPhoneMobile !== undefined || phoneInputError(form.debtorPhoneMobile) !== null}
-                onChange={(event) => patch({ debtorPhoneMobile: normalizePhoneInput(event.target.value) })}
+                onChange={(event) => patch({ debtorPhoneMobile: normalizePhoneEvent(event.target) })}
               />
             </Field>
             <Field
@@ -486,7 +490,7 @@ export function CaseFormModal({
                 // เผื่อตัวคั่น/+66 ตอนวาง — onChange แปลงเป็นตัวเลขเอง ไม่ตัดความยาวเงียบ (preship PS-031/R2-008)
                 maxLength={PHONE_INPUT_MAX_LENGTH}
                 invalid={fieldErrors.debtorPhoneWork !== undefined || phoneInputError(form.debtorPhoneWork) !== null}
-                onChange={(event) => patch({ debtorPhoneWork: normalizePhoneInput(event.target.value) })}
+                onChange={(event) => patch({ debtorPhoneWork: normalizePhoneEvent(event.target) })}
               />
             </Field>
           </div>
@@ -585,11 +589,16 @@ export function CaseFormModal({
                   {assetIdentifierWarning(form.assetImeiSerial)}
                 </p>
               )}
+              {/* วางคู่ IMEI ตัวเลขล้วน (`3569… 3569…` / `3569…/3569…`) — ช่องรับเลขเดียว ให้กดเลือกเอง (R3-031) */}
+              {multipleImeiInputCandidates(form.assetImeiSerial).length > 0 && (
+                <p className="mt-1 text-[11px] font-semibold text-amber-600">{IMEI_MULTIPLE_INPUT_MESSAGE}</p>
+              )}
               {/* วาง IMEI มาพร้อมข้อความ — เสนอให้ผู้ใช้กดใช้เฉพาะตัวเลขเอง ไม่ตัดให้เงียบ ๆ (preship PS-005)
-                  เครื่องสองซิมมีหลายเลข ⇒ แสดงปุ่มทุกเลขให้เลือกเลขหลักเอง (R2-014) */}
-              {fieldErrors.assetImeiSerial === undefined && embeddedImeiCandidates(form.assetImeiSerial).length > 0 && (
+                  เครื่องสองซิมมีหลายเลข ⇒ แสดงปุ่มทุกเลขให้เลือกเลขหลักเอง (R2-014 · R3-031 ตัวเลขล้วน)
+                  แสดงแม้มี error ของช่อง (หลังกดบันทึก) — ทางแก้คือกดเลือกเลขเดียว */}
+              {imeiPickerCandidates(form.assetImeiSerial).length > 0 && (
                 <div className="mt-1 flex flex-wrap gap-2">
-                  {embeddedImeiCandidates(form.assetImeiSerial).map((imei) => (
+                  {imeiPickerCandidates(form.assetImeiSerial).map((imei) => (
                     <Button key={imei} variant="secondary" onClick={() => patch({ assetImeiSerial: imei })}>
                       ใช้ <span className="font-mono">{imei}</span> เป็น IMEI
                     </Button>

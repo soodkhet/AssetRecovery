@@ -109,7 +109,7 @@ export function PayoutDetailModal({
               ยกเลิกรอบจ่าย
             </Button>
           )}
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="secondary" onClick={onClose}>
             ปิดหน้าต่าง
           </Button>
         </>

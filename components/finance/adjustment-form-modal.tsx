@@ -133,7 +133,7 @@ export function AdjustmentFormModal({
       description="ไม่แก้รายการต้นทาง — สร้างรายการชดเชยใหม่พร้อมร่องรอยตรวจสอบ"
       footer={
         <>
-          <Button variant="ghost" onClick={close}>
+          <Button variant="secondary" onClick={close}>
             ยกเลิก
           </Button>
           <Button loading={saving} disabled={!ready} onClick={() => void submit()}>

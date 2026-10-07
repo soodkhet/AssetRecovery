@@ -60,7 +60,7 @@ export function ReadinessModal({
       title={`ตรวจความพร้อมก่อนส่งบัญชี — ${period.periodLabel}`}
       description={readinessDescription(data === null ? null : data.checks.length)}
       footer={
-        <Button variant="ghost" onClick={onClose}>
+        <Button variant="secondary" onClick={onClose}>
           ปิดหน้าต่าง
         </Button>
       }

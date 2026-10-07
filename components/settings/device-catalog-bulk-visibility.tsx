@@ -101,7 +101,7 @@ export function DeviceCatalogBulkVisibility({
           title={ACTION_LABEL[pending]}
           footer={
             <>
-              <Button variant="ghost" onClick={() => setPending(null)} disabled={saving}>
+              <Button variant="secondary" onClick={() => setPending(null)} disabled={saving}>
                 ยกเลิก
               </Button>
               <Button onClick={() => void confirm()} loading={saving}>

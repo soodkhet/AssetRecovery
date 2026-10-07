@@ -24,7 +24,11 @@ export function MatchDetailModal({
       open
       onClose={onClose}
       title={`รายละเอียดการจับคู่ — ${fmtDate(transaction.transactionDate)}`}
-      footer={<Button onClick={onClose}>ปิดหน้าต่าง</Button>}
+      footer={
+        <Button variant="secondary" onClick={onClose}>
+          ปิดหน้าต่าง
+        </Button>
+      }
     >
       <div className="space-y-4 text-sm">
         <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 p-4">

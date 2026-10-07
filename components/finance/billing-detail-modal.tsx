@@ -90,7 +90,7 @@ export function BillingDetailModal({ batch, onClose }: { batch: BillingBatchDto 
               ใบแจ้งหนี้ PDF
             </Button>
           )}
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="secondary" onClick={onClose}>
             ปิดหน้าต่าง
           </Button>
         </>

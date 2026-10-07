@@ -137,7 +137,7 @@ export function ManualClaimModal({
       title="สร้างรายการเบิกด้วยตนเอง (Manual Claim)"
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="secondary" onClick={onClose}>
             ยกเลิก
           </Button>
           <Button loading={saving} onClick={() => void submit()}>

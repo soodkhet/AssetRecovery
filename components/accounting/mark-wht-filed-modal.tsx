@@ -59,7 +59,7 @@ export function MarkWhtFiledModal({
       description="ยืนยันว่ายื่น ภ.ง.ด.3/53 ของรอบนี้ต่อกรมสรรพากรเรียบร้อยแล้ว (ยื่นจริงนอกระบบ)"
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="secondary" onClick={onClose}>
             ปิด
           </Button>
           <Button loading={saving} disabled={!ready} onClick={() => void submit()}>

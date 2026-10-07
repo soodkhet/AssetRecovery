@@ -42,13 +42,30 @@ export const PHONE_INPUT_MAX_LENGTH = 32
 const PHONE_INPUT_MAX_DIGITS = 15
 const PHONE_MAX_DIGITS = 10
 
+const THAI_DIGIT_ZERO = 0x0e50
+const FULLWIDTH_DIGIT_ZERO = 0xff10
+
+/**
+ * เลขไทย (๐-๙) / เลขเต็มความกว้าง (０-９) และ `＋` เต็มความกว้าง → ASCII (preship R3-030)
+ * แป้นพิมพ์ไทย/IME บางตัวส่งเลขเหล่านี้มา — เดิมถูก `digitsOnly()` ตัดทิ้งเงียบจนเบอร์หายทั้งเบอร์
+ * แทนที่ทีละตัว ความยาวสตริงเท่าเดิม (ตำแหน่ง cursor ไม่เลื่อน)
+ */
+export function toAsciiDigits(value: string): string {
+  return value.replace(/[\u0E50-\u0E59\uFF10-\uFF19\uFF0B]/g, (char) => {
+    const code = char.charCodeAt(0)
+    if (code === 0xff0b) return '+'
+    return String(code >= FULLWIDTH_DIGIT_ZERO ? code - FULLWIDTH_DIGIT_ZERO : code - THAI_DIGIT_ZERO)
+  })
+}
+
 /**
  * ค่าที่พิมพ์/วางในช่องเบอร์โทร → ตัวเลขล้วน (preship R2-008)
  * - รูปแบบสากล `+66 81-234-5678` / `66812345678` ⇒ `0812345678` (เดิมกลายเป็น `6681234567` แล้วผ่านเงียบ)
  * - ตัดตัวคั่นทิ้ง แต่**ไม่ตัดความยาว** — ตัวเลขเกิน (เช่นวางเบอร์ต่อมาด้วย) ต้องขึ้น error ให้แก้ ไม่หายเงียบ
+ * - เลขไทย/เลขเต็มความกว้างแปลงเป็นเลขอารบิกก่อน ไม่ถูกตัดทิ้ง (R3-030)
  */
 export function normalizePhoneInput(raw: string): string {
-  const trimmed = raw.trim()
+  const trimmed = toAsciiDigits(raw).trim()
   let digits = digitsOnly(trimmed)
   const international = /^\+\s*66/.test(trimmed) || (digits.length === 11 && digits.startsWith('66'))
   if (international) {
@@ -56,6 +73,20 @@ export function normalizePhoneInput(raw: string): string {
     digits = local.startsWith('0') ? local : `0${local}`
   }
   return digits.slice(0, PHONE_INPUT_MAX_DIGITS)
+}
+
+/**
+ * {@link normalizePhoneInput} พร้อมตำแหน่ง cursor ใหม่ — ช่องเบอร์โทรเก็บค่าเป็นตัวเลขล้วนทุกครั้งที่พิมพ์
+ * ถ้าไม่คืนตำแหน่ง cursor เอง การพิมพ์ขีด/เว้นวรรคกลางเบอร์จะทำให้ cursor กระโดดไปท้ายช่อง (preship R3-030)
+ * ตำแหน่งใหม่ = จำนวนตัวเลขก่อน cursor เดิม (ปรับตามส่วนต่างจากการแปลง +66 / ตัดความยาว)
+ */
+export function normalizePhoneInputWithCaret(raw: string, caret: number | null): { value: string; caret: number } {
+  const value = normalizePhoneInput(raw)
+  const ascii = toAsciiDigits(raw)
+  const position = caret === null ? ascii.length : Math.min(Math.max(caret, 0), ascii.length)
+  const digitsBefore = digitsOnly(ascii.slice(0, position)).length
+  const delta = value.length - digitsOnly(ascii).length
+  return { value, caret: Math.min(Math.max(digitsBefore + (digitsBefore > 0 ? delta : 0), 0), value.length) }
 }
 
 /** error ระหว่างกรอก — แจ้งเฉพาะตัวเลขเกิน (สั้นกว่าระหว่างพิมพ์เป็นเรื่องปกติ ตรวจตอนบันทึก) */

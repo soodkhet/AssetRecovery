@@ -417,7 +417,7 @@ export function CompanyDocumentsModal({
                     <p className="text-xs text-amber-700">{formProblem}</p>
                   )}
                   <div className="flex justify-end gap-2">
-                    <Button variant="ghost" onClick={() => setForm(null)} disabled={saving}>
+                    <Button variant="secondary" onClick={() => setForm(null)} disabled={saving}>
                       ยกเลิก
                     </Button>
                     <Button loading={saving} disabled={formProblem !== null} onClick={() => void submit()}>

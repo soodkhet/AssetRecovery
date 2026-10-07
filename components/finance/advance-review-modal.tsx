@@ -83,7 +83,7 @@ export function AdvanceReviewModal({
       description={advance.purpose}
       footer={
         <>
-          <Button variant="ghost" onClick={close}>
+          <Button variant="secondary" onClick={close}>
             ยกเลิก
           </Button>
           <Button

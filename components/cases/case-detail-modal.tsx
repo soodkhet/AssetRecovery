@@ -101,6 +101,8 @@ export function CaseDetailModal({
 
   const [detail, setDetail] = useState<CaseDetailDto | null>(null)
   const [loadError, setLoadError] = useState<ApiCallError | null>(null)
+  // ปุ่ม "ลองใหม่" บน ErrorState — เพิ่มตัวนับให้ effect โหลดซ้ำ (R3-027)
+  const [retryKey, setRetryKey] = useState(0)
   const [teamOptions, setTeamOptions] = useState<readonly CaseTeamOptionDto[]>([])
 
   const [reason, setReason] = useState('')
@@ -152,7 +154,7 @@ export function CaseDetailModal({
     return () => {
       cancelled = true
     }
-  }, [open, caseId, load])
+  }, [open, caseId, load, retryKey])
 
   const status = detail?.status ?? ''
   const mode = caseDetailMode(status)
@@ -302,7 +304,14 @@ export function CaseDetailModal({
         }
       >
         {loadError !== null ? (
-          <ErrorState title={loadError.title} message={loadError.message} />
+          <ErrorState
+            title={loadError.title}
+            message={loadError.message}
+            onRetry={() => {
+              setLoadError(null)
+              setRetryKey((key) => key + 1)
+            }}
+          />
         ) : detail === null ? (
           <LoadingState message="กำลังโหลดรายละเอียดเคส..." />
         ) : (

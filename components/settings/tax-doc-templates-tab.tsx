@@ -57,6 +57,8 @@ export function TaxDocTemplatesTab() {
   const [forms, setForms] = useState<Record<string, FormState>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<{ title: string; message: string } | null>(null)
+  // ปุ่ม "ลองใหม่" บน ErrorState — เพิ่มตัวนับให้ effect โหลดซ้ำ (R3-027)
+  const [retryKey, setRetryKey] = useState(0)
   const [errors, setErrors] = useState<Record<string, Record<string, string>>>({})
   const [savingType, setSavingType] = useState<TemplateDocumentType | null>(null)
   const [previewType, setPreviewType] = useState<TemplateDocumentType | null>(null)
@@ -87,7 +89,7 @@ export function TaxDocTemplatesTab() {
     return () => {
       cancelled = true
     }
-  }, [fetchTemplates])
+  }, [fetchTemplates, retryKey])
 
   function set<K extends keyof FormState>(documentType: TemplateDocumentType, key: K, value: FormState[K]): void {
     setForms((current) => {
@@ -166,6 +168,12 @@ export function TaxDocTemplatesTab() {
     }
   }
 
+  const retryLoad = () => {
+    setError(null)
+    setLoading(true)
+    setRetryKey((key) => key + 1)
+  }
+
   if (loading) {
     return (
       <Card>
@@ -176,7 +184,7 @@ export function TaxDocTemplatesTab() {
   if (error !== null) {
     return (
       <Card>
-        <ErrorState title={error.title} message={error.message} />
+        <ErrorState title={error.title} message={error.message} onRetry={retryLoad} />
       </Card>
     )
   }

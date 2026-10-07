@@ -37,6 +37,8 @@ export function FileViewerModal({
 }) {
   const [url, setUrl] = useState<string | null>(null)
   const [failed, setFailed] = useState(false)
+  // ปุ่ม "ลองใหม่" บน ErrorState — เพิ่มตัวนับให้ effect ขอลิงก์ใหม่ (R3-027)
+  const [retryKey, setRetryKey] = useState(0)
 
   const fileUrl = document?.fileUrl ?? null
 
@@ -52,7 +54,7 @@ export function FileViewerModal({
     return () => {
       cancelled = true
     }
-  }, [open, fileUrl])
+  }, [open, fileUrl, retryKey])
 
   if (document === null) return null
 
@@ -86,7 +88,15 @@ export function FileViewerModal({
       }
     >
       {failed ? (
-        <ErrorState title="เปิดไฟล์ไม่สำเร็จ" message="ขอลิงก์ชั่วคราวของไฟล์ไม่ได้ — ลองใหม่อีกครั้ง" />
+        <ErrorState
+          title="เปิดไฟล์ไม่สำเร็จ"
+          message="ขอลิงก์ชั่วคราวของไฟล์ไม่ได้ — ลองใหม่อีกครั้ง"
+          onRetry={() => {
+            setFailed(false)
+            setUrl(null)
+            setRetryKey((key) => key + 1)
+          }}
+        />
       ) : url === null ? (
         <LoadingState message="กำลังเตรียมไฟล์..." />
       ) : isPdfMime(document.mimeType) ? (

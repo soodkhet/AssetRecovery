@@ -302,7 +302,11 @@ function CaseBoardCard({ overview }: { overview: LoadState<DashboardOverviewDto>
       <div className="mt-4">
         {board === null ? (
           overview.error !== null ? (
-            <ErrorState title={overview.error.title} message={overview.error.message} />
+            <ErrorState
+              title={overview.error.title}
+              message={overview.error.message}
+              onRetry={() => void overview.reload()}
+            />
           ) : (
             <div className="space-y-2">
               {[0, 1, 2, 3].map((index) => (

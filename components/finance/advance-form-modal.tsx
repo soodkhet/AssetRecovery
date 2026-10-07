@@ -88,7 +88,7 @@ export function AdvanceFormModal({ open, onClose, onCreated }: {
       title="ขอเบิกเงินทดรองจ่าย (Advance Request)"
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="secondary" onClick={onClose}>
             ยกเลิก
           </Button>
           <Button loading={saving} onClick={() => void submit()}>

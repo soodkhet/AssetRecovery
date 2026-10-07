@@ -70,7 +70,7 @@ export function MarkWhtSupplementaryFiledModal({
       description="ยืนยันว่ายื่นแบบเพิ่มเติมของรอบนี้ต่อกรมสรรพากรเรียบร้อยแล้ว (ยื่นจริงนอกระบบ)"
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="secondary" onClick={onClose}>
             ปิด
           </Button>
           <Button loading={saving} disabled={!ready} onClick={() => void submit()}>

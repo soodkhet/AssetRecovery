@@ -101,7 +101,7 @@ function ReceiptButton({ item, onView }: { item: FieldExpenseDto; onView: (file:
     <button
       type="button"
       onClick={() => onView(receipt)}
-      className="focus-ring mt-1 inline-flex items-center gap-1 text-xs font-bold text-blue-600"
+      className="focus-ring mt-1 inline-flex items-center gap-1 text-xs font-bold text-blue-600 pointer-coarse:min-h-11"
     >
       <IconFile className="h-3.5 w-3.5" /> ดูใบเสร็จ
     </button>
@@ -342,7 +342,7 @@ export function ExpensesTab({ initialView = 'caseBound' }: { initialView?: Expen
                 <button
                   type="button"
                   onClick={() => setHotelFormOpen(true)}
-                  className="focus-ring flex shrink-0 items-center gap-1 text-xs font-extrabold text-blue-600"
+                  className="focus-ring flex shrink-0 items-center gap-1 text-xs font-extrabold text-blue-600 pointer-coarse:min-h-11"
                 >
                   <IconPlus className="h-4 w-4" /> เบิกที่พัก
                 </button>

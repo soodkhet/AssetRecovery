@@ -110,7 +110,7 @@ export function ManualMatchModal({
       description={MATCH_TARGET_LABEL[kind]}
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="secondary" onClick={onClose}>
             ยกเลิก
           </Button>
           <Button loading={saving} disabled={!ready} onClick={() => void submit()}>

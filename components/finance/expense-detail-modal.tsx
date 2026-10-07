@@ -24,7 +24,7 @@ export function ExpenseDetailModal({ item, onClose }: { item: CompensationApprov
       title="รายละเอียดรายการเบิก"
       description={`${EXPENSE_TYPE_LABEL[item.expenseType]} · ${item.payeeName}`}
       footer={
-        <Button variant="ghost" onClick={onClose}>
+        <Button variant="secondary" onClick={onClose}>
           ปิด
         </Button>
       }

@@ -65,7 +65,7 @@ export function CancelWhtModal({
       description="ใบที่ยกเลิกยังเก็บไว้เป็นหลักฐาน แต่ยอดจะไม่ถูกนับในแบบ ภ.ง.ด. ของรอบอีก"
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="secondary" onClick={onClose}>
             ปิด
           </Button>
           <Button variant="danger" loading={saving} disabled={!ready} onClick={() => void submit()}>

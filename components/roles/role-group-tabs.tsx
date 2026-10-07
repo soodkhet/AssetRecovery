@@ -31,7 +31,8 @@ export function RoleGroupTabs({
 
   return (
     <div className={className}>
-      <div className="flex gap-6 border-b border-slate-200" role="tablist" aria-label="กลุ่มบทบาท">
+      {/* จอแคบ: ช่องไฟเล็กลง + ชื่อแท็บไม่ตัดกลางคำ (preship R3-037) */}
+      <div className="flex flex-wrap gap-x-4 border-b border-slate-200 sm:gap-x-6" role="tablist" aria-label="กลุ่มบทบาท">
         {ROLE_GROUP_TABS.filter((item) => tabs === undefined || tabs.includes(item.id)).map((item) => (
           <button
             key={item.id}
@@ -40,7 +41,7 @@ export function RoleGroupTabs({
             aria-selected={item.id === tab}
             onClick={() => onTabChange(item.id)}
             className={cn(
-              'focus-ring-inset border-b-2 py-2.5 text-sm font-medium transition-colors',
+              'focus-ring-inset border-b-2 py-2.5 text-sm font-medium whitespace-nowrap transition-colors',
               item.id === tab
                 ? 'border-slate-900 text-slate-900'
                 : 'border-transparent text-slate-500 hover:text-slate-800',

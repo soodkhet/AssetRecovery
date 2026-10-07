@@ -73,7 +73,7 @@ export function AcceptedTab({ currentUserId }: { currentUserId: string }) {
             type="button"
             onClick={() => setView(option.key)}
             className={cn(
-              'focus-ring flex flex-1 items-center justify-center gap-1 rounded-lg py-2 text-xs font-bold',
+              'focus-ring flex flex-1 items-center justify-center gap-1 rounded-lg py-2 text-xs font-bold pointer-coarse:min-h-11',
               view === option.key ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500',
             )}
           >
