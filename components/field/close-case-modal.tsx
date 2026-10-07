@@ -59,6 +59,7 @@ import { uploadFieldMedia, FieldUploadError } from '@/lib/field/upload-client'
 import type {
   FieldActionResultDto,
   FieldCaseDetailDto,
+  FieldCaseDetailResponseDto,
   FieldCheckinResultDto,
   FieldCloseDraftResultDto,
 } from '@/lib/field/types'
@@ -539,10 +540,15 @@ export function CloseCaseModal({
   useEffect(() => {
     let cancelled = false
     void (async () => {
-      const response = await callApi<FieldCaseDetailDto>(apiPath('field.caseDetail', { id: caseId }))
+      const response = await callApi<FieldCaseDetailResponseDto>(apiPath('field.caseDetail', { id: caseId }))
       if (cancelled) return
       if (response.error !== undefined || response.data === undefined) {
         setLoadError(response.error ?? { title: 'โหลดเคสไม่สำเร็จ', message: 'กรุณาลองใหม่' })
+        return
+      }
+      // เคสของเพื่อนร่วมทีม (preship R3-005) — ปิดงานแทนไม่ได้ BE ก็ปฏิเสธอยู่แล้ว
+      if (response.data.access === 'team') {
+        setLoadError({ title: 'เปิดเคสนี้ไม่ได้', message: 'เคสนี้ไม่ได้มอบหมายให้คุณ — ดูได้อย่างเดียวในมุมมองทีม' })
         return
       }
 

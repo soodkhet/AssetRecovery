@@ -10,6 +10,10 @@ import { ModuleError } from '@/lib/api/errors'
  * ซึ่งสร้างไว้ภายใน {@link DUPLICATE_CLAIM_WINDOW_MS} — retry ส่ง payload เดิมทุกช่อง ส่วนใบที่ต่างแม้ช่องเดียวคือคนละใบ
  * — จำกัดช่วงเวลาไว้เพราะเจตนาคือกันการส่งซ้ำ ไม่ได้ห้ามเบิกรายการหน้าตาเหมือนกันในวันอื่น/ภายหลัง
  * code `CLAIM_DUPLICATE_SUBMISSION` อยู่ที่ `docs/24` §6.4
+ *
+ * preship R3-004 — ใบเสร็จไฟล์เดียวกัน (SHA-256 ตรงกัน) ใช้ได้กับใบเบิก**ใบเดียว**เท่านั้น ไม่จำกัดเวลา และไม่จำกัด
+ * ผู้รับเงิน (ใบเสร็จคือเอกสารจริงชิ้นเดียว — คนอื่นเอาไปเบิกซ้ำก็คือเบิกซ้ำ · พักร่วมก็เบิกต่อห้องโดยคนเดียว) ⇒
+ * {@link findReceiptReuse} ใช้ทั้งตอนเบิกใหม่และตอนส่งใหม่หลังตีกลับ (code เดียวกัน คนละข้อความ)
  */
 
 export const DUPLICATE_CLAIM_WINDOW_MS = 10 * 60 * 1000
@@ -59,6 +63,51 @@ export function isDuplicateClaimSubmission(
         existing.sharedWithUserId === candidate.sharedWithUserId &&
         existing.receiptInCompanyName === candidate.receiptInCompanyName))
   )
+}
+
+export interface ReceiptHolder {
+  id: string
+  status: string
+  receiptFileHash: string | null
+}
+
+/**
+ * หาใบเบิกอื่นที่ใช้ใบเสร็จไฟล์เดียวกันอยู่ (ยังไม่ถูกตีกลับ/แทนที่) — ไม่มีใบเสร็จ (`null`) ไม่นับ
+ * (ใบรับรองแทนใบเสร็จแยกกันอยู่แล้ว) · `selfId` = ใบที่กำลังส่งใหม่ (ไม่นับตัวเอง)
+ */
+export function findReceiptReuse<T extends ReceiptHolder>(
+  receiptFileHash: string | null,
+  existing: readonly T[],
+  selfId: string | null = null,
+): T | undefined {
+  if (receiptFileHash === null || receiptFileHash === '') return undefined
+  return existing.find(
+    (row) =>
+      row.id !== selfId &&
+      row.receiptFileHash === receiptFileHash &&
+      !(DUPLICATE_CLAIM_IGNORED_STATUSES as readonly string[]).includes(row.status),
+  )
+}
+
+export class ClaimReceiptReusedError extends ModuleError<'CLAIM_DUPLICATE_SUBMISSION'> {
+  constructor(existingId: string, samePayee: boolean) {
+    super(
+      'CLAIM_DUPLICATE_SUBMISSION',
+      {
+        title: 'ใบเสร็จนี้ใช้เบิกไปแล้ว',
+        message: samePayee
+          ? 'ใบเสร็จไฟล์นี้ถูกใช้ในใบเบิกอื่นของคุณแล้ว — ใบเสร็จหนึ่งใบเบิกได้ครั้งเดียว ตรวจในรายการเบิกก่อน หรือแนบใบเสร็จของรายการนี้'
+          : 'ใบเสร็จไฟล์นี้ถูกใช้ในใบเบิกอื่นแล้ว — ใบเสร็จหนึ่งใบเบิกได้ครั้งเดียว กรุณาแนบใบเสร็จของรายการนี้',
+      },
+      409,
+      // ใบของคนอื่นไม่ส่ง id ออกไปให้ FE (ไม่ leak) — เก็บไว้ใน detail สำหรับ log เท่านั้น
+      {
+        detail: `receipt hash already used by expense ${existingId}`,
+        context: samePayee ? { reason: 'receipt_reused', existingExpenseId: existingId } : { reason: 'receipt_reused' },
+      },
+    )
+    this.name = 'ClaimReceiptReusedError'
+  }
 }
 
 export class ClaimDuplicateError extends ModuleError<'CLAIM_DUPLICATE_SUBMISSION'> {

@@ -1,5 +1,5 @@
 import { assertPeriodOpenAt, periodStatusAt } from '@/lib/accounting/period-guard'
-import { assertNoDuplicateClaimSubmission } from '@/lib/claims/duplicate-submission-queries'
+import { assertNoDuplicateClaimSubmission, assertReceiptNotReused } from '@/lib/claims/duplicate-submission-queries'
 import { emitAudit } from '@/lib/audit/audit'
 import type { RequestMeta } from '@/lib/auth/request-meta'
 import type { SessionUser } from '@/lib/auth/types'
@@ -669,6 +669,7 @@ export async function linkSupersededExpenses(
 
 const expenseSelect = {
   id: true,
+  payeeId: true,
   caseId: true,
   assignmentId: true,
   expenseType: true,
@@ -1078,6 +1079,15 @@ export async function resubmitFieldExpense(
         ? current.receiptFileHash
         : (await verifyUploadedFile(newReceiptPath, expenseReceiptRule(user.id))).sha256
   const updated = await prisma.$transaction(async (tx) => {
+    // preship R3-004 — ใบเสร็จ (ใหม่หรือเดิม) ต้องไม่ถูกใช้กับใบเบิกอื่นที่ยังมีผล — ระหว่างถูกตีกลับ ใบเสร็จเดิมอาจถูก
+    // นำไปเบิกใบใหม่แล้ว ⇒ ตรวจทุกครั้งที่ส่งใหม่ ไม่ใช่เฉพาะตอนแนบไฟล์ใหม่
+    await assertReceiptNotReused(tx as ExpenseTxClient, {
+      organizationId: user.organizationId,
+      payeeId: current.payeeId,
+      receiptFileHash: newReceiptPath !== null ? receiptHash : current.receiptFileHash,
+      selfExpenseId: expenseId,
+    })
+
     const row = await tx.expense.update({
       where: { id: expenseId },
       data: {

@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { normalizeCaseRef } from '@/lib/cases/case-ref'
 import {
   findDuplicateRefsInFile,
+  importRowIdentityError,
   mapImportRow,
+  normalizeImportPhone,
   parseCsv,
   planImport,
   resolveImportField,
@@ -121,5 +123,58 @@ describe('เลขที่สัญญาซ้ำภายในไฟล์�
   it('dash/underscore ต่างตำแหน่ง = ไม่ซ้ำ (normalize ไม่ตัดอักขระ)', () => {
     const plan = planImport([{ 'เลขที่สัญญา': 'SF-001' }, { 'เลขที่สัญญา': 'SF_001' }], COMPANY_ID)
     expect(findDuplicateRefsInFile(plan.rows, normalizeCaseRef).size).toBe(0)
+  })
+})
+
+describe('เบอร์โทร/เลขบัตรในไฟล์นำเข้า — ตรงกับฟอร์มและการนำเข้าจริง (preship R3-006)', () => {
+  it('normalizeImportPhone: รูปแบบที่ฟอร์มรับได้ ⇒ ตัวเลขล้วนแบบเดียวกับฟอร์ม', () => {
+    expect(normalizeImportPhone('081-234-5678')).toBe('0812345678')
+    expect(normalizeImportPhone('+66 81 234 5678')).toBe('0812345678')
+    expect(normalizeImportPhone('(081) 234-5678')).toBe('0812345678')
+    expect(normalizeImportPhone('081.234.5678')).toBe('0812345678')
+    expect(normalizeImportPhone('02-123-4567')).toBe('021234567')
+    expect(normalizeImportPhone('0812345678')).toBe('0812345678')
+  })
+
+  it('normalizeImportPhone: มีอักขระอื่นปน ⇒ ไม่ตัดทิ้งเงียบ (ปล่อยค่าเดิมให้แถวตก)', () => {
+    expect(normalizeImportPhone('abc')).toBe('abc')
+    expect(normalizeImportPhone('081-234-5678 ต่อ 12')).toBe('081-234-5678 ต่อ 12')
+    expect(normalizeImportPhone('---')).toBe('---')
+  })
+
+  it('mapImportRow: เบอร์มีขีด/รหัสประเทศ ⇒ payload เป็นเบอร์ 10 หลัก ไม่ติด error', () => {
+    const { payload, errors } = mapImportRow(
+      { 'เลขที่สัญญา': 'SF-1', 'เบอร์มือถือ': '+66 81 234 5678', 'เบอร์ที่ทำงาน': '(02) 123-4567' },
+      COMPANY_ID,
+    )
+    expect(errors).toEqual({})
+    expect(payload.debtorPhoneMobile).toBe('0812345678')
+    expect(payload.debtorPhoneWork).toBe('021234567')
+  })
+
+  it('mapImportRow: เบอร์ที่ตัดขีดแล้วเหลือ 9 หลักไม่ขึ้นต้น 0 ⇒ ยังจับเรื่องเลข 0 นำหน้าหาย', () => {
+    const { errors } = mapImportRow({ 'เลขที่สัญญา': 'SF-1', 'เบอร์มือถือ': '81-234-5678' }, COMPANY_ID)
+    expect(errors.debtorPhoneMobile).toMatch(/เลข 0 นำหน้า/)
+  })
+
+  it('importRowIdentityError: รหัส error เดียวกับ createCase', () => {
+    const plan = planImport(
+      [
+        { 'เลขที่สัญญา': 'SF-1', 'เบอร์มือถือ': '081-234-5678' },
+        { 'เลขที่สัญญา': 'SF-2', 'เบอร์มือถือ': 'abc' },
+        { 'เลขที่สัญญา': 'SF-3', 'เบอร์มือถือ': '0812345678999' },
+        { 'เลขที่สัญญา': 'SF-4', 'เลขบัตรประชาชน': '12345' },
+        { 'เลขที่สัญญา': 'SF-5', 'เบอร์ที่ทำงาน': '02-12' },
+      ],
+      COMPANY_ID,
+    )
+    expect(plan.errors).toEqual([])
+    expect(plan.rows.map((row) => importRowIdentityError(row.input)?.code ?? null)).toEqual([
+      null,
+      'CASE_INVALID_PHONE_FORMAT',
+      'CASE_INVALID_PHONE_FORMAT',
+      'CASE_INVALID_NATIONAL_ID',
+      'CASE_INVALID_PHONE_FORMAT',
+    ])
   })
 })

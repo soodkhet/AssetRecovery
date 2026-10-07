@@ -1,6 +1,7 @@
 import { PrismaPg } from '@prisma/adapter-pg'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SessionUser } from '@/lib/auth/types'
+import type { FieldCaseDetailDto } from '@/lib/field/types'
 import { closeFormFromDetail, hasCloseFormRevision } from '@/lib/field/close-form'
 import { clearDistanceCache } from '@/lib/field/distance-provider'
 import { PrismaClient } from '@/lib/generated/prisma/client'
@@ -69,6 +70,13 @@ type ExpenseQueries = typeof import('@/lib/field/expense-queries')
 type AssignmentQueries = typeof import('@/lib/assignments/queries')
 type FuelJob = typeof import('@/lib/field/fuel-distance-job')
 let field: FieldQueries
+
+/** รายละเอียดเคสของตัวเอง (`access: 'full'`) — เคสเพื่อนร่วมทีมได้มุมมองทีมแทน (preship R3-005) */
+async function ownFieldCase(user: SessionUser, caseId: string): Promise<FieldCaseDetailDto> {
+  const detail = await field.getFieldCase(user, caseId)
+  if (detail.access !== 'full') throw new Error(`expected full detail, got ${detail.access}`)
+  return detail
+}
 let expenses: ExpenseQueries
 let assignments: AssignmentQueries
 let fuelJob: FuelJob
@@ -749,7 +757,7 @@ suite('Phase 2.9 — 2 เส้นทางตีกลับ (`41` §10.1 ห�
     const caseId = await closeSuccessfully()
     await field.rejectFieldEvidence(manager, caseId, { reason: 'ภาพหลักฐานไม่ชัด' }, { actor: manager, meta })
 
-    const detail = await field.getFieldCase(agentA, caseId)
+    const detail = await ownFieldCase(agentA, caseId)
     expect(detail.status).toBe('needs_revision')
     expect(detail.rejectReason).toBe('ภาพหลักฐานไม่ชัด')
     expect(detail.submittedEvidence).toMatchObject({
@@ -946,7 +954,7 @@ suite('Phase 2.9 — 2 เส้นทางตีกลับ (`41` §10.1 ห�
 
     await field.rejectFieldEvidence(manager, caseId, { reason: 'ขอภาพเพิ่มอีกมุม' }, { actor: manager, meta })
     // ก่อนส่งใหม่: ยังไม่มีเวลาส่งใหม่
-    expect((await field.getFieldCase(agentA, caseId)).resubmittedAt).toBeNull()
+    expect((await ownFieldCase(agentA, caseId)).resubmittedAt).toBeNull()
 
     clearDistanceCache()
     stubDistanceMatrix(2_000)
@@ -969,7 +977,7 @@ suite('Phase 2.9 — 2 เส้นทางตีกลับ (`41` §10.1 ห�
     // เวลาส่งใหม่เก็บที่หลักฐานชุดใหม่ และแสดงคู่กับเวลาปิดครั้งแรก
     const latest = await db().caseEvidence.findFirstOrThrow({ where: { caseId }, orderBy: { submittedAt: 'desc' } })
     expect(latest.submittedAt.getTime()).toBeGreaterThan(new Date(FIRST_CLOSED_ISO).getTime())
-    const detail = await field.getFieldCase(agentA, caseId)
+    const detail = await ownFieldCase(agentA, caseId)
     expect(detail.closedAt).toBe(FIRST_CLOSED_ISO)
     expect(detail.resubmittedAt).toBe(latest.submittedAt.toISOString())
     const closedList = await field.listFieldCases(agentA, { view: 'own', status: 'closed' })
@@ -1167,7 +1175,12 @@ suite('Phase 2.9 — เบิกที่พัก + สรุปรายไ�
       note: null,
     }
     const oneNight = await expenses.submitHotelClaim(agentA, base, { actor: agentA, meta })
-    const twoNights = await expenses.submitHotelClaim(agentA, { ...base, hotelNights: 2 }, { actor: agentA, meta })
+    // ใบเสร็จไฟล์เดียวใช้ได้ใบเบิกเดียว (preship R3-004) ⇒ ใบที่สองแนบคนละไฟล์
+    const twoNights = await expenses.submitHotelClaim(
+      agentA,
+      { ...base, hotelNights: 2, receiptFileUrl: 'field/receipts/range-2.jpg' },
+      { actor: agentA, meta },
+    )
     expect(oneNight.hotelNights).toBe(1)
     expect(twoNights.hotelNights).toBe(2)
 
@@ -1186,7 +1199,12 @@ suite('Phase 2.9 — เบิกที่พัก + สรุปรายไ�
       note: null,
     }
     const unticked = await expenses.submitHotelClaim(agentA, base, { actor: agentA, meta })
-    const ticked = await expenses.submitHotelClaim(agentA, { ...base, receiptInCompanyName: true }, { actor: agentA, meta })
+    // ใบเสร็จไฟล์เดียวใช้ได้ใบเบิกเดียว (preship R3-004) ⇒ ใบที่สองแนบคนละไฟล์
+    const ticked = await expenses.submitHotelClaim(
+      agentA,
+      { ...base, receiptInCompanyName: true, receiptFileUrl: 'field/receipts/company-2.jpg' },
+      { actor: agentA, meta },
+    )
     expect(unticked.receiptInCompanyName).toBe(false)
     expect(ticked.receiptInCompanyName).toBe(true)
     expect(ticked.grossSatang).toBe(unticked.grossSatang)

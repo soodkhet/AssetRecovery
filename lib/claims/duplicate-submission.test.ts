@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   ClaimDuplicateError,
+  ClaimReceiptReusedError,
   DUPLICATE_CLAIM_WINDOW_MS,
+  findReceiptReuse,
   isDuplicateClaimSubmission,
   type ExistingClaim,
 } from '@/lib/claims/duplicate-submission'
@@ -82,5 +84,46 @@ describe('ClaimDuplicateError', () => {
     expect(error.status).toBe(409)
     expect(error.context).toEqual({ existingExpenseId: 'e1' })
     expect(error.userMessage).not.toMatch(/§|ไฟล์ \d/)
+  })
+})
+
+describe('findReceiptReuse (preship R3-004)', () => {
+  const hash = 'a'.repeat(64)
+  const holder = (id: string, status: string, receiptFileHash: string | null = hash) => ({ id, status, receiptFileHash })
+
+  it('ใบเสร็จเดียวกันอยู่ในใบเบิกที่ยังมีผล = ใช้ซ้ำ ไม่ว่าสร้างนานแค่ไหน/หมายเหตุต่างกัน', () => {
+    expect(findReceiptReuse(hash, [holder('e1', 'pending_approval')])?.id).toBe('e1')
+    expect(findReceiptReuse(hash, [holder('e1', 'approved')])?.id).toBe('e1')
+    expect(findReceiptReuse(hash, [holder('e1', 'paid')])?.id).toBe('e1')
+  })
+
+  it('ใบเดิมถูกตีกลับ/แทนที่แล้ว = ใช้ใบเสร็จนั้นเบิกใหม่ได้', () => {
+    expect(findReceiptReuse(hash, [holder('e1', 'rejected'), holder('e2', 'superseded')])).toBeUndefined()
+  })
+
+  it('ไม่นับตัวเอง (ส่งใหม่หลังตีกลับด้วยใบเสร็จเดิม)', () => {
+    expect(findReceiptReuse(hash, [holder('self', 'rejected')], 'self')).toBeUndefined()
+    expect(findReceiptReuse(hash, [holder('self', 'rejected'), holder('e2', 'pending_approval')], 'self')?.id).toBe('e2')
+  })
+
+  it('ไม่มีใบเสร็จ (ใบรับรองแทนใบเสร็จ) / ใบเสร็จต่างไฟล์ ไม่นับ', () => {
+    expect(findReceiptReuse(null, [holder('e1', 'pending_approval', null)])).toBeUndefined()
+    expect(findReceiptReuse(hash, [holder('e1', 'pending_approval', 'b'.repeat(64))])).toBeUndefined()
+  })
+})
+
+describe('ClaimReceiptReusedError', () => {
+  it('ใช้ code เดิม 409 · ผู้รับเงินเดียวกันเห็น id ใบเดิม · คนอื่นไม่ leak id', () => {
+    const own = new ClaimReceiptReusedError('e1', true)
+    expect(own.code).toBe('CLAIM_DUPLICATE_SUBMISSION')
+    expect(own.status).toBe(409)
+    expect(own.context).toEqual({ reason: 'receipt_reused', existingExpenseId: 'e1' })
+    const other = new ClaimReceiptReusedError('e9', false)
+    expect(other.context).toEqual({ reason: 'receipt_reused' })
+    for (const error of [own, other]) {
+      expect(error.userMessage).toContain('ใบเสร็จ')
+      expect(error.userMessage).toContain('ใบเบิกอื่น')
+      expect(error.userMessage).not.toMatch(/§|ไฟล์ \d/)
+    }
   })
 })

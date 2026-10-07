@@ -107,9 +107,17 @@ export function Modal({
       else requestCloseRef.current()
     }
 
+    // กรอกแล้วกด refresh/ปิดแท็บ ⇒ ให้ browser ถามก่อนทิ้ง (preship R3-014 — เดิมข้อมูลฟอร์มยาวหายเงียบ)
+    function handleBeforeUnload(event: BeforeUnloadEvent) {
+      if (!dirtyRef.current || !guardRef.current.confirmDiscard) return
+      event.preventDefault()
+      event.returnValue = ''
+    }
+
     const previousOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     document.addEventListener('keydown', handleKey)
+    window.addEventListener('beforeunload', handleBeforeUnload)
     panelRef.current?.focus()
 
     return () => {
@@ -119,6 +127,7 @@ export function Modal({
       unregisterModal(token)
       document.body.style.overflow = previousOverflow
       document.removeEventListener('keydown', handleKey)
+      window.removeEventListener('beforeunload', handleBeforeUnload)
     }
   }, [open])
 

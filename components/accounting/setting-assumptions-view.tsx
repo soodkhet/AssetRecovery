@@ -130,11 +130,12 @@ export function SettingAssumptionsView({ links }: { links: Readonly<Record<Setti
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <StatCard label="รอนักบัญชียืนยัน" value={loading ? '—' : fmtCount(pendingCount)} hint="ป้ายยังแสดงบนหน้าตั้งค่า" />
+        {/* โหลดไม่สำเร็จ ⇒ "—" ไม่ใช่ 0 (preship R3-028) */}
+        <StatCard label="รอนักบัญชียืนยัน" value={loading || error !== null ? '—' : fmtCount(pendingCount)} hint="ป้ายยังแสดงบนหน้าตั้งค่า" />
         <StatCard
           label="ยืนยันแล้ว"
-          value={loading ? '—' : fmtCount(rows.length - pendingCount)}
-          hint={`จากทั้งหมด ${fmtCount(rows.length)} รายการ`}
+          value={loading || error !== null ? '—' : fmtCount(rows.length - pendingCount)}
+          hint={loading || error !== null ? undefined : `จากทั้งหมด ${fmtCount(rows.length)} รายการ`}
         />
       </div>
 

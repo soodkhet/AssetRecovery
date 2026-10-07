@@ -302,6 +302,14 @@ describe('portal serializers — เนื้อหา', () => {
     expect(dto?.dueDate).toBe('2026-10-31')
   })
 
+  it('ค่าธรรมเนียมโอนที่ตัดบัญชีนับเป็นชำระแล้ว — รวม = ชำระ + ลูกค้าหัก + ค้าง ลงตัว (U144 · R3-007)', () => {
+    // BL-2569-006 จาก audit: 52,840 = 47,839 + 1,481 + 3,520
+    const dto = serializePortalBillingBatch({ id: 'b', batchNumber: 'BL-2569-006', period: '09/2569', totalSatang: 52_840, receivedSatang: 47_839, whtWithheldByCustomerSatang: 1_481, bankFeeWrittenOffSatang: 3_520, dueDate: new Date('2026-10-31T00:00:00Z'), sentAt: null, caseCount: 1, status: 'paid' })
+    expect(dto?.outstandingSatang).toBe(0)
+    expect(dto?.receivedSatang).toBe(51_359)
+    expect((dto?.receivedSatang ?? 0) + (dto?.customerWhtSatang ?? 0) + (dto?.outstandingSatang ?? 0)).toBe(dto?.totalSatang)
+  })
+
   it('รอบวางบิลมีเลขที่รอบจริง BL (มติ U76 แทน BB- ของ U62) + จำนวนเคส', () => {
     const base = { id: 'b', totalSatang: 100_000, receivedSatang: 0, whtWithheldByCustomerSatang: 0, bankFeeWrittenOffSatang: 0, dueDate: new Date('2026-10-31T00:00:00Z'), sentAt: null, caseCount: 5, status: 'sent' as const }
     const dto = serializePortalBillingBatch({ ...base, batchNumber: 'BL-2569-007', period: 'มิถุนายน 2569' })

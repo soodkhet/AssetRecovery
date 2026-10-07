@@ -240,6 +240,7 @@ export interface PortalBillingBatchDto {
   /** จำนวนเคสในรอบ (มติ U62) */
   caseCount: number
   totalSatang: number
+  /** ชำระแล้ว = เงินรับ + ค่าธรรมเนียมโอนที่ตัดบัญชี (มติ U144 · R3-007) */
   receivedSatang: number
   /** ภาษีหัก ณ ที่จ่ายที่ลูกค้าหักไว้ (มติ U11) — รวม = ชำระแล้ว + ลูกค้าหัก + ค้าง */
   customerWhtSatang: number
@@ -269,7 +270,9 @@ export function serializePortalBillingBatch(row: PortalBillingBatchSource): Port
     period: row.period,
     caseCount: row.caseCount,
     totalSatang: row.totalSatang,
-    receivedSatang: row.receivedSatang,
+    // มติ PO U144 — ค่าธรรมเนียมโอนที่ตัดเป็นค่าใช้จ่ายบริษัทนับเป็น "ชำระแล้ว" (ไม่แสดงแยก) ⇒ รวมในช่องนี้
+    // ให้สูตรบนหน้า (รวม = ชำระแล้ว + ภาษีที่ลูกค้าหัก + ค้างชำระ) ลงตัว — preship R3-007
+    receivedSatang: row.receivedSatang + row.bankFeeWrittenOffSatang,
     customerWhtSatang: row.whtWithheldByCustomerSatang,
     outstandingSatang,
     dueDate: dateOnly(row.dueDate),

@@ -56,6 +56,7 @@ let advances: typeof import('@/lib/advances/queries')
 let approvals: typeof import('@/lib/compensation/approval-queries')
 let payees: typeof import('@/lib/payees/queries')
 let access: typeof import('@/lib/uploads/access')
+let fieldExpenses: typeof import('@/lib/field/expense-queries')
 
 function db(): PrismaClient {
   if (!url) throw new Error('ไม่มี TEST_DATABASE_URL')
@@ -178,6 +179,7 @@ beforeAll(async () => {
   approvals = await import('@/lib/compensation/approval-queries')
   payees = await import('@/lib/payees/queries')
   access = await import('@/lib/uploads/access')
+  fieldExpenses = await import('@/lib/field/expense-queries')
 
   const tx = db()
   await tx.$executeRawUnsafe(`
@@ -676,5 +678,77 @@ suite('preship PS-003 — กันส่งใบเบิกเดิมซ้
     await db().expense.update({ where: { id: second.id }, data: { createdAt: new Date(Date.now() - 11 * 60 * 1000) } })
     await claims.createManualClaim({ actor: agent, meta }, noReceipt)
     expect(await countClaims()).toBe(3)
+  })
+})
+
+suite('preship R3-004 — ใบเสร็จไฟล์เดียวใช้เบิกได้ใบเดียว', () => {
+  const claimWith = (receiptFileUrl: string, note: string) => ({
+    claimType: 'receipt' as const,
+    grossSatang: 52_000,
+    expenseDate: new Date('2026-10-05T00:00:00Z'),
+    payeeId: null,
+    receiptFileUrl,
+    note,
+  })
+
+  it('ใบเสร็จเดิม เปลี่ยนแค่หมายเหตุ ⇒ CLAIM_DUPLICATE_SUBMISSION (ไม่จำกัด 10 นาที) · มีใบเบิกใบเดียว', async () => {
+    uploadTestState.realVerify = true
+    const path = receiptPathOf(AGENT_ID, 'r3-004.pdf')
+    const hash = uploadPdf(path, 'r3-004-receipt')
+    const first = await claims.createManualClaim({ actor: agent, meta }, claimWith(path, 'ค่าที่จอดรถ'))
+    await db().expense.update({ where: { id: first.id }, data: { createdAt: new Date(Date.now() - 24 * 3600 * 1000) } })
+
+    await expect(claims.createManualClaim({ actor: agent, meta }, claimWith(path, 'ค่าที่จอดรถ (อีกครั้ง)'))).rejects.toMatchObject({
+      code: 'CLAIM_DUPLICATE_SUBMISSION',
+      context: { reason: 'receipt_reused', existingExpenseId: first.id },
+    })
+    expect(await db().expense.count({ where: { organizationId: ORG_ID, receiptFileHash: hash } })).toBe(1)
+  })
+
+  it('ผู้รับเงินคนอื่นใช้ใบเสร็จไฟล์เดียวกัน ⇒ ปฏิเสธ ไม่ส่ง id ใบของคนอื่นออกไป', async () => {
+    uploadTestState.realVerify = true
+    uploadPdf(receiptPathOf(AGENT_ID, 'shared.pdf'), 'same-bytes')
+    uploadPdf(receiptPathOf(AGENT_2_ID, 'shared.pdf'), 'same-bytes')
+    await claims.createManualClaim({ actor: agent, meta }, claimWith(receiptPathOf(AGENT_ID, 'shared.pdf'), 'ของคนแรก'))
+    await expect(
+      claims.createManualClaim({ actor: agent2, meta }, claimWith(receiptPathOf(AGENT_2_ID, 'shared.pdf'), 'ของคนที่สอง')),
+    ).rejects.toMatchObject({ code: 'CLAIM_DUPLICATE_SUBMISSION', context: { reason: 'receipt_reused' } })
+  })
+
+  it('ใบที่ถูกตีกลับให้แก้ยังถือใบเสร็จไว้ · ส่งใหม่ด้วยใบเสร็จของใบอื่นไม่ได้ · ปฏิเสธถาวรแล้วจึงใช้ใบเสร็จได้อีก', async () => {
+    uploadTestState.realVerify = true
+    const pathA = receiptPathOf(AGENT_ID, 'resubmit-a.pdf')
+    const pathB = receiptPathOf(AGENT_ID, 'resubmit-b.pdf')
+    uploadPdf(pathA, 'receipt-a')
+    uploadPdf(pathB, 'receipt-b')
+    const first = await claims.createManualClaim({ actor: agent, meta }, claimWith(pathA, 'ใบแรก'))
+    await db().expense.update({ where: { id: first.id }, data: { status: 'needs_revision', rejectionReason: 'ยอดไม่ตรง' } })
+
+    // ตีกลับให้แก้ ≠ ปล่อยใบเสร็จ — ต้องส่งใบเดิมใหม่ ไม่ใช่เปิดใบเบิกใหม่ด้วยใบเสร็จเดิม
+    await expectCode(() => claims.createManualClaim({ actor: agent, meta }, claimWith(pathA, 'ใบใหม่')), 'CLAIM_DUPLICATE_SUBMISSION')
+    const second = await claims.createManualClaim({ actor: agent, meta }, claimWith(pathB, 'อีกรายการ'))
+
+    // ส่งใหม่โดยแนบใบเสร็จที่ใบอื่นใช้อยู่ ⇒ ปฏิเสธ สถานะไม่เปลี่ยน
+    await expectCode(
+      () =>
+        fieldExpenses.resubmitFieldExpense(agent, first.id, { note: 'แนบใบใหม่', receiptFileUrl: pathB }, { actor: agent, meta }),
+      'CLAIM_DUPLICATE_SUBMISSION',
+    )
+    const unchanged = await db().expense.findUniqueOrThrow({
+      where: { id: first.id },
+      select: { status: true, receiptFileUrl: true },
+    })
+    expect(unchanged).toEqual({ status: 'needs_revision', receiptFileUrl: pathA })
+
+    // ส่งใหม่ด้วยใบเสร็จเดิมของตัวเอง ⇒ ผ่าน (ไม่นับตัวเอง)
+    await expect(
+      fieldExpenses.resubmitFieldExpense(agent, first.id, { note: 'แก้ยอดแล้ว' }, { actor: agent, meta }),
+    ).resolves.toMatchObject({ status: 'pending_approval' })
+
+    // ใบที่ปฏิเสธถาวรปล่อยใบเสร็จ ⇒ เบิกใบใหม่ด้วยใบเสร็จนั้นได้
+    await db().expense.update({ where: { id: second.id }, data: { status: 'rejected', rejectionReason: 'ทดสอบ' } })
+    await expect(
+      claims.createManualClaim({ actor: agent, meta }, claimWith(pathB, 'เบิกใหม่หลังปฏิเสธถาวร')),
+    ).resolves.toBeDefined()
   })
 })

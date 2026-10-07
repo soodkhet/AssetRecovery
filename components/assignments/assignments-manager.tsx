@@ -400,7 +400,8 @@ export function AssignmentsManager({
         </div>
 
         {/* โหลดไม่สำเร็จ ⇒ ไม่โชว์ "แสดง 0 จาก 0 รายการ" ใต้ข้อความ error (preship PS-027) */}
-        {error === null && (
+        {/* ระหว่างโหลดก็ไม่โชว์ "แสดง 0 จาก 0" (preship R3-028) */}
+        {error === null && !loading && (
           <div className="mt-4 flex items-center justify-between text-xs text-slate-500">
             <span>
               แสดง {items.length} จาก {total} รายการ (หน้า {page}/{lastPage})

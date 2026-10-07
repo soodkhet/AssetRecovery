@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { FieldCaseDetailBody } from '@/components/field/field-case-detail'
+import { FieldCaseDetailView } from '@/components/field/field-case-detail'
 import { IconAlert, IconChevronLeft, IconChevronRight } from '@/components/field/field-icons'
 import { useFieldCases } from '@/components/field/field-cases-provider'
 import { Button, ErrorState, LoadingState, Modal, useToast } from '@/components/ui'
@@ -21,7 +21,12 @@ import {
 } from '@/lib/field/calendar'
 import { casesScheduledOn, teammatesInProvince } from '@/lib/field/field-ui'
 import { nextScheduleOrder } from '@/lib/field/schedule'
-import type { FieldActionResultDto, FieldCaseDetailDto, FieldCaseListItemDto, FieldCaseListResultDto } from '@/lib/field/types'
+import type {
+  FieldActionResultDto,
+  FieldCaseDetailResponseDto,
+  FieldCaseListItemDto,
+  FieldCaseListResultDto,
+} from '@/lib/field/types'
 import { fmtDate, toInputDate } from '@/lib/format/datetime'
 
 /**
@@ -55,7 +60,7 @@ export function CalendarPickerModal({
   const [pickedDate, setPickedDate] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
-  const [detail, setDetail] = useState<FieldCaseDetailDto | null>(null)
+  const [detail, setDetail] = useState<FieldCaseDetailResponseDto | null>(null)
   const [detailError, setDetailError] = useState<ApiCallError | null>(null)
   const [teamItems, setTeamItems] = useState<readonly FieldCaseListItemDto[]>([])
   /** เพิ่มค่าเมื่อกด "ลองใหม่" หลังโหลดเคสไม่สำเร็จ (preship R2-022) */
@@ -68,7 +73,7 @@ export function CalendarPickerModal({
     let cancelled = false
     void (async () => {
       const [detailResponse, teamResponse] = await Promise.all([
-        callApi<FieldCaseDetailDto>(apiPath('field.caseDetail', { id: caseId })),
+        callApi<FieldCaseDetailResponseDto>(apiPath('field.caseDetail', { id: caseId })),
         callApi<FieldCaseListResultDto>(apiPath('field.caseList', undefined, { view: 'team' })),
       ])
       if (cancelled) return
@@ -228,7 +233,7 @@ export function CalendarPickerModal({
         ) : detail === null ? (
           <LoadingState message="กำลังโหลดรายละเอียดเคส..." />
         ) : (
-          <FieldCaseDetailBody detail={detail} />
+          <FieldCaseDetailView detail={detail} />
         )}
       </div>
 

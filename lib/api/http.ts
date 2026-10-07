@@ -140,7 +140,9 @@ export function withEndpoint<Ctx = unknown, T = unknown>(
   const contract = API_CONTRACT[options.endpoint]
   const toErrorResponse = options.toErrorResponse ?? toModuleErrorResponse
   return async (request, context) => {
-    if (request.method !== contract.method) {
+    // Next ส่ง HEAD เข้า handler GET อัตโนมัติ — ถือเป็น GET (preship R3-022 · เดิม throw ⇒ 500 + stack ทุกครั้ง)
+    const method = request.method === 'HEAD' && contract.method === 'GET' ? 'GET' : request.method
+    if (method !== contract.method) {
       throw new Error(
         `route ของ "${options.endpoint}" ถูกต่อกับ ${request.method} แต่ contract ระบุ ${contract.method} (${contract.path})`,
       )

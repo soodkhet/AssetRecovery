@@ -110,9 +110,16 @@ export function PayoutTab() {
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard
-          label="เงินรอจ่าย (Payout)"
+          // ยอดโอนจริง (สุทธิ − หักคืนเงินทดรอง) ต่างจาก "เงินรอจ่าย" ของภาพรวมที่เป็นยอดสุทธิ ⇒ ตั้งชื่อให้ต่างกัน (preship R3-017)
+          label="ยอดโอนจริงที่รอจ่าย"
           value={unavailable ? '—' : fmtSatangSymbol(pendingPayoutTransferSatang(items))}
-          hint={failed ? 'โหลดข้อมูลไม่สำเร็จ' : `${fmtCount(countPendingPayoutBatches(items))} รอบที่ยังไม่จ่ายสำเร็จ`}
+          hint={
+            failed
+              ? 'โหลดข้อมูลไม่สำเร็จ'
+              : loading
+                ? 'กำลังโหลด...'
+                : `${fmtCount(countPendingPayoutBatches(items))} รอบที่ยังไม่จ่ายสำเร็จ · หักคืนเงินทดรองแล้ว`
+          }
         />
         <StatCard
           label="รอบทั้งหมดตามตัวกรอง"

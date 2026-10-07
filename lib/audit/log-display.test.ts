@@ -5,6 +5,8 @@ import {
   auditActionLabel,
   auditActorLabel,
   auditFieldChanges,
+  auditLoginFailureOf,
+  auditRowDisplay,
   auditTargetLabel,
   auditValueText,
   AUDIT_ACTION_GROUP,
@@ -129,5 +131,33 @@ describe('auditLogListQuerySchema', () => {
   it('action นอก enum ของ `02` §3 ถูกปฏิเสธ', () => {
     expect(auditLogListQuerySchema.safeParse({ action: 'approve' }).success).toBe(true)
     expect(auditLogListQuerySchema.safeParse({ action: 'archive' }).success).toBe(false)
+  })
+})
+
+describe('login ที่ล้มเหลวแยกจาก login สำเร็จ (preship R3-016)', () => {
+  it('อ่านผลล้มเหลวจาก after · login สำเร็จ/แถวอื่น = null', () => {
+    expect(auditLoginFailureOf('login', { result: 'failed', code: 'LOGIN_RATE_LIMITED', identifier: 'uat.finance' })).toEqual({
+      code: 'LOGIN_RATE_LIMITED',
+      identifier: 'uat.finance',
+    })
+    expect(auditLoginFailureOf('login', { result: 'success' })).toBeNull()
+    expect(auditLoginFailureOf('create', { result: 'failed', code: 'X' })).toBeNull()
+    expect(auditLoginFailureOf('login', null)).toBeNull()
+  })
+
+  it('ป้าย "เข้าสู่ระบบไม่สำเร็จ" สีเตือน/วิกฤต + เหตุผล · ผู้ดำเนินการไม่ใช่ "งานอัตโนมัติ"', () => {
+    const failure = { code: 'INVALID_CREDENTIALS', identifier: 'ghost' }
+    expect(auditRowDisplay({ action: 'login', targetType: 'users', reason: null, loginFailure: failure })).toEqual({
+      label: 'เข้าสู่ระบบไม่สำเร็จ',
+      group: 'warning',
+      detail: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง',
+    })
+    expect(
+      auditRowDisplay({ action: 'login', targetType: 'users', reason: null, loginFailure: { code: 'LOGIN_RATE_LIMITED', identifier: null } }).group,
+    ).toBe('critical')
+    expect(auditActorLabel(null, null, failure)).toBe('ไม่ระบุตัวตน (ghost)')
+    expect(auditActorLabel(null, null, { code: 'INVALID_CREDENTIALS', identifier: '<invalid>' })).toBe('ไม่ระบุตัวตน')
+    expect(auditActorLabel(null, null)).toBe('ระบบ (งานอัตโนมัติ)')
+    expect(auditRowDisplay({ action: 'login', targetType: 'users', reason: null, loginFailure: null }).label).toBe('เข้าสู่ระบบ')
   })
 })

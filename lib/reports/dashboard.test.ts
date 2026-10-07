@@ -70,3 +70,10 @@ describe('exceptionModuleLabel', () => {
     expect(exceptionModuleLabel('unknown_module')).toBe('unknown_module')
   })
 })
+
+describe('ป้ายโมดูลของข้อยกเว้นที่ระบบสร้างเอง (preship R3-039)', () => {
+  it('50 ทวิ ลูกค้า ไม่แสดงค่าดิบ', async () => {
+    const { CUSTOMER_WHT_EXCEPTION_MODULE } = await import('@/lib/customer-wht/queries')
+    expect(exceptionModuleLabel(CUSTOMER_WHT_EXCEPTION_MODULE)).toBe('50 ทวิ ลูกค้า')
+  })
+})

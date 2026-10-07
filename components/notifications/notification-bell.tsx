@@ -40,7 +40,8 @@ export function NotificationBell({
 
   const load = useCallback(async () => {
     const response = await callApi<NotificationListDto>(`/api/notifications?limit=${DROPDOWN_LIMIT}`)
-    if (response.data !== undefined) {
+    // data เป็น null (ตอบผิดรูป) ⇒ ถือว่าโหลดไม่สำเร็จ ไม่ใช่อ่าน null แล้วทั้งแอปพัง (preship R3-029)
+    if (response.data !== undefined && response.data !== null && Array.isArray(response.data.items)) {
       setData(response.data)
       setFailed(false)
     } else {

@@ -8,7 +8,7 @@ import type { FieldCaseListResultDto } from '@/lib/field/types'
 /**
  * `GET /api/field/cases` (`41` §17.1 · `45` §6.3) — งานของพนักงานตาม 4 กลุ่มสถานะ
  *
- * `view=team` = มุมมองทีมของ §7.3 (เห็นรายละเอียดเต็มของเพื่อนร่วมทีม แต่ **read-only** เสมอ —
+ * `view=team` = มุมมองทีมของ §7.3 (เคสของเพื่อนร่วมทีมเห็นเฉพาะชื่อลูกหนี้/พื้นที่/วันลงพื้นที่ — preship R3-005 `lib/field/team-view.ts` และ **read-only** เสมอ —
  * ไม่มี endpoint mutation ไหนรับ assignment ของคนอื่น)
  */
 export const GET = withEndpoint<unknown, FieldCaseListResultDto>({

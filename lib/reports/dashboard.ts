@@ -126,6 +126,8 @@ export const EXCEPTION_MODULE_LABEL: Readonly<Record<string, string>> = {
   sales: 'ขาย/ใบเสร็จ',
   tax_invoice: 'ใบกำกับภาษี',
   wht: 'ภาษีหัก ณ ที่จ่าย',
+  // `lib/customer-wht/queries.ts` CUSTOMER_WHT_EXCEPTION_MODULE — หนังสือ 50 ทวิ ที่ลูกค้าหัก (preship R3-039)
+  customer_wht: '50 ทวิ ลูกค้า',
   period: 'ปิดงวด',
   export: 'ส่งข้อมูลบัญชี',
 }

@@ -26,7 +26,7 @@ import { NotificationBell } from '@/components/notifications/notification-bell'
 import { FieldPwaProvider } from '@/components/field/pwa-provider'
 import { FieldReassignmentProvider } from '@/components/field/reassignment-provider'
 import { ToastProvider } from '@/components/ui'
-import { FetchTimeoutError, fetchWithTimeout } from '@/lib/api/fetch-with-timeout'
+import { requestLogout } from '@/lib/auth/logout-client'
 import { LOGIN_PATH } from '@/lib/auth/constants'
 import type { ClientSession } from '@/lib/auth/types'
 import {
@@ -148,16 +148,10 @@ function LogoutRow({ compact = false }: { compact?: boolean }) {
   async function handleLogout() {
     setLoading(true)
     setError(null)
-    try {
-      // preship R2-017 — มี timeout · เดิม server ค้างแล้วปุ่มหมุนไม่จบ
-      await fetchWithTimeout('/api/auth/logout', { method: 'POST' })
-    } catch (caught) {
-      // ออกจากระบบฝั่ง server ไม่สำเร็จ ⇒ session ยังใช้ได้ — ไม่พาไปหน้า login (จะเด้งกลับ) แต่บอกให้ลองใหม่
-      setError(
-        caught instanceof FetchTimeoutError
-          ? 'ระบบตอบช้าเกินไป ออกจากระบบไม่สำเร็จ กรุณาลองใหม่'
-          : 'เชื่อมต่อไม่สำเร็จ กรุณาตรวจสอบอินเทอร์เน็ตแล้วลองใหม่',
-      )
+    // preship R2-017 (timeout) + R3-010 (server ตอบ error) — ไม่สำเร็จ ⇒ session ยังใช้ได้ ไม่พาไปหน้า login แต่บอกให้ลองใหม่
+    const failure = await requestLogout()
+    if (failure !== null) {
+      setError(failure)
       setLoading(false)
       return
     }

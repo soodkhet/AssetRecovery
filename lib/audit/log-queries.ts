@@ -1,5 +1,6 @@
 import { AuthError } from '@/lib/auth/errors'
 import type { SessionUser } from '@/lib/auth/types'
+import { auditLoginFailureOf } from '@/lib/audit/log-display'
 import type { AuditLogListQuery } from '@/lib/audit/log-schemas'
 import type {
   AuditLogActorOptionDto,
@@ -31,13 +32,14 @@ const listSelect = {
   targetId: true,
   reason: true,
   createdAt: true,
+  // อ่านผลของ login ที่ล้มเหลว (R3-016) — แถวหน้าละไม่กี่สิบแถว
+  afterData: true,
   actor: { select: { fullName: true } },
 } satisfies Prisma.AuditLogSelect
 
 const detailSelect = {
   ...listSelect,
   beforeData: true,
-  afterData: true,
   ipAddress: true,
   userAgent: true,
 } satisfies Prisma.AuditLogSelect
@@ -57,6 +59,7 @@ function toListItem(row: ListRow): AuditLogListItemDto {
     targetType: row.targetType,
     targetId: row.targetId,
     reason: row.reason,
+    loginFailure: auditLoginFailureOf(row.action, row.afterData),
   }
 }
 

@@ -1,7 +1,13 @@
 import { emitAudit } from '@/lib/audit/audit'
 import { normalizeCaseRef } from '@/lib/cases/case-ref'
 import { CaseError } from '@/lib/cases/errors'
-import { findDuplicateRefsInFile, parseCsv, planImport, unmappedHeaders } from '@/lib/cases/import'
+import {
+  findDuplicateRefsInFile,
+  importRowIdentityError,
+  parseCsv,
+  planImport,
+  unmappedHeaders,
+} from '@/lib/cases/import'
 import { createCase, type CaseMutationContext } from '@/lib/cases/queries'
 import type { CaseImportInput } from '@/lib/cases/schemas'
 import type { CaseImportResultDto, CaseImportRowResultDto } from '@/lib/cases/types'
@@ -132,6 +138,23 @@ export async function importCases(
         caseId: null,
         errorCode: duplicate.code,
         errorMessage: 'เลขที่สัญญาซ้ำกับแถวก่อนหน้าในไฟล์เดียวกัน',
+        fields: null,
+        warnings: rowWarnings(row.input.assetImeiSerial, activeImeis, device.warning),
+      })
+      continue
+    }
+
+    // รูปแบบเลขบัตร/เบอร์โทร — ตัวตรวจเดียวกับ `createCase()` และอยู่ลำดับเดียวกัน (ก่อนเช็คเลขที่สัญญาในฐาน)
+    // ⇒ preview กับนำเข้าจริงได้สถานะ/รหัส error ตรงกันทุกแถว (preship R3-006 — เดิม preview บอกผ่านแต่จริงตก)
+    const identityError = importRowIdentityError(device.input)
+    if (identityError !== null) {
+      results.push({
+        rowNumber: row.rowNumber,
+        caseRef: row.input.caseRef,
+        status: 'failed',
+        caseId: null,
+        errorCode: identityError.code,
+        errorMessage: identityError.userMessage,
         fields: null,
         warnings: rowWarnings(row.input.assetImeiSerial, activeImeis, device.warning),
       })

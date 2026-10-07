@@ -17,6 +17,15 @@ export interface AuditLogListItemDto {
   targetType: string
   targetId: string | null
   reason: string | null
+  /** login/ยืนยันรหัสที่ล้มเหลว (`after.result = failed`) — แยกจาก login สำเร็จบนหน้าจอ (preship R3-016) */
+  loginFailure: AuditLoginFailure | null
+}
+
+export interface AuditLoginFailure {
+  /** error code ที่ลงไว้ เช่น `INVALID_CREDENTIALS` / `LOGIN_RATE_LIMITED` */
+  code: string
+  /** ชื่อผู้ใช้/อีเมลที่พิมพ์ (`<invalid>` = ไม่ใช่รูปแบบที่บันทึกได้) — `null` = ไม่ได้บันทึก */
+  identifier: string | null
 }
 
 export interface AuditLogDetailDto extends AuditLogListItemDto {

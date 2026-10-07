@@ -9,6 +9,7 @@ import { ReasonConfirmModal } from '@/components/settings/reason-confirm-modal'
 import {
   Badge,
   Button,
+  ConfirmModal,
   ErrorState,
   Field,
   InlineAlert,
@@ -103,6 +104,8 @@ export function CaseDetailModal({
   const [teamOptions, setTeamOptions] = useState<readonly CaseTeamOptionDto[]>([])
 
   const [reason, setReason] = useState('')
+  /** ปุ่ม "ไม่รับเคส" ที่รอยืนยัน (R3-013) */
+  const [confirmingReject, setConfirmingReject] = useState<CaseActionButton | null>(null)
   const [busyAction, setBusyAction] = useState<CaseActionButton['action'] | null>(null)
   const [actionError, setActionError] = useState<ApiCallError | null>(null)
 
@@ -276,7 +279,8 @@ export function CaseDetailModal({
                 loading={busyAction === button.action}
                 disabled={busyAction !== null || (button.reasonRequired && reason.trim() === '')}
                 title={button.reasonRequired && reason.trim() === '' ? 'ต้องกรอกเหตุผล/หมายเหตุก่อน' : undefined}
-                onClick={() => void runAction(button)}
+                // "ไม่รับเคส" เป็นสถานะสุดท้าย ย้อนกลับไม่ได้ ⇒ ยืนยันก่อนเสมอ (preship R3-013)
+                onClick={() => (button.confirmRequired ? setConfirmingReject(button) : void runAction(button))}
               >
                 {button.label}
               </Button>
@@ -390,6 +394,25 @@ export function CaseDetailModal({
           </div>
         )}
       </Modal>
+
+      <ConfirmModal
+        open={confirmingReject !== null}
+        onClose={() => setConfirmingReject(null)}
+        onConfirm={() => {
+          const button = confirmingReject
+          setConfirmingReject(null)
+          if (button !== null) void runAction(button)
+        }}
+        title={`ไม่รับเคส ${detail?.caseRef ?? ''}`}
+        description="เคสจะถูกปิดเป็น “ไม่รับเคส” ทันทีและย้อนกลับไม่ได้ — บริษัทไฟแนนซ์จะเห็นสถานะนี้พร้อมเหตุผล ถ้าต้องการให้แก้ข้อมูลแล้วส่งใหม่ ให้ใช้ “ขอข้อมูลเพิ่ม” แทน"
+        confirmLabel="ยืนยันไม่รับเคส"
+        confirmVariant="danger"
+      >
+        <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+          <p className="mb-1 font-semibold text-slate-800">เหตุผลที่จะบันทึก</p>
+          <p className="max-h-32 overflow-y-auto whitespace-pre-wrap break-words">{reason.trim()}</p>
+        </div>
+      </ConfirmModal>
 
       <ReasonConfirmModal
         open={teamPick !== null}

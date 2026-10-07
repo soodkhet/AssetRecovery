@@ -6,7 +6,7 @@ import { IconFile, IconImage, IconMapPin, IconPhone, IconUser } from '@/componen
 import { Button, ErrorState, LoadingState, Modal, RefText, StatusBadge } from '@/components/ui'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
-import { fmtDateTime } from '@/lib/format/datetime'
+import { fmtDate, fmtDateTime } from '@/lib/format/datetime'
 import { fmtSatangSymbol } from '@/lib/format/money'
 import {
   assetSummary,
@@ -18,7 +18,13 @@ import {
   mapsSearchHref,
   telHref,
 } from '@/lib/field/field-ui'
-import type { FieldActionResultDto, FieldAddressDto, FieldCaseDetailDto } from '@/lib/field/types'
+import type {
+  FieldActionResultDto,
+  FieldAddressDto,
+  FieldCaseDetailDto,
+  FieldCaseDetailResponseDto,
+  FieldCaseTeamViewDto,
+} from '@/lib/field/types'
 
 /**
  * **Case Detail ของ Field Tracker (`41` §7.7)** — เนื้อหาเดียวใช้ซ้ำ **3 ที่**:
@@ -335,6 +341,69 @@ export function FieldCaseDetailBody({
   )
 }
 
+/**
+ * เคสของ **เพื่อนร่วมทีม** (preship R3-005 · PDPA) — BE ส่งมาแค่ชื่อลูกหนี้/พื้นที่/วัน/ชื่อพนักงาน/สถานะ
+ * แสดงแบบอ่านอย่างเดียว ไม่มีปุ่มใดๆ ที่เปลี่ยนข้อมูลได้
+ */
+export function FieldCaseTeamViewBody({ detail }: { detail: FieldCaseTeamViewDto }) {
+  const area = [detail.district, detail.province].filter((part) => part !== null && part !== '').join(', ')
+  return (
+    <div className="space-y-3">
+      <div className="rounded-xl bg-slate-50 p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="truncate text-base font-extrabold text-slate-900">{detail.debtorName ?? '—'}</div>
+            <div className="mt-0.5 text-xs text-slate-400">
+              <RefText>{detail.caseRef}</RefText> · รอบที่ {detail.trackingRound}
+            </div>
+          </div>
+          <StatusBadge status={fieldStatusLabel(detail.status)} group={fieldStatusBadgeGroup(detail.status)} />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-2.5">
+        <div className="rounded-xl bg-slate-50 p-3">
+          <div className="mb-0.5 text-xs text-slate-400">พื้นที่</div>
+          <div className="flex items-center gap-1 text-sm font-bold text-slate-800">
+            <IconMapPin className="h-4 w-4 shrink-0 text-slate-400" />
+            {area === '' ? '—' : area}
+          </div>
+        </div>
+        <div className="rounded-xl bg-slate-50 p-3">
+          <div className="mb-0.5 text-xs text-slate-400">วันที่ลงพื้นที่</div>
+          <div className="text-sm font-bold text-slate-800">
+            {detail.scheduleDate === null ? 'ยังไม่จัดวัน' : fmtDate(detail.scheduleDate)}
+          </div>
+        </div>
+        <div className="col-span-2 rounded-xl bg-slate-50 p-3">
+          <div className="mb-0.5 text-xs text-slate-400">ผู้รับผิดชอบ</div>
+          <div className="flex items-center gap-1 text-sm font-bold text-slate-800">
+            <IconUser className="h-4 w-4 shrink-0 text-slate-400" />
+            {detail.agentName}
+          </div>
+        </div>
+      </div>
+      <div className="rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-500">
+        เคสของเพื่อนร่วมทีม — ดูได้อย่างเดียว ข้อมูลติดต่อ ที่อยู่ และเอกสารของลูกหนี้แสดงเฉพาะผู้รับผิดชอบเคส
+      </div>
+    </div>
+  )
+}
+
+/** เลือกเนื้อหาตามสิทธิ์ที่ BE ส่งมา — เคสตัวเอง = เต็ม · เคสเพื่อนร่วมทีม = มุมมองทีม */
+export function FieldCaseDetailView({
+  detail,
+  onRespondReassignment,
+}: {
+  detail: FieldCaseDetailResponseDto
+  onRespondReassignment?: (detail: FieldCaseDetailDto) => void
+}) {
+  return detail.access === 'team' ? (
+    <FieldCaseTeamViewBody detail={detail} />
+  ) : (
+    <FieldCaseDetailBody detail={detail} onRespondReassignment={onRespondReassignment} />
+  )
+}
+
 /** modal ห่อ {@link FieldCaseDetailBody} — โหลดเองด้วย `GET /api/field/cases/:id` (`41` §7.7) */
 export function FieldCaseDetailModal({
   open,
@@ -353,9 +422,11 @@ export function FieldCaseDetailModal({
   footerActions?: ReactNode
 }) {
   // ผูกผลลัพธ์ไว้กับ `caseId` ที่โหลดมา — เปิดเคสใหม่จึงไม่เห็นข้อมูลเคสเก่าค้าง โดยไม่ต้อง setState ใน effect
-  const [loaded, setLoaded] = useState<{ caseId: string; detail?: FieldCaseDetailDto; error?: ApiCallError } | null>(
-    null,
-  )
+  const [loaded, setLoaded] = useState<{
+    caseId: string
+    detail?: FieldCaseDetailResponseDto
+    error?: ApiCallError
+  } | null>(null)
   const [accepting, setAccepting] = useState(false)
   const [actionError, setActionError] = useState<ApiCallError | null>(null)
   /** เพิ่มทีละ 1 เพื่อโหลดใหม่ (ปุ่มลองใหม่ — preship PS-010) */
@@ -365,7 +436,7 @@ export function FieldCaseDetailModal({
     if (!open || caseId === null) return
     let cancelled = false
     void (async () => {
-      const response = await callApi<FieldCaseDetailDto>(apiPath('field.caseDetail', { id: caseId }))
+      const response = await callApi<FieldCaseDetailResponseDto>(apiPath('field.caseDetail', { id: caseId }))
       if (cancelled) return
       setLoaded({ caseId, detail: response.data, error: response.error })
     })()
@@ -407,7 +478,7 @@ export function FieldCaseDetailModal({
       description={detail === null ? undefined : `${detail.caseRef} · รอบที่ ${detail.trackingRound}`}
       footer={
         <>
-          {detail !== null && detail.status === 'pending_accept' && (
+          {detail !== null && detail.access === 'full' && detail.status === 'pending_accept' && (
             <Button onClick={accept} loading={accepting}>
               รับงาน
             </Button>
@@ -433,13 +504,19 @@ export function FieldCaseDetailModal({
       ) : (
         <>
           {actionError !== null && <ErrorState title={actionError.title} message={actionError.message} />}
-          <FieldCaseDetailBody detail={detail} onRespondReassignment={onRespondReassignment} />
-          <div className="mt-3 text-xs text-slate-400">มอบหมายเมื่อ {fmtDateTime(detail.assignedAt)}</div>
-          {detail.closedAt !== null && (
-            <div className="mt-0.5 text-xs text-slate-400">ปิดงานเมื่อ {fmtDateTime(detail.closedAt)}</div>
-          )}
-          {detail.resubmittedAt !== null && (
-            <div className="mt-0.5 text-xs text-slate-400">ส่งหลักฐานใหม่เมื่อ {fmtDateTime(detail.resubmittedAt)}</div>
+          <FieldCaseDetailView detail={detail} onRespondReassignment={onRespondReassignment} />
+          {detail.access === 'full' && (
+            <>
+              <div className="mt-3 text-xs text-slate-400">มอบหมายเมื่อ {fmtDateTime(detail.assignedAt)}</div>
+              {detail.closedAt !== null && (
+                <div className="mt-0.5 text-xs text-slate-400">ปิดงานเมื่อ {fmtDateTime(detail.closedAt)}</div>
+              )}
+              {detail.resubmittedAt !== null && (
+                <div className="mt-0.5 text-xs text-slate-400">
+                  ส่งหลักฐานใหม่เมื่อ {fmtDateTime(detail.resubmittedAt)}
+                </div>
+              )}
+            </>
           )}
         </>
       )}

@@ -80,3 +80,12 @@ describe('showsReasonBox', () => {
     expect(showsReasonBox('approved')).toBe(false)
   })
 })
+
+describe('confirmRequired — action ที่ย้อนกลับไม่ได้ต้องยืนยัน (preship R3-013)', () => {
+  it('ไม่รับเคส ต้องยืนยัน · ขอข้อมูลเพิ่ม/รับเคส ไม่ต้อง', () => {
+    const buttons = caseModalActions('pending_review', () => true)
+    expect(buttons.find((b) => b.action === 'reject')?.confirmRequired).toBe(true)
+    expect(buttons.find((b) => b.action === 'request_more_info')?.confirmRequired).toBe(false)
+    expect(buttons.find((b) => b.action === 'accept')?.confirmRequired).toBe(false)
+  })
+})

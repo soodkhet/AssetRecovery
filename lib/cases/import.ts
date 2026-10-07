@@ -1,6 +1,12 @@
 import { normalizeCapacityText } from '@/lib/device-catalog/device-attributes'
 import { parseBahtInput } from '@/lib/format/money'
-import { DEBTOR_NATIONALITIES, type DebtorNationalityCode } from '@/lib/cases/case'
+import {
+  assertIdentityFormats,
+  DEBTOR_NATIONALITIES,
+  normalizePhoneInput,
+  type DebtorNationalityCode,
+} from '@/lib/cases/case'
+import { CaseError } from '@/lib/cases/errors'
 import { caseCreateSchema, type CaseCreateInput } from '@/lib/cases/schemas'
 import { toFieldErrors } from '@/lib/api/validation'
 import {
@@ -451,6 +457,42 @@ export function looksLikeLostLeadingZeroPhone(value: string): boolean {
   return /^[1-9]\d{7,8}$/.test(value.trim())
 }
 
+/** อักขระที่ถือเป็น "ตัวคั่นเบอร์โทร" ได้ — ตัวเลข ช่องว่าง ขีด จุด วงเล็บ และ `+` (รหัสประเทศ) */
+const PHONE_FORMATTED_TEXT = /^[\d\s\-.()+]+$/
+
+/**
+ * เบอร์โทรในไฟล์ → รูปแบบเดียวกับที่ฟอร์มสร้างเคสเก็บ (preship R3-006)
+ * - ใช้ {@link normalizePhoneInput} ตัวเดียวกับฟอร์ม: `081-234-5678` / `+66 81 234 5678` / `(081) 234-5678` ⇒ `0812345678`
+ * - ค่าที่มีอักขระอื่นปน (เช่น `abc`, `081x`) **ไม่แปลง** — ปล่อยค่าเดิมให้ตรวจรูปแบบแล้วแถวตก
+ *   (ฟอร์มกรองตัวอักษรทิ้งตอนพิมพ์ได้เพราะผู้ใช้เห็นผล แต่ไฟล์นำเข้าห้ามตัดข้อมูลทิ้งเงียบ)
+ */
+export function normalizeImportPhone(value: string): string {
+  if (!PHONE_FORMATTED_TEXT.test(value)) return value
+  const normalized = normalizePhoneInput(value)
+  return normalized === '' ? value : normalized
+}
+
+/**
+ * ตรวจรูปแบบเลขบัตร/เบอร์โทรของแถวที่ผ่าน Zod แล้ว — **ตัวเดียวกับที่ `createCase()` เรียก**
+ * (`assertIdentityFormats`) ⇒ preview (dryRun) กับการนำเข้าจริงได้ผล/รหัส error เดียวกัน (preship R3-006)
+ * · ผ่าน = `null` · ไม่ผ่าน = `CaseError` (`CASE_INVALID_NATIONAL_ID` / `CASE_INVALID_PHONE_FORMAT`)
+ */
+export function importRowIdentityError(input: CaseCreateInput): CaseError | null {
+  try {
+    assertIdentityFormats({
+      nationality: input.debtorNationality ?? null,
+      nationalId: input.debtorNationalId ?? null,
+      phoneMobile: input.debtorPhoneMobile ?? null,
+      phoneWork: input.debtorPhoneWork ?? null,
+      contactPhones: input.contacts?.map((contact) => contact.contactPhone),
+    })
+    return null
+  } catch (error) {
+    if (error instanceof CaseError) return error
+    throw error
+  }
+}
+
 /** ประกอบ payload ของ `POST /api/cases` จากแถวดิบ (ยังไม่ validate — ค่าที่แปลงไม่ได้ถูกทิ้งไว้ให้ Zod จับ) */
 export function mapImportRow(
   raw: Record<string, unknown>,
@@ -476,7 +518,11 @@ export function mapImportRow(
   }
   for (const field of PHONE_FIELDS) {
     const value = text(field)
-    if (value !== undefined && errors[field] === undefined && looksLikeLostLeadingZeroPhone(value)) {
+    if (value === undefined || errors[field] !== undefined) continue
+    // แปลงรูปแบบเบอร์เหมือนฟอร์ม (preship R3-006) ก่อนตรวจ — ใช้ทั้ง preview และนำเข้าจริง
+    const normalized = normalizeImportPhone(value)
+    values.set(field, normalized)
+    if (looksLikeLostLeadingZeroPhone(normalized)) {
       errors[field] = `${importColumnLabel(field)} "${value}" ไม่มีเลข 0 นำหน้า (Excel อาจตัดทิ้ง) — ตั้งรูปแบบเซลล์เป็น “ข้อความ” แล้วพิมพ์เบอร์ใหม่ให้ครบ`
     }
   }

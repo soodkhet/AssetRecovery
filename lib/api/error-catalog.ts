@@ -131,7 +131,7 @@ export const ERROR_CATALOG = {
   REJECT_REASON_REQUIRED: { status: 400, severity: 'reject', source: '24 §6.4' },
   APPROVAL_STEP_OUT_OF_ORDER: { status: 400, severity: 'reject', source: '24 §6.4' },
   SEGREGATION_OF_DUTIES_VIOLATION: { status: 403, severity: 'reject', source: '24 §6.4' },
-  // preship PS-003 — กันส่งใบเบิกเดิมซ้ำภายใน 10 นาที (`lib/claims/duplicate-submission.ts`)
+  // preship PS-003 — กันส่งใบเบิกเดิมซ้ำภายใน 10 นาที + R3-004 ใบเสร็จไฟล์เดียวใช้ได้ใบเบิกเดียว (`lib/claims/duplicate-submission.ts`)
   CLAIM_DUPLICATE_SUBMISSION: { status: 409, severity: 'reject', source: '24 §6.4' },
 
   // ── 24 §6.5 Payout/Payee ───────────────────────────────────────────────

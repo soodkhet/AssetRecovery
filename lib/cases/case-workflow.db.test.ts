@@ -1022,4 +1022,46 @@ suite('Phase 2.3 — state machine + snapshot + recycle (DB จริง)', () =
     ])
     expect(preview.createdCount).toBe(1)
   })
+  it('Import dryRun: ผล preview (สถานะ/รหัส error ต่อแถว) ตรงกับนำเข้าจริง — เบอร์โทร/เลขบัตร (preship R3-006)', async () => {
+    const { importCases } = await import('@/lib/cases/import-queries')
+    const suffix = Date.now().toString(36).toUpperCase()
+    const rows = [
+      { 'เลขที่สัญญา': `R3-A-${suffix}`, 'เบอร์มือถือ': '0812345678' },
+      { 'เลขที่สัญญา': `R3-B-${suffix}`, 'เบอร์มือถือ': '081-234-5678' },
+      { 'เลขที่สัญญา': `R3-C-${suffix}`, 'เบอร์มือถือ': '+66 81 234 5678', 'เบอร์ที่ทำงาน': '02-123-4567' },
+      { 'เลขที่สัญญา': `R3-D-${suffix}`, 'เบอร์มือถือ': '(081) 234-5678' },
+      { 'เลขที่สัญญา': `R3-E-${suffix}`, 'เบอร์มือถือ': 'abc' },
+      { 'เลขที่สัญญา': `R3-F-${suffix}`, 'เบอร์มือถือ': '0812345678999' },
+      { 'เลขที่สัญญา': `R3-G-${suffix}`, 'เลขบัตรประชาชน': '12345678' },
+    ]
+    const shape = (result: Awaited<ReturnType<typeof importCases>>) =>
+      result.rows.map((row) => [row.rowNumber, row.status, row.errorCode])
+
+    const preview = await importCases({ financeCompanyId: COMPANY_ID, dryRun: true, rows }, { actor, meta })
+    const real = await importCases({ financeCompanyId: COMPANY_ID, dryRun: false, rows }, { actor, meta })
+
+    expect(shape(preview)).toEqual([
+      [2, 'created', null],
+      [3, 'created', null],
+      [4, 'created', null],
+      [5, 'created', null],
+      [6, 'failed', 'CASE_INVALID_PHONE_FORMAT'],
+      [7, 'failed', 'CASE_INVALID_PHONE_FORMAT'],
+      [8, 'failed', 'CASE_INVALID_NATIONAL_ID'],
+    ])
+    expect(shape(real)).toEqual(shape(preview))
+    expect(real.rows.map((row) => row.errorMessage)).toEqual(preview.rows.map((row) => row.errorMessage))
+
+    // เบอร์ที่มีตัวคั่น/รหัสประเทศถูกเก็บแบบเดียวกับฟอร์ม
+    const stored = await db().$queryRawUnsafe<Array<{ case_ref: string; phone_mobile: string | null; phone_work: string | null }>>(
+      `SELECT case_ref, debtor_phone_mobile AS phone_mobile, debtor_phone_work AS phone_work FROM cases
+        WHERE organization_id = '${ORG_ID}' AND case_ref LIKE 'R3-%-${suffix}' ORDER BY case_ref`,
+    )
+    expect(stored).toEqual([
+      { case_ref: `R3-A-${suffix}`, phone_mobile: '0812345678', phone_work: null },
+      { case_ref: `R3-B-${suffix}`, phone_mobile: '0812345678', phone_work: null },
+      { case_ref: `R3-C-${suffix}`, phone_mobile: '0812345678', phone_work: '021234567' },
+      { case_ref: `R3-D-${suffix}`, phone_mobile: '0812345678', phone_work: null },
+    ])
+  })
 })

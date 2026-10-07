@@ -61,7 +61,7 @@ export function RefText({
   title?: string
 }) {
   return (
-    <span className={cn('font-mono text-xs text-slate-700', className)} title={title}>
+    <span className={cn('font-mono text-xs whitespace-nowrap text-slate-700', className)} title={title}>
       {children}
     </span>
   )

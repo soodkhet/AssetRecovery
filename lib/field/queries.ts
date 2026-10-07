@@ -54,7 +54,7 @@ import type {
 } from '@/lib/field/schemas'
 import type {
   FieldActionResultDto,
-  FieldCaseDetailDto,
+  FieldCaseDetailResponseDto,
   FieldCaseListItemDto,
   FieldCaseListResultDto,
   FieldCheckinDto,
@@ -67,6 +67,7 @@ import type {
   FieldTravelOriginDto,
 } from '@/lib/field/types'
 import { FieldError } from '@/lib/field/errors'
+import { toTeamViewCaseDetail, toTeamViewListItem } from '@/lib/field/team-view'
 import { loadEvidenceTimelines, resubmittedAtIso } from '@/lib/field/resubmission'
 import { Prisma } from '@/lib/generated/prisma/client'
 import type { AssignmentStatus, CaseOutcome, ExpenseStatus, FuelMode } from '@/lib/generated/prisma/enums'
@@ -396,7 +397,7 @@ export async function listFieldCases(user: SessionUser, query: FieldCaseListQuer
   const statuses: AssignmentStatus[] =
     query.status === undefined ? [...ACTIVE_ASSIGNMENT_STATUSES] : statusesInGroup(query.status)
 
-  // มุมมองทีม (`41` §7.3) = เพื่อนร่วมทีมเดียวกันทั้งทีม **อ่านอย่างเดียว** เห็นรายละเอียดเต็มไม่ปิดบัง (§20)
+  // มุมมองทีม (`41` §7.3) = เพื่อนร่วมทีมเดียวกันทั้งทีม **อ่านอย่างเดียว** — ชื่อลูกหนี้/พื้นที่ครบ (§20) แต่ไม่มี PII (R3-005)
   const agentFilter: Prisma.CaseAssignmentWhereInput =
     query.view === 'team' ? { team: { members: { some: { id: user.id } } } } : { agentId: user.id }
 
@@ -421,7 +422,11 @@ export async function listFieldCases(user: SessionUser, query: FieldCaseListQuer
     view: query.view,
     group: query.status ?? null,
     readOnly: query.view === 'team',
-    items: rows.map((row) => toListItem(row, pending.has(row.caseId), closedExtras.get(row.id))),
+    items: rows.map((row) => {
+      const item = toListItem(row, pending.has(row.caseId), closedExtras.get(row.id))
+      // มุมมองทีม: เคสของเพื่อนร่วมทีมเห็นแค่ชื่อลูกหนี้/พื้นที่/วัน/ชื่อพนักงาน (preship R3-005 · PDPA)
+      return query.view === 'team' ? toTeamViewListItem(item, user.id) : item
+    }),
   }
 }
 
@@ -449,17 +454,16 @@ export async function listFieldTeammates(user: SessionUser): Promise<FieldTeamma
 
 // ── GET /api/field/cases/:id (`41` §7.7) ────────────────────────────────────
 
-export async function getFieldCase(user: SessionUser, caseId: string): Promise<FieldCaseDetailDto> {
+export async function getFieldCase(user: SessionUser, caseId: string): Promise<FieldCaseDetailResponseDto> {
   const assignment = await prisma.caseAssignment.findFirst({
     where: {
       caseId,
       organizationId: user.organizationId,
       case: { deletedAt: null, organizationId: user.organizationId },
       /**
-       * ขอบเขตของหน้านี้ = **เคสตัวเอง หรือเคสของเพื่อนร่วมทีมเดียวกัน** (`41` §7.3/§13)
-       * กว้างกว่า `caseScopeWhere()` ของพนักงาน (ซึ่งจำกัดเฉพาะเคสที่ตัวเองถือ) โดยตั้งใจ —
-       * §7.3/§20 บังคับว่ามุมมองทีมต้องเห็นรายละเอียดเต็มไม่ปิดบัง แต่ยัง **read-only**
+       * ขอบเขตของหน้านี้ = **เคสตัวเอง หรือเคสของเพื่อนร่วมทีมเดียวกัน** (`41` §7.3/§13) — read-only
        * (mutation ทุกตัวไปทาง `loadOwnAssignment()` ซึ่งบังคับ `agentId = ผู้เรียก` เสมอ)
+       * เคสของเพื่อนร่วมทีมคืนแบบมุมมองทีมเท่านั้น ไม่มีข้อมูลส่วนบุคคลของลูกหนี้ (preship R3-005 · PDPA)
        */
       OR: [{ agentId: user.id }, { team: { members: { some: { id: user.id } } } }],
     },
@@ -467,6 +471,9 @@ export async function getFieldCase(user: SessionUser, caseId: string): Promise<F
     select: assignmentSelect,
   })
   if (assignment === null) throw new AssignmentError('ASSIGNMENT_NOT_FOUND')
+
+  // ไม่ใช่ผู้รับผิดชอบ = เพื่อนร่วมทีม → allowlist มุมมองทีม และไม่ query PII/เอกสาร/หลักฐานเลย
+  if (assignment.agentId !== user.id) return toTeamViewCaseDetail(toListItem(assignment, false))
 
   const [caseRow, checkins, travelOrigin, draft, pending, evidence, timelines] = await Promise.all([
     prisma.case.findUniqueOrThrow({
@@ -574,6 +581,7 @@ export async function getFieldCase(user: SessionUser, caseId: string): Promise<F
   const productPhotos = caseRow.documents.filter((doc) => doc.documentType === 'product_photo')
 
   return {
+    access: 'full',
     ...toListItem(assignment, pending !== null, {
       ...NO_CLOSED_EXTRAS,
       resubmittedAt: resubmittedAtIso(timelines.get(assignment.id)),

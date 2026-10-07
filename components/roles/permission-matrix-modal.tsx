@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { usePermission } from '@/components/auth/permission-provider'
 import { Badge, Button, Field, InlineAlert, LoadingState, Modal, Select, Textarea, useToast } from '@/components/ui'
 import { MATRIX_LEVELS, MATRIX_LEVEL_LABEL, type MatrixLevel, type MatrixSection } from '@/lib/roles/matrix'
 import { callApi, jsonRequest } from '@/lib/api/types'
@@ -34,6 +35,7 @@ export function PermissionMatrixModal({
   onSaved: () => void
 }) {
   const { showToast } = useToast()
+  const { can } = usePermission()
   const [sections, setSections] = useState<readonly MatrixSection[]>([])
   const [levels, setLevels] = useState<Record<string, MatrixLevel>>({})
   const [initialLevels, setInitialLevels] = useState<Record<string, MatrixLevel>>({})
@@ -116,7 +118,9 @@ export function PermissionMatrixModal({
   }
 
   const reasonTooShort = reason.trim().length < REASON_MIN_LENGTH
-  const editableRole = role !== null && role.isEditable && role.name !== 'Superadmin'
+  // ผู้ดูที่ไม่มีสิทธิ์จัดการบทบาท (เช่นบริหาร) เห็นแบบอ่านอย่างเดียว — เดิมเห็นปุ่มบันทึกแล้วได้ 403 (preship R3-019)
+  const canManageRoles = can('manage', 'manage_roles')
+  const editableRole = role !== null && role.isEditable && role.name !== 'Superadmin' && canManageRoles
 
   return (
     <Modal
@@ -130,13 +134,15 @@ export function PermissionMatrixModal({
           <Button variant="secondary" onClick={onClose} disabled={saving}>
             ยกเลิก
           </Button>
-          <Button
-            onClick={() => void save()}
-            loading={saving}
-            disabled={!editableRole || changed.length === 0 || reasonTooShort}
-          >
-            บันทึกสิทธิ์ ({changed.length})
-          </Button>
+          {canManageRoles && (
+            <Button
+              onClick={() => void save()}
+              loading={saving}
+              disabled={!editableRole || changed.length === 0 || reasonTooShort}
+            >
+              บันทึกสิทธิ์ ({changed.length})
+            </Button>
+          )}
         </>
       }
     >
@@ -146,7 +152,11 @@ export function PermissionMatrixModal({
         <div className="space-y-4">
           {state.error !== null && <InlineAlert tone="error">{state.error}</InlineAlert>}
 
-          {role !== null && !editableRole && (
+          {role !== null && !canManageRoles && (
+            <InlineAlert tone="info">ดูอย่างเดียว — บัญชีของคุณไม่มีสิทธิ์แก้สิทธิ์ของบทบาท</InlineAlert>
+          )}
+
+          {role !== null && canManageRoles && !editableRole && (
             <InlineAlert tone="warning">
               {role.name === 'Superadmin'
                 ? 'Superadmin มีสิทธิ์ทุกรายการโดยนิยาม (ไม่เก็บ record) จึงแก้ไม่ได้'
@@ -175,7 +185,7 @@ export function PermissionMatrixModal({
                       aria-label={`ระดับสิทธิ์ของ ${row.label}`}
                       className="w-44 shrink-0"
                       value={levels[row.code] ?? row.level}
-                      disabled={!row.editable || saving}
+                      disabled={!row.editable || !canManageRoles || saving}
                       onChange={(event) =>
                         setLevels((current) => ({
                           ...current,

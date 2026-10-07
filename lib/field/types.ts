@@ -168,6 +168,8 @@ export interface FieldCaseListResultDto {
 }
 
 export interface FieldCaseDetailDto extends FieldCaseListItemDto {
+  /** ผู้เรียกเป็นผู้รับผิดชอบเคสนี้ = เห็นรายละเอียดเต็ม (preship R3-005) */
+  access: 'full'
   companyName: string
   teamId: string | null
   teamName: string | null
@@ -199,6 +201,32 @@ export interface FieldCaseDetailDto extends FieldCaseListItemDto {
   /** เหตุผลที่ถูกตีกลับหลักฐาน (`41` §10.1) — แสดงเป็นแบนเนอร์ค้างบนฟอร์มโหมด `needs_revision` */
   rejectReason: string | null
 }
+
+/**
+ * รายละเอียดเคสของ **เพื่อนร่วมทีม** (preship R3-005 · PDPA — ชั่วคราวรอมติ PO) — read-only และเปิดเผยน้อยที่สุด
+ * ตาม `41` §3/§11 (ดูเคสเพื่อนได้เฉพาะมุมมองทีมของหน้าจัดวันที่ เพื่อวางแผนเส้นทาง/ที่พักร่วมกัน)
+ * ไม่มีเลขบัตร/เบอร์โทร/LINE/Facebook/ที่อยู่ละเอียด/ผู้ติดต่อ/เอกสาร/หลักฐาน/IMEI/มูลหนี้/ค่าตอบแทน
+ * — allowlist อยู่ที่ `toTeamViewCaseDetail()` (`lib/field/team-view.ts`)
+ */
+export interface FieldCaseTeamViewDto {
+  access: 'team'
+  caseId: string
+  assignmentId: string
+  caseRef: string
+  trackingRound: number
+  status: AssignmentStatus
+  group: FieldGroup
+  agentId: string
+  agentName: string
+  debtorName: string | null
+  province: string | null
+  district: string | null
+  scheduleDate: string | null
+  scheduleOrder: number | null
+}
+
+/** ผลของ `GET /api/field/cases/:id` — แยกด้วย `access` (เคสตัวเอง = `full` · เคสเพื่อนร่วมทีม = `team`) */
+export type FieldCaseDetailResponseDto = FieldCaseDetailDto | FieldCaseTeamViewDto
 
 export interface FieldActionResultDto {
   caseId: string

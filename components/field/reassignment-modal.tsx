@@ -7,7 +7,7 @@ import { Button, ErrorState, LoadingState, Modal, Textarea, useToast } from '@/c
 import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
 import { declineReasonError, reassignmentCountdown } from '@/lib/field/reassignment-ui'
-import type { FieldActionResultDto, FieldCaseDetailDto } from '@/lib/field/types'
+import type { FieldActionResultDto, FieldCaseDetailDto, FieldCaseDetailResponseDto } from '@/lib/field/types'
 import { fmtDateTime } from '@/lib/format/datetime'
 
 /**
@@ -43,10 +43,15 @@ export function ReassignmentModal({
   useEffect(() => {
     let cancelled = false
     void (async () => {
-      const response = await callApi<FieldCaseDetailDto>(apiPath('field.caseDetail', { id: caseId }))
+      const response = await callApi<FieldCaseDetailResponseDto>(apiPath('field.caseDetail', { id: caseId }))
       if (cancelled) return
       if (response.error !== undefined || response.data === undefined) {
         setLoadError(response.error ?? { title: 'โหลดคำขอไม่สำเร็จ', message: 'กรุณาลองใหม่' })
+        return
+      }
+      // เคสของเพื่อนร่วมทีม (preship R3-005) — ตอบคำขอแทนไม่ได้
+      if (response.data.access === 'team') {
+        setLoadError({ title: 'เปิดเคสนี้ไม่ได้', message: 'เคสนี้ไม่ได้มอบหมายให้คุณ — ดูได้อย่างเดียวในมุมมองทีม' })
         return
       }
       setDetail(response.data)

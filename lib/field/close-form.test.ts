@@ -21,6 +21,7 @@ import type { FieldCaseDetailDto } from '@/lib/field/types'
 
 function detailOf(overrides: Partial<FieldCaseDetailDto> = {}): FieldCaseDetailDto {
   return {
+    access: 'full',
     caseId: 'case-1',
     assignmentId: 'assign-1',
     caseRef: 'REF-001',

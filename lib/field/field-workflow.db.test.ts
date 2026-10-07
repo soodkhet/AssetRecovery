@@ -1,6 +1,7 @@
 import { PrismaPg } from '@prisma/adapter-pg'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SessionUser } from '@/lib/auth/types'
+import type { FieldCaseDetailDto } from '@/lib/field/types'
 import { PrismaClient } from '@/lib/generated/prisma/client'
 import { putFakeUpload, resetFakeUploads, sampleBytes, sha256Of, uploadTestState } from '@/tests/helpers/fake-uploads'
 
@@ -58,6 +59,13 @@ let client: PrismaClient | null = null
 type FieldQueries = typeof import('@/lib/field/queries')
 type AssignmentQueries = typeof import('@/lib/assignments/queries')
 let field: FieldQueries
+
+/** รายละเอียดเคสของตัวเอง (`access: 'full'`) — เคสเพื่อนร่วมทีมได้มุมมองทีมแทน (preship R3-005) */
+async function ownFieldCase(user: SessionUser, caseId: string): Promise<FieldCaseDetailDto> {
+  const detail = await field.getFieldCase(user, caseId)
+  if (detail.access !== 'full') throw new Error(`expected full detail, got ${detail.access}`)
+  return detail
+}
 let assignments: AssignmentQueries
 
 function db(): PrismaClient {
@@ -672,7 +680,7 @@ suite('Phase 2.8 — draft + จุดเริ่มเดินทาง (`41`
       { actor: agentA, meta },
     )
 
-    const detail = await field.getFieldCase(agentA, caseId)
+    const detail = await ownFieldCase(agentA, caseId)
     expect(detail.draft?.outcome).toBe('closed_success')
     expect(detail.draft?.photos).toEqual(['p1.jpg', 'p2.jpg'])
     expect(detail.draft?.note).toBe('ทำต่อพรุ่งนี้')
@@ -682,7 +690,7 @@ suite('Phase 2.8 — draft + จุดเริ่มเดินทาง (`41`
 
   it('ลากปรับตำแหน่งจุดเริ่มเดินทางได้ และไม่กระทบเช็คอิน (§20)', async () => {
     const caseId = await seedReadyToClose()
-    const before = await field.getFieldCase(agentA, caseId)
+    const before = await ownFieldCase(agentA, caseId)
     expect(before.travelOrigin?.source).toBe('gps_auto')
 
     await field.saveCloseDraft(
@@ -698,7 +706,7 @@ suite('Phase 2.8 — draft + จุดเริ่มเดินทาง (`41`
       { actor: agentA, meta },
     )
 
-    const after = await field.getFieldCase(agentA, caseId)
+    const after = await ownFieldCase(agentA, caseId)
     expect(after.travelOrigin?.source).toBe('manual_adjusted')
     expect(after.travelOrigin?.latitude).toBeCloseTo(18.6, 4)
     expect(after.checkins).toHaveLength(1)
@@ -715,7 +723,7 @@ suite('Phase 2.8 — draft + จุดเริ่มเดินทาง (`41`
       { actor: agentA, meta },
     )
 
-    const detail = await field.getFieldCase(agentA, second)
+    const detail = await ownFieldCase(agentA, second)
     expect(detail.travelOrigin).toBeNull()
   })
 
@@ -727,7 +735,7 @@ suite('Phase 2.8 — draft + จุดเริ่มเดินทาง (`41`
       { latitude: 18.59, longitude: 99.01, checkinType: 'workplace' },
       { actor: agentA, meta },
     )
-    const detail = await field.getFieldCase(agentA, caseId)
+    const detail = await ownFieldCase(agentA, caseId)
     expect(detail.checkins).toHaveLength(2)
     expect(detail.checkins.map((row) => row.checkinType)).toEqual(['address', 'workplace'])
   })
@@ -771,9 +779,55 @@ suite('Phase 2.8 — รายการงาน 4 กลุ่ม + มุม�
     const teamView = await field.listFieldCases(agentA, { status: 'accepted', view: 'team' })
     expect(teamView.readOnly).toBe(true)
     expect(teamView.items).toHaveLength(1)
-    // เห็นรายละเอียดเต็ม ไม่ปิดบัง (§20 "มุมมองทีมเห็นข้อมูลเต็ม")
+    // เห็นชื่อลูกหนี้/จังหวัดครบ (§20) แต่ไม่เห็นมูลหนี้/ค่าตอบแทน/ทรัพย์ของเพื่อน (preship R3-005)
     expect(teamView.items[0]?.debtorName).not.toBeNull()
+    expect(teamView.items[0]?.province).toBe(PROVINCE)
     expect(teamView.items[0]?.agentId).toBe(AGENT_B)
+    expect(teamView.items[0]?.debtAmountSatang).toBeNull()
+    expect(teamView.items[0]?.commissionSatang).toBeNull()
+    expect(teamView.items[0]?.noSuccessFeeSatang).toBeNull()
+    expect(teamView.items[0]?.assetDescription).toBeNull()
+  })
+
+  it('มุมมองทีม: เคสของตัวเองในรายการทีมยังเห็นค่าตอบแทนครบ (preship R3-005)', async () => {
+    await seedAcceptedCase(agentA)
+    const teamView = await field.listFieldCases(agentA, { status: 'accepted', view: 'team' })
+    const mine = teamView.items.find((item) => item.agentId === AGENT_A)
+    expect(mine?.commissionSatang).toBe(150000)
+    expect(mine?.debtAmountSatang).toBe(1000000)
+  })
+
+  it('รายละเอียดเคสเพื่อนร่วมทีม = มุมมองทีมไม่มี PII · ผู้รับผิดชอบเห็นเต็ม (preship R3-005 · PDPA)', async () => {
+    const caseId = await seedAcceptedCase(agentB)
+    await db().$executeRawUnsafe(`
+      UPDATE cases SET debtor_national_id = '1101700012345', debtor_phone_mobile = '0812345678',
+        debtor_line_id = 'line-debtor', id_card_addr_detail = '99/1 หมู่ 2', addr_detail = '12 ซอยลับ'
+      WHERE id = '${caseId}'
+    `)
+
+    const teammate = await field.getFieldCase(agentA, caseId)
+    expect(teammate.access).toBe('team')
+    expect(teammate.agentId).toBe(AGENT_B)
+    expect(teammate.debtorName).not.toBeNull()
+    expect(teammate.province).toBe(PROVINCE)
+    expect(Object.keys(teammate).sort()).toEqual(
+      [
+        'access', 'agentId', 'agentName', 'assignmentId', 'caseId', 'caseRef', 'debtorName', 'district',
+        'group', 'province', 'scheduleDate', 'scheduleOrder', 'status', 'trackingRound',
+      ].sort(),
+    )
+    const raw = JSON.stringify(teammate)
+    for (const secret of ['1101700012345', '0812345678', 'line-debtor', '99/1 หมู่ 2', '12 ซอยลับ', 'SN-']) {
+      expect(raw).not.toContain(secret)
+    }
+
+    const assignee = await field.getFieldCase(agentB, caseId)
+    expect(assignee.access).toBe('full')
+    if (assignee.access !== 'full') return
+    expect(assignee.debtorNationalId).toBe('1101700012345')
+    expect(assignee.debtorPhoneMobile).toBe('0812345678')
+    expect(assignee.idCardAddress.detail).toBe('99/1 หมู่ 2')
+    expect(assignee.commissionSatang).toBe(150000)
   })
 
   it('แก้เคสของเพื่อนร่วมทีมไม่ได้ = ASSIGNMENT_NOT_FOUND (มุมมองทีม read-only เสมอ)', async () => {
@@ -788,8 +842,10 @@ suite('Phase 2.8 — รายการงาน 4 กลุ่ม + มุม�
         ),
       'ASSIGNMENT_NOT_FOUND',
     )
-    // แต่ยังเปิดดูรายละเอียดเต็มได้ (§7.3)
-    expect((await field.getFieldCase(agentA, caseId)).agentId).toBe(AGENT_B)
+    // ยังเปิดดูได้ แต่เป็นมุมมองทีมแบบจำกัด (§7.3 · preship R3-005)
+    const detail = await field.getFieldCase(agentA, caseId)
+    expect(detail.agentId).toBe(AGENT_B)
+    expect(detail.access).toBe('team')
   })
 
   it('เคสที่ปิดแล้วอยู่กลุ่ม "จบงาน" พร้อมวันเวลาปิดงาน (§7.11)', async () => {

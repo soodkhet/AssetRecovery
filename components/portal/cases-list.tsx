@@ -152,7 +152,10 @@ export function PortalCasesList({ canViewPhotos }: { canViewPhotos: boolean }) {
               ล้างตัวกรอง
             </Button>
           )}
-          <div className="text-xs text-slate-400 md:ml-auto">ทั้งหมด {total.toLocaleString('th-TH')} รายการ</div>
+          {/* โหลด/ล้มเหลว ⇒ ไม่โชว์ "ทั้งหมด 0 รายการ" คู่กับข้อความ error (preship R3-028) */}
+          {!state.loading && state.error === null && (
+            <div className="text-xs text-slate-400 md:ml-auto">ทั้งหมด {total.toLocaleString('th-TH')} รายการ</div>
+          )}
         </div>
 
         {/* desktop: ตาราง */}

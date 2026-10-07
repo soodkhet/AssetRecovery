@@ -28,6 +28,8 @@ export interface CaseActionButton {
   tone: 'primary' | 'danger' | 'secondary'
   /** ต้องกรอกเหตุผล/หมายเหตุก่อนยืนยัน (`38` §12 — ตัวบังคับจริงอยู่ `assertStatusChange()`) */
   reasonRequired: boolean
+  /** ผลย้อนกลับไม่ได้ (ไปสถานะสุดท้าย) ⇒ ต้องเปิดกล่องยืนยันก่อนส่ง (preship R3-013 · Rule 05) */
+  confirmRequired: boolean
 }
 
 /**
@@ -51,6 +53,9 @@ const TONE: Record<CaseStatusAction, CaseActionButton['tone']> = {
   reject_recycle: 'danger',
 }
 
+/** action ที่พาเคสไปสถานะสุดท้าย (`rejected` ไม่มีเส้นออก — `23`) ต้องยืนยันก่อน */
+const CONFIRM_REQUIRED: ReadonlySet<CaseStatusAction> = new Set(['reject'])
+
 /** ลำดับปุ่มบน modal ต่อโหมด (`38` §7.5) — ซ้ายไปขวา */
 const MODE_ACTIONS: Record<CaseDetailMode, readonly CaseStatusAction[]> = {
   review: ['reject', 'request_more_info', 'accept'],
@@ -71,6 +76,7 @@ function toButton(action: CaseStatusAction): CaseActionButton {
     label: MODAL_LABEL[action] ?? CASE_STATUS_RULES[action].label,
     tone: TONE[action],
     reasonRequired: CASE_STATUS_RULES[action].reasonRequired,
+    confirmRequired: CONFIRM_REQUIRED.has(action),
   }
 }
 
