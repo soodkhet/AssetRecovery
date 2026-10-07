@@ -474,6 +474,49 @@ suite('preship R5-001 — ใบเสร็จที่ใช้เคลีย
   })
 })
 
+suite('preship L6-001 — ใบเบิกส่วนเกินจากการเคลียร์เงินทดรอง ตีกลับแล้วส่งใหม่ด้วยใบเสร็จเดิมได้', () => {
+  it('ใบเบิกส่วนเกิน needs_revision ⇒ ส่งใหม่ผ่าน (audit การเคลียร์ของตัวเองไม่นับ) · ใบเบิกอื่นใช้ใบเดิมยังถูกปฏิเสธ', async () => {
+    const { markAdvancePaidOut } = await import('@/tests/helpers/advance-paid-out')
+    const created = await advances.createAdvance({ actor: agent, meta }, {
+      requestedSatang: 100_000,
+      purpose: 'ค่าเดินทางติดตามทรัพย์ L6-001',
+      dueClearDate: new Date('2026-12-31T00:00:00Z'),
+      payeeId: null,
+    })
+    await db().$executeRawUnsafe(
+      `UPDATE advances SET status = 'approved', approved_satang = 100000, approved_at = now() WHERE id = '${created.id}'`,
+    )
+    await markAdvancePaidOut(db(), { organizationId: ORG_ID, advanceId: created.id, actorId: FINANCE_ID })
+
+    uploadTestState.realVerify = true
+    const path = receiptPathOf(AGENT_ID, 'l6-001.pdf')
+    uploadPdf(path, `l6-001-receipt-${RUN}`)
+    const settled = await advances.settleAdvance({ actor: agent, meta }, created.id, { usedSatang: 130_000, receiptFileUrl: path, note: null })
+    const excessId = settled.excessClaimId ?? ''
+    expect(excessId).not.toBe('')
+
+    await db().expense.update({ where: { id: excessId }, data: { status: 'needs_revision', rejectionReason: 'แนบรายละเอียดเพิ่ม' } })
+    await fieldExpenses.resubmitFieldExpense(agent, excessId, { note: 'แนบรายละเอียดแล้ว' }, { actor: agent, meta })
+    const after = await db().expense.findUniqueOrThrow({ where: { id: excessId }, select: { status: true } })
+    expect(after.status).not.toBe('needs_revision')
+
+    const copyPath = receiptPathOf(AGENT_ID, 'l6-001-copy.pdf')
+    uploadPdf(copyPath, `l6-001-receipt-${RUN}`)
+    await expectCode(
+      () =>
+        claims.createManualClaim({ actor: agent, meta }, {
+          claimType: 'receipt',
+          grossSatang: 30_000,
+          expenseDate: new Date('2026-10-05T00:00:00Z'),
+          payeeId: null,
+          receiptFileUrl: copyPath,
+          note: 'ใช้ใบเสร็จที่เคลียร์เงินทดรองแล้วซ้ำ',
+        }),
+      'CLAIM_DUPLICATE_SUBMISSION',
+    )
+  })
+})
+
 suite('มติ PO U153 — บันทึกแทนผู้อื่น', () => {
   it('การเงินบันทึกเบิกแทนพนักงาน ⇒ รายการเป็นของพนักงาน · audit ระบุผู้บันทึก + ผู้รับ · คิวแสดงชื่อผู้บันทึกแทน', async () => {
     uploadTestState.realVerify = true

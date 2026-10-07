@@ -127,3 +127,14 @@ describe('ClaimReceiptReusedError', () => {
     }
   })
 })
+
+describe('isOwnExcessClaim (preship L6-001)', () => {
+  it('audit การเคลียร์ที่สร้างใบเบิกส่วนเกินใบนี้ ⇒ true · ใบอื่น/ไม่มี ⇒ false', async () => {
+    const { isOwnExcessClaim } = await import('@/lib/claims/duplicate-submission-queries')
+    expect(isOwnExcessClaim({ excess_claim_id: 'e1' }, 'e1')).toBe(true)
+    expect(isOwnExcessClaim({ excess_claim_id: 'e1' }, 'e2')).toBe(false)
+    expect(isOwnExcessClaim({ excess_claim_id: null }, 'e1')).toBe(false)
+    expect(isOwnExcessClaim({ excess_claim_id: 'e1' }, undefined)).toBe(false)
+    expect(isOwnExcessClaim(null, 'e1')).toBe(false)
+  })
+})

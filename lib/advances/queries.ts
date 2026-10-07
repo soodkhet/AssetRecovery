@@ -603,6 +603,7 @@ export async function settleAdvance(
       payeeId: current.payeeId,
       receiptFileHash: receipt?.sha256 ?? null,
       selfAdvanceId: advanceId,
+      actorId: user.id,
     })
 
     const excessClaim = preview.needsExtraClaim

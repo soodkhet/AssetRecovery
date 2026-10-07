@@ -169,8 +169,8 @@ export function BankReconTab() {
                   <Td numeric className="font-bold text-rose-600">
                     {row.amountSatang < 0 ? `-${fmtSatangSymbol(Math.abs(row.amountSatang))}` : '—'}
                   </Td>
-                  {/* เลขรอบจ่าย/เอกสารไม่ตัดบรรทัดที่ขีด (preship R5-002) */}
-                  <Td className="font-mono text-xs whitespace-nowrap text-slate-600">{row.matchedRef ?? '—'}</Td>
+                  {/* ช่องนี้มีคำอธิบายยาว (รอบวางบิล … · ชื่อบริษัท) — ห้าม nowrap ทั้งช่อง (R6-001) · กว้างขั้นต่ำพอให้รหัสสั้นอย่าง PB-O-IN1 ไม่ตัดที่ขีด (R5-002) */}
+                  <Td className="min-w-36 font-mono text-xs break-words text-slate-600">{row.matchedRef ?? '—'}</Td>
                   <Td
                     className="max-w-[160px] truncate text-xs text-slate-500"
                     title={row.matchNote ?? row.refundNote ?? row.suspenseNote ?? ''}

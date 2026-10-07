@@ -60,7 +60,10 @@ export function pickPage(value: string | string[] | undefined): number {
  * prop จาก server (`fallback`) ใช้เฉพาะตอน render ฝั่ง server เท่านั้น: Back/Forward กลับมา entry ที่เคยลบ `?case=`
  * ด้วย `replaceUrlParams` แล้ว Next ใช้ payload เก่าที่ยังมี `?case=` ⇒ เดิมรายละเอียดเคสเด้งเปิดเอง (preship R5-007)
  */
-export function initialUrlUuid(key: string, fallback: string | null): string | null {
+export function initialUrlUuid(key: string, fallback: string | null, pathname?: string): string | null {
   if (typeof window === 'undefined') return fallback
+  // นำทางฝั่ง client (router.push จากแจ้งเตือน) render หน้าใหม่ก่อน Next เปลี่ยน URL ของ browser ⇒ ตอนนี้
+  // window.location ยังเป็นหน้าเดิม — ใช้ค่าจาก server แทน (preship R6-003 · Back/Forward URL เปลี่ยนแล้วจึงอ่านจาก URL ได้)
+  if (pathname !== undefined && window.location.pathname !== pathname) return fallback
   return pickUuid(new URLSearchParams(window.location.search).get(key) ?? undefined)
 }

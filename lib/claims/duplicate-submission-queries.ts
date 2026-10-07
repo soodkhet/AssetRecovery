@@ -76,6 +76,8 @@ export async function assertReceiptNotReused(
     selfExpenseId?: string
     /** เคลียร์เงินทดรองก้อนนี้อยู่ — ไม่นับ audit ของตัวเอง */
     selfAdvanceId?: string
+    /** ผู้ทำรายการ — ใบเสร็จที่ตัวเองใช้เคลียร์เงินทดรองไปแล้ว ⇒ ข้อความแบบ "ของคุณ" */
+    actorId?: string
   },
 ): Promise<void> {
   const hash = input.receiptFileHash
@@ -106,10 +108,17 @@ export async function assertReceiptNotReused(
       afterData: { path: ['receipt_file_hash'], equals: hash },
       ...(input.selfAdvanceId !== undefined ? { NOT: { targetId: input.selfAdvanceId } } : {}),
     },
-    select: { targetId: true, actorId: true },
+    select: { targetId: true, actorId: true, afterData: true },
     orderBy: { createdAt: 'asc' },
   })
-  if (settledAdvance !== null) {
-    throw new ClaimReceiptReusedError(`advance:${settledAdvance.targetId ?? '-'}`, false)
+  // ใบเบิกส่วนเกินที่เกิดจากการเคลียร์ครั้งนั้นเองใช้ใบเสร็จเดียวกันโดยชอบ — ตีกลับแล้วส่งใหม่ต้องผ่าน (preship L6-001)
+  if (settledAdvance !== null && !isOwnExcessClaim(settledAdvance.afterData, input.selfExpenseId)) {
+    throw new ClaimReceiptReusedError(`advance:${settledAdvance.targetId ?? '-'}`, settledAdvance.actorId !== null && settledAdvance.actorId === input.actorId)
   }
+}
+
+/** audit การเคลียร์เงินทดรองที่สร้างใบเบิกส่วนเกินใบนี้เอง (`after.excess_claim_id`) — pure */
+export function isOwnExcessClaim(afterData: unknown, selfExpenseId: string | undefined): boolean {
+  if (selfExpenseId === undefined || afterData === null || typeof afterData !== 'object' || Array.isArray(afterData)) return false
+  return (afterData as Record<string, unknown>).excess_claim_id === selfExpenseId
 }

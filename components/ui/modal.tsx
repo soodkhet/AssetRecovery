@@ -15,6 +15,9 @@ import { isTopModal, registerModal, unregisterModal } from '@/components/ui/moda
  * ⚠️ Modal ที่ทำลายข้อมูล (ยกเลิก/ลบ/ปลดล็อก) **ต้อง confirm** และคำบนปุ่มต้องตรง action (`04` §10)
  */
 
+/** คลิก backdrop ภายในช่วงนี้หลังเปิด ⇒ ไม่ปิด (คลิกที่สองของดับเบิลคลิก ~300ms) */
+const BACKDROP_CLICK_GRACE_MS = 400
+
 export type ModalSize = 'sm' | 'md' | 'lg' | 'xl'
 
 const SIZE_CLASS: Readonly<Record<ModalSize, string>> = {
@@ -61,6 +64,8 @@ export function Modal({
   const closeLocked = isBusy || lockClose
   // handler ของ Esc ผูกกับ `open` อย่างเดียว (ดูเหตุผลด้านล่าง) จึงอ่านค่าล่าสุดผ่าน ref
   const dirtyRef = useRef(false)
+  /** เวลาที่เปิด — คลิกที่สองของดับเบิลคลิกปุ่มเปิดตกที่ backdrop ⇒ ไม่นับเป็นสั่งปิด (preship R6-007) */
+  const openedAtRef = useRef(0)
   const guardRef = useRef({ closeLocked, confirming, confirmDiscard })
   useEffect(() => {
     guardRef.current = { closeLocked, confirming, confirmDiscard }
@@ -88,6 +93,7 @@ export function Modal({
     if (!open) return
 
     dirtyRef.current = false
+    openedAtRef.current = Date.now()
     const panel = panelRef.current
     // ตรวจปุ่ม `<Button loading>` (aria-busy) ของ modal นี้เอง — ไม่นับของ modal ที่ซ้อนอยู่ข้างใน
     // ยกเว้นปุ่มย่อยที่ติด data-modal-busy="ignore" เช่นค้นหา (preship R3-002 → R4-006)
@@ -164,7 +170,10 @@ export function Modal({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div
         className="absolute inset-0 bg-slate-900/40"
-        onClick={requestClose}
+        onClick={() => {
+          if (Date.now() - openedAtRef.current < BACKDROP_CLICK_GRACE_MS) return
+          requestClose()
+        }}
         aria-hidden="true"
       />
       <div

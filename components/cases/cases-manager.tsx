@@ -1,5 +1,6 @@
 'use client'
 
+import { usePathname } from 'next/navigation'
 import { initialUrlUuid, pickUuid, replaceUrlParams } from '@/components/ui/url-state'
 import { useSearchParamChange } from '@/components/ui/use-search-param-change'
 import { kpiValue } from '@/components/ui/kpi-value'
@@ -138,7 +139,8 @@ export function CasesManager({
   const [editing, setEditing] = useState<CaseDetailDto | null>(null)
   const [openingCaseId, setOpeningCaseId] = useState<string | null>(null)
   // อ่าน `?case=` จาก URL ปัจจุบัน — prop จาก server อาจเป็นของ entry เก่า (Forward แล้วเด้งเปิดเอง · R5-007)
-  const [detailCaseId, setDetailCaseId] = useState<string | null>(() => initialUrlUuid('case', initialDetailCaseId))
+  const pathname = usePathname()
+  const [detailCaseId, setDetailCaseId] = useState<string | null>(() => initialUrlUuid('case', initialDetailCaseId, pathname))
   // นำทางมา route เดิมด้วย `?case=` ใหม่ (เช่น กดแจ้งเตือนตอนอยู่หน้านี้) — เปิดรายละเอียดเคสนั้น (preship R2-009)
   // ค่าว่าง (ปิด dialog แล้วลบ `?case=` ออกเอง) ไม่ต้องทำอะไร
   useSearchParamChange('case', (value) => {

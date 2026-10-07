@@ -1086,6 +1086,7 @@ export async function resubmitFieldExpense(
       payeeId: current.payeeId,
       receiptFileHash: newReceiptPath !== null ? receiptHash : current.receiptFileHash,
       selfExpenseId: expenseId,
+      actorId: user.id,
     })
 
     const row = await tx.expense.update({

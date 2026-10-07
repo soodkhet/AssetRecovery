@@ -57,7 +57,7 @@ export function TopNav({ menus, session }: { menus: readonly MenuItem[]; session
                   <path d="M12 16h.01" />
                 </svg>
               </span>
-              <span className="truncate text-lg font-bold tracking-tight text-slate-900 max-[359px]:sr-only">AssetRecovery</span>
+              <span className="truncate text-lg font-bold tracking-tight text-slate-900 max-[374px]:sr-only">AssetRecovery</span>
             </Link>
             <nav aria-label="เมนูหลัก" className="no-scrollbar hidden overflow-x-auto rounded-lg bg-slate-100 p-1 xl:flex">
               {tabs}
