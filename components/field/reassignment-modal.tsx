@@ -190,6 +190,7 @@ export function ReassignmentModal({
                 เหตุผลที่ไม่ยินยอม (จำเป็น)
               </label>
               <Textarea
+                maxLength={1000}
                 id="decline-reason"
                 rows={3}
                 value={reason}

@@ -1,6 +1,7 @@
 'use client'
 
 import { LINK_PENDING_CORNER_CLASS, LinkPending } from '@/components/shell/link-pending'
+import { ScrollStrip } from '@/components/shell/scroll-strip'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { LogoutButton } from '@/components/auth/logout-button'
@@ -20,6 +21,8 @@ import type { ClientSession } from '@/lib/auth/types'
 export function TopNav({ menus, session }: { menus: readonly MenuItem[]; session: ClientSession }) {
   const pathname = usePathname()
 
+  const activeMenuId =
+    menus.find((menu) => pathname === menu.path || pathname.startsWith(`${menu.path}/`))?.id ?? null
   const tabs = menus.map((menu) => {
     const active = pathname === menu.path || pathname.startsWith(`${menu.path}/`)
     return (
@@ -45,7 +48,7 @@ export function TopNav({ menus, session }: { menus: readonly MenuItem[]; session
       <div className="mx-auto max-w-[1600px] px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between gap-4">
           <div className="flex min-w-0 items-center gap-6">
-            <Link href="/dashboard" className="focus-ring flex flex-shrink-0 items-center gap-3 rounded">
+            <Link href="/dashboard" className="focus-ring flex flex-shrink-0 items-center gap-3 rounded pointer-coarse:min-h-11">
               <span className="rounded bg-slate-900 p-2 text-white">
                 <svg width="20" height="20" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M20 13c0 5-3.5 7.5-7.66 9.7a1 1 0 0 1-.68 0C7.5 20.5 4 18 4 13V6a1 1 0 0 1 .76-.97l8-2a1 1 0 0 1 .48 0l8 2c.42.1.76.47.76.97Z" />
@@ -72,9 +75,17 @@ export function TopNav({ menus, session }: { menus: readonly MenuItem[]; session
           </div>
         </div>
 
-        <nav aria-label="เมนูหลัก (จอเล็ก)" className="mb-2 flex flex-wrap gap-1 rounded-lg bg-slate-100 p-1 xl:hidden">
-          {tabs}
-        </nav>
+        {/* มือถือ (< sm) แถวเดียวเลื่อนได้ + ขอบจาง ไม่ให้เมนูหลายแถวดันเนื้อหาลงครึ่งจอ (preship R4-021) */}
+        <div className="mb-2 xl:hidden">
+          <ScrollStrip
+            label="เมนูหลัก (จอเล็ก)"
+            activeKey={activeMenuId}
+            fadeClassName="rounded-lg from-slate-100"
+            className="flex flex-wrap gap-1 rounded-lg bg-slate-100 p-1"
+          >
+            {tabs}
+          </ScrollStrip>
+        </div>
       </div>
     </header>
   )

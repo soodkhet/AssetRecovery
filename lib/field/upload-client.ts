@@ -3,7 +3,7 @@ import {
   checkFieldMediaCandidate,
   type FieldMediaKind,
 } from '@/lib/field/media-upload'
-import { StorageUploadError, uploadToStorage } from '@/lib/uploads/client'
+import { StorageUploadError, uploadToStorage, type UploadToStorageOptions } from '@/lib/uploads/client'
 import type { UploadTarget } from '@/lib/uploads/targets'
 
 /**
@@ -23,29 +23,35 @@ export class FieldUploadError extends Error {
   }
 }
 
-async function upload(target: UploadTarget, file: File): Promise<string> {
+async function upload(target: UploadTarget, file: File, options: UploadToStorageOptions = {}): Promise<string> {
   try {
-    return await uploadToStorage(target, file)
+    return await uploadToStorage(target, file, options)
   } catch (error) {
     if (error instanceof StorageUploadError) throw new FieldUploadError(error.message)
     throw error
   }
 }
 
-export async function uploadFieldMedia(caseId: string, kind: FieldMediaKind, file: File): Promise<string> {
+export async function uploadFieldMedia(
+  caseId: string,
+  kind: FieldMediaKind,
+  file: File,
+  options: UploadToStorageOptions = {},
+): Promise<string> {
   const problem = checkFieldMediaCandidate(kind, { name: file.name, type: file.type, size: file.size })
   if (problem !== null) throw new FieldUploadError(problem)
   // bucket เป็น private ⇒ เก็บ path ไว้ แล้วขอ signed URL จาก server ตอนเปิดดู (`signedFileUrl()`)
-  return upload({ kind: 'field_evidence', caseId, mediaKind: kind }, file)
+  return upload({ kind: 'field_evidence', caseId, mediaKind: kind }, file, options)
 }
 
 /**
  * อัปโหลดใบเสร็จของรายการเบิกแยก (`41` §6.6) แล้วคืน path ที่ส่งเข้า
  * `POST /api/field/expenses/hotel` หรือ `POST /api/field/expenses/:id/resubmit`
  * — path อยู่ใต้ผู้เรียกเสมอ (server ใช้ผู้ใช้ของ session ไม่รับ userId จาก browser)
+ * · `options.signal` ยกเลิกการอัปโหลดที่ค้างได้จริง (preship R3-026)
  */
-export async function uploadExpenseReceipt(file: File): Promise<string> {
+export async function uploadExpenseReceipt(file: File, options: UploadToStorageOptions = {}): Promise<string> {
   const problem = checkExpenseReceiptCandidate({ name: file.name, type: file.type, size: file.size })
   if (problem !== null) throw new FieldUploadError(problem)
-  return upload({ kind: 'expense_receipt' }, file)
+  return upload({ kind: 'expense_receipt' }, file, options)
 }

@@ -66,6 +66,7 @@ export function QuestionFormModal({
     >
       <Field label="คำถาม / ข้อสงสัย" required hint="ระบุให้ครบว่าถามถึงรายการไหน เพื่อให้ตามกลับได้ภายหลัง">
         <Textarea
+          maxLength={2000}
           rows={5}
           value={questionText}
           onChange={(event) => setQuestionText(event.target.value)}

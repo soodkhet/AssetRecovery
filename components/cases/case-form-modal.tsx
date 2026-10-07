@@ -17,6 +17,7 @@ import {
   DEBTOR_NATIONALITIES,
   DEBTOR_NATIONALITY_LABEL,
   digitsOnly,
+  toAsciiDigits,
   PHONE_INPUT_MAX_LENGTH,
   phoneInputError,
   DOCUMENT_SLOT_LABEL,
@@ -442,7 +443,7 @@ export function CaseFormModal({
                   maxLength={13}
                   placeholder="13 หลัก"
                   invalid={fieldErrors.debtorNationalId !== undefined}
-                  onChange={(event) => patch({ debtorNationalId: digitsOnly(event.target.value).slice(0, 13) })}
+                  onChange={(event) => patch({ debtorNationalId: digitsOnly(toAsciiDigits(event.target.value)).slice(0, 13) })}
                 />
               </Field>
             ) : (
@@ -716,6 +717,7 @@ export function CaseFormModal({
             >
               <Textarea
                 id="edit-note"
+                maxLength={500}
                 value={form.editNote}
                 onChange={(event) => patch({ editNote: event.target.value })}
               />

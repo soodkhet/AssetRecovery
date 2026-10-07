@@ -157,6 +157,7 @@ export function ExceptionFormModal({
 
         <Field id="exception-description" label="รายละเอียดปัญหา" required>
           <Textarea
+            maxLength={2000}
             id="exception-description"
             rows={4}
             value={description}

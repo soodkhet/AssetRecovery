@@ -339,6 +339,7 @@ export function VatRatesTab() {
 
           <Field id="vat-reason" label="เหตุผล" required error={errors.reason}>
             <Textarea
+              maxLength={500}
               id="vat-reason"
               value={form.reason}
               onChange={(event) => set('reason', event.target.value)}

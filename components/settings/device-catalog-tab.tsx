@@ -225,7 +225,7 @@ export function DeviceCatalogTab() {
             key={key}
             type="button"
             className={cn(
-              'focus-ring -mb-px border-b-2 px-3 py-2 text-xs font-semibold whitespace-nowrap',
+              'focus-ring -mb-px border-b-2 px-3 py-2 text-xs font-semibold whitespace-nowrap pointer-coarse:min-h-11',
               view === key ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-800',
             )}
             onClick={() => setView(key)}
@@ -254,7 +254,9 @@ export function DeviceCatalogTab() {
 
       <p className="mt-6 border-t border-slate-100 pt-3 text-[11px] text-slate-400">
         แหล่งที่มา: {TAC_SOURCE_ATTRIBUTION} ·{' '}
-        <a className="underline hover:text-slate-600" href={TAC_SOURCE_REPO_URL} target="_blank" rel="noreferrer">
+        <a
+          className="inline-flex items-center underline hover:text-slate-600 pointer-coarse:min-h-11"
+          href={TAC_SOURCE_REPO_URL} target="_blank" rel="noreferrer">
           ดูแหล่งข้อมูล
         </a>
       </p>
@@ -403,7 +405,7 @@ function DeviceCatalogSettingsForm({ canManage, onSaved }: { canManage: boolean;
       {canManage && (
         <>
           <Field id="device-filter-reason" label="เหตุผล (ไม่บังคับ)" error={errors.reason}>
-            <Textarea id="device-filter-reason" value={reason} onChange={(event) => setReason(event.target.value)} />
+            <Textarea maxLength={500} id="device-filter-reason" value={reason} onChange={(event) => setReason(event.target.value)} />
           </Field>
           <Button onClick={() => void save()} loading={saving}>
             บันทึกค่าตั้ง

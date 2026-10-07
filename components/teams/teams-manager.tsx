@@ -354,6 +354,7 @@ export function TeamsManager() {
       >
         <Field id="team-delete-reason" label="เหตุผล" required>
           <Textarea
+            maxLength={500}
             id="team-delete-reason"
             value={deleteReason}
             onChange={(event) => setDeleteReason(event.target.value)}

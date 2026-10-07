@@ -90,7 +90,7 @@ export function Select({ invalid = false, className, children, ...rest }: Select
   return (
     <select
       aria-invalid={invalid || undefined}
-      className={cn(FIELD_CLASS, 'bg-white', invalid && ERROR_CLASS, className)}
+      className={cn(FIELD_CLASS, 'bg-white pointer-coarse:min-h-11', invalid && ERROR_CLASS, className)}
       {...rest}
     >
       {children}

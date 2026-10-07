@@ -266,6 +266,7 @@ export function PaymentFileModal({
 
             <Field label="เหตุผล / อ้างอิงการอนุมัติจ่าย" required>
               <Textarea
+                maxLength={500}
                 rows={2}
                 value={reason}
                 onChange={(event) => setReason(event.target.value)}

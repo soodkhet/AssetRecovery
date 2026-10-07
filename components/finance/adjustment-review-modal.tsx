@@ -137,12 +137,13 @@ export function AdjustmentReviewModal({
               </InlineAlert>
             )}
             <Field label="หมายเหตุของผู้อนุมัติ (ถ้ามี)">
-              <Textarea rows={2} value={note} onChange={(event) => setNote(event.target.value)} />
+              <Textarea maxLength={1000} rows={2} value={note} onChange={(event) => setNote(event.target.value)} />
             </Field>
           </>
         ) : (
           <Field label="เหตุผลที่ปฏิเสธ (บังคับกรอก)" required>
             <Textarea
+              maxLength={1000}
               rows={3}
               placeholder="เช่น เอกสารประกอบไม่ครบ ให้แนบใบเสร็จฉบับจริงแล้วยื่นใหม่"
               value={rejectionReason}

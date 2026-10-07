@@ -263,6 +263,7 @@ export function AdjustmentFormModal({
 
         <Field label="เหตุผล" required hint="บังคับกรอกเสมอ อย่างน้อย 5 ตัวอักษร">
           <Textarea
+            maxLength={1000}
             rows={3}
             value={reason}
             onChange={(event) => setReason(event.target.value)}

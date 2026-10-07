@@ -480,6 +480,10 @@ export function CloseCaseModal({
     formRef.current = form
   }, [form])
   const [busy, setBusy] = useState(false)
+  // อัปโหลดสื่ออยู่ (อาจนานบนเน็ตภาคสนาม) — ยกเลิกได้จริง ไม่ต้องรอจนหมดเวลา · ปิด modal = abort (preship R3-026)
+  const [uploading, setUploading] = useState(false)
+  const uploadAbortRef = useRef<AbortController | null>(null)
+  useEffect(() => () => uploadAbortRef.current?.abort(), [])
   const [submitting, setSubmitting] = useState(false)
   const [showMissing, setShowMissing] = useState(false)
   const [originError, setOriginError] = useState<string | null>(null)
@@ -614,17 +618,34 @@ export function CloseCaseModal({
     updateForm({ ...form, outcome })
   }
 
-  async function addMedia(section: MediaSection, files: FileList): Promise<void> {
+  /** เริ่มรอบอัปโหลดที่ยกเลิกได้ — คืน signal ให้ส่งต่อ `uploadFieldMedia` · จบรอบต้องเรียก `endUpload()` */
+  function beginUpload(): AbortSignal {
+    const controller = new AbortController()
+    uploadAbortRef.current = controller
     setBusy(true)
+    setUploading(true)
+    return controller.signal
+  }
+
+  function endUpload(): void {
+    uploadAbortRef.current = null
+    setUploading(false)
+    setBusy(false)
+  }
+
+  async function addMedia(section: MediaSection, files: FileList): Promise<void> {
+    const signal = beginUpload()
     try {
       const uploaded: string[] = []
       for (const file of Array.from(files)) {
+        // กดยกเลิกแล้ว ⇒ หยุดทั้งชุด (ไฟล์ที่อัปโหลดเสร็จก่อนหน้ายังผูกกับฟอร์มตามเดิม)
+        if (signal.aborted) break
         try {
-          uploaded.push(await uploadFieldMedia(caseId, section.kind, file))
+          uploaded.push(await uploadFieldMedia(caseId, section.kind, file, { signal }))
         } catch (error) {
           showToast({
-            tone: 'error',
-            title: `เพิ่ม${section.title}ไม่สำเร็จ`,
+            tone: signal.aborted ? 'info' : 'error',
+            title: signal.aborted ? 'ยกเลิกการอัปโหลดแล้ว' : `เพิ่ม${section.title}ไม่สำเร็จ`,
             description: error instanceof FieldUploadError ? error.message : 'อัปโหลดไฟล์ไม่สำเร็จ',
           })
         }
@@ -632,25 +653,25 @@ export function CloseCaseModal({
       if (uploaded.length === 0) return
       updateFormWith((latest) => ({ ...latest, [section.list]: appendMedia(latest[section.list], uploaded) }))
     } finally {
-      setBusy(false)
+      endUpload()
     }
   }
 
   async function addAudio(files: FileList): Promise<void> {
     const file = files.item(0)
     if (file === null) return
-    setBusy(true)
+    const signal = beginUpload()
     try {
-      const path = await uploadFieldMedia(caseId, 'audio', file)
+      const path = await uploadFieldMedia(caseId, 'audio', file, { signal })
       updateFormWith((latest) => ({ ...latest, audioUrl: path }))
     } catch (error) {
       showToast({
-        tone: 'error',
-        title: 'แนบไฟล์เสียงไม่สำเร็จ',
+        tone: signal.aborted ? 'info' : 'error',
+        title: signal.aborted ? 'ยกเลิกการอัปโหลดแล้ว' : 'แนบไฟล์เสียงไม่สำเร็จ',
         description: error instanceof FieldUploadError ? error.message : 'อัปโหลดไฟล์ไม่สำเร็จ',
       })
     } finally {
-      setBusy(false)
+      endUpload()
     }
   }
 
@@ -829,6 +850,12 @@ export function CloseCaseModal({
       footer={
         detail === null || mode === null ? null : (
           <>
+            {/* ระหว่างอัปโหลดสื่อ: modal ล็อกไว้ แต่ยกเลิกการอัปโหลดได้ (preship R3-026) */}
+            {uploading && (
+              <Button variant="secondary" onClick={() => uploadAbortRef.current?.abort()}>
+                ยกเลิกการอัปโหลด
+              </Button>
+            )}
             {mode.canSaveDraft && (
               <Button variant="secondary" onClick={saveDraftAndClose} disabled={submitting || busy}>
                 บันทึก Draft
@@ -1023,7 +1050,7 @@ export function CloseCaseModal({
                         target="_blank"
                         rel="noreferrer"
                         aria-label={`เปิดจุดเช็คอินที่ ${index + 1} ใน Google Maps`}
-                        className="focus-ring flex items-center justify-between gap-2 border-b border-emerald-100 bg-emerald-50/60 px-3 py-2.5"
+                        className="focus-ring flex items-center justify-between gap-2 border-b border-emerald-100 bg-emerald-50/60 px-3 py-2.5 pointer-coarse:min-h-11"
                       >
                         <span className="truncate font-mono text-[11px] text-slate-600">
                           {formatCoordinates(checkin)}

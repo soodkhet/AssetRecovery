@@ -1,6 +1,7 @@
 'use client'
 
 import { LINK_PENDING_CORNER_CLASS, LinkPending } from '@/components/shell/link-pending'
+import { ScrollStrip } from '@/components/shell/scroll-strip'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/components/ui/cn'
@@ -25,9 +26,12 @@ export function SubNav({ menus, className }: { menus: readonly MenuItem[]; class
 
   return (
     <div className={cn('flex-shrink-0 border-b border-slate-200 bg-slate-50', className)}>
-      {/* แท็บขึ้นบรรทัดใหม่แทนเลื่อนแนวนอนแบบซ่อน scrollbar — tablet เคยมองไม่เห็น Audit Log/Job Log ท้ายแถว (preship R2-013) */}
-      <nav
-        aria-label="แท็บย่อย"
+      {/* sm ขึ้นไป: แท็บขึ้นบรรทัดใหม่แทนเลื่อนแบบซ่อน scrollbar — tablet เคยมองไม่เห็น Audit Log/Job Log ท้ายแถว (preship R2-013)
+          มือถือ (< sm): แถวเดียวเลื่อนได้ + ขอบจาง — แบบขึ้นบรรทัดใหม่สูงจนดันเนื้อหาลงครึ่งจอ (preship R4-021) */}
+      <ScrollStrip
+        label="แท็บย่อย"
+        activeKey={currentPath}
+        fadeClassName="from-slate-50"
         className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-2 px-4 py-2 sm:px-6 lg:px-8"
       >
         {items.map((item) => {
@@ -64,7 +68,7 @@ export function SubNav({ menus, className }: { menus: readonly MenuItem[]; class
             </Link>
           )
         })}
-      </nav>
+      </ScrollStrip>
     </div>
   )
 }

@@ -329,7 +329,7 @@ export function UsersManager() {
                     <span className="text-xs text-slate-600">{fmtDateTime(user.lastLoginAt)}</span>
                   </Td>
                   <Td className="text-right">
-                    <div className="flex items-center justify-end gap-2">
+                    <div className="flex flex-wrap items-center justify-end gap-2">
                       {!user.isProvisioned && (
                         <StatusBadge group="pending" label="รอตั้งรหัสผ่าน" />
                       )}
@@ -348,7 +348,7 @@ export function UsersManager() {
                               แก้ไข
                             </Button>
                             {user.status !== 'deleted' && (
-                              <Button variant="secondary" onClick={() => setPasswordUser(user)}>
+                              <Button variant="secondary" className="whitespace-nowrap" onClick={() => setPasswordUser(user)}>
                                 ตั้งรหัสผ่าน
                               </Button>
                             )}
@@ -365,6 +365,7 @@ export function UsersManager() {
                             ) : (
                               <Button
                                 variant="secondary"
+                                className="whitespace-nowrap"
                                 onClick={() => {
                                   setPending({ user, action: 'reactivate' })
                                   setPendingReason('')
@@ -435,6 +436,7 @@ export function UsersManager() {
         )}
         <Field id="user-action-reason" label="เหตุผล" required>
           <Textarea
+            maxLength={500}
             id="user-action-reason"
             value={pendingReason}
             onChange={(event) => setPendingReason(event.target.value)}

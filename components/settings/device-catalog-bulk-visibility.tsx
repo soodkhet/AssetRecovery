@@ -115,7 +115,7 @@ export function DeviceCatalogBulkVisibility({
               เงื่อนไข: {conditionText} — ทุกรายการจะเป็น “{pending === 'active' ? 'แสดง' : 'ไม่แสดง'} (ตั้งเอง)” และการดึงข้อมูลอัตโนมัติจะไม่เปลี่ยนค่านี้
             </InlineAlert>
             <Field id="device-bulk-reason" label="เหตุผล" required error={errors.reason}>
-              <Textarea id="device-bulk-reason" value={reason} onChange={(event) => setReason(event.target.value)} />
+              <Textarea maxLength={500} id="device-bulk-reason" value={reason} onChange={(event) => setReason(event.target.value)} />
             </Field>
           </div>
         </Modal>

@@ -658,6 +658,7 @@ export function OrganizationProfileTab() {
 
             <Field id="org-reason" label="เหตุผล" required error={errors.reason}>
               <Textarea
+                maxLength={500}
                 id="org-reason"
                 value={form.reason}
                 onChange={(event) => set('reason', event.target.value)}
@@ -709,6 +710,7 @@ export function OrganizationProfileTab() {
             )}
             <Field id="org-image-reason" label="เหตุผล" required>
               <Textarea
+                maxLength={500}
                 id="org-image-reason"
                 value={logoReason}
                 onChange={(event) => setLogoReason(event.target.value)}

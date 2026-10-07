@@ -184,11 +184,12 @@ export function PermissionMatrixModal({
               </h3>
               <ul className="divide-y divide-slate-50">
                 {section.rows.map((row) => (
-                  <li key={row.code} className="flex items-center gap-3 px-4 py-2.5">
+                  // จอแคบ: ชื่อสิทธิ์อยู่เหนือช่องเลือก ไม่ถูกตัดเหลือไม่กี่ตัวอักษร (preship R4-022)
+                  <li key={row.code} className="flex flex-col gap-2 px-4 py-2.5 sm:flex-row sm:items-center sm:gap-3">
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         {/* รหัส capability เป็นข้อมูลภายใน — mockup ไม่แสดง จึงเก็บไว้แค่ tooltip (UAT BUG-019) */}
-                        <span className="truncate text-sm font-semibold text-slate-800" title={row.code}>
+                        <span className="text-sm font-semibold text-slate-800 sm:truncate" title={row.code}>
                           {row.label}
                         </span>
                         {row.locked && <Badge className="bg-slate-900 text-white">🔒 {row.lockOwner}</Badge>}
@@ -196,7 +197,7 @@ export function PermissionMatrixModal({
                     </div>
                     <Select
                       aria-label={`ระดับสิทธิ์ของ ${row.label}`}
-                      className="w-44 shrink-0"
+                      className="w-full shrink-0 sm:w-44"
                       value={levels[row.code] ?? row.level}
                       disabled={!row.editable || !canManageRoles || saving}
                       onChange={(event) =>

@@ -375,6 +375,7 @@ export function HolidaysTab() {
           </Field>
           <Field id="holiday-reason" label="เหตุผล" required error={errors.reason}>
             <Textarea
+              maxLength={500}
               id="holiday-reason"
               value={form.reason}
               onChange={(event) => setForm((current) => ({ ...current, reason: event.target.value }))}
@@ -447,6 +448,7 @@ export function HolidaysTab() {
           )}
           <Field id="holiday-import-reason" label="เหตุผล" required error={importErrors.reason}>
             <Textarea
+              maxLength={500}
               id="holiday-import-reason"
               value={importReason}
               onChange={(event) => setImportReason(event.target.value)}

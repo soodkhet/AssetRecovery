@@ -145,7 +145,7 @@ export function CreatePayoutModal({
           {suggestedCutoff !== null && suggestedCutoff !== cutoffDate && (
             <button
               type="button"
-              className="focus-ring mt-1 text-[11px] font-semibold text-emerald-700 hover:underline"
+              className="focus-ring mt-1 inline-flex items-center text-left text-[11px] font-semibold text-emerald-700 hover:underline pointer-coarse:min-h-11"
               onClick={() => setCutoffDate(suggestedCutoff)}
             >
               ใช้วันตัดรอบตามรอบจ่าย ({fmtDate(`${suggestedCutoff}T00:00:00Z`)})

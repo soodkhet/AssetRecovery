@@ -250,6 +250,7 @@ export function TaxDocTemplatesTab() {
 
                 <Field id={`reason-${template.documentType}`} label="เหตุผล" required error={fieldErrors.reason}>
                   <Textarea
+                    maxLength={500}
                     id={`reason-${template.documentType}`}
                     value={form.reason}
                     onChange={(event) => set(template.documentType, 'reason', event.target.value)}

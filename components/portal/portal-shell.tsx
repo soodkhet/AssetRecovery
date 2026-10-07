@@ -122,7 +122,7 @@ export function PortalTopBar({
     <header className="sticky top-0 z-30 hidden border-b border-slate-200 bg-white md:block">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between gap-4">
-          <Link href={homeHref} className="focus-ring flex min-w-0 items-center gap-3 rounded">
+          <Link href={homeHref} className="focus-ring flex min-w-0 items-center gap-3 rounded pointer-coarse:min-h-11">
             <PortalLogo />
             <span className="min-w-0">
               <span className="text-lg font-bold tracking-tight text-slate-900">AssetRecovery</span>
@@ -146,7 +146,11 @@ export function PortalTopBar({
 
 export function PortalTabs({ items, activeKey }: { items: readonly PortalNavItem[]; activeKey: PortalNavKey | null }) {
   return (
-    <nav aria-label="เมนูพอร์ทัล" className="no-scrollbar mb-6 hidden gap-6 overflow-x-auto border-b border-slate-200 md:flex">
+    // 768px: gap-6 ทำให้แท็บสุดท้ายล้นถูกตัดใต้ scrollbar ที่ซ่อน ⇒ ช่องห่างแคบลงต่ำกว่า lg + wrap กันล้น (preship R4-020)
+    <nav
+      aria-label="เมนูพอร์ทัล"
+      className="mb-6 hidden flex-wrap gap-x-4 border-b border-slate-200 md:flex lg:gap-x-6"
+    >
       {items.map((item) => {
         const active = item.key === activeKey
         return (
@@ -156,7 +160,7 @@ export function PortalTabs({ items, activeKey }: { items: readonly PortalNavItem
             aria-current={active ? 'page' : undefined}
             className={cn(
               // `relative` ให้ spinner ระหว่างเปลี่ยนหน้าลอยมุม ไม่ดันความกว้าง (preship R2-024/R2-034)
-              'focus-ring-inset relative flex items-center gap-2 border-b-2 py-2.5 text-sm font-semibold whitespace-nowrap transition-colors',
+              'focus-ring-inset relative flex items-center gap-2 border-b-2 py-2.5 text-sm font-semibold whitespace-nowrap transition-colors pointer-coarse:min-h-11',
               active ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-800',
             )}
           >

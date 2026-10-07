@@ -138,6 +138,7 @@ export function ExportPackModal({
 
         <Field label="บันทึกช่วยจำ" hint="ไม่บังคับ — เก็บลง audit log คู่กับรายชื่อไฟล์และเวอร์ชัน">
           <Textarea
+            maxLength={1000}
             rows={2}
             value={note}
             onChange={(event) => setNote(event.target.value)}

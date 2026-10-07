@@ -611,6 +611,7 @@ export function BankFileFormatsTab() {
 
           <Field id="bank-file-reason" label="เหตุผล" required error={errors.reason}>
             <Textarea
+              maxLength={500}
               id="bank-file-reason"
               value={form.reason}
               onChange={(event) => set('reason', event.target.value)}

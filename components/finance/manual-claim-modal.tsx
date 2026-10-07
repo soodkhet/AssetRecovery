@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { usePermission } from '@/components/auth/permission-provider'
 import { OnBehalfPayeeSelect } from '@/components/payees/on-behalf-payee-select'
 import { NoReceiptLinesEditor, NoReceiptToggle } from '@/components/substitute-receipts/no-receipt-lines'
@@ -56,6 +56,13 @@ export function ManualClaimModal({
   const [note, setNote] = useState('')
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
+  // อัปโหลดใบเสร็จยกเลิกได้จริง — ปิด modal/ออกจากหน้า = abort request ที่ค้าง (preship R3-026)
+  const [uploading, setUploading] = useState(false)
+  const uploadAbortRef = useRef<AbortController | null>(null)
+  useEffect(() => {
+    if (!open) uploadAbortRef.current?.abort()
+  }, [open])
+  useEffect(() => () => uploadAbortRef.current?.abort(), [])
 
   if (!open) return null
 
@@ -96,10 +103,27 @@ export function ManualClaimModal({
       return
     }
 
-    setSaving(true)
     setErrors({})
+    let receiptFileUrl: string | null = null
+    if (!noReceipt && receipt !== null) {
+      const controller = new AbortController()
+      uploadAbortRef.current = controller
+      setUploading(true)
+      try {
+        receiptFileUrl = await uploadExpenseReceipt(receipt, { signal: controller.signal })
+      } catch (uploadError) {
+        setErrors({
+          receiptFileUrl: uploadError instanceof FieldUploadError ? uploadError.message : 'อัปโหลดใบเสร็จไม่สำเร็จ',
+        })
+        return
+      } finally {
+        uploadAbortRef.current = null
+        setUploading(false)
+      }
+    }
+
+    setSaving(true)
     try {
-      const receiptFileUrl = noReceipt || receipt === null ? null : await uploadExpenseReceipt(receipt)
       // ส่ง payload ดิบ — `parsed.data.expenseDate` ถูก transform เป็น Date แล้ว (`dateOnlySchema`)
       const result = await callApi<{ substituteReceiptNumber: string | null }>(
         '/api/claims',
@@ -121,10 +145,6 @@ export function ManualClaimModal({
       reset()
       onCreated()
       onClose()
-    } catch (uploadError) {
-      setErrors({
-        receiptFileUrl: uploadError instanceof FieldUploadError ? uploadError.message : 'อัปโหลดใบเสร็จไม่สำเร็จ',
-      })
     } finally {
       setSaving(false)
     }
@@ -135,17 +155,30 @@ export function ManualClaimModal({
       open
       onClose={onClose}
       title="สร้างรายการเบิกด้วยตนเอง (Manual Claim)"
+      // ระหว่างอัปโหลดไม่ใช้ `loading` (ซึ่งล็อกทั้ง footer) — ให้ปุ่ม "ยกเลิกการอัปโหลด" กดได้ (R3-026)
+      lockClose={uploading}
       footer={
-        <>
-          <Button variant="secondary" onClick={onClose}>
-            ยกเลิก
-          </Button>
-          <Button loading={saving} onClick={() => void submit()}>
-            ส่งเข้าคิวอนุมัติ
-          </Button>
-        </>
+        uploading ? (
+          <>
+            <Button variant="secondary" onClick={() => uploadAbortRef.current?.abort()}>
+              ยกเลิกการอัปโหลด
+            </Button>
+            <Button disabled>กำลังอัปโหลดใบเสร็จ...</Button>
+          </>
+        ) : (
+          <>
+            <Button variant="secondary" onClick={onClose}>
+              ยกเลิก
+            </Button>
+            <Button loading={saving} onClick={() => void submit()}>
+              ส่งเข้าคิวอนุมัติ
+            </Button>
+          </>
+        )
       }
     >
+      {/* ล็อกช่องกรอกระหว่างอัปโหลด — ค่าที่ส่งคือค่าตอนกดส่ง */}
+      <fieldset disabled={uploading} className="m-0 min-w-0 border-0 p-0">
       <div className="space-y-4">
         <InlineAlert tone="warning">
           รายการที่สร้างที่นี่ <b>ไม่ผูกกับเคส</b> — ค่าน้ำมัน/เบี้ยเลี้ยง/ค่าคอมมิชชันของเคสระบบคิดให้เองจากงานภาคสนาม
@@ -219,12 +252,14 @@ export function ManualClaimModal({
         <Field label="รายละเอียด / หมายเหตุ" error={errors.note}>
           <Textarea
             rows={2}
+            maxLength={500}
             placeholder="เช่น ค่าที่พักระหว่างติดตามทรัพย์ จ.เชียงราย คืนวันที่ 12"
             value={note}
             onChange={(event) => setNote(event.target.value)}
           />
         </Field>
       </div>
+      </fieldset>
     </Modal>
   )
 }

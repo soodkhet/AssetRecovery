@@ -190,6 +190,7 @@ export function LockedFuelExpensesCard() {
           </InlineAlert>
           <Field id="backdated-fuel-reason" label="เหตุผล" required error={reasonError}>
             <Textarea
+              maxLength={500}
               id="backdated-fuel-reason"
               value={reason}
               onChange={(event) => setReason(event.target.value)}

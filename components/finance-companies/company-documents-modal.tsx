@@ -409,6 +409,7 @@ export function CompanyDocumentsModal({
                   </Field>
                   <Field id="company-doc-reason" label="เหตุผล" required>
                     <Textarea
+                      maxLength={500}
                       id="company-doc-reason"
                       value={form.reason}
                       onChange={(event) => setForm({ ...form, reason: event.target.value })}

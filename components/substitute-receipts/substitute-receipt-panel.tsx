@@ -165,7 +165,7 @@ export function SubstituteReceiptPanel({
       }
     >
       <div className="flex flex-wrap items-center gap-1.5">
-        <span className={`font-mono text-[11px] font-semibold ${cancelled ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
+        <span className={`font-mono text-[11px] font-semibold whitespace-nowrap ${cancelled ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
           {substituteReceiptBadgeText(receipt.receiptNumber)}
         </span>
         <StatusBadge
@@ -245,7 +245,9 @@ export function SubstituteReceiptPanel({
         <ul className="space-y-0.5 border-t border-slate-200 pt-1" aria-label="ใบรับรองที่ยกเลิกแล้ว">
           {receipt.cancelledHistory.map((entry) => (
             <li key={entry.id} className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500">
-              <span className="font-mono text-slate-400 line-through">{substituteReceiptBadgeText(entry.receiptNumber)}</span>
+              <span className="font-mono whitespace-nowrap text-slate-400 line-through">
+                {substituteReceiptBadgeText(entry.receiptNumber)}
+              </span>
               <StatusBadge
                 status="cancelled"
                 group={substituteReceiptStatusBadgeGroup('cancelled')}

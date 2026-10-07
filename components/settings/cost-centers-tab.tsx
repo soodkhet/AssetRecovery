@@ -309,6 +309,7 @@ export function CostCentersTab() {
 
           <Field id="cost-center-description" label="คำอธิบาย" error={errors.description}>
             <Textarea
+              maxLength={300}
               id="cost-center-description"
               value={form.description}
               onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
@@ -329,6 +330,7 @@ export function CostCentersTab() {
 
           <Field id="cost-center-reason" label="เหตุผล" required error={errors.reason}>
             <Textarea
+              maxLength={500}
               id="cost-center-reason"
               value={form.reason}
               onChange={(event) => setForm((current) => ({ ...current, reason: event.target.value }))}

@@ -16,6 +16,7 @@ import {
   Button,
   FilterGroup,
   InlineAlert,
+  RefText,
   StatCard,
   StatusBadge,
   TBody,
@@ -242,14 +243,16 @@ export function WhtTab() {
                 certificates.items.map((row) => (
                   <Tr key={row.id} className={row.status === 'cancelled' ? 'bg-red-50/30 opacity-60' : undefined}>
                     <Td>
-                      <span className="font-mono text-xs text-blue-600">{row.certificateNumber}</span>
+                      <RefText className="text-blue-600">{row.certificateNumber}</RefText>
                       {row.replacesCertificateNumber === null ? null : (
-                        <p className="mt-0.5 text-[10px] text-slate-400">ออกแทน {row.replacesCertificateNumber}</p>
+                        <p className="mt-0.5 text-[10px] text-slate-400">
+                          ออกแทน <span className="font-mono whitespace-nowrap">{row.replacesCertificateNumber}</span>
+                        </p>
                       )}
                     </Td>
                     <Td>
                       <div className="text-sm font-semibold text-slate-900">{row.payeeName}</div>
-                      <p className="mt-0.5 font-mono text-[10px] text-slate-400">{row.payoutBatchName}</p>
+                      <p className="mt-0.5 font-mono text-[10px] whitespace-nowrap text-slate-400">{row.payoutBatchName}</p>
                     </Td>
                     <Td className="font-mono text-xs text-slate-500">{row.payeeTaxId ?? '—'}</Td>
                     <Td className="text-xs text-slate-600">{row.incomeType}</Td>

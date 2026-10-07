@@ -81,6 +81,7 @@ function StatusFilterSelect({
   return (
     <Select
       aria-label="กรองตามสถานะ"
+      className="pointer-coarse:min-h-11"
       value={value}
       onChange={(event) => onChange(event.target.value as ExpenseStatusFilter)}
     >
@@ -350,7 +351,7 @@ export function ExpensesTab({ initialView = 'caseBound' }: { initialView?: Expen
 
               <div className="grid grid-cols-2 gap-2">
                 <StatusFilterSelect value={statusFilter} options={SEPARATE_STATUS_FILTERS} onChange={setStatusFilter} />
-                <Select aria-label="กรองตามเดือน" value={month} onChange={(event) => setMonth(event.target.value)}>
+                <Select aria-label="กรองตามเดือน" className="pointer-coarse:min-h-11" value={month} onChange={(event) => setMonth(event.target.value)}>
                   {months.map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}

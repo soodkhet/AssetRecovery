@@ -129,12 +129,13 @@ export function AdvanceReviewModal({
             )}
 
             <Field label="หมายเหตุ (ถ้ามี)">
-              <Textarea rows={2} value={note} onChange={(event) => setNote(event.target.value)} />
+              <Textarea maxLength={500} rows={2} value={note} onChange={(event) => setNote(event.target.value)} />
             </Field>
           </>
         ) : (
           <Field label="เหตุผลที่ปฏิเสธ (บังคับกรอก)" required>
             <Textarea
+              maxLength={500}
               rows={3}
               placeholder="เช่น วัตถุประสงค์ไม่ชัดเจน ขอให้ระบุแผนการเดินทางและจำนวนวัน"
               value={reason}

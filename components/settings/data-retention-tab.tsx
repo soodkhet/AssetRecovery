@@ -164,6 +164,7 @@ export function DataRetentionTab() {
 
         <Field id="retention-reason" label="เหตุผล" required error={errors.reason}>
           <Textarea
+            maxLength={500}
             id="retention-reason"
             value={form.reason}
             onChange={(event) => set('reason', event.target.value)}

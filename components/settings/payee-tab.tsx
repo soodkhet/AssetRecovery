@@ -452,6 +452,7 @@ export function PayeeTab() {
             error={errors.reason}
           >
             <Textarea
+              maxLength={500}
               id="payee-reason"
               rows={2}
               value={form.reason}

@@ -493,6 +493,7 @@ export function ApprovalMatrixTab() {
 
           <Field id="approval-reason" label="เหตุผล" required error={errors.reason}>
             <Textarea
+              maxLength={500}
               id="approval-reason"
               value={form.reason}
               onChange={(event) => set('reason', event.target.value)}

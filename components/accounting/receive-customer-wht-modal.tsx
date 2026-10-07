@@ -161,7 +161,7 @@ export function ReceiveCustomerWhtModal({
         </Field>
 
         <Field label="หมายเหตุ" hint="ไม่บังคับ">
-          <Textarea rows={2} value={note} onChange={(event) => setNote(event.target.value)} />
+          <Textarea maxLength={1000} rows={2} value={note} onChange={(event) => setNote(event.target.value)} />
         </Field>
       </div>
     </Modal>

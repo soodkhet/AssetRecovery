@@ -104,6 +104,7 @@ export function MarkWhtFiledModal({
 
         <Field label="อ้างอิงการยื่น" required hint="บังคับกรอก — เช่น เลขที่ใบเสร็จ/วันที่ยื่น/ผู้ยื่น">
           <Textarea
+            maxLength={1000}
             rows={3}
             value={reason}
             onChange={(event) => setReason(event.target.value)}

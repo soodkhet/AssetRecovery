@@ -520,13 +520,14 @@ function RowActions({
           key={button.action}
           variant={button.tone === 'primary' ? 'primary' : 'secondary'}
           size="sm"
+          className="whitespace-nowrap"
           onClick={() => onRun(button)}
         >
           {button.label}
         </Button>
       ))}
       {/* "ดูรายละเอียด" ไม่ผูกกับ settings — หัวหน้าเห็นได้เสมอ (`40` §6.4) */}
-      <Button variant="secondary" size="sm" onClick={onOpenDetail}>
+      <Button variant="secondary" size="sm" className="whitespace-nowrap" onClick={onOpenDetail}>
         ดูรายละเอียด
       </Button>
     </div>

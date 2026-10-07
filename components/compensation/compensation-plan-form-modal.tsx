@@ -413,6 +413,7 @@ export function CompensationPlanFormModal({
 
         <Field id="plan-reason" label="เหตุผล" required hint="บันทึกลง audit log ถาวร (หมวดเงิน)" error={errors.reason}>
           <Textarea
+            maxLength={500}
             id="plan-reason"
             value={form.reason}
             onChange={(event) => set('reason', event.target.value)}

@@ -174,6 +174,7 @@ export function SlaPolicyTab() {
 
         <Field id="sla-reason" label="เหตุผล" required error={errors.reason}>
           <Textarea
+            maxLength={500}
             id="sla-reason"
             value={form.reason}
             onChange={(event) => set('reason', event.target.value)}

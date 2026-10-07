@@ -179,6 +179,7 @@ export function ManualMatchModal({
           hint={noteRequired ? 'บังคับกรอก — บันทึกลง audit log' : 'ไม่บังคับเมื่อยอดตรงเป๊ะ'}
         >
           <Textarea
+            maxLength={1000}
             rows={2}
             value={note}
             onChange={(event) => setNote(event.target.value)}

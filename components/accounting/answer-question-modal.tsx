@@ -90,6 +90,7 @@ export function AnswerQuestionModal({
           <>
             <Field label="พิมพ์คำตอบ / ชี้แจง" required hint="ตอบให้ครบถ้วน รวมถึงอ้างอิงเอกสารที่แก้ไขแล้วถ้ามี">
               <Textarea
+                maxLength={2000}
                 rows={5}
                 value={answerText}
                 onChange={(event) => setAnswerText(event.target.value)}

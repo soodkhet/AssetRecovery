@@ -150,7 +150,7 @@ export function ClosedTab() {
           </button>
         ))}
         <div className="hidden lg:block lg:w-[220px]">
-          <Select aria-label="กรองตามเดือน" value={month} onChange={(event) => setMonth(event.target.value)}>
+          <Select aria-label="กรองตามเดือน" className="pointer-coarse:min-h-11" value={month} onChange={(event) => setMonth(event.target.value)}>
             {months.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
@@ -161,7 +161,7 @@ export function ClosedTab() {
       </div>
 
       <div className="mb-3 lg:hidden">
-        <Select aria-label="กรองตามเดือน" value={month} onChange={(event) => setMonth(event.target.value)}>
+        <Select aria-label="กรองตามเดือน" className="pointer-coarse:min-h-11" value={month} onChange={(event) => setMonth(event.target.value)}>
           {months.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}

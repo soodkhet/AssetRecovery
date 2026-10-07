@@ -625,12 +625,14 @@ function CaseRowActions({
   const workflow = caseRowActions(item.status, (capability) => can('manage', capability))
 
   return (
+    // ปุ่มคำไทยห้ามหักกลางคำ (preship R4-009/R3-040) — แถวยัง flex-wrap ⇒ จอแคบปุ่มลงบรรทัดใหม่แทนล้น
     <div className="flex flex-wrap justify-end gap-1.5">
       {workflow.map((button) => (
         <Button
           key={button.action}
           variant="secondary"
           size="sm"
+          className="whitespace-nowrap"
           loading={workflowBusy}
           disabled={workflowBusy}
           onClick={() => onRunAction(button)}
@@ -639,13 +641,14 @@ function CaseRowActions({
         </Button>
       ))}
       {canEdit && (
-        <Button variant="secondary" size="sm" loading={busy} onClick={onEdit}>
+        <Button variant="secondary" size="sm" className="whitespace-nowrap" loading={busy} onClick={onEdit}>
           แก้ไข
         </Button>
       )}
       <Button
         variant={item.status === 'pending_review' ? 'success' : 'secondary'}
         size="sm"
+        className="whitespace-nowrap"
         onClick={onOpenDetail}
       >
         {item.status === 'pending_review' ? 'พิจารณา' : 'ดูรายละเอียด'}

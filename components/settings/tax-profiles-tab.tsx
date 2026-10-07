@@ -462,6 +462,7 @@ export function TaxProfilesTab() {
 
           <Field id="tax-reason" label="เหตุผล" required error={errors.reason}>
             <Textarea
+              maxLength={500}
               id="tax-reason"
               value={form.reason}
               onChange={(event) => set('reason', event.target.value)}

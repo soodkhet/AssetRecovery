@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { IconFile } from '@/components/field/field-icons'
 import { ReceiptInCompanyNameCheckbox } from '@/components/field/hotel-claim-modal'
 import { Button, Field, InlineAlert, Input, Modal, Textarea, useToast } from '@/components/ui'
@@ -48,6 +48,23 @@ export function ResubmitExpenseModal({
   const [receipt, setReceipt] = useState<File | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  // อัปโหลดใบเสร็จใหม่ยกเลิกได้จริง — ปิด modal ระหว่างอัปโหลด = abort request ที่ค้าง (preship R3-026)
+  const [uploading, setUploading] = useState(false)
+  const uploadAbortRef = useRef<AbortController | null>(null)
+
+  useEffect(() => () => uploadAbortRef.current?.abort(), [])
+
+  async function uploadReceipt(file: File): Promise<string> {
+    const controller = new AbortController()
+    uploadAbortRef.current = controller
+    setUploading(true)
+    try {
+      return await uploadExpenseReceipt(file, { signal: controller.signal })
+    } finally {
+      uploadAbortRef.current = null
+      setUploading(false)
+    }
+  }
 
   async function submit(): Promise<void> {
     if (note.trim() === '') {
@@ -78,7 +95,7 @@ export function ResubmitExpenseModal({
     setSubmitting(true)
     setError(null)
     try {
-      const receiptFileUrl = receipt === null ? undefined : await uploadExpenseReceipt(receipt)
+      const receiptFileUrl = receipt === null ? undefined : await uploadReceipt(receipt)
       const response = await callApi<FieldExpenseDto>(
         apiPath('field.resubmitExpense', { id: expense.id }),
         jsonRequest('POST', {
@@ -108,12 +125,27 @@ export function ResubmitExpenseModal({
       onClose={onClose}
       title="แก้ไขรายการเบิกที่ถูกตีกลับ"
       description={`${EXPENSE_TYPE_ICON[expense.expenseType]} ${expenseTypeLabel(expense.expenseType)} · ${fmtDate(expense.expenseDate)} · ${fmtSatangSymbol(expense.grossSatang)}`}
+      // ระหว่างอัปโหลดไม่ใช้ `loading` (ซึ่งล็อกทั้ง footer) — ให้ปุ่ม "ยกเลิกการอัปโหลด" กดได้ (R3-026)
+      lockClose={uploading}
       footer={
-        <Button onClick={() => void submit()} loading={submitting} className="w-full justify-center py-3">
-          {submitting ? 'กำลังส่ง...' : 'ส่งกลับเข้าคิวอนุมัติ'}
-        </Button>
+        uploading ? (
+          <div className="flex w-full gap-2">
+            <Button variant="secondary" onClick={() => uploadAbortRef.current?.abort()} className="justify-center py-3">
+              ยกเลิกการอัปโหลด
+            </Button>
+            <Button disabled className="flex-1 justify-center py-3">
+              กำลังอัปโหลดใบเสร็จ...
+            </Button>
+          </div>
+        ) : (
+          <Button onClick={() => void submit()} loading={submitting} className="w-full justify-center py-3">
+            {submitting ? 'กำลังส่ง...' : 'ส่งกลับเข้าคิวอนุมัติ'}
+          </Button>
+        )
       }
     >
+      {/* ล็อกช่องกรอกระหว่างอัปโหลด — ค่าที่ส่งคือค่าตอนกดส่ง */}
+      <fieldset disabled={uploading} className="m-0 min-w-0 border-0 p-0">
       <div className="space-y-3">
         {expense.rejectReason !== null && (
           <InlineAlert tone="warning" title="เหตุผลที่ถูกตีกลับ">
@@ -182,11 +214,12 @@ export function ResubmitExpenseModal({
         )}
 
         <Field label="สิ่งที่แก้ไข / ชี้แจง" required>
-          <Textarea rows={3} value={note} onChange={(event) => setNote(event.target.value)} />
+          <Textarea rows={3} maxLength={1000} value={note} onChange={(event) => setNote(event.target.value)} />
         </Field>
 
         {error !== null && <p className="text-xs font-semibold text-red-600">{error}</p>}
       </div>
+      </fieldset>
     </Modal>
   )
 }

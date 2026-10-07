@@ -605,6 +605,7 @@ export function CyclesTab() {
 
           <Field id="cycle-reason" label="เหตุผล" required error={errors.reason}>
             <Textarea
+              maxLength={500}
               id="cycle-reason"
               value={form.reason}
               onChange={(event) => set('reason', event.target.value)}

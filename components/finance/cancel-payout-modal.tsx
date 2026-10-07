@@ -96,6 +96,7 @@ export function CancelPayoutModal({
 
         <Field label="เหตุผลการยกเลิก" required hint="อย่างน้อย 5 ตัวอักษร — บันทึกลงรอบจ่ายและประวัติการแก้ไข">
           <Textarea
+            maxLength={500}
             rows={3}
             value={reason}
             onChange={(event) => setReason(event.target.value)}

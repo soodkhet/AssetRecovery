@@ -58,12 +58,54 @@ export function withContextSuffix(message: string, payload: Partial<Record<strin
 }
 
 /**
+ * ชื่อช่องภาษาไทยของ key ที่พบบ่อยใน schema — ใช้เติมหน้าข้อความ error กลางของ Zod ที่ไม่บอกชื่อช่อง
+ * (เช่น `ยาวเกิน 1,000 ตัวอักษร`) ให้ผู้ใช้รู้ว่าช่องไหน (preship R3-012) · key ที่ไม่อยู่ในรายการคงข้อความเดิม
+ */
+const FIELD_MESSAGE_LABELS: Readonly<Record<string, string>> = {
+  note: 'หมายเหตุ',
+  reason: 'เหตุผล',
+  rejectionReason: 'เหตุผลที่ปฏิเสธ',
+  rejectReason: 'เหตุผลที่ไม่รับ',
+  declineReason: 'เหตุผลที่ไม่ยินยอม',
+  teamChangeReason: 'เหตุผลที่ย้ายทีม',
+  failReasonDetail: 'รายละเอียดเหตุผล',
+  editNote: 'หมายเหตุการแก้ไข',
+  matchNote: 'หมายเหตุการจับคู่',
+  resolutionNote: 'หมายเหตุการแก้ไขปัญหา',
+  purpose: 'วัตถุประสงค์',
+  description: 'รายละเอียด',
+  detail: 'รายละเอียด',
+  questionText: 'คำถาม',
+  answerText: 'คำตอบ',
+  title: 'หัวข้อ',
+  name: 'ชื่อ',
+}
+
+/** ข้อความกลางของ Zod (`lib/validation/zod-thai.ts` · `userFacingIssueMessage`) — ไม่มีชื่อช่องในตัว */
+const GENERIC_FIELD_MESSAGE =
+  /^(ยาวเกิน|ต้องมีอย่างน้อย|ต้องไม่เกิน|ต้องไม่น้อยกว่า|ต้องน้อยกว่า|ต้องมากกว่า|ต้องเป็นตัวเลข|กรุณากรอกข้อมูลช่องนี้|กรุณาระบุข้อมูลช่องนี้|รูปแบบข้อมูลไม่ถูกต้อง|เลือกได้ไม่เกิน|ต้องเลือกอย่างน้อย|ค่าต้อง)/
+
+/** `contacts.0.note` ⇒ ใช้ส่วนท้ายที่ไม่ใช่ตัวเลข (`note`) หาชื่อช่อง */
+export function labelFieldMessage(key: string, text: string): string {
+  if (!GENERIC_FIELD_MESSAGE.test(text)) return text
+  const segment = key.split('.').filter((part) => !/^\d+$/.test(part)).pop() ?? key
+  const label = FIELD_MESSAGE_LABELS[segment]
+  return label === undefined ? text : `${label}: ${text}`
+}
+
+/**
  * ต่อข้อความ error รายช่องท้าย message — preship R3-012
  * หลายหน้าจอแสดงแค่ title+message ใน toast/InlineAlert ไม่ได้ map `fields` ลงใต้ช่อง ⇒ ผู้ใช้ถูกบอกให้
  * "ตรวจช่องที่มีข้อความแจ้งเตือน" ที่ไม่มีอยู่จริง · แสดงไม่เกิน 3 ข้อ (ที่เหลือบอกจำนวน)
  */
 export function withFieldsSuffix(message: string, fields: Record<string, string> | undefined): string {
-  const messages = [...new Set(Object.values(fields ?? {}).filter((text) => typeof text === 'string' && text.trim() !== ''))]
+  const messages = [
+    ...new Set(
+      Object.entries(fields ?? {})
+        .filter(([, text]) => typeof text === 'string' && text.trim() !== '')
+        .map(([key, text]) => labelFieldMessage(key, text)),
+    ),
+  ]
   if (messages.length === 0) return message
   const shown = messages.slice(0, 3).join(' · ')
   const more = messages.length > 3 ? ` และอีก ${messages.length - 3} ข้อ` : ''

@@ -359,6 +359,7 @@ export function ServiceFeeTemplatesManager() {
       >
         <Field id="sf-activation-reason" label="เหตุผล" required>
           <Textarea
+            maxLength={500}
             id="sf-activation-reason"
             value={activationReason}
             onChange={(event) => setActivationReason(event.target.value)}

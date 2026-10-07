@@ -115,7 +115,7 @@ export function ExpensesTab() {
                 <Tr key={row.id} className={row.documentStatus === 'incomplete' ? 'bg-red-50/30' : undefined}>
                   <Td>
                     <div className="text-sm font-semibold text-slate-900">{row.payeeName}</div>
-                    <p className="mt-0.5 font-mono text-[10px] text-slate-400">{row.payoutBatchName}</p>
+                    <p className="mt-0.5 font-mono text-[10px] whitespace-nowrap text-slate-400">{row.payoutBatchName}</p>
                   </Td>
                   <Td className="text-slate-600">{row.category}</Td>
                   <Td className="text-xs text-slate-500">{fmtDate(row.paymentDate)}</Td>

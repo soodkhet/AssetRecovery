@@ -353,6 +353,7 @@ export function FunctionalPermissionsTab() {
               error={reasonTooShort && reason.length > 0 ? `ระบุอย่างน้อย ${REASON_MIN_LENGTH} ตัวอักษร` : null}
             >
               <Textarea
+                maxLength={500}
                 id="functional-permission-reason"
                 value={reason}
                 onChange={(event) => setReason(event.target.value)}

@@ -166,6 +166,7 @@ export function UserPaymentSection({
             error={errors.reason}
           >
             <Textarea
+              maxLength={500}
               id="user-payment-reason"
               rows={2}
               value={state.reason}

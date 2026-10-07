@@ -124,6 +124,7 @@ export function ExceptionActionModal({
 
         <Field id="exception-note" label={copy.label} required hint={copy.hint}>
           <Textarea
+            maxLength={1000}
             id="exception-note"
             rows={4}
             value={note}

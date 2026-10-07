@@ -4,6 +4,7 @@ import {
   assertIdentityFormats,
   DEBTOR_NATIONALITIES,
   normalizePhoneInput,
+  toAsciiDigits,
   type DebtorNationalityCode,
 } from '@/lib/cases/case'
 import { CaseError } from '@/lib/cases/errors'
@@ -467,9 +468,25 @@ const PHONE_FORMATTED_TEXT = /^[\d\s\-.()+]+$/
  *   (ฟอร์มกรองตัวอักษรทิ้งตอนพิมพ์ได้เพราะผู้ใช้เห็นผล แต่ไฟล์นำเข้าห้ามตัดข้อมูลทิ้งเงียบ)
  */
 export function normalizeImportPhone(value: string): string {
-  if (!PHONE_FORMATTED_TEXT.test(value)) return value
+  // เลขไทย/เลขเต็มความกว้าง (๐๘๑…/０８１…) แปลงเป็นเลขอารบิกก่อนตรวจ — เหมือนช่องเบอร์ในฟอร์ม (preship R3-030)
+  if (!PHONE_FORMATTED_TEXT.test(toAsciiDigits(value))) return value
   const normalized = normalizePhoneInput(value)
   return normalized === '' ? value : normalized
+}
+
+/** อักขระที่ตัดทิ้งได้ในเลขบัตรประชาชน — ตัวเลข ช่องว่าง และขีดเท่านั้น (`1-2345-67890-12-3`) */
+const NATIONAL_ID_FORMATTED_TEXT = /^[\d\s-]+$/
+
+/**
+ * เลขบัตรประชาชนในไฟล์ → ตัวเลขล้วน 13 หลักแบบเดียวกับที่ฟอร์มเก็บ
+ * - แปลงเลขไทย/เลขเต็มความกว้างก่อน แล้วตัด**เฉพาะ**ช่องว่างและขีด
+ * - มีอักขระอื่นปน (ตัวอักษร จุด ฯลฯ) ⇒ คืนค่าเดิม ให้การตรวจ 13 หลักตีแถวตก — ห้ามตัดข้อมูลทิ้งเงียบ
+ */
+export function normalizeImportNationalId(value: string): string {
+  const ascii = toAsciiDigits(value)
+  if (!NATIONAL_ID_FORMATTED_TEXT.test(ascii)) return value
+  const digits = ascii.replace(/[\s-]/g, '')
+  return digits === '' ? value : digits
 }
 
 /**
@@ -525,6 +542,12 @@ export function mapImportRow(
     if (looksLikeLostLeadingZeroPhone(normalized)) {
       errors[field] = `${importColumnLabel(field)} "${value}" ไม่มีเลข 0 นำหน้า (Excel อาจตัดทิ้ง) — ตั้งรูปแบบเซลล์เป็น “ข้อความ” แล้วพิมพ์เบอร์ใหม่ให้ครบ`
     }
+  }
+
+  const nationalIdRaw = text('debtorNationalId')
+  if (nationalIdRaw !== undefined && errors.debtorNationalId === undefined) {
+    // ใช้ทั้ง preview และนำเข้าจริง (เส้นทางเดียวกันผ่าน planImport)
+    values.set('debtorNationalId', normalizeImportNationalId(nationalIdRaw))
   }
 
   const addressOf = (prefix: 'addressCurrent' | 'addressWork' | 'addressIdCard') => {

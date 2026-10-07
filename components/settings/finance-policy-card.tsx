@@ -328,6 +328,7 @@ export function FinancePolicyCard() {
 
         <Field id="policy-reason" label="เหตุผล" required error={errors.reason}>
           <Textarea
+            maxLength={500}
             id="policy-reason"
             value={form.reason}
             onChange={(event) => set('reason', event.target.value)}

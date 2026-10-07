@@ -121,6 +121,7 @@ export function MarkWhtSupplementaryFiledModal({
 
         <Field label="อ้างอิงการยื่นเพิ่มเติม" required hint="บังคับกรอก — เช่น เลขที่รับแบบ/วันที่ยื่น/ผู้ยื่น">
           <Textarea
+            maxLength={1000}
             rows={3}
             value={reason}
             onChange={(event) => setReason(event.target.value)}

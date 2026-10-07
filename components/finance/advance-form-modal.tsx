@@ -129,6 +129,7 @@ export function AdvanceFormModal({ open, onClose, onCreated }: {
 
         <Field label="วัตถุประสงค์ (บังคับกรอก)" required error={errors.purpose}>
           <Textarea
+            maxLength={500}
             rows={2}
             placeholder="ระบุวัตถุประสงค์ให้ชัดเจน เช่น เดินทางไปติดตามทรัพย์ จ.เชียงราย 3 วัน"
             value={purpose}

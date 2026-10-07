@@ -191,6 +191,7 @@ export function LockedFieldDaysCard() {
           </InlineAlert>
           <Field id="backdated-reason" label="เหตุผล" required error={reasonError}>
             <Textarea
+              maxLength={500}
               id="backdated-reason"
               value={reason}
               onChange={(event) => setReason(event.target.value)}

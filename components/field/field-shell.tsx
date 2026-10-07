@@ -301,7 +301,7 @@ function TopBar({ title, onOpenMenu }: { title: string; onOpenMenu: () => void }
   return (
     <header className="sticky top-0 z-30 border-b border-slate-200 bg-white lg:hidden">
       <div className="mx-auto flex h-16 max-w-[560px] items-center justify-between px-4">
-        <Link href="/field" className="focus-ring flex items-center gap-2">
+        <Link href="/field" className="focus-ring flex items-center gap-2 pointer-coarse:min-h-11">
           <span className="rounded-lg bg-slate-900 p-1.5 text-white">
             <IconTruck className="h-5 w-5" />
           </span>

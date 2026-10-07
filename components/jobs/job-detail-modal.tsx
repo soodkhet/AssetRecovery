@@ -137,6 +137,7 @@ export function JobDetailModal({
               )}
               <Field label="เหตุผล">
                 <Textarea
+                  maxLength={500}
                   rows={2}
                   value={reason}
                   onChange={(event) => setReason(event.target.value)}

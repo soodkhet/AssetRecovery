@@ -390,7 +390,7 @@ function NotificationsCard() {
                   {href === null ? (
                     <div>{body}</div>
                   ) : (
-                    <Link href={href} className="focus-ring block rounded hover:bg-slate-50">
+                    <Link href={href} className="focus-ring block rounded hover:bg-slate-50 pointer-coarse:min-h-11">
                       {body}
                     </Link>
                   )}

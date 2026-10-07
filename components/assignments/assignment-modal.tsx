@@ -14,7 +14,7 @@ import {
   teamSideLabel,
   type AssignmentTarget,
 } from '@/lib/assignments/assignment-ui'
-import { ASSIGNMENT_REASON_MIN, isAssignmentReasonLongEnough } from '@/lib/assignments/schemas'
+import { ASSIGNMENT_REASON_MAX, ASSIGNMENT_REASON_MIN, isAssignmentReasonLongEnough } from '@/lib/assignments/schemas'
 import type { AssignmentActionResultDto, TeamAgentDto } from '@/lib/assignments/types'
 
 /**
@@ -163,6 +163,7 @@ export function AssignmentModal({
                       hint={`อย่างน้อย ${ASSIGNMENT_REASON_MIN} ตัวอักษร (พิมพ์แล้ว ${reason.trim().length})`}
                     >
                       <Textarea
+                        maxLength={ASSIGNMENT_REASON_MAX}
                         id="reassign-reason"
                         value={reason}
                         placeholder="ระบุเหตุผล — ถูกบันทึกลง audit log และแจ้งพนักงานคนเดิม"

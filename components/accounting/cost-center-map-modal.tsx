@@ -106,6 +106,7 @@ export function CostCenterMapModal({
 
         <Field label="หมายเหตุการ Mapping" required hint="บังคับกรอก — บันทึกเป็นเหตุผลใน audit log">
           <Textarea
+            maxLength={1000}
             rows={3}
             value={reason}
             onChange={(event) => setReason(event.target.value)}

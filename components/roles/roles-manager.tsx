@@ -313,6 +313,7 @@ export function RolesManager() {
 
           <Field id="role-reason" label="เหตุผล" required hint="บันทึกลง audit log ถาวร">
             <Textarea
+              maxLength={500}
               id="role-reason"
               value={createReason}
               onChange={(event) => setCreateReason(event.target.value)}
@@ -334,6 +335,7 @@ export function RolesManager() {
       >
         <Field id="delete-reason" label="เหตุผลในการลบ" required>
           <Textarea
+            maxLength={500}
             id="delete-reason"
             value={deleteReason}
             onChange={(event) => setDeleteReason(event.target.value)}

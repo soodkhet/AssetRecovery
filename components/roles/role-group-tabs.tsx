@@ -41,7 +41,7 @@ export function RoleGroupTabs({
             aria-selected={item.id === tab}
             onClick={() => onTabChange(item.id)}
             className={cn(
-              'focus-ring-inset border-b-2 py-2.5 text-sm font-medium whitespace-nowrap transition-colors',
+              'focus-ring-inset border-b-2 py-2.5 text-sm font-medium whitespace-nowrap transition-colors pointer-coarse:min-h-11',
               item.id === tab
                 ? 'border-slate-900 text-slate-900'
                 : 'border-transparent text-slate-500 hover:text-slate-800',
@@ -62,7 +62,7 @@ export function RoleGroupTabs({
               aria-selected={group === subGroup}
               onClick={() => onSubGroupChange(group)}
               className={cn(
-                'focus-ring-inset rounded-md px-4 py-1.5 text-xs font-medium transition-colors',
+                'focus-ring-inset rounded-md px-4 py-1.5 text-xs font-medium transition-colors pointer-coarse:min-h-11',
                 group === subGroup ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700',
               )}
             >

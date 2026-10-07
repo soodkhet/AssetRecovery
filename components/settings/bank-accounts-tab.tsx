@@ -334,7 +334,8 @@ export function BankAccountsTab() {
                 </Td>
                 <Td>
                   <span className="font-mono text-xs text-slate-700">{item.accountNumberMasked}</span>
-                  {item.isPrimary && <StatusBadge group="pending" label="บัญชีหลัก" className="ml-2" />}
+                  {/* ป้ายหมวดหมู่ ไม่ใช่สถานะ ⇒ ป้ายกลาง ไม่ยืมสีเหลือง "รอดำเนินการ" (preship D4-005) */}
+                  {item.isPrimary && <Badge className="ml-2">บัญชีหลัก</Badge>}
                 </Td>
                 <Td>
                   <span className="text-xs text-slate-600">

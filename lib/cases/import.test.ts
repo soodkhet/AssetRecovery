@@ -4,6 +4,7 @@ import {
   findDuplicateRefsInFile,
   importRowIdentityError,
   mapImportRow,
+  normalizeImportNationalId,
   normalizeImportPhone,
   parseCsv,
   planImport,
@@ -140,6 +141,44 @@ describe('เบอร์โทร/เลขบัตรในไฟล์นำ
     expect(normalizeImportPhone('abc')).toBe('abc')
     expect(normalizeImportPhone('081-234-5678 ต่อ 12')).toBe('081-234-5678 ต่อ 12')
     expect(normalizeImportPhone('---')).toBe('---')
+  })
+
+  it('normalizeImportPhone: เลขไทย/เลขเต็มความกว้าง ⇒ แปลงเป็นเลขอารบิกแบบเดียวกับฟอร์ม', () => {
+    expect(normalizeImportPhone('๐๘๑-๒๓๔-๕๖๗๘')).toBe('0812345678')
+    expect(normalizeImportPhone('０８１２３４５６７８')).toBe('0812345678')
+    expect(normalizeImportPhone('＋๖๖ ๘๑ ๒๓๔ ๕๖๗๘')).toBe('0812345678')
+    expect(normalizeImportPhone('๐๘๑ ต่อ ๒')).toBe('๐๘๑ ต่อ ๒')
+  })
+
+  it('normalizeImportNationalId: ตัดเฉพาะขีด/ช่องว่าง + แปลงเลขไทย — อักขระอื่นไม่ตัดเงียบ', () => {
+    expect(normalizeImportNationalId('1-2345-67890-12-3')).toBe('1234567890123')
+    expect(normalizeImportNationalId('1 2345 67890 12 3')).toBe('1234567890123')
+    expect(normalizeImportNationalId('๑๒๓๔๕๖๗๘๙๐๑๒๓')).toBe('1234567890123')
+    expect(normalizeImportNationalId('1234567890123')).toBe('1234567890123')
+    expect(normalizeImportNationalId('1.2345.67890.12.3')).toBe('1.2345.67890.12.3')
+    expect(normalizeImportNationalId('A234567890123')).toBe('A234567890123')
+    expect(normalizeImportNationalId('---')).toBe('---')
+  })
+
+  it('planImport: เลขบัตรมีขีด/เลขไทย ผ่าน · ขาด/เกิน/อักขระอื่น ⇒ CASE_INVALID_NATIONAL_ID', () => {
+    const plan = planImport(
+      [
+        { 'เลขที่สัญญา': 'NID-1', 'เลขบัตรประชาชน': '1-2345-67890-12-3', 'เบอร์มือถือ': '๐๘๑๒๓๔๕๖๗๘' },
+        { 'เลขที่สัญญา': 'NID-2', 'เลขบัตรประชาชน': '1-2345-67890-12' },
+        { 'เลขที่สัญญา': 'NID-3', 'เลขบัตรประชาชน': '12345678901.3' },
+        { 'เลขที่สัญญา': 'NID-4', 'เลขบัตรประชาชน': '1.2345.67890.12.3' },
+      ],
+      COMPANY_ID,
+    )
+    // ยาวเกิน 13 ตัวอักษรหลังตัดขีด/ช่องว่าง ⇒ แถวตกตั้งแต่ Zod (ไม่ถูกตัดให้สั้นลงเงียบ)
+    expect(plan.errors.map((error) => [error.caseRef, Object.keys(error.fields)])).toEqual([['NID-4', ['debtorNationalId']]])
+    expect(plan.rows[0]?.input.debtorNationalId).toBe('1234567890123')
+    expect(plan.rows[0]?.input.debtorPhoneMobile).toBe('0812345678')
+    expect(plan.rows.map((row) => importRowIdentityError(row.input)?.code ?? null)).toEqual([
+      null,
+      'CASE_INVALID_NATIONAL_ID',
+      'CASE_INVALID_NATIONAL_ID',
+    ])
   })
 
   it('mapImportRow: เบอร์มีขีด/รหัสประเทศ ⇒ payload เป็นเบอร์ 10 หลัก ไม่ติด error', () => {

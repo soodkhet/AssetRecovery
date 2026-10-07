@@ -389,6 +389,7 @@ export function CaseDetailModal({
                   label={mode === 'review' ? 'จำเป็นเมื่อไม่รับเคส หรือขอข้อมูลเพิ่ม' : 'จำเป็นสำหรับคำขอ/การไม่อนุมัติรีไซเกิล'}
                 >
                   <Textarea
+                    maxLength={1000}
                     id="case-review-reason"
                     value={reason}
                     placeholder="ระบุเหตุผลให้ผู้เกี่ยวข้องเข้าใจตรงกัน — ถูกบันทึกลง audit log"

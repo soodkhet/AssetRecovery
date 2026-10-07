@@ -288,6 +288,7 @@ export function TaxProfileDefaultsCard() {
 
           <Field id="tax-default-reason" label="เหตุผล" required error={errors.reason}>
             <Textarea
+              maxLength={500}
               id="tax-default-reason"
               value={form.reason}
               onChange={(event) => setForm((currentForm) => ({ ...currentForm, reason: event.target.value }))}

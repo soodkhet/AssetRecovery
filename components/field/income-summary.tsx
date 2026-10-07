@@ -57,6 +57,7 @@ export function IncomeSummary() {
       <div className="mb-4 lg:max-w-[280px]">
         <Select
           aria-label="เลือกเดือน"
+          className="pointer-coarse:min-h-11"
           value={month}
           onChange={(event) => {
             setLoading(true)

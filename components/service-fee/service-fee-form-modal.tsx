@@ -270,6 +270,7 @@ export function ServiceFeeFormModal({
 
         <Field id="sf-reason" label="เหตุผล" required hint="บันทึกลง audit log ถาวร (กระทบรายได้)" error={errors.reason}>
           <Textarea
+            maxLength={500}
             id="sf-reason"
             value={form.reason}
             onChange={(event) => set('reason', event.target.value)}

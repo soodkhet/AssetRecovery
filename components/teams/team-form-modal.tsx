@@ -349,6 +349,7 @@ export function TeamFormModal({
 
         <Field id="team-reason" label="เหตุผล" required error={errors.reason}>
           <Textarea
+            maxLength={500}
             id="team-reason"
             value={form.reason}
             onChange={(event) => set('reason', event.target.value)}

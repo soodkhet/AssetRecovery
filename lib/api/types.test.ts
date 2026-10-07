@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { callApi, describeApiFailure, withContextSuffix, withFieldsSuffix } from '@/lib/api/types'
+import { callApi, describeApiFailure, labelFieldMessage, withContextSuffix, withFieldsSuffix } from '@/lib/api/types'
 
 describe('withContextSuffix — ต่อท้ายรายชื่อจากข้อมูลประกอบของ error', () => {
   it('companies (TEMPLATE_IN_USE) ต่อท้ายเหมือนเดิม', () => {
@@ -110,7 +110,19 @@ describe('withFieldsSuffix — ข้อความรายช่องต่�
   })
 
   it('ต่อข้อความรายช่อง ไม่ซ้ำ · เกิน 3 ข้อบอกจำนวนที่เหลือ', () => {
-    expect(withFieldsSuffix('แก้ไขข้อมูล', { failReasonDetail: 'ยาวเกิน 1,000 ตัวอักษร' })).toBe('แก้ไขข้อมูล — ยาวเกิน 1,000 ตัวอักษร')
+    expect(withFieldsSuffix('แก้ไขข้อมูล', { failReasonDetail: 'ยาวเกิน 1,000 ตัวอักษร' })).toBe(
+      'แก้ไขข้อมูล — รายละเอียดเหตุผล: ยาวเกิน 1,000 ตัวอักษร',
+    )
     expect(withFieldsSuffix('x', { a: '1', b: '1', c: '2', d: '3', e: '4' })).toBe('x — 1 · 2 · 3 และอีก 1 ข้อ')
+  })
+
+  it('ข้อความกลางที่ไม่บอกชื่อช่อง ⇒ เติมชื่อช่องที่รู้จัก · ข้อความที่ระบุชื่อช่องเองแล้ว/ช่องไม่รู้จักคงเดิม', () => {
+    expect(labelFieldMessage('note', 'ยาวเกิน 500 ตัวอักษร')).toBe('หมายเหตุ: ยาวเกิน 500 ตัวอักษร')
+    expect(labelFieldMessage('contacts.0.note', 'กรุณากรอกข้อมูลช่องนี้')).toBe('หมายเหตุ: กรุณากรอกข้อมูลช่องนี้')
+    expect(labelFieldMessage('note', 'หมายเหตุยาวเกินไป')).toBe('หมายเหตุยาวเกินไป')
+    expect(labelFieldMessage('unknownKey', 'ยาวเกิน 10 ตัวอักษร')).toBe('ยาวเกิน 10 ตัวอักษร')
+    expect(withFieldsSuffix('x', { note: 'ยาวเกิน 500 ตัวอักษร', reason: 'ยาวเกิน 500 ตัวอักษร' })).toBe(
+      'x — หมายเหตุ: ยาวเกิน 500 ตัวอักษร · เหตุผล: ยาวเกิน 500 ตัวอักษร',
+    )
   })
 })

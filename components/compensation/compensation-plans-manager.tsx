@@ -332,6 +332,7 @@ export function CompensationPlansManager() {
       >
         <Field id="plan-activation-reason" label="เหตุผล" required>
           <Textarea
+            maxLength={500}
             id="plan-activation-reason"
             value={activationReason}
             onChange={(event) => setActivationReason(event.target.value)}

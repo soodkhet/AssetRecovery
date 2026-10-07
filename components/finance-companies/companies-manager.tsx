@@ -415,6 +415,7 @@ export function CompaniesManager() {
       >
         <Field id="company-status-reason" label="เหตุผล" required>
           <Textarea
+            maxLength={500}
             id="company-status-reason"
             value={statusReason}
             onChange={(event) => setStatusReason(event.target.value)}

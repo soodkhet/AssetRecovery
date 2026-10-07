@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ReactNode, type SyntheticEvent } from
 import { Button, type ButtonVariant } from '@/components/ui/button'
 import { cn } from '@/components/ui/cn'
 import { busyElementLocksModal, decideModalClose } from '@/components/ui/modal-close-guard'
+import { guardModalHistory } from '@/components/ui/modal-history'
 import { isTopModal, registerModal, unregisterModal } from '@/components/ui/modal-stack'
 
 /**
@@ -113,6 +114,23 @@ export function Modal({
       event.returnValue = ''
     }
 
+    // ปุ่ม Back ของ browser = สั่งปิด modal (ผ่าน guard เดียวกับ Esc) แทนการออกจากหน้า — preship R3-014 / R4-005
+    // modal ที่ปิดการถามยืนยัน (ช่องกรอกเป็นแค่ตัวกรอง) ไม่ยุ่งกับ history
+    const releaseHistory = guardRef.current.confirmDiscard
+      ? guardModalHistory({
+          onBack: () => {
+            // มี modal อื่นซ้อนอยู่ข้างบน (เช่นหน้าดูไฟล์) ⇒ ไม่ปิดตัวข้างหลังทะลุ — อยู่หน้าเดิม
+            if (!isTopModal(token)) return 'stay'
+            const { closeLocked: busyNow, confirmDiscard: confirmNow } = guardRef.current
+            const decision = decideModalClose({ busy: busyNow, dirty: dirtyRef.current, confirmDiscard: confirmNow })
+            if (decision === 'close') return 'close'
+            if (decision === 'confirm-discard') setConfirming(true)
+            return 'stay'
+          },
+          onClose: () => onCloseRef.current(),
+        })
+      : null
+
     const previousOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     document.addEventListener('keydown', handleKey)
@@ -124,6 +142,7 @@ export function Modal({
       setOwnBusy(false)
       setConfirming(false)
       unregisterModal(token)
+      releaseHistory?.()
       document.body.style.overflow = previousOverflow
       document.removeEventListener('keydown', handleKey)
       window.removeEventListener('beforeunload', handleBeforeUnload)

@@ -94,6 +94,7 @@ export function CancelWhtModal({
 
         <Field label="เหตุผลการยกเลิก" required hint="บังคับกรอก — บันทึกลงเอกสารและ audit log">
           <Textarea
+            maxLength={1000}
             rows={3}
             value={reason}
             onChange={(event) => setReason(event.target.value)}

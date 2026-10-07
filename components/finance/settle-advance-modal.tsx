@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button, Field, InlineAlert, Input, Modal, Textarea, useToast } from '@/components/ui'
 import type { AdvanceDto, AdvanceSettleResult } from '@/lib/advances/types'
 import { callApi, jsonRequest } from '@/lib/api/types'
@@ -51,6 +51,14 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
     emptySubstituteLine('line-0', toInputDate(new Date())),
   ])
   const [substituteError, setSubstituteError] = useState<string | null>(null)
+  // อัปโหลดใบเสร็จยกเลิกได้จริง — ปิด modal/ออกจากหน้า = abort request ที่ค้าง (preship R3-026)
+  const [uploading, setUploading] = useState(false)
+  const uploadAbortRef = useRef<AbortController | null>(null)
+  const open = advance !== null
+  useEffect(() => {
+    if (!open) uploadAbortRef.current?.abort()
+  }, [open])
+  useEffect(() => () => uploadAbortRef.current?.abort(), [])
 
   if (advance === null) return null
 
@@ -83,15 +91,22 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
       return
     }
     setReceiptError(null)
-    setSaving(true)
     let receiptFileUrl: string | null = null
-    try {
-      receiptFileUrl = receipt === null ? null : await uploadExpenseReceipt(receipt)
-    } catch (uploadError) {
-      setSaving(false)
-      setReceiptError(uploadError instanceof FieldUploadError ? uploadError.message : 'อัปโหลดใบเสร็จไม่สำเร็จ')
-      return
+    if (receipt !== null) {
+      const controller = new AbortController()
+      uploadAbortRef.current = controller
+      setUploading(true)
+      try {
+        receiptFileUrl = await uploadExpenseReceipt(receipt, { signal: controller.signal })
+      } catch (uploadError) {
+        setReceiptError(uploadError instanceof FieldUploadError ? uploadError.message : 'อัปโหลดใบเสร็จไม่สำเร็จ')
+        return
+      } finally {
+        uploadAbortRef.current = null
+        setUploading(false)
+      }
     }
+    setSaving(true)
     const result = await callApi<AdvanceSettleResult>(
       `/api/advances/${advance.id}/settle`,
       jsonRequest('PATCH', {
@@ -140,17 +155,30 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
       onClose={onClose}
       title="เคลียร์เงินทดรองจ่าย (Settle Advance)"
       description={advance.purpose}
+      // ระหว่างอัปโหลดไม่ใช้ `loading` (ซึ่งล็อกทั้ง footer) — ให้ปุ่ม "ยกเลิกการอัปโหลด" กดได้ (R3-026)
+      lockClose={uploading}
       footer={
-        <>
-          <Button variant="secondary" onClick={onClose}>
-            ยกเลิก
-          </Button>
-          <Button loading={saving} disabled={!validUsed} onClick={() => void submit()}>
-            บันทึกการเคลียร์ยอด
-          </Button>
-        </>
+        uploading ? (
+          <>
+            <Button variant="secondary" onClick={() => uploadAbortRef.current?.abort()}>
+              ยกเลิกการอัปโหลด
+            </Button>
+            <Button disabled>กำลังอัปโหลดใบเสร็จ...</Button>
+          </>
+        ) : (
+          <>
+            <Button variant="secondary" onClick={onClose}>
+              ยกเลิก
+            </Button>
+            <Button loading={saving} disabled={!validUsed} onClick={() => void submit()}>
+              บันทึกการเคลียร์ยอด
+            </Button>
+          </>
+        )
       }
     >
+      {/* ล็อกช่องกรอกระหว่างอัปโหลด — ค่าที่ส่งคือค่าตอนกดบันทึก */}
+      <fieldset disabled={uploading} className="m-0 min-w-0 border-0 p-0">
       <div className="space-y-4">
         <div className="grid grid-cols-3 gap-3">
           <Summary label="ยอดที่ยืม (อนุมัติ)" value={fmtSatangSymbol(advance.approvedSatang ?? advance.requestedSatang)} />
@@ -249,9 +277,10 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
         )}
 
         <Field label="หมายเหตุ (ถ้ามี)">
-          <Textarea rows={2} value={note} onChange={(event) => setNote(event.target.value)} />
+          <Textarea rows={2} maxLength={500} value={note} onChange={(event) => setNote(event.target.value)} />
         </Field>
       </div>
+      </fieldset>
     </Modal>
   )
 }
