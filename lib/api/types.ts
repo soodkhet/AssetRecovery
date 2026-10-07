@@ -57,6 +57,19 @@ export function withContextSuffix(message: string, payload: Partial<Record<strin
   return message
 }
 
+/**
+ * ต่อข้อความ error รายช่องท้าย message — preship R3-012
+ * หลายหน้าจอแสดงแค่ title+message ใน toast/InlineAlert ไม่ได้ map `fields` ลงใต้ช่อง ⇒ ผู้ใช้ถูกบอกให้
+ * "ตรวจช่องที่มีข้อความแจ้งเตือน" ที่ไม่มีอยู่จริง · แสดงไม่เกิน 3 ข้อ (ที่เหลือบอกจำนวน)
+ */
+export function withFieldsSuffix(message: string, fields: Record<string, string> | undefined): string {
+  const messages = [...new Set(Object.values(fields ?? {}).filter((text) => typeof text === 'string' && text.trim() !== ''))]
+  if (messages.length === 0) return message
+  const shown = messages.slice(0, 3).join(' · ')
+  const more = messages.length > 3 ? ` และอีก ${messages.length - 3} ข้อ` : ''
+  return `${message} — ${shown}${more}`
+}
+
 /** เวลารอสูงสุดของคำขอหนึ่งครั้ง — เกินแล้วหยุดรอและบอกผู้ใช้ (preship PS-007) · งานยาว (PDF/export) ส่งค่าเองได้ */
 export const DEFAULT_API_TIMEOUT_MS = 60_000
 
@@ -135,7 +148,7 @@ export async function callApi<T>(input: string, init?: RequestInit, options?: Ca
         error: {
           code,
           title,
-          message: withContextSuffix(message, envelope.error),
+          message: withFieldsSuffix(withContextSuffix(message, envelope.error), fields),
           ...(fields === undefined ? {} : { fields }),
           payload: envelope.error,
         },

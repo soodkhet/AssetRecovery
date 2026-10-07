@@ -169,6 +169,8 @@ function FailReasonSection({
         className="mt-2"
         rows={2}
         aria-label="อธิบายเหตุผลเพิ่มเติม"
+        // เพดานเดียวกับ schema — เดิมวางข้อความยาวแล้ว autosave ล้มเงียบ (preship R3-012)
+        maxLength={1000}
         disabled={locked}
         value={detail ?? ''}
         onChange={(event) => onDetailChange(event.target.value)}
@@ -1102,6 +1104,7 @@ export function CloseCaseModal({
                 <SectionTitle>บันทึกเพิ่มเติม (ไม่บังคับ)</SectionTitle>
                 <Textarea
                   rows={2}
+                  maxLength={2000}
                   value={form.note ?? ''}
                   onChange={(event) => setForm({ ...form, note: event.target.value === '' ? null : event.target.value })}
                   onBlur={() => void persistDraft(form, { revision: mode.revision })}

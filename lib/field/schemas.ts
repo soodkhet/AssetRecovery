@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { substituteReceiptDraftSchema } from '@/lib/substitute-receipts/schemas'
 import { dateOnlySchema } from '@/lib/api/validation'
+import { toInputDate } from '@/lib/format/datetime'
 import { CLOSE_FAIL_REASONS } from '@/lib/field/fail-reasons'
 import { FIELD_GROUPS } from '@/lib/field/field-status'
 import {
@@ -38,9 +39,17 @@ export const fieldCaseListQuerySchema = z.object({
 
 export type FieldCaseListQuery = z.infer<typeof fieldCaseListQuerySchema>
 
+/** วันที่ลงพื้นที่อยู่ก่อนวันนี้ตามปฏิทินไทย (วันนี้ได้) — ตรวจที่ API ด้วย ไม่ใช่แค่ปฏิทิน disable (preship R3-018) */
+export function isScheduleDateInPast(scheduleDate: Date, now: Date): boolean {
+  return toInputDate(scheduleDate) < toInputDate(now)
+}
+
 /** `POST /api/field/cases/:id/schedule` — วันที่ลงพื้นที่ (คอลัมน์ `DATE` ⇒ ต้องใช้ `dateOnlySchema`) */
 export const scheduleCaseSchema = z.object({
-  scheduleDate: dateOnlySchema('วันที่ลงพื้นที่'),
+  scheduleDate: dateOnlySchema('วันที่ลงพื้นที่').refine(
+    (date) => !isScheduleDateInPast(date, new Date()),
+    'วันที่ลงพื้นที่ต้องเป็นวันนี้หรือวันถัดไป — เลือกวันที่ผ่านมาแล้วไม่ได้',
+  ),
 })
 
 export type ScheduleCaseInput = z.infer<typeof scheduleCaseSchema>

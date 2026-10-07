@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { callApi, describeApiFailure, withContextSuffix } from '@/lib/api/types'
+import { callApi, describeApiFailure, withContextSuffix, withFieldsSuffix } from '@/lib/api/types'
 
 describe('withContextSuffix — ต่อท้ายรายชื่อจากข้อมูลประกอบของ error', () => {
   it('companies (TEMPLATE_IN_USE) ต่อท้ายเหมือนเดิม', () => {
@@ -100,5 +100,17 @@ describe('describeApiFailure', () => {
     for (const kind of ['timeout', 'network', 'server', 'client', 'invalid_response'] as const) {
       expect(JSON.stringify(describeApiFailure(kind, 'POST'))).not.toMatch(/§|PS-\d/)
     }
+  })
+})
+
+describe('withFieldsSuffix — ข้อความรายช่องต่อท้าย (preship R3-012)', () => {
+  it('ไม่มี fields ⇒ ข้อความเดิม', () => {
+    expect(withFieldsSuffix('แก้ไขข้อมูล', undefined)).toBe('แก้ไขข้อมูล')
+    expect(withFieldsSuffix('แก้ไขข้อมูล', {})).toBe('แก้ไขข้อมูล')
+  })
+
+  it('ต่อข้อความรายช่อง ไม่ซ้ำ · เกิน 3 ข้อบอกจำนวนที่เหลือ', () => {
+    expect(withFieldsSuffix('แก้ไขข้อมูล', { failReasonDetail: 'ยาวเกิน 1,000 ตัวอักษร' })).toBe('แก้ไขข้อมูล — ยาวเกิน 1,000 ตัวอักษร')
+    expect(withFieldsSuffix('x', { a: '1', b: '1', c: '2', d: '3', e: '4' })).toBe('x — 1 · 2 · 3 และอีก 1 ข้อ')
   })
 })
