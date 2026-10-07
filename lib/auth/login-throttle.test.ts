@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  createRateLimitAuditGate,
   isLoginThrottled,
   LOGIN_MAX_FAILURES_PER_ACCOUNT,
   LOGIN_MAX_FAILURES_PER_ACCOUNT_IP,
@@ -52,5 +53,23 @@ describe('loginThrottleKey', () => {
   it('บัญชีที่ไม่มีใช้ identifier (ตัวพิมพ์เล็ก) · ไม่ถูกรูปแบบ = นับไม่ได้', () => {
     expect(loginThrottleKey(null, 'Ghost.User')).toBe('identifier:ghost.user')
     expect(loginThrottleKey(null, UNAUDITABLE_IDENTIFIER)).toBeNull()
+  })
+})
+
+describe('createRateLimitAuditGate (R3-009)', () => {
+  it('ครั้งแรกต่อกุญแจผ่าน · ซ้ำในช่วงเวลาไม่ผ่าน · พ้นช่วงผ่านอีกครั้ง', () => {
+    const gate = createRateLimitAuditGate(1_000)
+    expect(gate.claim('user:a|1.1.1.1', 0)).toBe(true)
+    expect(gate.claim('user:a|1.1.1.1', 999)).toBe(false)
+    expect(gate.claim('user:a|2.2.2.2', 999)).toBe(true)
+    expect(gate.claim('user:a|1.1.1.1', 1_000)).toBe(true)
+  })
+
+  it('จำกัดขนาด — ล้างของที่หมดช่วงก่อน แล้วยังรับกุญแจใหม่ได้', () => {
+    const gate = createRateLimitAuditGate(1_000, 2)
+    expect(gate.claim('a', 0)).toBe(true)
+    expect(gate.claim('b', 0)).toBe(true)
+    expect(gate.claim('c', 500)).toBe(true)
+    expect(gate.claim('d', 2_000)).toBe(true)
   })
 })

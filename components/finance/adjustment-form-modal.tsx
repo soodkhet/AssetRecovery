@@ -52,6 +52,11 @@ export function AdjustmentFormModal({
   const [reason, setReason] = useState('')
   const [saving, setSaving] = useState(false)
 
+  // กดค้นหาซ้ำคำเดิม/ช่องว่างต้องโหลดใหม่และปลดสถานะค้นหาเสมอ — เดิม query ไม่เปลี่ยน effect ไม่รัน
+  // ปุ่มค้างหมุนจน modal ล็อกทั้งบาน (preship R3-002) ⇒ ใช้ nonce ให้ effect รันทุกครั้งที่กด
+  const [searchNonce, setSearchNonce] = useState(0)
+  const [searchError, setSearchError] = useState<string | null>(null)
+
   useEffect(() => {
     if (!open) return
     let cancelled = false
@@ -60,12 +65,13 @@ export function AdjustmentFormModal({
       const result = await callApi<AdjustmentTargetDto[]>(`/api/adjustments/targets?${params.toString()}`)
       if (cancelled) return
       setTargets(result.data ?? [])
+      setSearchError(result.error === undefined ? null : `${result.error.title} — ${result.error.message}`)
       setSearching(false)
     })()
     return () => {
       cancelled = true
     }
-  }, [open, targetType, query])
+  }, [open, targetType, query, searchNonce])
 
   if (!open) return null
 
@@ -166,12 +172,15 @@ export function AdjustmentFormModal({
                 setSearching(true)
                 setSelected(null)
                 setQuery(search.trim())
+                setSearchNonce((value) => value + 1)
               }}
             >
               ค้นหา
             </Button>
           </div>
         </Field>
+
+        {searchError !== null && <InlineAlert tone="error">{searchError}</InlineAlert>}
 
         <div className="max-h-56 overflow-y-auto rounded-lg border border-slate-200">
           {targets.length === 0 ? (

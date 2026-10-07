@@ -91,19 +91,42 @@ suite('loginThrottled — นับจาก audit login ที่ผิด', ()
     expect(await throttle.loginThrottled({ organizationId: ORG_ID, throttleKey: `identifier:${identifier}`, accountId: null, ipAddress: null, now: later })).toBe(false)
   })
 
-  it('ยิงพร้อมกันบัญชีเดียวกัน ⇒ ได้ล็อกทีละคำขอ ที่เหลือ BUSY (R2-002)', async () => {
-    const key = `identifier:${freshIdentifier()}`
-    let release: () => void = () => undefined
-    const holding = new Promise<void>((resolve) => {
-      release = resolve
+  it('rateLimitAuditedSince — เห็นแถวถูกพักของกุญแจ+IP เดียวกันในช่วง · คนละ IP/กุญแจ/พ้นช่วงไม่นับ (R3-009)', async () => {
+    const identifier = freshIdentifier()
+    const ip = freshIp()
+    const query = (overrides: { throttleKey?: string | null; ipAddress?: string; since?: Date } = {}) =>
+      throttle.rateLimitAuditedSince({
+        organizationId: ORG_ID,
+        throttleKey: overrides.throttleKey === undefined ? `identifier:${identifier}` : overrides.throttleKey,
+        ipAddress: overrides.ipAddress ?? ip,
+        since: overrides.since ?? new Date(Date.now() - 60_000),
+      })
+    expect(await query()).toBe(false)
+    await failedLogin(identifier, ip) // INVALID_CREDENTIALS ไม่นับ
+    expect(await query()).toBe(false)
+    await failedLogin(identifier, ip, 'LOGIN_RATE_LIMITED')
+    expect(await query()).toBe(true)
+    expect(await query({ ipAddress: freshIp() })).toBe(false)
+    expect(await query({ throttleKey: `identifier:${freshIdentifier()}` })).toBe(false)
+    expect(await query({ since: new Date(Date.now() + 60_000) })).toBe(false)
+  })
+
+  it('rateLimitAuditedSince — ไม่มีกุญแจบัญชี (identifier <invalid>) นับตาม IP', async () => {
+    const ip = freshIp()
+    const args = { organizationId: ORG_ID, throttleKey: null, ipAddress: ip, since: new Date(Date.now() - 60_000) }
+    expect(await throttle.rateLimitAuditedSince(args)).toBe(false)
+    await audit.emitAudit({
+      organizationId: ORG_ID,
+      actorId: null,
+      actorRole: null,
+      action: 'login',
+      targetType: 'users',
+      targetId: null,
+      after: { result: 'failed', code: 'LOGIN_RATE_LIMITED', identifier: '<invalid>', throttle_key: null },
+      ipAddress: ip,
+      userAgent: 'vitest',
     })
-    const first = throttle.withLoginAttemptLock(key, () => holding.then(() => 'first'))
-    await new Promise((resolve) => setTimeout(resolve, 100))
-    const second = await throttle.withLoginAttemptLock(key, async () => 'second')
-    expect(second).toBe(throttle.LOGIN_ATTEMPT_BUSY)
-    release()
-    expect(await first).toBe('first')
-    expect(await throttle.withLoginAttemptLock(key, async () => 'third')).toBe('third')
+    expect(await throttle.rateLimitAuditedSince(args)).toBe(true)
   })
 
   it('ผู้ดูแลตั้งรหัสใหม่ให้ ⇒ เริ่มนับรายบัญชีใหม่ (ทางปลดล็อก R2-003)', async () => {

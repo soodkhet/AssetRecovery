@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { decideModalClose } from '@/components/ui/modal-close-guard'
+import { busyElementLocksModal, decideModalClose } from '@/components/ui/modal-close-guard'
 
 describe('decideModalClose', () => {
   it('ระหว่างบันทึก ปิดไม่ได้เลย แม้กรอกข้อมูลไว้หรือปิดการยืนยันทิ้ง', () => {
@@ -18,5 +18,17 @@ describe('decideModalClose', () => {
 
   it('ยังไม่ได้กรอกอะไร ปิดได้ทันที', () => {
     expect(decideModalClose({ busy: false, dirty: false, confirmDiscard: true })).toBe('close')
+  })
+})
+
+describe('busyElementLocksModal (R3-002)', () => {
+  it('ปุ่มใน footer / ปุ่ม submit / modal ไม่มี footer ⇒ ล็อก', () => {
+    expect(busyElementLocksModal({ hasFooter: true, inFooter: true, isSubmit: false })).toBe(true)
+    expect(busyElementLocksModal({ hasFooter: true, inFooter: false, isSubmit: true })).toBe(true)
+    expect(busyElementLocksModal({ hasFooter: false, inFooter: false, isSubmit: false })).toBe(true)
+  })
+
+  it('ปุ่มย่อยใน body (ค้นหา/ดาวน์โหลด) ของ modal ที่มี footer ⇒ ไม่ล็อกทั้ง modal', () => {
+    expect(busyElementLocksModal({ hasFooter: true, inFooter: false, isSubmit: false })).toBe(false)
   })
 })

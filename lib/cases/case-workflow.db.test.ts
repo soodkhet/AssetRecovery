@@ -454,6 +454,40 @@ suite('Phase 2.3 — state machine + snapshot + recycle (DB จริง)', () =
     expect(switched.readiness.missingDocuments).toEqual(['bundle_doc'])
   })
 
+  it('แก้เคสจาก 2 ฟอร์มพร้อมกัน: ฟอร์มที่เปิดก่อนบันทึกทีหลัง ⇒ CASE_EDIT_CONFLICT ไม่ทับค่า (preship R3-003)', async () => {
+    const { updateCase, getCase } = await import('@/lib/cases/queries')
+    const caseId = await seedCase('SF-2026-2357', { withDocuments: true })
+    const opened = (await getCase(actor, caseId)).updatedAt
+
+    const first = await updateCase(actor, caseId, { debtorLineId: 'line-from-tab1', expectedUpdatedAt: opened }, { actor, meta })
+    expect(first.debtorLineId).toBe('line-from-tab1')
+    await expect(
+      updateCase(actor, caseId, { debtorFacebook: 'fb-from-tab2', debtorLineId: '', expectedUpdatedAt: opened }, { actor, meta }),
+    ).rejects.toMatchObject({ code: 'CASE_EDIT_CONFLICT' })
+    const after = await getCase(actor, caseId)
+    expect(after.debtorLineId).toBe('line-from-tab1')
+    expect(after.debtorFacebook).not.toBe('fb-from-tab2')
+
+    // โหลดใหม่แล้วบันทึกได้ · ไม่ส่ง expectedUpdatedAt (ผู้เรียกเดิม) ไม่ตรวจ
+    const reloaded = await updateCase(actor, caseId, { debtorFacebook: 'fb-from-tab2', expectedUpdatedAt: after.updatedAt }, { actor, meta })
+    expect(reloaded.debtorFacebook).toBe('fb-from-tab2')
+    await updateCase(actor, caseId, { debtorFacebook: 'fb-legacy' }, { actor, meta })
+  })
+
+  it('บันทึกพร้อมกัน 2 คำขอจากฟอร์มเวอร์ชันเดียวกัน ⇒ สำเร็จ 1 · อีกคำขอ CASE_EDIT_CONFLICT (R3-003)', async () => {
+    const { updateCase, getCase } = await import('@/lib/cases/queries')
+    const caseId = await seedCase('SF-2026-2358', { withDocuments: true })
+    const opened = (await getCase(actor, caseId)).updatedAt
+    const results = await Promise.allSettled([
+      updateCase(actor, caseId, { debtorLineId: 'a', expectedUpdatedAt: opened }, { actor, meta }),
+      updateCase(actor, caseId, { debtorLineId: 'b', expectedUpdatedAt: opened }, { actor, meta }),
+    ])
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1)
+    const rejected = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+    expect(rejected).toHaveLength(1)
+    expect(rejected[0]?.reason).toMatchObject({ code: 'CASE_EDIT_CONFLICT' })
+  })
+
   it('เคสแยกประเภทเดิมรับเคสได้โดยไม่ต้องยืนยันเอกสารชุด และ audit ไม่มีฟิลด์ชุด', async () => {
     const caseId = await seedCase('SF-2026-2341', { withDocuments: true })
     await service.changeCaseStatus(actor, caseId, change({ action: 'review' }), { actor, meta })

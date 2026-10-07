@@ -50,3 +50,30 @@ export function isLoginThrottled({
   if (ipFailures !== null && ipFailures >= LOGIN_MAX_FAILURES_PER_IP) return true
   return false
 }
+
+/** ลง audit "ถูกพัก" ของกุญแจ + IP เดียวกันได้ครั้งเดียวต่อช่วงนี้ (preship R3-009 — audit immutable เก็บ 5 ปี) */
+export const LOGIN_RATE_LIMIT_AUDIT_INTERVAL_MS = 5 * 60 * 1000
+
+/**
+ * ด่านในโปรเซสก่อนถาม DB ว่าเพิ่งลง audit ถูกพักไปหรือยัง — คำขอซ้ำถี่ๆ ไม่ต้องแตะ DB เลย
+ * `claim` คืน `true` ครั้งแรกต่อกุญแจต่อช่วงเวลา (แล้วจองช่วงนั้นไว้) · จำกัดขนาดกันหน่วยความจำโต
+ */
+export function createRateLimitAuditGate(intervalMs = LOGIN_RATE_LIMIT_AUDIT_INTERVAL_MS, maxEntries = 10_000) {
+  const lastClaim = new Map<string, number>()
+  return {
+    claim(key: string, now: number): boolean {
+      const last = lastClaim.get(key)
+      if (last !== undefined && now - last < intervalMs) return false
+      if (lastClaim.size >= maxEntries) {
+        for (const [k, at] of lastClaim) if (now - at >= intervalMs) lastClaim.delete(k)
+        if (lastClaim.size >= maxEntries) lastClaim.clear()
+      }
+      lastClaim.set(key, now)
+      return true
+    },
+    /** สำหรับเทสต์ */
+    reset(): void {
+      lastClaim.clear()
+    },
+  }
+}

@@ -109,7 +109,14 @@ export type CaseCreateInput = z.infer<typeof caseCreateSchema>
 export const caseUpdateSchema = caseCreateSchema
   .omit({ sourceChannel: true })
   .partial()
-  .extend({ editNote: optionalText(500) })
+  .extend({
+    editNote: optionalText(500),
+    /**
+     * `updatedAt` ของเคสตอนเปิดฟอร์ม — ไม่ตรงค่าปัจจุบัน ⇒ `CASE_EDIT_CONFLICT` (preship R3-003 · `38` §12 v3.12)
+     * ไม่ส่ง = ไม่ตรวจ (ผู้เรียกภายนอก/เดิม)
+     */
+    expectedUpdatedAt: z.iso.datetime({ offset: true }).optional(),
+  })
 
 export type CaseUpdateInput = z.infer<typeof caseUpdateSchema>
 

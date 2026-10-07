@@ -13,8 +13,14 @@ import {
 import type { RequestMeta } from '@/lib/auth/request-meta'
 import type { LoginInput } from '@/lib/auth/schemas'
 import { padLoginFailure, realLoginTimingClock, type LoginTimingClock } from '@/lib/auth/login-timing'
-import { loginThrottleKey, UNAUDITABLE_IDENTIFIER } from '@/lib/auth/login-throttle'
-import { LOGIN_ATTEMPT_BUSY, loginThrottled, withLoginAttemptLock } from '@/lib/auth/login-throttle-queries'
+import { LOGIN_ATTEMPT_BUSY, loginAttemptLockKey, withLoginAttemptLock } from '@/lib/auth/login-attempt-lock'
+import {
+  createRateLimitAuditGate,
+  LOGIN_RATE_LIMIT_AUDIT_INTERVAL_MS,
+  loginThrottleKey,
+  UNAUDITABLE_IDENTIFIER,
+} from '@/lib/auth/login-throttle'
+import { loginThrottled, rateLimitAuditedSince } from '@/lib/auth/login-throttle-queries'
 import { invalidateSessionCache, setCachedSession } from '@/lib/auth/session-cache'
 import { getAuthenticatedUid, loadSessionUser } from '@/lib/auth/session'
 import type { SessionUser } from '@/lib/auth/types'
@@ -127,33 +133,53 @@ export async function login(
   }
 }
 
+const rateLimitAuditGate = createRateLimitAuditGate()
+
+/** สำหรับเทสต์ — ล้างด่านลง audit ถูกพักในโปรเซส */
+export function resetRateLimitAuditGateForTests(): void {
+  rateLimitAuditGate.reset()
+}
+
 /**
- * ตรวจเพดานครั้งที่ผิด → ตรวจรหัสกับ Supabase → ลง audit ครั้งที่ผิด อยู่ใต้ล็อกต่อบัญชี (R2-002)
+ * ลง audit "ถูกพัก" ครั้งแรกต่อ (กุญแจบัญชี, IP) ต่อ {@link LOGIN_RATE_LIMIT_AUDIT_INTERVAL_MS} — preship R3-009
+ * ครั้งถัดไปในช่วงเดียวกันไม่ลงซ้ำ (ด่านในโปรเซสก่อน แล้วเช็ค DB กันหลาย instance)
+ * ⚠️ ส่วนต่างจาก `05` §13 ("ลงทุกครั้ง") — ตัดสินชั่วคราวรอ PO (uat/PO-DECISIONS-2569-10-08.md)
+ */
+async function shouldAuditRateLimit(organizationId: string, throttleKey: string | null, ipAddress: string | null): Promise<boolean> {
+  const now = Date.now()
+  if (!rateLimitAuditGate.claim(`${throttleKey ?? '-'}|${ipAddress ?? '-'}`, now)) return false
+  const since = new Date(now - LOGIN_RATE_LIMIT_AUDIT_INTERVAL_MS)
+  return !(await rateLimitAuditedSince({ organizationId, throttleKey, ipAddress, since }))
+}
+
+/**
+ * ตรวจเพดานครั้งที่ผิด → ตรวจรหัสกับ Supabase → ลง audit ครั้งที่ผิด ทีละคำขอต่อ บัญชี+IP (R2-002 · R3-001/008)
  * คืน Supabase uid เมื่อรหัสถูก · ผิด/พัก ⇒ throw `AuthError`
+ * - ตรวจเพดานก่อนเข้าคิว ⇒ IP ที่ถูกพักแล้วไม่ได้เข้าคิว/ไม่แตะ Supabase
+ * - ไม่ถือ connection ของ DB ระหว่างรอคิวหรือเรียก Supabase (R3-001 — เดิมทำ pool ตัน)
  */
 async function verifyCredentials(input: LoginInput, account: LoginAccount | null, meta: RequestMeta): Promise<string> {
   const auditOrganizationId = await resolveAuditOrganizationId(account)
   const throttleKey = loginThrottleKey(account?.id ?? null, auditableIdentifier(input.identifier))
 
   const rateLimited = async (): Promise<never> => {
-    await auditLoginFailed(input.identifier, account, 'LOGIN_RATE_LIMITED', meta)
+    if (auditOrganizationId !== null && (await shouldAuditRateLimit(auditOrganizationId, throttleKey, meta.ipAddress))) {
+      await auditLoginFailed(input.identifier, account, 'LOGIN_RATE_LIMITED', meta)
+    }
     throw new AuthError('LOGIN_RATE_LIMITED', 'too many failed logins')
   }
 
-  const attempt = async (): Promise<string> => {
-    // preship PS-009 — ผิดซ้ำเกินเพดาน ⇒ พักก่อนแตะ Supabase (ไม่ตรวจรหัสผ่านเลย แม้รหัสครั้งนี้ถูก)
-    if (
-      auditOrganizationId !== null &&
-      (await loginThrottled({
-        organizationId: auditOrganizationId,
-        throttleKey,
-        accountId: account?.id ?? null,
-        ipAddress: meta.ipAddress,
-      }))
-    ) {
-      return rateLimited()
-    }
+  // preship PS-009 — ผิดซ้ำเกินเพดาน ⇒ พักก่อนแตะ Supabase (ไม่ตรวจรหัสผ่านเลย แม้รหัสครั้งนี้ถูก)
+  const throttled = async (): Promise<boolean> =>
+    auditOrganizationId !== null &&
+    (await loginThrottled({
+      organizationId: auditOrganizationId,
+      throttleKey,
+      accountId: account?.id ?? null,
+      ipAddress: meta.ipAddress,
+    }))
 
+  const attempt = async (): Promise<string> => {
     // ไม่พบผู้ใช้ / ยังไม่มีบัญชี Auth = ตอบเหมือนรหัสผิดทุกประการ (ห้าม leak ว่ามีตัวตนนี้ในระบบ — `05` §10)
     // ไม่พบบัญชี → ยังเรียกอ่านบัญชี Auth ด้วย uid หลอก 1 ครั้ง ให้จำนวนครั้งที่เรียก Auth เท่าทางที่มีบัญชีจริง (BUG-140)
     const authEmail = await getAuthEmail(account?.supabaseUid ?? LOGIN_TIMING_DUMMY_UID)
@@ -173,9 +199,14 @@ async function verifyCredentials(input: LoginInput, account: LoginAccount | null
     return data.user.id
   }
 
+  if (await throttled()) return rateLimited()
   if (throttleKey === null) return attempt()
-  const result = await withLoginAttemptLock(throttleKey, attempt)
-  // คำขอของบัญชีเดียวกันกำลังตรวจอยู่ (ยิงซ้อน) ⇒ ไม่ตรวจรหัสซ้ำ — ตอบแบบถูกพัก ไม่นับเป็นครั้งที่ผิด
+  const result = await withLoginAttemptLock(loginAttemptLockKey(throttleKey, meta.ipAddress), async ({ waited }) => {
+    // รอคำขอก่อนหน้าของบัญชี+IP เดียวกัน ⇒ ครั้งที่ผิดของตัวก่อนเพิ่งลง audit — ตรวจเพดานซ้ำ (กันยิงพร้อมกันเกินเพดาน R2-002)
+    if (waited && (await throttled())) return LOGIN_ATTEMPT_BUSY
+    return attempt()
+  })
+  // คิวของบัญชี+IP นี้เต็ม / ถูกพักระหว่างรอ ⇒ ตอบแบบถูกพัก (ไม่กระทบ IP อื่น — R3-008)
   return result === LOGIN_ATTEMPT_BUSY ? rateLimited() : result
 }
 
@@ -296,11 +327,17 @@ async function verifyCurrentPassword(user: SessionUser, currentPassword: string,
       userAgent: meta.userAgent,
     })
 
-  const result = await withLoginAttemptLock(throttleKey ?? `user:${user.id}`, async () => {
-    if (await loginThrottled({ organizationId: user.organizationId, throttleKey, accountId: user.id, ipAddress: meta.ipAddress })) {
-      await auditFailure('LOGIN_RATE_LIMITED')
-      throw new AuthError('LOGIN_RATE_LIMITED', `change-password throttled user=${user.id}`)
-    }
+  const rateLimited = async (): Promise<never> => {
+    if (await shouldAuditRateLimit(user.organizationId, throttleKey, meta.ipAddress)) await auditFailure('LOGIN_RATE_LIMITED')
+    throw new AuthError('LOGIN_RATE_LIMITED', `change-password throttled user=${user.id}`)
+  }
+  const throttled = () =>
+    loginThrottled({ organizationId: user.organizationId, throttleKey, accountId: user.id, ipAddress: meta.ipAddress })
+
+  if (await throttled()) return rateLimited()
+  const lockKey = loginAttemptLockKey(throttleKey ?? `user:${user.id}`, meta.ipAddress)
+  const result = await withLoginAttemptLock(lockKey, async ({ waited }) => {
+    if (waited && (await throttled())) return LOGIN_ATTEMPT_BUSY
     const authEmail = await getAuthEmail(user.supabaseUid)
     if (authEmail === null || !(await verifyPassword(authEmail, currentPassword))) {
       await auditFailure('INVALID_CREDENTIALS')
@@ -308,8 +345,7 @@ async function verifyCurrentPassword(user: SessionUser, currentPassword: string,
     }
     return authEmail
   })
-  if (result === LOGIN_ATTEMPT_BUSY) throw new AuthError('LOGIN_RATE_LIMITED', `change-password concurrent user=${user.id}`)
-  return result
+  return result === LOGIN_ATTEMPT_BUSY ? rateLimited() : result
 }
 
 /**

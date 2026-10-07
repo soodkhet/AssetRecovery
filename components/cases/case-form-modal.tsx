@@ -101,12 +101,15 @@ export function CaseFormModal({
   const [deleteTarget, setDeleteTarget] = useState<CaseDocumentDto | null>(null)
   const [deleteReason, setDeleteReason] = useState('')
   const [deleting, setDeleting] = useState(false)
+  /** `updatedAt` ของเคสที่ฟอร์มนี้แก้อยู่ — ส่งไปตรวจว่าไม่มีใครบันทึกทับระหว่างนี้ (preship R3-003) */
+  const [baseUpdatedAt, setBaseUpdatedAt] = useState<string | null>(editing?.updatedAt ?? null)
 
   // เปลี่ยนเป้าหมายของ modal (สร้าง ↔ แก้ไขเคสอื่น) = โหลดค่าเริ่มต้นใหม่ระหว่าง render
   // (ไม่ใช้ `useEffect` — กฎ `react-hooks/set-state-in-effect` ใน REUSE_INDEX)
   const targetId = editing?.id ?? null
   if (targetId !== loadedId) {
     setLoadedId(targetId)
+    setBaseUpdatedAt(editing?.updatedAt ?? null)
     setDocuments(editing?.documents ?? [])
     setForm(caseFormFromDetail(editing))
     setFieldErrors({})
@@ -148,7 +151,10 @@ export function CaseFormModal({
       return
     }
 
-    const payload = buildCasePayload(form, isEdit ? 'edit' : 'create')
+    const payload = {
+      ...buildCasePayload(form, isEdit ? 'edit' : 'create'),
+      ...(isEdit && baseUpdatedAt !== null ? { expectedUpdatedAt: baseUpdatedAt } : {}),
+    }
     const schema = isEdit ? caseUpdateSchema : caseCreateSchema
     const parsed = schema.safeParse(payload)
     if (!parsed.success) {
@@ -227,6 +233,7 @@ export function CaseFormModal({
         return
       }
       setDocuments(response.data.documents)
+      setBaseUpdatedAt(response.data.updatedAt)
       showToast({ tone: 'success', title: 'ลบเอกสารแล้ว', description: deleteTarget.originalName })
       setDeleteTarget(null)
       onDocumentsChanged?.()

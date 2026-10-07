@@ -506,3 +506,16 @@ export function assertCaseEditable(status: string): void {
     throw new CaseError('CASE_LOCKED_AFTER_APPROVAL', { context: { status } })
   }
 }
+
+/**
+ * optimistic concurrency ของการแก้เคส — preship R3-003 · `38` §12 v3.12
+ * ฟอร์มส่ง `updatedAt` ที่โหลดมา ไม่ตรงค่าปัจจุบัน (เทียบระดับมิลลิวินาทีเท่าที่ JSON ส่งได้) ⇒ `CASE_EDIT_CONFLICT`
+ * `expected` ไม่ส่ง = ไม่ตรวจ (ผู้เรียกภายนอก/เดิม)
+ */
+export function assertCaseNotModifiedSince(current: Date, expected: string | undefined): void {
+  if (expected === undefined) return
+  const expectedMs = Date.parse(expected)
+  if (Number.isNaN(expectedMs) || Math.floor(current.getTime()) !== expectedMs) {
+    throw new CaseError('CASE_EDIT_CONFLICT', { context: { currentUpdatedAt: current.toISOString(), expectedUpdatedAt: expected } })
+  }
+}

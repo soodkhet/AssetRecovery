@@ -8,6 +8,7 @@ import {
   assertBundleConfirmed,
   assertCaseDocumentDeletable,
   assertCaseEditable,
+  assertCaseNotModifiedSince,
   assertDocumentModeCompatible,
   assertDocumentModeSelectable,
   documentModeAfterAdding,
@@ -440,5 +441,27 @@ describe('normalizePhoneInput / phoneInputError (preship R2-008)', () => {
     expect(phoneInputError('')).toBeNull()
     expect(phoneInputError('081')).toBeNull()
     expect(phoneInputError('0812345678')).toBeNull()
+  })
+})
+
+describe('assertCaseNotModifiedSince — แก้เคสพร้อมกัน (preship R3-003)', () => {
+  const current = new Date('2026-10-08T01:02:03.456Z')
+
+  it('ค่าที่ฟอร์มโหลดมาตรงกับปัจจุบัน ⇒ ผ่าน · ไม่ส่งค่า ⇒ ไม่ตรวจ', () => {
+    expect(() => assertCaseNotModifiedSince(current, '2026-10-08T01:02:03.456Z')).not.toThrow()
+    expect(() => assertCaseNotModifiedSince(current, '2026-10-08T08:02:03.456+07:00')).not.toThrow()
+    expect(() => assertCaseNotModifiedSince(current, undefined)).not.toThrow()
+  })
+
+  it('มีคนบันทึกหลังเปิดฟอร์ม ⇒ CASE_EDIT_CONFLICT 409', () => {
+    let caught: unknown
+    try {
+      assertCaseNotModifiedSince(current, '2026-10-08T01:02:03.000Z')
+    } catch (error) {
+      caught = error
+    }
+    expect(caught).toBeInstanceOf(CaseError)
+    expect((caught as CaseError).code).toBe('CASE_EDIT_CONFLICT')
+    expect((caught as CaseError).status).toBe(409)
   })
 })

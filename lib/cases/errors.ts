@@ -9,6 +9,7 @@ import { ModuleError, type ErrorMessage } from '@/lib/api/errors'
  * code ที่เติมเข้า `38` §12 พร้อมงาน Phase 2.3: `CASE_INVALID_STATUS_TRANSITION`, `CASE_STATUS_REASON_REQUIRED`
  * code ที่เติมเข้า `38` §12 ตามมติ PO 04/10/2569 (เอกสารชุดเดียว): `CASE_DOCUMENT_MODE_CONFLICT`, `CASE_BUNDLE_CONFIRMATION_REQUIRED`
  * code ที่เติมเข้า `38` §12 ตามมติ PO 04/10/2569 (v3.4 ลบเอกสาร): `CASE_DOCUMENT_NOT_FOUND`, `CASE_DOCUMENT_DELETE_NOT_ALLOWED`
+ * code ที่เติมเข้า `38` §12 ตาม preship R3-003 (v3.12 แก้เคสพร้อมกัน): `CASE_EDIT_CONFLICT`
  *
  * **pure ล้วน** — ห้าม import อะไรที่แตะ Prisma (ฟอร์มฝั่ง client เรียกตัว assert ชุดเดียวกัน)
  */
@@ -25,6 +26,7 @@ export const CASE_ERROR_CODES = [
   'CASE_INVALID_NATIONAL_ID',
   'CASE_INVALID_PHONE_FORMAT',
   'CASE_LOCKED_AFTER_APPROVAL',
+  'CASE_EDIT_CONFLICT',
   'CASE_INVALID_STATUS_TRANSITION',
   'CASE_STATUS_REASON_REQUIRED',
   'CASE_NO_TEAM_MATCH',
@@ -54,6 +56,7 @@ const HTTP_STATUS: Record<CaseErrorCode, number> = {
   CASE_INVALID_NATIONAL_ID: 400,
   CASE_INVALID_PHONE_FORMAT: 400,
   CASE_LOCKED_AFTER_APPROVAL: 400,
+  CASE_EDIT_CONFLICT: 409,
   CASE_INVALID_STATUS_TRANSITION: 400,
   CASE_STATUS_REASON_REQUIRED: 400,
   CASE_NO_TEAM_MATCH: 400,
@@ -114,6 +117,10 @@ const MESSAGES: Record<CaseErrorCode, ErrorMessage> = {
   CASE_LOCKED_AFTER_APPROVAL: {
     title: 'แก้ไขเคสนี้ไม่ได้แล้ว',
     message: 'แก้ไขได้เฉพาะเคสสถานะ ร่าง / รอพิจารณา / รอข้อมูลเพิ่ม เท่านั้น',
+  },
+  CASE_EDIT_CONFLICT: {
+    title: 'มีผู้แก้ไขเคสนี้หลังคุณเปิดฟอร์ม',
+    message: 'ระบบยังไม่บันทึกการแก้ไขของคุณ เพื่อไม่ให้ทับข้อมูลที่เพิ่งบันทึก — กรุณาปิดฟอร์ม เปิดเคสใหม่ แล้วแก้ไขอีกครั้ง',
   },
   CASE_INVALID_STATUS_TRANSITION: {
     title: 'เปลี่ยนสถานะแบบนี้ไม่ได้',

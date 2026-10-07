@@ -1,4 +1,4 @@
-import { isLoginThrottled, LOGIN_THROTTLE_WINDOW_MS } from '@/lib/auth/login-throttle'
+import { isLoginThrottled, LOGIN_THROTTLE_WINDOW_MS, UNAUDITABLE_IDENTIFIER } from '@/lib/auth/login-throttle'
 import { prisma } from '@/lib/prisma'
 
 /**
@@ -62,22 +62,33 @@ async function accountCountingStart(
   return reset?.createdAt ?? windowStart
 }
 
-/** ผล {@link withLoginAttemptLock} เมื่อมีคำขอของบัญชีเดียวกันกำลังตรวจรหัสอยู่ */
-export const LOGIN_ATTEMPT_BUSY = Symbol('login-attempt-busy')
-
 /**
- * ตรวจรหัสของบัญชีเดียวกันได้ทีละคำขอ (R2-002) — นับครั้งที่ผิด → ตรวจรหัส → ลง audit อยู่ใต้ล็อกเดียวกัน
- * คำขอที่ยิงพร้อมกันจึงเห็นครั้งที่ผิดของกันและกันเสมอ (ก่อนหน้านี้ยิงพร้อมกัน 20 ครั้งผ่านเพดาน 5 ได้ทั้งหมด)
- * ใช้ try-lock ⇒ คำขอที่ซ้อนไม่ต้องรอถือ connection (ไม่กิน pool) แต่ได้ {@link LOGIN_ATTEMPT_BUSY} ทันที
- * ⚠️ `fn` ต้องเขียน audit ผ่าน prisma ปกติ (commit ทันที) ไม่ใช่ `tx` นี้ — ล็อกปล่อยหลัง audit มองเห็นแล้ว
+ * มีแถว audit "ถูกพัก" ของกุญแจ + IP เดียวกันหลัง `since` แล้วหรือยัง — preship R3-009
+ * ใช้ลง audit การถูกพักครั้งแรกต่อช่วงเวลา แทนลงทุกคำขอ (audit ลบไม่ได้ ⇒ ยิงซ้ำไม่จำกัดตารางโตไม่หยุด)
  */
-export async function withLoginAttemptLock<T>(key: string, fn: () => Promise<T>): Promise<T | typeof LOGIN_ATTEMPT_BUSY> {
-  return prisma.$transaction(
-    async (tx) => {
-      const rows = await tx.$queryRaw<{ locked: boolean }[]>`SELECT pg_try_advisory_xact_lock(hashtext(${`login_attempt:${key}`})) AS locked`
-      if (rows[0]?.locked !== true) return LOGIN_ATTEMPT_BUSY
-      return fn()
+export async function rateLimitAuditedSince(input: {
+  organizationId: string
+  throttleKey: string | null
+  ipAddress: string | null
+  since: Date
+}): Promise<boolean> {
+  const row = await prisma.auditLog.findFirst({
+    where: {
+      AND: [
+        {
+          organizationId: input.organizationId,
+          action: { in: ['login', 'update'] },
+          createdAt: { gte: input.since },
+          afterData: { path: ['code'], equals: 'LOGIN_RATE_LIMITED' },
+          ipAddress: input.ipAddress,
+        },
+        // ไม่มีกุญแจบัญชี = identifier ลง audit เป็น `<invalid>` (`loginThrottleKey`)
+        input.throttleKey === null
+          ? { afterData: { path: ['identifier'], equals: UNAUDITABLE_IDENTIFIER } }
+          : { afterData: { path: ['throttle_key'], equals: input.throttleKey } },
+      ],
     },
-    { maxWait: 5_000, timeout: 30_000 },
-  )
+    select: { id: true },
+  })
+  return row !== null
 }

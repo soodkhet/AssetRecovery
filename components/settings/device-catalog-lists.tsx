@@ -177,6 +177,8 @@ export function DeviceBrandList({
     return callApi<DeviceBrandListDto>(`/api/settings/device-catalog/brands?${params.toString()}`)
   }, [visibility, page, search])
 
+  /** เพิ่มทุกครั้งที่กดค้นหา — ให้โหลดใหม่แม้คำค้นเท่าเดิม (R3-011) */
+  const [searchNonce, setSearchNonce] = useState(0)
   const apply = useCallback((result: Awaited<ReturnType<typeof fetchItems>>) => {
     if (result.error !== undefined) setError({ title: result.error.title, message: result.error.message })
     else {
@@ -195,7 +197,7 @@ export function DeviceBrandList({
     return () => {
       cancelled = true
     }
-  }, [apply, fetchItems, refreshKey])
+  }, [apply, fetchItems, refreshKey, searchNonce])
 
   async function setManual(brand: DeviceBrandDto, manualStatus: DeviceCatalogStatusCode | null): Promise<void> {
     setSavingId(brand.id)
@@ -248,6 +250,8 @@ export function DeviceBrandList({
             setLoading(true)
             setPage(1)
             setSearch(q.trim())
+            // ค้นหาซ้ำคำเดิม ⇒ ค่าไม่เปลี่ยน effect ไม่รัน ตารางค้าง "กำลังโหลด" (preship R3-011) — บังคับโหลดใหม่
+            setSearchNonce((value) => value + 1)
           }}
         >
           <div className="w-56">
@@ -449,6 +453,8 @@ export function DeviceModelList({
     return callApi<DeviceModelListDto>(`/api/settings/device-catalog/models?${params.toString()}`)
   }, [visibility, assetKind, page, search, brandId])
 
+  /** เพิ่มทุกครั้งที่กดค้นหา — ให้โหลดใหม่แม้คำค้นเท่าเดิม (R3-011) */
+  const [searchNonce, setSearchNonce] = useState(0)
   const apply = useCallback((result: Awaited<ReturnType<typeof fetchItems>>) => {
     if (result.error !== undefined) setError({ title: result.error.title, message: result.error.message })
     else {
@@ -468,7 +474,7 @@ export function DeviceModelList({
     return () => {
       cancelled = true
     }
-  }, [apply, fetchItems, refreshKey])
+  }, [apply, fetchItems, refreshKey, searchNonce])
 
   async function reload(): Promise<void> {
     setLoading(true)
@@ -555,6 +561,8 @@ export function DeviceModelList({
             setLoading(true)
             setPage(1)
             setSearch(q.trim())
+            // ค้นหาซ้ำคำเดิม ⇒ ค่าไม่เปลี่ยน effect ไม่รัน ตารางค้าง "กำลังโหลด" (preship R3-011) — บังคับโหลดใหม่
+            setSearchNonce((value) => value + 1)
           }}
         >
           <div className="w-56">

@@ -5,6 +5,7 @@ import type { SessionUser } from '@/lib/auth/types'
 import {
   assertCaseDocumentDeletable,
   assertCaseEditable,
+  assertCaseNotModifiedSince,
   assertIdentityFormats,
   assertDocumentModeCompatible,
   assertDocumentModeSelectable,
@@ -814,7 +815,9 @@ export async function updateCase(
   if (current === null) throw new CaseError('CASE_NOT_FOUND')
   assertCaseEditable(current.status)
 
-  const { editNote, ...values } = input
+  const { editNote, expectedUpdatedAt, ...values } = input
+  // preship R3-003 — ฟอร์มที่เปิดก่อนคนอื่นบันทึก ห้ามทับเงียบ (เช็คซ้ำแบบ atomic ตอน update ด้านล่าง)
+  assertCaseNotModifiedSince(current.updatedAt, expectedUpdatedAt)
   const companyId = values.financeCompanyId ?? current.companyId
   if (values.financeCompanyId !== undefined && values.financeCompanyId !== current.companyId) {
     await assertCompanyUsable(organizationId, values.financeCompanyId)
@@ -906,6 +909,11 @@ export async function updateCase(
 
   try {
     const saved = await prisma.$transaction(async (tx) => {
+      // มี expectedUpdatedAt ⇒ ล็อกแถวแล้วตรวจซ้ำในธุรกรรม — อีกคำขอบันทึกแทรกหลังอ่านด้านบน ⇒ 409 (R3-003)
+      if (expectedUpdatedAt !== undefined) {
+        const locked = await tx.$queryRaw<{ updated_at: Date }[]>`SELECT updated_at FROM cases WHERE id = ${caseId}::uuid FOR UPDATE`
+        assertCaseNotModifiedSince(locked[0]?.updated_at ?? current.updatedAt, expectedUpdatedAt)
+      }
       const updated = await tx.case.update({
         where: { id: caseId },
         data: {

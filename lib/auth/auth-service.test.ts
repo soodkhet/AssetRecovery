@@ -41,16 +41,24 @@ vi.mock('@/lib/auth/company-status', () => ({
 
 // preship PS-009 — ค่าเริ่มต้นไม่ถูกพัก · เทสต์ของการพักตั้งค่าเอง
 const loginThrottledMock = vi.hoisted(() => vi.fn(async () => false))
-const LOGIN_ATTEMPT_BUSY = vi.hoisted(() => Symbol('busy'))
-// ค่าเริ่มต้นล็อกได้เสมอ (รัน fn ตรง) · เทสต์ยิงซ้อนตั้งให้คืน BUSY เอง
-const withLoginAttemptLockMock = vi.hoisted(() => vi.fn(async (_key: string, fn: () => Promise<unknown>) => fn()))
+// R3-009 — ค่าเริ่มต้นยังไม่เคยลง audit ถูกพักในช่วงนี้
+const rateLimitAuditedSinceMock = vi.hoisted(() => vi.fn(async () => false))
 vi.mock('@/lib/auth/login-throttle-queries', () => ({
   loginThrottled: loginThrottledMock,
+  rateLimitAuditedSince: rateLimitAuditedSinceMock,
+}))
+const LOGIN_ATTEMPT_BUSY = vi.hoisted(() => Symbol('busy'))
+// ค่าเริ่มต้นได้คิวทันที (รัน fn ตรง) · เทสต์ยิงซ้อนตั้งค่าเอง
+const withLoginAttemptLockMock = vi.hoisted(() =>
+  vi.fn(async (_key: string, fn: (context: { waited: boolean }) => Promise<unknown>) => fn({ waited: false })),
+)
+vi.mock('@/lib/auth/login-attempt-lock', () => ({
   withLoginAttemptLock: withLoginAttemptLockMock,
+  loginAttemptLockKey: (key: string, ip: string | null) => `${key}|${ip ?? '-'}`,
   LOGIN_ATTEMPT_BUSY,
 }))
 
-const { login, changeOwnPassword } = await import('@/lib/auth/auth-service')
+const { login, changeOwnPassword, resetRateLimitAuditGateForTests } = await import('@/lib/auth/auth-service')
 const { LOGIN_FAILURE_MIN_DURATION_MS, remainingLoginDelayMs } = await import('@/lib/auth/login-timing')
 
 const ORG = '00000000-0000-4000-8000-0000000000aa'
@@ -90,6 +98,7 @@ async function loginError(): Promise<AuthError> {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  resetRateLimitAuditGateForTests()
   prismaMock.user.findFirst.mockResolvedValue({ organizationId: ORG, supabaseUid: 'uid-1' })
   prismaMock.user.update.mockResolvedValue({})
   prismaMock.organization.findFirst.mockResolvedValue({ id: ORG })
@@ -246,7 +255,8 @@ describe('login — พักเมื่อผิดซ้ำเกินเพ
     expect(getAuthEmailMock).not.toHaveBeenCalled()
     expect(signInMock).not.toHaveBeenCalled()
     const accountId = account().id
-    expect(withLoginAttemptLockMock).toHaveBeenCalledWith(`user:${accountId}`, expect.any(Function))
+    // R3-008 — ถูกพักแล้วไม่เข้าคิวของบัญชีเลย (ไม่กันคำขอจาก IP อื่น)
+    expect(withLoginAttemptLockMock).not.toHaveBeenCalled()
     expect(loginThrottledMock).toHaveBeenCalledWith({
       organizationId: ORG,
       throttleKey: `user:${accountId}`,
@@ -282,6 +292,49 @@ describe('login — พักเมื่อผิดซ้ำเกินเพ
         after: expect.objectContaining({ code: 'LOGIN_RATE_LIMITED', throttle_key: `user:${account().id}` }),
       }),
     )
+  })
+
+  it('คิวตรวจรหัสแยกตาม บัญชี + IP (R3-008)', async () => {
+    prismaMock.user.findFirst.mockResolvedValue(account())
+
+    signInMock.mockResolvedValue({ data: { user: null }, error: { message: 'Invalid login credentials' } })
+
+    expect((await loginError()).code).toBe('INVALID_CREDENTIALS')
+    expect(withLoginAttemptLockMock).toHaveBeenCalledWith(`user:${account().id}|${META.ipAddress}`, expect.any(Function))
+  })
+
+  it('รอคิวแล้วพบว่าถูกพักระหว่างรอ ⇒ 429 ไม่เรียก Supabase (R2-002)', async () => {
+    prismaMock.user.findFirst.mockResolvedValue(account())
+    loginThrottledMock.mockResolvedValueOnce(false).mockResolvedValueOnce(true)
+    withLoginAttemptLockMock.mockImplementationOnce(async (_key, fn) => fn({ waited: true }))
+
+    const error = await loginError()
+
+    expect(error.code).toBe('LOGIN_RATE_LIMITED')
+    expect(loginThrottledMock).toHaveBeenCalledTimes(2)
+    expect(getAuthEmailMock).not.toHaveBeenCalled()
+    expect(signInMock).not.toHaveBeenCalled()
+  })
+
+  it('ถูกพักซ้ำจากบัญชี+IP เดิม ⇒ ลง audit ครั้งแรกครั้งเดียวต่อช่วงเวลา (R3-009)', async () => {
+    prismaMock.user.findFirst.mockResolvedValue(account())
+    loginThrottledMock.mockResolvedValue(true)
+
+    for (let i = 0; i < 5; i += 1) expect((await loginError()).code).toBe('LOGIN_RATE_LIMITED')
+
+    const rateLimitAudits = emitAuditMock.mock.calls.filter(([entry]) => entry.after?.code === 'LOGIN_RATE_LIMITED')
+    expect(rateLimitAudits).toHaveLength(1)
+    expect(rateLimitAuditedSinceMock).toHaveBeenCalledTimes(1)
+    loginThrottledMock.mockResolvedValue(false)
+  })
+
+  it('instance อื่นลง audit ถูกพักไปแล้วในช่วงนี้ ⇒ ไม่ลงซ้ำ (R3-009)', async () => {
+    prismaMock.user.findFirst.mockResolvedValue(account())
+    loginThrottledMock.mockResolvedValueOnce(true)
+    rateLimitAuditedSinceMock.mockResolvedValueOnce(true)
+
+    expect((await loginError()).code).toBe('LOGIN_RATE_LIMITED')
+    expect(emitAuditMock).not.toHaveBeenCalled()
   })
 
   it('รหัสผิด ⇒ audit ลง throttle_key ของบัญชี (อีเมล/username นับร่วม)', async () => {

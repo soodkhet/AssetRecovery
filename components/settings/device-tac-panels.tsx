@@ -92,6 +92,8 @@ export function DeviceTacList({ refreshKey, onChanged }: { refreshKey: number; o
             setLoading(true)
             setPage(1)
             setQuery(q.trim())
+            // ค้นหาซ้ำคำเดิม ⇒ บังคับโหลดใหม่ ไม่งั้นตารางค้าง "กำลังโหลด" (preship R3-011)
+            setRetryKey((value) => value + 1)
           }}
         >
           <Input

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode, type SyntheticEvent } from 'react'
 import { Button, type ButtonVariant } from '@/components/ui/button'
 import { cn } from '@/components/ui/cn'
-import { decideModalClose } from '@/components/ui/modal-close-guard'
+import { busyElementLocksModal, decideModalClose } from '@/components/ui/modal-close-guard'
 import { isTopModal, registerModal, unregisterModal } from '@/components/ui/modal-stack'
 
 /**
@@ -54,6 +54,7 @@ export function Modal({
   confirmDiscard?: boolean
 }) {
   const panelRef = useRef<HTMLDivElement>(null)
+  const footerRef = useRef<HTMLDivElement>(null)
   const [ownBusy, setOwnBusy] = useState(false)
   const [confirming, setConfirming] = useState(false)
   const isBusy = busy || ownBusy
@@ -89,8 +90,9 @@ export function Modal({
     dirtyRef.current = false
     const panel = panelRef.current
     // ตรวจปุ่ม `<Button loading>` (aria-busy) ของ modal นี้เอง — ไม่นับของ modal ที่ซ้อนอยู่ข้างใน
+    // และไม่นับปุ่มย่อยใน body เช่นค้นหา/ดาวน์โหลด (preship R3-002 — เดิมค้นหาค้างแล้วทั้ง modal ปิดไม่ได้)
     const observer = new MutationObserver(() => {
-      if (panel) setOwnBusy(hasOwnBusyElement(panel))
+      if (panel) setOwnBusy(hasOwnBusyElement(panel, footerRef.current))
     })
     if (panel) {
       observer.observe(panel, { subtree: true, childList: true, attributes: true, attributeFilter: ['aria-busy'] })
@@ -181,7 +183,7 @@ export function Modal({
         )}
 
         {footer !== undefined && (
-          <div className="shrink-0 border-t border-slate-200 bg-slate-50 px-5 py-3">
+          <div ref={footerRef} className="shrink-0 border-t border-slate-200 bg-slate-50 px-5 py-3">
             {/* ปุ่มใน footer (รวม "ยกเลิก") ล็อกระหว่างบันทึกด้วย — เดิมปุ่มยกเลิกปิด modal กลางคำขอได้ (preship R2-006) */}
             <fieldset disabled={isBusy} className="m-0 flex w-full min-w-0 items-center justify-end gap-2 border-0 p-0">
               {footer}
@@ -278,9 +280,14 @@ export function ConfirmModal({
   )
 }
 
-/** มีปุ่มกำลังทำงาน (`aria-busy`) ที่เป็นของ panel นี้เอง (ไม่ใช่ของ modal ที่ซ้อนอยู่ข้างใน) */
-function hasOwnBusyElement(panel: HTMLElement): boolean {
-  return Array.from(panel.querySelectorAll('[aria-busy="true"]')).some(
-    (element) => element !== panel && element.closest('[role="dialog"]') === panel,
-  )
+/** มีปุ่มบันทึกกำลังทำงาน (`aria-busy`) ของ panel นี้เอง (ไม่ใช่ของ modal ที่ซ้อนข้างใน) — เกณฑ์ใน `busyElementLocksModal` */
+function hasOwnBusyElement(panel: HTMLElement, footer: HTMLElement | null): boolean {
+  return Array.from(panel.querySelectorAll('[aria-busy="true"]')).some((element) => {
+    if (element === panel || element.closest('[role="dialog"]') !== panel) return false
+    return busyElementLocksModal({
+      hasFooter: footer !== null,
+      inFooter: footer?.contains(element) === true,
+      isSubmit: element instanceof HTMLButtonElement && element.type === 'submit',
+    })
+  })
 }
