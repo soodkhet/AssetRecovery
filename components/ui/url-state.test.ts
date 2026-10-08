@@ -162,9 +162,23 @@ describe('replaceUrlParams — จำ query ที่หน้าเขียน
     expect(isRecentSelfWrite('tab=advances&adv_status=uncleared', later)).toBe(true)
     // กดแจ้งเตือน ⇒ /finance?tab=advances (ตัวกรองถูกล้างตาม URL)
     markQueryAsCurrent('tab=advances')
-    expect(isRecentSelfWrite('tab=advances', later)).toBe(true)
     // Back ⇒ กลับ entry ที่มีตัวกรอง — ไม่ใช่ echo แล้ว
     expect(isRecentSelfWrite('tab=advances&adv_status=uncleared', later)).toBe(false)
+  })
+
+  it('query จากการนำทางส่งถึงตัวฟังทุกตัวของหน้า — ตัวแรก mark แล้วตัวถัดไปต้องไม่นับเป็น echo (R9-002)', () => {
+    stubBrowser('/finance', '?tab=payout')
+    replaceUrlParams({ payout_status: 'completed' })
+    replaceUrlParams({ payout_side: 'inhouse' })
+    const later = Date.now() + 5000
+    // กดแจ้งเตือน ⇒ /finance?tab=payout — hook ตัวกรองตัวแรกรับแล้ว mark
+    expect(isRecentSelfWrite('tab=payout', later)).toBe(false)
+    markQueryAsCurrent('tab=payout')
+    // hook ตัวกรองตัวที่สองใน render เดียวกันต้องยังรับได้
+    expect(isRecentSelfWrite('tab=payout', later)).toBe(false)
+    // echo ของการเขียนเองล่าสุดยังถูกข้ามตามเดิม
+    replaceUrlParams({ payout_status: 'cancelled' })
+    expect(isRecentSelfWrite('tab=payout&payout_status=cancelled&payout_side=inhouse', later)).toBe(true)
   })
 
   it('clearUrlParamsExcept ล้างตัวกรองย่อยทุกตัว เหลือแต่ key ที่ระบุ', () => {

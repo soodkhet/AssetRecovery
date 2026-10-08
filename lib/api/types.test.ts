@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { loginUrlFor, SESSION_EXPIRED_EVENT } from '@/lib/api/session-expiry'
+import { isSessionLost, loginUrlFor, SESSION_EXPIRED_EVENT } from '@/lib/api/session-expiry'
 import { callApi, describeApiFailure, jsonRequest, labelFieldMessage, withContextSuffix, withFieldsSuffix } from '@/lib/api/types'
 
 describe('withContextSuffix — ต่อท้ายรายชื่อจากข้อมูลประกอบของ error', () => {
@@ -151,10 +151,24 @@ describe('callApi — session หมดอายุ (preship R8-009)', () => {
     expect((dispatchEvent.mock.calls[0]?.[0] as Event).type).toBe(SESSION_EXPIRED_EVENT)
   })
 
+  it('401 SESSION_EXPIRED (session ครบ 24 ชม. — กรณีจริงที่พบบ่อยสุด) ⇒ ประกาศเช่นกัน (R9-003)', async () => {
+    const dispatchEvent = stub(401, 'SESSION_EXPIRED')
+    const result = await callApi('/api/x')
+    expect(result.error?.code).toBe('SESSION_EXPIRED')
+    expect(dispatchEvent).toHaveBeenCalledTimes(1)
+  })
+
   it('403 / error อื่น ⇒ ไม่ประกาศ', async () => {
     const dispatchEvent = stub(403, 'PERMISSION_DENIED')
     await callApi('/api/x')
     expect(dispatchEvent).not.toHaveBeenCalled()
+  })
+
+  it('isSessionLost: เฉพาะ 401 ของ session — INVALID_CREDENTIALS / 403 ไม่นับ', () => {
+    expect(isSessionLost(401, 'UNAUTHENTICATED')).toBe(true)
+    expect(isSessionLost(401, 'SESSION_EXPIRED')).toBe(true)
+    expect(isSessionLost(401, 'INVALID_CREDENTIALS')).toBe(false)
+    expect(isSessionLost(403, 'SESSION_EXPIRED')).toBe(false)
   })
 
   it('loginUrlFor เก็บ path + query ไว้ใน next', () => {

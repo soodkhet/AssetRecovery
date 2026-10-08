@@ -137,7 +137,9 @@ export function NotificationBell({
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} aria-hidden="true" />
-          <div className="absolute right-0 z-50 mt-1 w-[min(88vw,340px)] rounded-xl border border-slate-200 bg-white shadow-lg">
+          {/* มือถือ (< sm): ยึดกับขอบจอซ้าย-ขวาใต้แถบหัว 64px — เดิมยึดขอบขวาของปุ่มกระดิ่ง (มีปุ่มเมนูอยู่ทางขวาอีก)
+              แผงกว้าง 88vw จึงล้นขอบซ้าย 13–81px หัวข้อ/เลขเคสถูกตัด (preship R9-001) */}
+          <div className="fixed inset-x-2 top-16 z-50 max-h-[calc(100dvh-5rem)] overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg sm:absolute sm:inset-x-auto sm:top-auto sm:right-0 sm:mt-1 sm:max-h-none sm:w-[340px] sm:overflow-visible">
             <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2">
               <span className="text-xs font-bold text-slate-700">แจ้งเตือนล่าสุด</span>
               <div className="flex items-center gap-1">

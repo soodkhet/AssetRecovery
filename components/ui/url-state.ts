@@ -27,30 +27,34 @@ export function mergeSearchParams(current: string, updates: UrlParamUpdates): st
  * เป็นการนำทาง ไม่งั้นตัวกรองย้อนกลับไปค่าก่อนหน้า (preship R7-004)
  */
 const SELF_WRITE_WINDOW_MS = 500
-const selfWrites: { query: string; at: number }[] = []
+/** `self` = หน้าเขียน URL เอง · `nav` = หน้ารับ query จากการนำทางแล้ว (`markQueryAsCurrent`) */
+const urlEvents: { query: string; at: number; kind: 'self' | 'nav' }[] = []
 
 /**
- * `query` (ไม่มี `?`) เป็นค่าที่หน้าเขียนลง URL เอง — ค่าล่าสุดที่เขียน (state ของหน้าเท่ากับค่านี้อยู่แล้ว) หรือค่าที่
- * เขียนภายใน 500ms (echo ของการกดรัว ที่ Next ซิงก์ช้ากว่า) · ค่าที่เขียนนานกว่านั้นแล้วถูกนำทางกลับมา = การนำทางจริง
- * (เช่น กดแจ้งเตือนที่ลิงก์ `?tab=advances` หลังผู้ใช้กรอง — ต้องล้างตัวกรอง)
+ * `query` (ไม่มี `?`) เป็นค่าที่หน้าเขียนลง URL เอง — ค่าล่าสุดที่**หน้าเขียนเอง** (state ของหน้าเท่ากับค่านี้อยู่แล้ว)
+ * หรือค่าที่เขียนภายใน 500ms (echo ของการกดรัว ที่ Next ซิงก์ช้ากว่า) · ค่าที่เขียนนานกว่านั้นแล้วถูกนำทางกลับมา =
+ * การนำทางจริง (เช่น กดแจ้งเตือนที่ลิงก์ `?tab=advances` หลังผู้ใช้กรอง — ต้องล้างตัวกรอง)
  */
 export function isRecentSelfWrite(query: string, now: number = Date.now()): boolean {
-  if (selfWrites.length > 0 && selfWrites[selfWrites.length - 1]?.query === query) return true
-  return selfWrites.some((write) => write.query === query && now - write.at <= SELF_WRITE_WINDOW_MS)
+  const latest = urlEvents[urlEvents.length - 1]
+  // กฎ "ค่าล่าสุด" ใช้เฉพาะค่าที่หน้าเขียนเอง — query จากการนำทางต้องส่งถึงตัวฟังทุกตัวของหน้า (หลาย hook ตัวกรอง
+  // ในแท็บเดียว) ไม่ใช่ตัวแรกรับแล้วตัวถัดไปถูกข้ามเพราะนับเป็น echo (preship R9-002)
+  if (latest !== undefined && latest.kind === 'self' && latest.query === query) return true
+  return urlEvents.some((event) => event.kind === 'self' && event.query === query && now - event.at <= SELF_WRITE_WINDOW_MS)
 }
 
 /**
- * หน้ารับ query จากการนำทางแล้ว (state ตาม URL นี้แล้ว) — ให้ query นี้เป็น "ค่าล่าสุด" แทนค่าที่หน้าเขียนเองก่อนหน้า
+ * หน้ารับ query จากการนำทางแล้ว (state ตาม URL นี้แล้ว) — ค่าที่หน้าเขียนเองก่อนหน้าไม่ใช่ "ค่าล่าสุด" อีกต่อไป
  * ⇒ กด Back กลับไป entry ที่มีตัวกรอง (ค่าที่เคยเขียนเอง) ถือเป็นการนำทาง ไม่ใช่ echo (preship R8-004 — เดิมจอค้าง
- * "ทั้งหมด" ทั้งที่ URL กลับมามีตัวกรอง) · ไม่นับเป็น echo ช่วง 500ms (เวลา = -∞)
+ * "ทั้งหมด" ทั้งที่ URL กลับมามีตัวกรอง)
  */
 export function markQueryAsCurrent(query: string): void {
-  recordSelfWrite(query, Number.NEGATIVE_INFINITY)
+  recordUrlEvent(query, Number.NEGATIVE_INFINITY, 'nav')
 }
 
-function recordSelfWrite(query: string, now: number): void {
-  selfWrites.push({ query, at: now })
-  if (selfWrites.length > 30) selfWrites.splice(0, selfWrites.length - 30)
+function recordUrlEvent(query: string, at: number, kind: 'self' | 'nav'): void {
+  urlEvents.push({ query, at, kind })
+  if (urlEvents.length > 30) urlEvents.splice(0, urlEvents.length - 30)
 }
 
 /** เขียนค่าลง URL ของหน้าปัจจุบันแบบไม่เพิ่ม history entry */
@@ -62,7 +66,7 @@ export function replaceUrlParams(updates: UrlParamUpdates): void {
     // state ห้ามมี `__NA` — ส่ง `history.state` เดิมทั้งก้อนแล้ว router ของ Next ไม่รับรู้ URL ใหม่ ⇒ ลิงก์แจ้งเตือน
     // กลับไปค่าเดิมไม่ทำงาน และ re-render เขียน URL เก่าทับ (preship R2-009) · คงเฉพาะเครื่องหมาย sentinel ของ
     // modal ที่เปิดอยู่ (ไม่มี = `null` ตามตัวอย่างของ Next) ไม่งั้น entry นั้นค้างใน history แยกไม่ออก (R5-008)
-    recordSelfWrite(query, Date.now())
+    recordUrlEvent(query, Date.now(), 'self')
     window.history.replaceState(modalGuardHistoryState(), '', next)
   }
 }
