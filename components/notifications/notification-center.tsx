@@ -1,7 +1,8 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { markNotificationsRead } from '@/components/notifications/notification-bell'
 import {
   Button,
   Card,
@@ -12,8 +13,9 @@ import {
   PageHeader,
   StatusBadge,
   cn,
+  useToast,
 } from '@/components/ui'
-import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
+import { callApi, type ApiCallError } from '@/lib/api/types'
 import { notificationHref } from '@/lib/field/push-client'
 import { fmtDateTime } from '@/lib/format/datetime'
 import { notificationDisplay } from '@/lib/notifications/events'
@@ -40,16 +42,26 @@ const PAGE_LIMIT = 100
 
 export function NotificationCenter() {
   const router = useRouter()
+  const { showToast } = useToast()
   const [filter, setFilter] = useState<NotificationFilter>('all')
-  const [data, setData] = useState<NotificationListDto | null>(null)
+  /** รายการ + ตัวกรองที่รายการนี้เป็นของ — ตัวกรองไม่ตรงกับที่เลือก = กำลังโหลด (R8-005) */
+  const [loaded, setLoaded] = useState<{ filter: NotificationFilter; list: NotificationListDto } | null>(null)
   const [error, setError] = useState<ApiCallError | null>(null)
   const [busy, setBusy] = useState(false)
+  /** ลำดับคำขอล่าสุด — คำตอบของคำขอเก่าที่มาช้าห้ามทับรายการของตัวกรองปัจจุบัน (R8-005) */
+  const requestSeq = useRef(0)
 
   const load = useCallback(async (next: NotificationFilter) => {
+    const seq = ++requestSeq.current
     const response = await callApi<NotificationListDto>(`/api/notifications?filter=${next}&limit=${PAGE_LIMIT}`)
+    if (seq !== requestSeq.current) return
     setError(response.error ?? null)
-    setData(response.data ?? null)
+    if (response.data !== undefined) setLoaded({ filter: next, list: response.data })
   }, [])
+
+  // ตัวเลขบนแท็บใช้ของรายการล่าสุดได้แม้กำลังโหลดตัวกรองใหม่ · ตารางแสดง loading จนกว่าจะเป็นของตัวกรองนี้
+  const data = loaded?.list ?? null
+  const listReady = loaded !== null && loaded.filter === filter
 
   useEffect(() => {
     void (async () => {
@@ -57,16 +69,20 @@ export function NotificationCenter() {
     })()
   }, [filter, load])
 
+  const showError = (failure: { title: string; message: string }) =>
+    showToast({ tone: 'error', title: failure.title, description: failure.message })
+
+  // ล้มเหลว ⇒ toast (เดิมเงียบ · R8-006) · สำเร็จ ⇒ กระดิ่งบนหัวจอโหลดตัวเลขใหม่ด้วย (R8-007)
   async function markOneRead(id: string): Promise<void> {
     setBusy(true)
-    await callApi(`/api/notifications/${id}/read`, jsonRequest('PATCH', {}))
+    await markNotificationsRead(`/api/notifications/${id}/read`, showError)
     await load(filter)
     setBusy(false)
   }
 
   async function markAllRead(): Promise<void> {
     setBusy(true)
-    await callApi('/api/notifications/read-all', jsonRequest('PATCH', {}))
+    await markNotificationsRead('/api/notifications/read-all', showError)
     await load(filter)
     setBusy(false)
   }
@@ -116,7 +132,7 @@ export function NotificationCenter() {
               </Button>
             }
           />
-        ) : data === null ? (
+        ) : data === null || !listReady ? (
           <LoadingState message="กำลังโหลดการแจ้งเตือน..." />
         ) : data.items.length === 0 ? (
           <EmptyState

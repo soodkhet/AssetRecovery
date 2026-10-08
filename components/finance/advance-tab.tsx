@@ -173,7 +173,8 @@ export function AdvanceTab() {
                     </Td>
                     {/* กว้างขั้นต่ำ — เดิมถูกบีบเหลือ 81px ชื่อไทยแตก 3 บรรทัด (preship R7-002) */}
                     <Td className="min-w-[7.5rem]">
-                      <p className="font-semibold text-slate-900">{advance.payeeName}</p>
+                      {/* ตัดบรรทัดที่ช่องว่างเท่านั้น — ชื่อไทยไม่แตกกลางคำ (R8-001) */}
+                      <p className="font-semibold [word-break:keep-all] text-slate-900">{advance.payeeName}</p>
                       {advance.teamName !== null && <p className="text-[10px] text-slate-500">{advance.teamName}</p>}
                     </Td>
                     <Td className="max-w-[160px] text-xs text-slate-600">
@@ -222,7 +223,7 @@ export function AdvanceTab() {
                             </p>
                           )}
                           {/* มติ PO U100 — ประวัติการคืน + ใบรับคืนเงินทดรอง (RAV) ต่อแถว */}
-                          <AdvanceReturnHistory advance={advance} />
+                          <AdvanceReturnHistory advance={advance} collapsed />
                         </div>
                       )}
                       {advance.excessSatang > 0 && (

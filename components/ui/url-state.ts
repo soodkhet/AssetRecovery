@@ -39,6 +39,15 @@ export function isRecentSelfWrite(query: string, now: number = Date.now()): bool
   return selfWrites.some((write) => write.query === query && now - write.at <= SELF_WRITE_WINDOW_MS)
 }
 
+/**
+ * หน้ารับ query จากการนำทางแล้ว (state ตาม URL นี้แล้ว) — ให้ query นี้เป็น "ค่าล่าสุด" แทนค่าที่หน้าเขียนเองก่อนหน้า
+ * ⇒ กด Back กลับไป entry ที่มีตัวกรอง (ค่าที่เคยเขียนเอง) ถือเป็นการนำทาง ไม่ใช่ echo (preship R8-004 — เดิมจอค้าง
+ * "ทั้งหมด" ทั้งที่ URL กลับมามีตัวกรอง) · ไม่นับเป็น echo ช่วง 500ms (เวลา = -∞)
+ */
+export function markQueryAsCurrent(query: string): void {
+  recordSelfWrite(query, Number.NEGATIVE_INFINITY)
+}
+
 function recordSelfWrite(query: string, now: number): void {
   selfWrites.push({ query, at: now })
   if (selfWrites.length > 30) selfWrites.splice(0, selfWrites.length - 30)

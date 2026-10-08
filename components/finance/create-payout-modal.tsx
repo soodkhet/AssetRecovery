@@ -6,12 +6,13 @@ import {
   ClosedPeriodCutoffAlert,
   isClosedPeriodCutoffError,
   isCutoffInClosedPeriod,
-  useClosedPeriodChecker,
+  ClosedPeriodsUnavailableNote,
+  useClosedPeriods,
 } from '@/components/finance/closed-period-cutoff-alert'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import type { PayoutBatchDto } from '@/lib/payout/types'
 import { fmtDate, toInputDate } from '@/lib/format/datetime'
-import { cycleCoversSide, pickMatchingCycle, suggestOpenCutoffDate } from '@/lib/settings/cycles'
+import { cycleCoversSide, pickMatchingCycle, suggestCutoffDate, suggestOpenCutoffDate } from '@/lib/settings/cycles'
 import type { CycleDto } from '@/lib/settings/types'
 
 /** รอบ AP ในรูปที่ใช้ตัดสินขอบเขต (มติ PO U133) */
@@ -49,7 +50,8 @@ export function CreatePayoutModal({
   const [saving, setSaving] = useState(false)
   /** วันตัดรอบที่ server ปฏิเสธเพราะงวดปิดแล้ว — แสดงคำแนะนำใต้ช่องจนกว่าจะเปลี่ยนวัน (R7-009) */
   const [closedCutoff, setClosedCutoff] = useState<string | null>(null)
-  const isPeriodClosed = useClosedPeriodChecker(open)
+  const closedPeriods = useClosedPeriods(open)
+  const isPeriodClosed = closedPeriods.isClosed
   const [cycles, setCycles] = useState<readonly CycleDto[]>([])
   /** `null` = ให้ระบบเลือกตามฝั่ง · `NO_CYCLE` = ไม่ใช้รอบ · อื่น = id รอบที่ผู้ใช้เลือกเอง */
   const [cycleChoice, setCycleChoice] = useState<string | null>(null)
@@ -74,12 +76,16 @@ export function CreatePayoutModal({
   // มติ PO U146 — รอบเป็นที่กำหนดวันตัดรอบ: เสนอวันตัดรอบล่าสุดตามกติกาของรอบที่เลือก (กดใช้ได้ · แก้ได้)
   // ไม่เสนอวันในงวดที่ปิดแล้ว — เสนอวันนี้แทน (P11 · R7-009)
   const cycleForCutoff = cycles.find((cycle) => cycle.id === selectedCycle) ?? null
+  const today = new Date(`${toInputDate(new Date())}T00:00:00Z`)
   const suggestedCutoff =
     cycleForCutoff === null
       ? null
-      : suggestOpenCutoffDate(cycleForCutoff, new Date(`${toInputDate(new Date())}T00:00:00Z`), isPeriodClosed)
-          .toISOString()
-          .slice(0, 10)
+      : suggestOpenCutoffDate(cycleForCutoff, today, isPeriodClosed).toISOString().slice(0, 10)
+  // วันตามกติกาของรอบอยู่ในงวดปิด ⇒ ค่าที่เสนอคือวันนี้ — ป้ายปุ่มต้องบอกตามจริง (R8-002)
+  const suggestedIsFallback =
+    cycleForCutoff !== null && suggestedCutoff !== suggestCutoffDate(cycleForCutoff, today).toISOString().slice(0, 10)
+  const showClosedAlert =
+    (closedCutoff !== null && closedCutoff === cutoffDate) || isCutoffInClosedPeriod(cutoffDate, isPeriodClosed)
 
   async function submit(): Promise<void> {
     if (cutoffDate === '') return
@@ -158,21 +164,23 @@ export function CreatePayoutModal({
 
         <Field label="วันตัดรอบ (Cut-off Date)" required>
           <Input type="date" value={cutoffDate} onChange={(event) => setCutoffDate(event.target.value)} />
-          {/* วันตามรอบจ่ายที่ server เพิ่งปฏิเสธ (งวดปิด) ไม่เสนอซ้ำ (R7-009) */}
-          {suggestedCutoff !== null && suggestedCutoff !== cutoffDate && suggestedCutoff !== closedCutoff && (
+          {/* วันตามรอบจ่ายที่ server เพิ่งปฏิเสธ (งวดปิด) ไม่เสนอซ้ำ (R7-009) · คำเตือนงวดปิดมีปุ่มใช้วันนี้อยู่แล้ว
+              ไม่แสดงปุ่มซ้ำ (R8-002) */}
+          {suggestedCutoff !== null && suggestedCutoff !== cutoffDate && suggestedCutoff !== closedCutoff && !showClosedAlert && (
             <button
               type="button"
               className="focus-ring mt-1 inline-flex items-center text-left text-[11px] font-semibold text-emerald-700 hover:underline pointer-coarse:min-h-11"
               onClick={() => setCutoffDate(suggestedCutoff)}
             >
-              ใช้วันตัดรอบตามรอบจ่าย ({fmtDate(`${suggestedCutoff}T00:00:00Z`)})
+              {suggestedIsFallback
+                ? `ใช้วันนี้ (${fmtDate(`${suggestedCutoff}T00:00:00Z`)}) — วันตัดรอบตามรอบจ่ายอยู่ในงวดที่ปิดแล้ว`
+                : `ใช้วันตัดรอบตามรอบจ่าย (${fmtDate(`${suggestedCutoff}T00:00:00Z`)})`}
             </button>
           )}
+          {closedPeriods.status === 'error' && <ClosedPeriodsUnavailableNote />}
         </Field>
 
-        {((closedCutoff !== null && closedCutoff === cutoffDate) || isCutoffInClosedPeriod(cutoffDate, isPeriodClosed)) && (
-          <ClosedPeriodCutoffAlert onUseToday={setCutoffDate} />
-        )}
+        {showClosedAlert && <ClosedPeriodCutoffAlert onUseToday={setCutoffDate} />}
 
         <Field
           label="รอบจ่าย (AP) ที่ใช้กำหนดวันจ่าย"

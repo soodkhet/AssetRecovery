@@ -25,33 +25,72 @@ export function AdvanceRequestPdfLink({ advance }: { advance: Pick<AdvanceDto, '
   )
 }
 
-/** ประวัติการคืนยอด + ลิงก์ใบรับคืน (RAV) ต่อแถว — แถวที่กลับรายการแล้วยังพิมพ์ได้ (ป้าย "ยกเลิก") */
-export function AdvanceReturnHistory({ advance }: { advance: Pick<AdvanceDto, 'id' | 'returns'> }) {
+/**
+ * ประวัติการคืนยอด + ลิงก์ใบรับคืน (RAV) ต่อแถว — แถวที่กลับรายการแล้วยังพิมพ์ได้ (ป้าย "ยกเลิก")
+ * `collapsed` (ตารางการเงิน): แสดงรายการล่าสุด + พับที่เหลือ — เดิมแสดงครบทุกรายการในคอลัมน์แคบ แถวสูง 335px (preship R8-001)
+ */
+export function AdvanceReturnHistory({
+  advance,
+  collapsed = false,
+}: {
+  advance: Pick<AdvanceDto, 'id' | 'returns'>
+  collapsed?: boolean
+}) {
   if (advance.returns.length === 0) return null
+  if (!collapsed || advance.returns.length === 1) {
+    return (
+      <ul className="mt-1 space-y-0.5 text-right">
+        {advance.returns.map((entry) => (
+          <ReturnEntry key={entry.id} advanceId={advance.id} entry={entry} />
+        ))}
+      </ul>
+    )
+  }
+  // API เรียงใหม่ → เก่า (`createdAt desc`)
+  const latest = advance.returns[0]
+  const earlier = advance.returns.slice(1)
   return (
-    <ul className="mt-1 space-y-0.5 text-right">
-      {advance.returns.map((entry) => (
-        <li key={entry.id} className="text-[10px] font-normal text-slate-500">
-          <span className={entry.reversedAt === null ? undefined : 'line-through'}>
-            <span className="font-mono whitespace-nowrap">{entry.returnNumber}</span> · {ADVANCE_RETURN_CHANNEL_LABEL[entry.channel]}{' '}
-            {fmtSatangSymbol(entry.amountSatang)}
-            {entry.payoutBatchName !== null
-              ? ` · ${entry.payoutBatchName}`
-              : entry.receivedDate !== null
-                ? ` · ${fmtDate(entry.receivedDate)}`
-                : ''}
-          </span>
-          {entry.reversedAt !== null && <span className="ml-1 font-semibold text-red-600">ยกเลิก</span>}{' '}
-          <a
-            href={`/api/advances/${advance.id}/returns/${entry.id}/pdf`}
-            target="_blank"
-            rel="noreferrer"
-            className={LINK_CLASS}
-          >
-            ใบรับคืน PDF
-          </a>
-        </li>
-      ))}
-    </ul>
+    <div className="mt-1 text-right">
+      {latest !== undefined && (
+        <ul className="space-y-0.5">
+          <ReturnEntry advanceId={advance.id} entry={latest} />
+        </ul>
+      )}
+      <details className="mt-0.5">
+        <summary className="focus-ring cursor-pointer text-[10px] font-semibold text-slate-600 pointer-coarse:min-h-11">
+          ดูการคืนก่อนหน้า ({earlier.length} รายการ)
+        </summary>
+        <ul className="mt-0.5 space-y-0.5">
+          {earlier.map((entry) => (
+            <ReturnEntry key={entry.id} advanceId={advance.id} entry={entry} />
+          ))}
+        </ul>
+      </details>
+    </div>
+  )
+}
+
+function ReturnEntry({ advanceId, entry }: { advanceId: string; entry: AdvanceDto['returns'][number] }) {
+  return (
+    <li className="text-[10px] font-normal text-slate-500">
+      <span className={entry.reversedAt === null ? undefined : 'line-through'}>
+        <span className="font-mono whitespace-nowrap">{entry.returnNumber}</span> · {ADVANCE_RETURN_CHANNEL_LABEL[entry.channel]}{' '}
+        <span className="whitespace-nowrap">{fmtSatangSymbol(entry.amountSatang)}</span>
+        {entry.payoutBatchName !== null
+          ? ` · ${entry.payoutBatchName}`
+          : entry.receivedDate !== null
+            ? ` · ${fmtDate(entry.receivedDate)}`
+            : ''}
+      </span>
+      {entry.reversedAt !== null && <span className="ml-1 font-semibold text-red-600">ยกเลิก</span>}{' '}
+      <a
+        href={`/api/advances/${advanceId}/returns/${entry.id}/pdf`}
+        target="_blank"
+        rel="noreferrer"
+        className={LINK_CLASS}
+      >
+        ใบรับคืน PDF
+      </a>
+    </li>
   )
 }

@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
+import { useToast } from '@/components/ui/toast'
 import { TOUCH_TARGET_CLASS } from '@/components/ui/button'
 import { cn } from '@/components/ui/cn'
 import { IconBell, IconClose } from '@/components/notifications/notification-icons'
@@ -24,6 +25,30 @@ import { fmtDateTime } from '@/lib/format/datetime'
 
 const DROPDOWN_LIMIT = 10
 
+/**
+ * อ่านแล้ว/อ่านทั้งหมดจากที่ใดก็ตาม (หน้า /notifications หรือกระดิ่งอีกตัว) ⇒ กระดิ่งทุกตัวโหลดตัวเลขใหม่ทันที
+ * — เดิมค้างได้ถึง 2 นาที (preship R8-007)
+ */
+const NOTIFICATIONS_CHANGED_EVENT = 'ar:notifications-changed'
+
+export function announceNotificationsChanged(): void {
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(NOTIFICATIONS_CHANGED_EVENT))
+}
+
+/** PATCH อ่านแล้ว/อ่านทั้งหมด — ล้มเหลวต้องบอกผู้ใช้ (เดิมเงียบ · R8-006) · สำเร็จแจ้งกระดิ่งทุกตัว */
+export async function markNotificationsRead(
+  path: string,
+  onError: (error: { title: string; message: string }) => void,
+): Promise<boolean> {
+  const response = await callApi(path, jsonRequest('PATCH', {}))
+  if (response.error !== undefined) {
+    onError(response.error)
+    return false
+  }
+  announceNotificationsChanged()
+  return true
+}
+
 export function NotificationBell({
   /** ลิงก์ "ดูทั้งหมด" ท้าย dropdown — ไม่ส่ง = ไม่แสดง (Field Tracker ไม่มีหน้ารายการเต็มของตัวเอง) */
   allHref,
@@ -31,6 +56,7 @@ export function NotificationBell({
   allHref?: string
 }) {
   const router = useRouter()
+  const { showToast } = useToast()
   const [open, setOpen] = useState(false)
   const [data, setData] = useState<NotificationListDto>({ items: [], unreadCount: 0, totalCount: 0 })
   // Rule 05 — ต้องแยก "กำลังโหลด" / "ว่างจริง" / "โหลดไม่สำเร็จ" ออกจากกัน
@@ -56,17 +82,24 @@ export function NotificationBell({
     })()
     // เปิดแอปค้างไว้ทั้งวันได้ ⇒ รีเฟรชเบา ๆ ทุก 2 นาที (ไม่ใช่ช่องทางเดียว จึงไม่ต้องถี่กว่านี้)
     const timer = setInterval(() => void load(), 120_000)
-    return () => clearInterval(timer)
+    const onChanged = () => void load()
+    window.addEventListener(NOTIFICATIONS_CHANGED_EVENT, onChanged)
+    return () => {
+      clearInterval(timer)
+      window.removeEventListener(NOTIFICATIONS_CHANGED_EVENT, onChanged)
+    }
   }, [load])
 
+  const showError = (error: { title: string; message: string }) =>
+    showToast({ tone: 'error', title: error.title, description: error.message })
+
   async function markOneRead(id: string): Promise<void> {
-    await callApi(`/api/notifications/${id}/read`, jsonRequest('PATCH', {}))
-    await load()
+    // สำเร็จ ⇒ event โหลดกระดิ่งทุกตัว (รวมตัวนี้) · ล้มเหลว ⇒ toast + โหลดใหม่ให้ตัวเลขตรงจริง
+    if (!(await markNotificationsRead(`/api/notifications/${id}/read`, showError))) await load()
   }
 
   async function markAllRead(): Promise<void> {
-    await callApi('/api/notifications/read-all', jsonRequest('PATCH', {}))
-    await load()
+    if (!(await markNotificationsRead('/api/notifications/read-all', showError))) await load()
   }
 
   function openItem(item: NotificationDto): void {
@@ -84,7 +117,11 @@ export function NotificationBell({
     <div className="relative">
       <button
         type="button"
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => {
+          // เปิด dropdown ⇒ โหลดรายการล่าสุด (ไม่รอรอบ 2 นาที · R8-007)
+          if (!open) void load()
+          setOpen((current) => !current)
+        }}
         aria-label={`การแจ้งเตือน${badge === null ? '' : ` (ยังไม่อ่าน ${badge})`}`}
         aria-expanded={open}
         className="focus-ring relative inline-flex items-center justify-center pointer-coarse:min-h-11 pointer-coarse:min-w-11 rounded-lg p-2 text-slate-700 hover:bg-slate-100"

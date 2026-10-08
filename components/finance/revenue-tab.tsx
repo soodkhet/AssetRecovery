@@ -113,7 +113,20 @@ export function RevenueTab() {
         : await callApi(`/api/billing-batches/${action.batch.id}`, jsonRequest('DELETE', { reason: reason.trim() }))
     setBusy(false)
     if (result.error !== undefined) {
-      showToast({ tone: 'error', title: result.error.title, description: result.error.message })
+      // รอบนี้ถูกลบ/เปลี่ยนสถานะไปแล้วจากที่อื่น (อีกแท็บ/อีกคน) ⇒ ปิดกล่อง + โหลดรายการใหม่ ไม่ให้กดซ้ำกับแถวเก่า (R8-010)
+      const stale = result.error.code === 'BILLING_BATCH_NOT_FOUND' || result.error.code === 'BILLING_BATCH_INVALID_STATUS'
+      showToast({
+        tone: 'error',
+        title: stale ? 'รอบวางบิลนี้เปลี่ยนไปแล้ว' : result.error.title,
+        description: stale
+          ? `${action.batch.batchNumber} ถูกลบหรือเปลี่ยนสถานะจากหน้าจออื่นแล้ว — โหลดรายการล่าสุดให้แล้ว`
+          : result.error.message,
+      })
+      if (stale) {
+        setAction(null)
+        setReason('')
+        reloadAll()
+      }
       return
     }
     showToast({

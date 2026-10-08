@@ -31,6 +31,8 @@ import {
   Th,
   Tr,
 } from '@/components/ui'
+import { TOUCH_TARGET_CLASS } from '@/components/ui/button'
+import { cn } from '@/components/ui/cn'
 import {
   AUTHORIZE_EXCEPTION,
   MANAGE_EXCEPTIONS,
@@ -186,7 +188,14 @@ export function ExceptionsTab() {
                       {link === null ? (
                         exceptionModuleLabel(row.sourceModule)
                       ) : (
-                        <a className="focus-ring text-slate-700 underline underline-offset-2" href={link}>
+                        // พื้นที่แตะ 44px บนจอสัมผัส — เดิมเท่าตัวอักษร 17×31px (preship R8-003)
+                        <a
+                          className={cn(
+                            'focus-ring text-slate-700 underline underline-offset-2 pointer-coarse:inline-flex pointer-coarse:items-center',
+                            TOUCH_TARGET_CLASS,
+                          )}
+                          href={link}
+                        >
                           {exceptionModuleLabel(row.sourceModule)}
                         </a>
                       )}

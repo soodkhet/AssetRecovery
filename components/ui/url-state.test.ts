@@ -5,6 +5,7 @@ import {
   clearUrlParamsExcept,
   initialUrlParam,
   isRecentSelfWrite,
+  markQueryAsCurrent,
   initialUrlUuid,
   mergeSearchParams,
   pickPage,
@@ -152,6 +153,18 @@ describe('replaceUrlParams — จำ query ที่หน้าเขียน
     // ค่าเก่าที่เขียนนานแล้วถูกนำทางกลับมา = การนำทางจริง
     expect(isRecentSelfWrite('tab=advances&adv_status=cleared', now + 5000)).toBe(false)
     expect(isRecentSelfWrite('tab=advances', now)).toBe(false)
+  })
+
+  it('นำทางมา query ใหม่แล้ว Back กลับ query ที่มีตัวกรอง (เคยเขียนเอง) ⇒ นับเป็นการนำทาง (R8-004)', () => {
+    stubBrowser('/finance', '?tab=advances')
+    replaceUrlParams({ adv_status: 'uncleared' })
+    const later = Date.now() + 5000
+    expect(isRecentSelfWrite('tab=advances&adv_status=uncleared', later)).toBe(true)
+    // กดแจ้งเตือน ⇒ /finance?tab=advances (ตัวกรองถูกล้างตาม URL)
+    markQueryAsCurrent('tab=advances')
+    expect(isRecentSelfWrite('tab=advances', later)).toBe(true)
+    // Back ⇒ กลับ entry ที่มีตัวกรอง — ไม่ใช่ echo แล้ว
+    expect(isRecentSelfWrite('tab=advances&adv_status=uncleared', later)).toBe(false)
   })
 
   it('clearUrlParamsExcept ล้างตัวกรองย่อยทุกตัว เหลือแต่ key ที่ระบุ', () => {

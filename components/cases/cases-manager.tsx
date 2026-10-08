@@ -286,6 +286,16 @@ export function CasesManager({
   // ตัวเลือกบริษัท (ตัวกรอง + ฟอร์ม) มากับรายการเคส — ไม่เรียก `/api/finance-companies` ที่ต้องใช้
   // `view_master_data` ซึ่งเจ้าหน้าที่อนุมัติเคสไม่มี (`25` §7.1 · UAT BUG-032)
   const companies = result?.companies ?? []
+  // บริษัทใน URL ที่ไม่อยู่ในตัวเลือก (bookmark เก่า/บริษัทถูกปิด) ⇒ กลับเป็น "ทั้งหมด" — เดิมตารางว่างแต่ช่องบริษัท
+  // แสดง "ทั้งหมด" (preship R8-013) · ปรับ state ระหว่าง render (ไม่ใช่ effect) · effect ของตัวกรองล้าง `company` ใน URL ให้
+  if (
+    result !== null &&
+    filters.financeCompanyId !== 'all' &&
+    !companies.some((company) => company.id === filters.financeCompanyId)
+  ) {
+    setLoading(true)
+    setFilters({ ...filters, financeCompanyId: 'all' })
+  }
   const items = result?.items ?? []
   const total = result?.total ?? 0
   const lastPage = Math.max(1, Math.ceil(total / PAGE_SIZE))

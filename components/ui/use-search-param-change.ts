@@ -2,7 +2,7 @@
 
 import { useSearchParams } from 'next/navigation'
 import { useState } from 'react'
-import { isRecentSelfWrite } from '@/components/ui/url-state'
+import { isRecentSelfWrite, markQueryAsCurrent } from '@/components/ui/url-state'
 
 /**
  * เรียก `onChange` เมื่อค่า `?key=` ใน URL **เปลี่ยน** หลัง mount (ไม่เรียกตอน mount — ค่าแรกมาจาก prop ของ page แล้ว)
@@ -35,6 +35,9 @@ export function useSearchQueryChange(onChange: (params: URLSearchParams) => void
   if (query !== seen) {
     setSeen(query)
     // ค่าที่หน้าเพิ่งเขียนเองวนกลับมาช้า (transition) — ไม่ใช่การนำทาง ข้าม ไม่งั้นตัวกรองย้อนไปค่าก่อนหน้า
-    if (!isRecentSelfWrite(query)) onChange(new URLSearchParams(query))
+    if (!isRecentSelfWrite(query)) {
+      markQueryAsCurrent(query)
+      onChange(new URLSearchParams(query))
+    }
   }
 }

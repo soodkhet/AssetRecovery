@@ -8,24 +8,44 @@ import { closedPeriodChecker, type ClosedPeriodKey } from '@/lib/settings/cycles
 
 const NOTHING_CLOSED = closedPeriodChecker([])
 
+export interface ClosedPeriodState {
+  /** วันตัดรอบ (date-only) อยู่ในงวดที่ปิดแล้วไหม — ยังไม่โหลด/โหลดไม่สำเร็จ = ถือว่าเปิดทุกงวด */
+  isClosed: (dateOnly: Date) => boolean
+  status: 'loading' | 'ready' | 'error'
+}
+
 /**
- * ตัวตอบ "วันตัดรอบ (date-only) อยู่ในงวดที่ปิดแล้วไหม" — โหลดจาก `GET /api/finance/closed-periods` ตอนเปิด modal
- * (preship R7-009 · P11) · ยังไม่โหลด/โหลดไม่สำเร็จ = ถือว่าเปิดทุกงวด (เหมือนเดิม — ยามจริงอยู่ที่ server ตอนสร้าง)
+ * งวดที่ปิดแล้ว — โหลดจาก `GET /api/finance/closed-periods` ตอนเปิด modal (preship R7-009 · P11)
+ * โหลดไม่สำเร็จ ⇒ `status: 'error'` ให้ modal แจ้งว่าตรวจงวดไม่ได้ (R8-008) — ยามจริงยังอยู่ที่ server ตอนสร้าง
  */
-export function useClosedPeriodChecker(open: boolean): (dateOnly: Date) => boolean {
-  const [checker, setChecker] = useState<{ isClosed: (dateOnly: Date) => boolean }>({ isClosed: NOTHING_CLOSED })
+export function useClosedPeriods(open: boolean): ClosedPeriodState {
+  const [state, setState] = useState<ClosedPeriodState>({ isClosed: NOTHING_CLOSED, status: 'loading' })
   useEffect(() => {
     if (!open) return
     let cancelled = false
     void (async () => {
       const result = await callApi<{ closedPeriods: ClosedPeriodKey[] }>('/api/finance/closed-periods')
-      if (!cancelled && result.data !== undefined) setChecker({ isClosed: closedPeriodChecker(result.data.closedPeriods) })
+      if (cancelled) return
+      setState(
+        result.data === undefined
+          ? { isClosed: NOTHING_CLOSED, status: 'error' }
+          : { isClosed: closedPeriodChecker(result.data.closedPeriods), status: 'ready' },
+      )
     })()
     return () => {
       cancelled = true
     }
   }, [open])
-  return checker.isClosed
+  return state
+}
+
+/** แจ้งเบา ๆ เมื่อโหลดงวดที่ปิดไม่สำเร็จ — วันที่เสนออาจอยู่ในงวดปิด (server ยังตรวจตอนสร้าง) · R8-008 */
+export function ClosedPeriodsUnavailableNote() {
+  return (
+    <p className="text-[11px] text-slate-500">
+      ตรวจงวดบัญชีที่ปิดแล้วไม่ได้ในขณะนี้ — ถ้าวันตัดรอบอยู่ในงวดที่ปิด ระบบจะแจ้งตอนกดสร้าง
+    </p>
+  )
 }
 
 /** ค่าจาก `<input type="date">` อยู่ในงวดที่ปิดแล้ว — ค่าว่าง/รูปแบบผิด = ไม่ใช่ */
