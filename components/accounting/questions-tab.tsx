@@ -1,6 +1,8 @@
 'use client'
 
 import { useState } from 'react'
+import { useUrlFilter } from '@/components/ui/use-url-filter'
+import { ACCOUNTING_FILTER_PARAMS } from '@/lib/accounting/accounting-tabs'
 import { kpiValue } from '@/components/ui/kpi-value'
 import { AnswerQuestionModal } from '@/components/accounting/answer-question-modal'
 import { QuestionFormModal } from '@/components/accounting/question-form-modal'
@@ -46,7 +48,8 @@ export function QuestionsTab() {
   const { can } = usePermission()
   const canManage = can('manage', MANAGE_ACCOUNTANT_QUESTIONS)
 
-  const [status, setStatus] = useState<QuestionStatusFilter>('all')
+  // ตัวกรองอยู่ใน URL — refresh/Back กลับมายังกรองเหมือนเดิม (preship R7-005)
+  const [status, setStatus] = useUrlFilter<QuestionStatusFilter>(ACCOUNTING_FILTER_PARAMS.questionStatus, STATUS_FILTERS, 'all')
   const { data, loading, error, reload } = useAccountantQuestions(status)
   // ระหว่างโหลด/โหลดไม่สำเร็จ KPI = "—" ไม่ใช่ ฿0.00/0 ที่อ่านเหมือนไม่มียอด (preship R2-007)
   const ready = !loading && error === null

@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { usePathname } from 'next/navigation'
-import { browserSearchParams, replaceUrlParams } from '@/components/ui/url-state'
+import { browserSearchParams, clearUrlParamsExcept, replaceUrlParams } from '@/components/ui/url-state'
 import { useSearchParamChange } from '@/components/ui/use-search-param-change'
 import { CustomerWhtTab } from '@/components/accounting/customer-wht-tab'
 import { AdjustmentTab } from '@/components/finance/adjustment-tab'
@@ -19,11 +19,7 @@ import { ScrollStrip } from '@/components/shell/scroll-strip'
 import { Card, EmptyState, PageHeader } from '@/components/ui'
 import { cn } from '@/components/ui/cn'
 import { useSession } from '@/components/auth/permission-provider'
-import {
-  FINANCE_FILTER_PARAMS,
-  resolveFinanceOperationTab,
-  visibleFinanceOperationTabs,
-} from '@/lib/finance/operation-tabs'
+import { resolveFinanceOperationTab, visibleFinanceOperationTabs } from '@/lib/finance/operation-tabs'
 import { UNDER_DEVELOPMENT_TEXT } from '@/lib/nav/menu-registry'
 
 /**
@@ -50,7 +46,7 @@ export function FinanceShell({ initialTab }: { initialTab: string }) {
   // เปลี่ยนแท็บ = ล้างตัวกรองย่อยของแท็บเดิมออกจาก URL ก่อน render แท็บใหม่ (แท็บใหม่อ่านตัวกรองจาก URL — R6-008)
   const changeTab = (next: string) => {
     if (next === tab) return
-    replaceUrlParams(Object.fromEntries(Object.values(FINANCE_FILTER_PARAMS).map((key) => [key, null])))
+    clearUrlParamsExcept(['tab'])
     setTab(next)
   }
   // นำทางมา route เดิมด้วย `?tab=` ใหม่ (เช่น กดแจ้งเตือนตอนอยู่หน้านี้) — หน้าจอต้องตาม URL (preship R2-009)

@@ -1,6 +1,8 @@
 'use client'
 
 import { useState } from 'react'
+import { useUrlFilter } from '@/components/ui/use-url-filter'
+import { ACCOUNTING_FILTER_PARAMS } from '@/lib/accounting/accounting-tabs'
 import { kpiValue } from '@/components/ui/kpi-value'
 import { CostCenterMapModal } from '@/components/accounting/cost-center-map-modal'
 import { ExpenseDetailModal } from '@/components/accounting/expense-detail-modal'
@@ -47,7 +49,12 @@ export function ExpensesTab() {
   const { can } = usePermission()
   const canMap = can('manage', MAP_COST_CENTER)
 
-  const [documentStatus, setDocumentStatus] = useState<ExpenseDocumentFilter>('all')
+  // ตัวกรองอยู่ใน URL — refresh/Back กลับมายังกรองเหมือนเดิม (preship R7-005)
+  const [documentStatus, setDocumentStatus] = useUrlFilter<ExpenseDocumentFilter>(
+    ACCOUNTING_FILTER_PARAMS.expenseDocument,
+    DOCUMENT_FILTERS,
+    'all',
+  )
   const { data, loading, error, reload } = useExpenseRecords(documentStatus)
   // ระหว่างโหลด/โหลดไม่สำเร็จ KPI = "—" ไม่ใช่ ฿0.00/0 ที่อ่านเหมือนไม่มียอด (preship R2-007)
   const ready = !loading && error === null

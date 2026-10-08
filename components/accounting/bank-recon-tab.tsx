@@ -1,6 +1,8 @@
 'use client'
 
 import { useState } from 'react'
+import { useUrlFilter } from '@/components/ui/use-url-filter'
+import { ACCOUNTING_FILTER_PARAMS } from '@/lib/accounting/accounting-tabs'
 import { kpiValue } from '@/components/ui/kpi-value'
 import { ImportStatementModal } from '@/components/accounting/import-statement-modal'
 import { ManualMatchModal } from '@/components/accounting/manual-match-modal'
@@ -58,7 +60,8 @@ export function BankReconTab() {
   const { can } = usePermission()
   const canManage = can('manage', MANAGE_BANK_RECONCILIATION)
 
-  const [status, setStatus] = useState<BankStatusFilter>('all')
+  // ตัวกรองอยู่ใน URL — refresh/Back กลับมายังกรองเหมือนเดิม (preship R7-005)
+  const [status, setStatus] = useUrlFilter<BankStatusFilter>(ACCOUNTING_FILTER_PARAMS.bankStatus, STATUS_FILTERS, 'all')
   const { data, loading, error, reload } = useBankTransactions(status)
   // ระหว่างโหลด/โหลดไม่สำเร็จ KPI = "—" ไม่ใช่ ฿0.00/0 ที่อ่านเหมือนไม่มียอด (preship R2-007)
   const ready = !loading && error === null
@@ -170,7 +173,9 @@ export function BankReconTab() {
                     {row.amountSatang < 0 ? `-${fmtSatangSymbol(Math.abs(row.amountSatang))}` : '—'}
                   </Td>
                   {/* ช่องนี้มีคำอธิบายยาว (รอบวางบิล … · ชื่อบริษัท) — ห้าม nowrap ทั้งช่อง (R6-001) · กว้างขั้นต่ำพอให้รหัสสั้นอย่าง PB-O-IN1 ไม่ตัดที่ขีด (R5-002) */}
-                  <Td className="min-w-36 font-mono text-xs break-words text-slate-600">{row.matchedRef ?? '—'}</Td>
+                  <Td className="min-w-36 font-mono text-xs break-words text-slate-600">
+                    {row.matchedRef === null ? '—' : <NoBreakRefs text={row.matchedRef} />}
+                  </Td>
                   <Td
                     className="max-w-[160px] truncate text-xs text-slate-500"
                     title={row.matchNote ?? row.refundNote ?? row.suspenseNote ?? ''}
@@ -195,8 +200,9 @@ export function BankReconTab() {
                       </p>
                     )}
                   </Td>
+                  {/* ปุ่มเรียงแนวตั้ง — เดิมเรียงแนวนอน 3 ปุ่มกว้าง 314px ตารางล้นที่ 1280 (preship R7-001) */}
                   <Td className="text-right whitespace-nowrap">
-                    <div className="inline-flex items-center gap-1.5">
+                    <div className="inline-flex flex-col items-end gap-1">
                       {row.matchStatus === 'unmatched' && canManage && (
                         <>
                           <Button size="sm" variant="ghost" onClick={() => setMatching(row)}>
@@ -223,7 +229,7 @@ export function BankReconTab() {
                         </>
                       )}
                       {row.matchStatus === 'suspense_refunded' && (
-                        <span className="text-[10px] text-slate-400 italic">คืนเงินผู้โอนแล้ว</span>
+                        <span className="max-w-[8rem] text-[10px] whitespace-normal text-slate-400 italic">คืนเงินผู้โอนแล้ว</span>
                       )}
                       {isMatched(row.matchStatus) && (
                         <Button size="sm" variant="ghost" onClick={() => setViewing(row)}>
@@ -231,7 +237,9 @@ export function BankReconTab() {
                         </Button>
                       )}
                       {row.matchStatus === 'unmatched_resolved' && (
-                        <span className="text-[10px] text-slate-400 italic">ปิดรายการแล้ว — ดูเหตุผลที่ช่องหมายเหตุ</span>
+                        <span className="max-w-[8rem] text-[10px] whitespace-normal text-slate-400 italic">
+                          ปิดรายการแล้ว — ดูเหตุผลที่ช่องหมายเหตุ
+                        </span>
                       )}
                     </div>
                   </Td>
@@ -281,5 +289,24 @@ export function BankReconTab() {
         onDone={refresh}
       />
     </div>
+  )
+}
+
+/** เลขเอกสาร (BL-2569-010 · PB-O-IN1) ห้ามตัดบรรทัดที่ขีด — ข้อความรอบ ๆ ตัดได้ตามปกติ (preship R7-001) */
+const DOC_REF_PATTERN = /([A-Z]{2,}(?:-[A-Z0-9]+)+)/
+
+function NoBreakRefs({ text }: { text: string }) {
+  return (
+    <>
+      {text.split(DOC_REF_PATTERN).map((part, index) =>
+        index % 2 === 1 ? (
+          <span key={index} className="whitespace-nowrap">
+            {part}
+          </span>
+        ) : (
+          part
+        ),
+      )}
+    </>
   )
 }

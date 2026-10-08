@@ -62,12 +62,19 @@ import { SERVICE_FEE_MODEL_LABEL } from '@/lib/service-fee/template'
  * ⚠️ ยอดคงค้าง/วันเกินกำหนดมาจาก API (`22` §6.11) — หน้าจอแค่ format และทาสีแดงเมื่อ > 0
  * ⚠️ **ไม่มีปุ่มแก้ยอดรายได้** — Revenue เกิดจากเกต `19` §6.1 เท่านั้น แก้ยอดต้องผ่าน Adjustment (ไฟล์ 20)
  */
+/** มุมมองของแท็บรายได้และวางบิล — อยู่ใน URL (`rev_view` · preship R7-005) */
+const VIEW_OPTIONS = [
+  { value: 'batches', label: 'รอบวางบิล' },
+  { value: 'aging', label: 'AR Aging' },
+] as const
+
 export function RevenueTab() {
   const { can } = usePermission()
   const canManage = can('manage', MANAGE_BILLING)
   const { showToast } = useToast()
 
-  const [view, setView] = useState<'batches' | 'aging'>('batches')
+  // ตัวกรองอยู่ใน URL — refresh/Back กลับมายังกรองเหมือนเดิม (preship R7-005)
+  const [view, setView] = useUrlFilter<'batches' | 'aging'>(FINANCE_FILTER_PARAMS.revenueView, VIEW_OPTIONS, 'batches')
   const [companyId, setCompanyId] = useState('')
   // ตัวกรองอยู่ใน URL — refresh/Back กลับมายังกรองเหมือนเดิม (preship R6-008)
   const [batchStatus, setBatchStatus] = useUrlFilter<BillingStatusFilter>(FINANCE_FILTER_PARAMS.billingStatus, BILLING_STATUS_FILTERS, 'all')
@@ -158,10 +165,7 @@ export function RevenueTab() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <FilterGroup
-              options={[
-                { value: 'batches', label: 'รอบวางบิล' },
-                { value: 'aging', label: 'AR Aging' },
-              ]}
+              options={VIEW_OPTIONS}
               value={view}
               onChange={(value) => setView(value === 'aging' ? 'aging' : 'batches')}
             />

@@ -2,8 +2,13 @@
 
 import { usePathname } from 'next/navigation'
 import { browserSearchParams, initialUrlUuid, pickUuid, replaceUrlParams } from '@/components/ui/url-state'
-import { EMPTY_CASE_LIST_FILTERS, parseCaseListParams, type CaseListFilters } from '@/components/cases/case-list-params'
-import { useSearchParamChange } from '@/components/ui/use-search-param-change'
+import {
+  EMPTY_CASE_LIST_FILTERS,
+  parseCaseListParams,
+  sameCaseListFilters,
+  type CaseListFilters,
+} from '@/components/cases/case-list-params'
+import { useSearchParamChange, useSearchQueryChange } from '@/components/ui/use-search-param-change'
 import { kpiValue } from '@/components/ui/kpi-value'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Can, usePermission } from '@/components/auth/permission-provider'
@@ -113,6 +118,16 @@ export function CasesManager({
   })
   const [filters, setFilters] = useState<Filters>(initialFromUrl.filters)
   const [page, setPage] = useState(initialFromUrl.page)
+  // นำทางมา route เดิมด้วย URL ใหม่ (กดแจ้งเตือน `?case=`) ⇒ ตัวกรอง/หน้าตาม URL (R7-004) · ค่าที่หน้าเขียนเองวนกลับมา
+  // เท่าเดิม = ไม่ทำอะไร (คำค้นเทียบแบบ trim — URL เก็บค่าที่ trim แล้ว ไม่งั้นพิมพ์เว้นวรรคท้ายแล้วถูกกลืน)
+  useSearchQueryChange((params) => {
+    const next = parseCaseListParams((key) => params.get(key))
+    if (!sameCaseListFilters(next.filters, filters)) {
+      setLoading(true)
+      setFilters(next.filters)
+    }
+    if (next.page !== page) setPage(next.page)
+  })
   // ตัวกรอง/หน้า อยู่ใน URL — refresh/Back กลับมาที่รายการเดิม (preship PS-013) · ค่าเริ่มต้นไม่ใส่ (URL สั้น)
   useEffect(() => {
     replaceUrlParams({

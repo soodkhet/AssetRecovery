@@ -2,6 +2,8 @@
 
 import { kpiValue } from '@/components/ui/kpi-value'
 import { useEffect, useState } from 'react'
+import { useUrlFilter } from '@/components/ui/use-url-filter'
+import { ACCOUNTING_FILTER_PARAMS } from '@/lib/accounting/accounting-tabs'
 import { ReceiveCustomerWhtModal } from '@/components/accounting/receive-customer-wht-modal'
 import { useCustomerWht } from '@/components/accounting/use-customer-wht'
 import { usePermission } from '@/components/auth/permission-provider'
@@ -47,6 +49,12 @@ import { signedFileUrl } from '@/lib/uploads/client'
 type StatusFilter = CustomerWhtStatus | 'all'
 type AgeFilter = CustomerWhtAgeBucket | 'all'
 
+/** ตัวเลือกอายุค้าง — ใช้ตรวจค่าจาก URL (`cwht_age`) ชุดเดียวกับ dropdown */
+const AGE_FILTERS: readonly { value: AgeFilter }[] = [
+  { value: 'all' },
+  ...CUSTOMER_WHT_AGE_BUCKETS.map((bucket) => ({ value: bucket })),
+]
+
 const STATUS_FILTERS: readonly { value: StatusFilter; label: string }[] = [
   { value: 'pending', label: CUSTOMER_WHT_STATUS_LABEL.pending },
   { value: 'received', label: CUSTOMER_WHT_STATUS_LABEL.received },
@@ -58,8 +66,9 @@ export function CustomerWhtTab() {
   const canManage = can('manage', MANAGE_CUSTOMER_WHT)
   const { showToast } = useToast()
 
-  const [status, setStatus] = useState<StatusFilter>('pending')
-  const [age, setAge] = useState<AgeFilter>('all')
+  // ตัวกรองอยู่ใน URL — refresh/Back กลับมายังกรองเหมือนเดิม (preship R7-005)
+  const [status, setStatus] = useUrlFilter<StatusFilter>(ACCOUNTING_FILTER_PARAMS.customerWhtStatus, STATUS_FILTERS, 'pending')
+  const [age, setAge] = useUrlFilter<AgeFilter>(ACCOUNTING_FILTER_PARAMS.customerWhtAge, AGE_FILTERS, 'all')
   const [companyId, setCompanyId] = useState('')
   const [companies, setCompanies] = useState<readonly FinanceCompanyDto[]>([])
   const [receiving, setReceiving] = useState<CustomerWhtDto | null>(null)

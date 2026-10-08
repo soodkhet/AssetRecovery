@@ -138,7 +138,8 @@ export function AdvanceTab() {
         )}
 
         <div className="overflow-x-auto rounded-lg border border-slate-200">
-          <Table>
+          {/* 9 คอลัมน์ + ป้ายสถานะยาว ("อนุมัติแล้ว — รอเคลียร์ยอด") — ระยะในช่องแคบลงให้พอดีจอ 1280 โดยไม่บีบชื่อ (R7-002) */}
+          <Table className="[&_td]:px-3 [&_th]:px-3">
             <THead>
               <Tr>
                 <Th>เลขที่</Th>
@@ -170,7 +171,8 @@ export function AdvanceTab() {
                       <p className="text-[10px] text-slate-400">ขอเมื่อ {fmtDate(advance.createdAt)}</p>
                       <AdvanceRequestPdfLink advance={advance} />
                     </Td>
-                    <Td>
+                    {/* กว้างขั้นต่ำ — เดิมถูกบีบเหลือ 81px ชื่อไทยแตก 3 บรรทัด (preship R7-002) */}
+                    <Td className="min-w-[7.5rem]">
                       <p className="font-semibold text-slate-900">{advance.payeeName}</p>
                       {advance.teamName !== null && <p className="text-[10px] text-slate-500">{advance.teamName}</p>}
                     </Td>
@@ -202,7 +204,8 @@ export function AdvanceTab() {
                       {fmtSatangSymbol(advance.returnSatang)}
                       {advance.returnState !== 'none' && (
                         // ประวัติการคืนตัดบรรทัดได้ — เดิมยาวบรรทัดเดียวจนคอลัมน์กว้าง ~400px ตารางล้นที่ 1440px (preship PS-016)
-                        <div className="mt-1 ml-auto max-w-[200px] space-y-0.5 text-right whitespace-normal">
+                        // font-sans: ช่องตัวเลขเป็น font-mono ทั้งช่อง ข้อความไทยในประวัติจึงกว้าง/อ่านยาก (R7-002)
+                        <div className="mt-1 ml-auto max-w-[200px] space-y-0.5 text-right font-sans whitespace-normal">
                           <StatusBadge
                             status={advance.returnState}
                             group={advanceReturnStateBadgeGroup(advance.returnState)}

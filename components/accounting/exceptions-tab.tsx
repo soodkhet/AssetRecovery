@@ -1,6 +1,8 @@
 'use client'
 
 import { useState } from 'react'
+import { useUrlFilter } from '@/components/ui/use-url-filter'
+import { ACCOUNTING_FILTER_PARAMS } from '@/lib/accounting/accounting-tabs'
 import { kpiValue } from '@/components/ui/kpi-value'
 import {
   ExceptionActionModal,
@@ -68,8 +70,9 @@ export function ExceptionsTab() {
     canAuthorize: can('manage', AUTHORIZE_EXCEPTION),
   }
 
-  const [status, setStatus] = useState<ExceptionStatusFilter>('all')
-  const [level, setLevel] = useState<ExceptionLevelFilter>('all')
+  // ตัวกรองอยู่ใน URL — refresh/Back กลับมายังกรองเหมือนเดิม (preship R7-005)
+  const [status, setStatus] = useUrlFilter<ExceptionStatusFilter>(ACCOUNTING_FILTER_PARAMS.exceptionStatus, STATUS_FILTERS, 'all')
+  const [level, setLevel] = useUrlFilter<ExceptionLevelFilter>(ACCOUNTING_FILTER_PARAMS.exceptionLevel, LEVEL_FILTERS, 'all')
   const { data, loading, error, reload } = useAccountingExceptions({ status, level, periodId: '' })
   // ระหว่างโหลด/โหลดไม่สำเร็จ KPI = "—" ไม่ใช่ ฿0.00/0 ที่อ่านเหมือนไม่มียอด (preship R2-007)
   const ready = !loading && error === null

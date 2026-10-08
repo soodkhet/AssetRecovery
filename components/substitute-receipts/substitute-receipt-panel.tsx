@@ -177,7 +177,7 @@ export function SubstituteReceiptPanel({
       </div>
       {receipt.replacesReceiptNumber !== null && (
         <p className="text-[11px] text-slate-500">
-          ออกแทนเลขที่ <span className="font-mono">{receipt.replacesReceiptNumber}</span>
+          ออกแทนเลขที่ <span className="font-mono whitespace-nowrap">{receipt.replacesReceiptNumber}</span>
         </p>
       )}
       {!compact && (

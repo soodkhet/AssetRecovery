@@ -138,12 +138,13 @@ export function resolveFinanceOperationTab(tab: string | undefined, viewer: Capa
 }
 
 /**
- * key ใน URL ของตัวกรองย่อยแต่ละแท็บ (preship R6-008) — ชื่อไม่ซ้ำข้ามแท็บ · เปลี่ยนแท็บแล้วล้างทิ้งทั้งชุด
- * (`FinanceShell`) ไม่ให้ตัวกรองของแท็บก่อนค้างใน URL
+ * key ใน URL ของตัวกรองย่อยแต่ละแท็บ (preship R6-008) — ชื่อไม่ซ้ำข้ามแท็บ (รวม `ACCOUNTING_FILTER_PARAMS`)
+ * · เปลี่ยนแท็บแล้ว `FinanceShell` ล้างทุก key ยกเว้น `tab` ไม่ให้ตัวกรองของแท็บก่อนค้างใน URL
  */
 export const FINANCE_FILTER_PARAMS = {
   billingStatus: 'bill_status',
   revenueStatus: 'rev_status',
+  revenueView: 'rev_view',
   payoutStatus: 'payout_status',
   payoutSide: 'payout_side',
   advanceStatus: 'adv_status',

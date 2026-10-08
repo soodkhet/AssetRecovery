@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { usePathname } from 'next/navigation'
-import { browserSearchParams, replaceUrlParams } from '@/components/ui/url-state'
+import { browserSearchParams, clearUrlParamsExcept, replaceUrlParams } from '@/components/ui/url-state'
 import { useSearchParamChange } from '@/components/ui/use-search-param-change'
 import { useSession } from '@/components/auth/permission-provider'
 import { BankReconTab } from '@/components/accounting/bank-recon-tab'
@@ -40,6 +40,12 @@ export function AccountingShell({ initialTab }: { initialTab: string }) {
   useEffect(() => {
     replaceUrlParams({ tab })
   }, [tab])
+  // เปลี่ยนแท็บ = ล้างตัวกรองย่อยของแท็บเดิมออกจาก URL ก่อน render แท็บใหม่ (preship R7-005)
+  const changeTab = (next: string) => {
+    if (next === tab) return
+    clearUrlParamsExcept(['tab'])
+    setTab(next)
+  }
   // นำทางมา route เดิมด้วย `?tab=` ใหม่ (เช่น กดแจ้งเตือนตอนอยู่หน้านี้) — หน้าจอต้องตาม URL (preship R2-009)
   useSearchParamChange('tab', (value) => {
     if (session !== null) setTab(resolveAccountingTab(value ?? undefined, session))
@@ -81,7 +87,7 @@ export function AccountingShell({ initialTab }: { initialTab: string }) {
                 <button
                   key={item.id}
                   type="button"
-                  onClick={() => setTab(item.id)}
+                  onClick={() => changeTab(item.id)}
                   aria-current={active ? 'page' : undefined}
                   className={cn(
                     'focus-ring-inset border-b-2 py-2.5 text-sm font-semibold whitespace-nowrap transition-colors',

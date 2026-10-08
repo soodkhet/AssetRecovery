@@ -33,7 +33,7 @@ export function AdvanceReturnHistory({ advance }: { advance: Pick<AdvanceDto, 'i
       {advance.returns.map((entry) => (
         <li key={entry.id} className="text-[10px] font-normal text-slate-500">
           <span className={entry.reversedAt === null ? undefined : 'line-through'}>
-            <span className="font-mono">{entry.returnNumber}</span> · {ADVANCE_RETURN_CHANNEL_LABEL[entry.channel]}{' '}
+            <span className="font-mono whitespace-nowrap">{entry.returnNumber}</span> · {ADVANCE_RETURN_CHANNEL_LABEL[entry.channel]}{' '}
             {fmtSatangSymbol(entry.amountSatang)}
             {entry.payoutBatchName !== null
               ? ` · ${entry.payoutBatchName}`

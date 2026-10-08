@@ -21,6 +21,29 @@ export function mergeSearchParams(current: string, updates: UrlParamUpdates): st
   return params.toString()
 }
 
+/**
+ * query ที่หน้าเขียนเองล่าสุด — Next ซิงก์ `replaceState` เข้า `useSearchParams()` แบบ transition (ช้ากว่า state ของหน้า)
+ * ⇒ ระหว่างพิมพ์ค้นหา/กดตัวกรองรัว ค่าเก่าที่เพิ่งเขียนวนกลับมาทีหลัง · ตัวฟัง URL (`useSearchQueryChange`) ต้องไม่ถือว่า
+ * เป็นการนำทาง ไม่งั้นตัวกรองย้อนกลับไปค่าก่อนหน้า (preship R7-004)
+ */
+const SELF_WRITE_WINDOW_MS = 500
+const selfWrites: { query: string; at: number }[] = []
+
+/**
+ * `query` (ไม่มี `?`) เป็นค่าที่หน้าเขียนลง URL เอง — ค่าล่าสุดที่เขียน (state ของหน้าเท่ากับค่านี้อยู่แล้ว) หรือค่าที่
+ * เขียนภายใน 500ms (echo ของการกดรัว ที่ Next ซิงก์ช้ากว่า) · ค่าที่เขียนนานกว่านั้นแล้วถูกนำทางกลับมา = การนำทางจริง
+ * (เช่น กดแจ้งเตือนที่ลิงก์ `?tab=advances` หลังผู้ใช้กรอง — ต้องล้างตัวกรอง)
+ */
+export function isRecentSelfWrite(query: string, now: number = Date.now()): boolean {
+  if (selfWrites.length > 0 && selfWrites[selfWrites.length - 1]?.query === query) return true
+  return selfWrites.some((write) => write.query === query && now - write.at <= SELF_WRITE_WINDOW_MS)
+}
+
+function recordSelfWrite(query: string, now: number): void {
+  selfWrites.push({ query, at: now })
+  if (selfWrites.length > 30) selfWrites.splice(0, selfWrites.length - 30)
+}
+
 /** เขียนค่าลง URL ของหน้าปัจจุบันแบบไม่เพิ่ม history entry */
 export function replaceUrlParams(updates: UrlParamUpdates): void {
   if (typeof window === 'undefined') return
@@ -30,8 +53,22 @@ export function replaceUrlParams(updates: UrlParamUpdates): void {
     // state ห้ามมี `__NA` — ส่ง `history.state` เดิมทั้งก้อนแล้ว router ของ Next ไม่รับรู้ URL ใหม่ ⇒ ลิงก์แจ้งเตือน
     // กลับไปค่าเดิมไม่ทำงาน และ re-render เขียน URL เก่าทับ (preship R2-009) · คงเฉพาะเครื่องหมาย sentinel ของ
     // modal ที่เปิดอยู่ (ไม่มี = `null` ตามตัวอย่างของ Next) ไม่งั้น entry นั้นค้างใน history แยกไม่ออก (R5-008)
+    recordSelfWrite(query, Date.now())
     window.history.replaceState(modalGuardHistoryState(), '', next)
   }
+}
+
+/**
+ * ล้างทุก key ของ URL ยกเว้น `keep` — ใช้ตอนผู้ใช้เปลี่ยนแท็บของหน้า shell (การเงิน/บัญชี) ให้ตัวกรองย่อยของแท็บเดิม
+ * ไม่ค้างใน URL (preship R6-008/R7-005) · เรียกก่อน `setTab` เพื่อให้แท็บใหม่อ่าน URL ที่สะอาดตอน mount
+ */
+export function clearUrlParamsExcept(keep: readonly string[]): void {
+  if (typeof window === 'undefined') return
+  const updates: Record<string, null> = {}
+  for (const key of new URLSearchParams(window.location.search).keys()) {
+    if (!keep.includes(key)) updates[key] = null
+  }
+  replaceUrlParams(updates)
 }
 
 /** อ่านค่าจาก `searchParams` ของ page (server) — ค่าไม่อยู่ในชุดที่อนุญาต = ค่าเริ่มต้น */

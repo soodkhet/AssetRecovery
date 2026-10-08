@@ -2,6 +2,7 @@
 
 import { useSearchParams } from 'next/navigation'
 import { useState } from 'react'
+import { isRecentSelfWrite } from '@/components/ui/url-state'
 
 /**
  * เรียก `onChange` เมื่อค่า `?key=` ใน URL **เปลี่ยน** หลัง mount (ไม่เรียกตอน mount — ค่าแรกมาจาก prop ของ page แล้ว)
@@ -19,5 +20,21 @@ export function useSearchParamChange(key: string, onChange: (value: string | nul
   if (value !== seen) {
     setSeen(value)
     onChange(value)
+  }
+}
+
+/**
+ * เหมือน `useSearchParamChange` แต่ดูทั้ง query — สำหรับหน้าที่ผูกหลาย key (ตัวกรองรายการเคส) · preship R7-004:
+ * กดแจ้งเตือนที่พามา route เดิม (`router.push('/cases/submit?case=…')`) แทน URL ทั้งก้อน ⇒ ตัวกรองต้องตาม URL ใหม่
+ * ไม่งั้นจอยังกรองค่าเดิมแต่ URL ไม่มีตัวกรอง (refresh แล้วผลเปลี่ยน) · ผู้เรียกต้อง set state แบบ idempotent
+ */
+export function useSearchQueryChange(onChange: (params: URLSearchParams) => void): void {
+  const searchParams = useSearchParams()
+  const query = searchParams.toString()
+  const [seen, setSeen] = useState(query)
+  if (query !== seen) {
+    setSeen(query)
+    // ค่าที่หน้าเพิ่งเขียนเองวนกลับมาช้า (transition) — ไม่ใช่การนำทาง ข้าม ไม่งั้นตัวกรองย้อนไปค่าก่อนหน้า
+    if (!isRecentSelfWrite(query)) onChange(new URLSearchParams(query))
   }
 }

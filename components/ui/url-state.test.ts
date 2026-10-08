@@ -2,12 +2,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { parseCaseListParams } from '@/components/cases/case-list-params'
 import {
   browserSearchParams,
+  clearUrlParamsExcept,
   initialUrlParam,
+  isRecentSelfWrite,
   initialUrlUuid,
   mergeSearchParams,
   pickPage,
   pickParam,
   pickUuid,
+  replaceUrlParams,
 } from '@/components/ui/url-state'
 
 describe('mergeSearchParams', () => {
@@ -95,11 +98,65 @@ describe('parseCaseListParams', () => {
   })
 
   it('อ่านทุก key + ตัดคำค้นยาวเกิน 100 ตัว · หน้าไม่ใช่จำนวนเต็มบวก = 1', () => {
-    const query = new URLSearchParams({ search: 'ก'.repeat(150), status: 'draft', source: 'email', page: '-3' })
+    const query = new URLSearchParams({ search: 'ก'.repeat(150), status: 'draft', source: 'import', page: '-3' })
     const { filters, page } = parseCaseListParams((key) => query.get(key))
     expect(filters.search).toHaveLength(100)
     expect(filters.status).toBe('draft')
-    expect(filters.sourceChannel).toBe('email')
+    expect(filters.sourceChannel).toBe('import')
     expect(page).toBe(1)
+  })
+
+  it('ค่านอกชุด (สถานะ/ช่องทาง/บริษัทไม่ใช่ UUID/จังหวัด) = ทั้งหมด — ไม่ส่งต่อให้ API แล้วตาราง error (R7-010)', () => {
+    const query = new URLSearchParams({ status: 'bogus', source: 'email', company: 'x', province: 'ไม่มีจังหวัดนี้' })
+    expect(parseCaseListParams((key) => query.get(key)).filters).toEqual({
+      search: '',
+      status: 'all',
+      sourceChannel: 'all',
+      financeCompanyId: 'all',
+      province: 'all',
+    })
+    const valid = new URLSearchParams({ company: '3f1c2b4a-1111-4222-8333-944455556666', province: 'เชียงใหม่' })
+    const { filters } = parseCaseListParams((key) => valid.get(key))
+    expect(filters.financeCompanyId).toBe('3f1c2b4a-1111-4222-8333-944455556666')
+    expect(filters.province).toBe('เชียงใหม่')
+  })
+})
+
+describe('replaceUrlParams — จำ query ที่หน้าเขียนเอง (preship R7-004)', () => {
+  const stubBrowser = (pathname: string, search: string) => {
+    const location = { pathname, search, hash: '' }
+    const history = {
+      state: null,
+      replaceState: (_state: unknown, _unused: string, url: string) => {
+        const parsed = new URL(url, 'http://localhost')
+        location.pathname = parsed.pathname
+        location.search = parsed.search
+      },
+    }
+    vi.stubGlobal('window', { location, history })
+    return location
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('ค่าที่เพิ่งเขียนเอง = echo (ไม่ใช่การนำทาง) · หมดเวลาแล้วไม่นับ · ค่าที่ไม่เคยเขียน = การนำทาง', () => {
+    stubBrowser('/finance', '?tab=advances')
+    replaceUrlParams({ adv_status: 'cleared' })
+    replaceUrlParams({ adv_status: 'uncleared' })
+    const now = Date.now()
+    // echo ของค่าก่อนหน้าที่กดรัว (ภายใน 500ms) · ค่าล่าสุดนับเสมอ
+    expect(isRecentSelfWrite('tab=advances&adv_status=cleared', now)).toBe(true)
+    expect(isRecentSelfWrite('tab=advances&adv_status=uncleared', now + 60_000)).toBe(true)
+    // ค่าเก่าที่เขียนนานแล้วถูกนำทางกลับมา = การนำทางจริง
+    expect(isRecentSelfWrite('tab=advances&adv_status=cleared', now + 5000)).toBe(false)
+    expect(isRecentSelfWrite('tab=advances', now)).toBe(false)
+  })
+
+  it('clearUrlParamsExcept ล้างตัวกรองย่อยทุกตัว เหลือแต่ key ที่ระบุ', () => {
+    const location = stubBrowser('/accounting', '?tab=bank&bank_status=unmatched&cwht_age=d30')
+    clearUrlParamsExcept(['tab'])
+    expect(location.search).toBe('?tab=bank')
   })
 })

@@ -94,3 +94,20 @@ export function resolveAccountingTab(tab: string | undefined, viewer: Capability
   const fallback = selectable.find((item) => item.id === DEFAULT_ACCOUNTING_TAB) ?? selectable[0]
   return fallback?.id ?? DEFAULT_ACCOUNTING_TAB
 }
+
+/**
+ * key ใน URL ของตัวกรองย่อยแต่ละแท็บบัญชี (preship R7-005) — ชื่อไม่ซ้ำกับ `FINANCE_FILTER_PARAMS`
+ * (แท็บภาษีลูกค้าหักใช้ทั้งหน้าการเงินและบัญชี) · เปลี่ยนแท็บแล้ว `AccountingShell` ล้างทุก key ยกเว้น `tab`
+ */
+export const ACCOUNTING_FILTER_PARAMS = {
+  bankStatus: 'bank_status',
+  customerWhtStatus: 'cwht_status',
+  customerWhtAge: 'cwht_age',
+  expenseDocument: 'exp_doc',
+  exceptionStatus: 'exc_status',
+  exceptionLevel: 'exc_level',
+  questionStatus: 'q_status',
+  salesInvoice: 'sales_invoice',
+  whtStatus: 'wht_status',
+  assumptionStatus: 'assume_status',
+} as const

@@ -2,6 +2,8 @@
 
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
+import { useUrlFilter } from '@/components/ui/use-url-filter'
+import { ACCOUNTING_FILTER_PARAMS } from '@/lib/accounting/accounting-tabs'
 import { usePermission } from '@/components/auth/permission-provider'
 import { ReasonConfirmModal } from '@/components/settings/reason-confirm-modal'
 import {
@@ -56,7 +58,12 @@ export function SettingAssumptionsView({ links }: { links: Readonly<Record<Setti
   const [rows, setRows] = useState<readonly SettingAssumptionOverviewDto[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<{ title: string; message: string } | null>(null)
-  const [filter, setFilter] = useState<SettingAssumptionStatusFilter>('all')
+  // ตัวกรองอยู่ใน URL — refresh/Back กลับมายังกรองเหมือนเดิม (preship R7-005)
+  const [filter, setFilter] = useUrlFilter<SettingAssumptionStatusFilter>(
+    ACCOUNTING_FILTER_PARAMS.assumptionStatus,
+    FILTERS,
+    'all',
+  )
 
   const [target, setTarget] = useState<SettingAssumptionOverviewDto | null>(null)
   const [reason, setReason] = useState('')

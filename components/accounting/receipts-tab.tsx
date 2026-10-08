@@ -109,7 +109,10 @@ export function ReceiptsTab() {
                     {row.bankRef === null ? (
                       <span className="text-xs text-slate-300">—</span>
                     ) : (
-                      <RefText>{row.bankRef}</RefText>
+                      // อ้างอิงธนาคารบางรายการยาวมาก — ย่อด้วย … (ค่าเต็มตอน hover) ไม่ให้คอลัมน์นี้กำหนดความกว้างทั้งตาราง (R7-003)
+                      <RefText className="inline-block max-w-[10rem] truncate align-bottom" title={row.bankRef}>
+                        {row.bankRef}
+                      </RefText>
                     )}
                   </Td>
                   <Td>

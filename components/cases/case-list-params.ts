@@ -1,4 +1,7 @@
-import { pickPage } from '@/components/ui/url-state'
+import { pickPage, pickParam, pickUuid } from '@/components/ui/url-state'
+import { THAI_PROVINCES } from '@/lib/address/thai-address'
+import { CASE_STATUSES } from '@/lib/cases/state-machine'
+import { CASE_SOURCE_CHANNELS } from '@/lib/cases/status-display'
 
 /** ตัวกรองรายการเคสหน้ารับเคส — ผูกกับ URL (preship PS-013) */
 export interface CaseListFilters {
@@ -19,7 +22,9 @@ export const EMPTY_CASE_LIST_FILTERS: CaseListFilters = {
 
 /**
  * อ่านตัวกรอง/หน้าจาก query — ใช้ทั้ง page (server `searchParams`) และ `CasesManager` (URL จริงของ browser ตอน
- * Back กลับมา — preship R6-004) ด้วยกติกาเดียวกัน ⇒ hydrate ไม่ mismatch · ค่าแปลก ๆ ไม่อันตราย: API ตรวจ query ซ้ำด้วย Zod
+ * Back กลับมา — preship R6-004) ด้วยกติกาเดียวกัน ⇒ hydrate ไม่ mismatch
+ * ตัวเลือกที่มีชุดค่าตายตัว (สถานะ/ช่องทาง/บริษัท/จังหวัด) ค่านอกชุด = "ทั้งหมด" — เดิมส่งต่อให้ API แล้วตาราง error
+ * ทั้งที่ dropdown แสดง "ทั้งหมด" (preship R7-010) · API ตรวจ query ซ้ำด้วย Zod เสมอ
  */
 export function parseCaseListParams(get: (key: string) => string | null | undefined): {
   filters: CaseListFilters
@@ -32,11 +37,22 @@ export function parseCaseListParams(get: (key: string) => string | null | undefi
   return {
     filters: {
       search: text('search', ''),
-      status: text('status', 'all'),
-      sourceChannel: text('source', 'all'),
-      financeCompanyId: text('company', 'all'),
-      province: text('province', 'all'),
+      status: pickParam(get('status') ?? undefined, CASE_STATUSES, 'all'),
+      sourceChannel: pickParam(get('source') ?? undefined, CASE_SOURCE_CHANNELS, 'all'),
+      financeCompanyId: pickUuid(get('company') ?? undefined) ?? 'all',
+      province: pickParam(get('province') ?? undefined, THAI_PROVINCES, 'all'),
     },
     page: pickPage(get('page') ?? undefined),
   }
+}
+
+/** ตัวกรองเท่ากันในความหมายของ URL — คำค้นเทียบแบบ trim (URL เก็บค่าที่ trim แล้ว) */
+export function sameCaseListFilters(a: CaseListFilters, b: CaseListFilters): boolean {
+  return (
+    a.search.trim() === b.search.trim() &&
+    a.status === b.status &&
+    a.sourceChannel === b.sourceChannel &&
+    a.financeCompanyId === b.financeCompanyId &&
+    a.province === b.province
+  )
 }
