@@ -3,12 +3,17 @@
 import { useEffect, useState } from 'react'
 import { REASON_MIN_LENGTH } from '@/components/settings/reason-confirm-modal'
 import { Button, Field, InlineAlert, Input, Modal, Select, Textarea, useToast } from '@/components/ui'
-import { ClosedPeriodCutoffAlert, isClosedPeriodCutoffError } from '@/components/finance/closed-period-cutoff-alert'
+import {
+  ClosedPeriodCutoffAlert,
+  isClosedPeriodCutoffError,
+  isCutoffInClosedPeriod,
+  useClosedPeriodChecker,
+} from '@/components/finance/closed-period-cutoff-alert'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import type { FinanceCompanyDto } from '@/lib/finance-companies/types'
 import { fmtDate, toInputDate } from '@/lib/format/datetime'
 import type { BillingBatchDetailDto } from '@/lib/revenue/types'
-import { resolveDueDate, suggestCutoffDate } from '@/lib/settings/cycles'
+import { resolveDueDate, suggestOpenCutoffDate } from '@/lib/settings/cycles'
 
 /** วันนี้ตามเวลาไทยในรูป date-only (เที่ยงคืน UTC) — ฐานของการเสนอวันตัดรอบ */
 function todayDateOnly(): Date {
@@ -44,6 +49,7 @@ export function CreateBillingModal({
   const [saving, setSaving] = useState(false)
   /** วันตัดรอบที่ server ปฏิเสธเพราะงวดปิดแล้ว — แสดงคำแนะนำใต้ช่องจนกว่าจะเปลี่ยนวัน (R7-009) */
   const [closedCutoff, setClosedCutoff] = useState<string | null>(null)
+  const isPeriodClosed = useClosedPeriodChecker(open)
 
   useEffect(() => {
     if (!open) return
@@ -71,8 +77,12 @@ export function CreateBillingModal({
   function selectCompany(nextCompanyId: string): void {
     setCompanyId(nextCompanyId)
     const nextCycle = companies.find((company) => company.id === nextCompanyId)?.billingCycle ?? null
-    // มติ PO U146 — เสนอวันตัดรอบล่าสุดตามกติกาของรอบบิล (ผู้ใช้แก้ได้)
-    setCutoffDate(nextCycle === null ? '' : suggestCutoffDate(nextCycle, todayDateOnly()).toISOString().slice(0, 10))
+    // มติ PO U146 — เสนอวันตัดรอบล่าสุดตามกติกาของรอบบิล (ผู้ใช้แก้ได้) · ไม่เสนอวันในงวดที่ปิดแล้ว (P11 · R7-009)
+    setCutoffDate(
+      nextCycle === null
+        ? ''
+        : suggestOpenCutoffDate(nextCycle, todayDateOnly(), isPeriodClosed).toISOString().slice(0, 10),
+    )
   }
   const ready = companyId !== '' && cycle !== null && cutoffDate !== '' && reason.trim().length >= REASON_MIN_LENGTH
 
@@ -178,7 +188,9 @@ export function CreateBillingModal({
           <Input type="date" value={cutoffDate} onChange={(event) => setCutoffDate(event.target.value)} />
         </Field>
 
-        {closedCutoff !== null && closedCutoff === cutoffDate && <ClosedPeriodCutoffAlert onUseToday={setCutoffDate} />}
+        {((closedCutoff !== null && closedCutoff === cutoffDate) || isCutoffInClosedPeriod(cutoffDate, isPeriodClosed)) && (
+          <ClosedPeriodCutoffAlert onUseToday={setCutoffDate} />
+        )}
 
         <Field label="เหตุผล" required hint={`อย่างน้อย ${REASON_MIN_LENGTH} ตัวอักษร — บันทึกลง audit log`}>
           <Textarea

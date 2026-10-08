@@ -6,7 +6,9 @@ import {
   isDueRuleShapeValid,
   normalizeCycleValues,
   resolveDueDate,
+  closedPeriodChecker,
   suggestCutoffDate,
+  suggestOpenCutoffDate,
   toCycleAuditPayload,
   type CycleValues,
 } from '@/lib/settings/cycles'
@@ -168,5 +170,34 @@ describe('resolveDueDate (A5 · `19` §7.2)', () => {
     const due = resolveDueDate(cutoff('2026-08-31'), { dueRuleType: 'net_days', dueRuleValue: 30 })
     expect(due.getUTCHours()).toBe(0)
     expect(due.getUTCMinutes()).toBe(0)
+  })
+})
+
+describe('suggestOpenCutoffDate — ไม่เสนอวันตัดรอบในงวดที่ปิดแล้ว (preship R7-009 · P11)', () => {
+  const d = (iso: string): Date => new Date(`${iso}T00:00:00Z`)
+  const iso = (date: Date): string => date.toISOString().slice(0, 10)
+  const SEPT_2569_CLOSED = closedPeriodChecker([{ yearBe: 2569, month: 9 }])
+  const NONE_CLOSED = closedPeriodChecker([])
+
+  it('closedPeriodChecker: เทียบ พ.ศ./เดือน ของวัน date-only', () => {
+    expect(SEPT_2569_CLOSED(d('2026-09-30'))).toBe(true)
+    expect(SEPT_2569_CLOSED(d('2026-09-01'))).toBe(true)
+    expect(SEPT_2569_CLOSED(d('2026-10-01'))).toBe(false)
+    expect(SEPT_2569_CLOSED(d('2025-09-30'))).toBe(false)
+  })
+
+  it('month_end: สิ้นเดือนก่อนอยู่ในงวดเปิด ⇒ ตามกติกาเดิม · งวดปิด ⇒ วันนี้', () => {
+    const rule: Pick<CycleValues, 'cutoffRuleType' | 'cutoffDates'> = { cutoffRuleType: 'month_end', cutoffDates: [] }
+    expect(iso(suggestOpenCutoffDate(rule, d('2026-10-08'), NONE_CLOSED))).toBe('2026-09-30')
+    expect(iso(suggestOpenCutoffDate(rule, d('2026-10-08'), SEPT_2569_CLOSED))).toBe('2026-10-08')
+    // วันนี้เป็นสิ้นเดือนเอง (งวดเปิด) ⇒ วันนี้ตามกติกา
+    expect(iso(suggestOpenCutoffDate(rule, d('2026-10-31'), SEPT_2569_CLOSED))).toBe('2026-10-31')
+  })
+
+  it('fixed_dates: วันล่าสุดในเดือนนี้ใช้ได้ตามเดิม · ย้อนไปเดือนที่ปิด ⇒ วันนี้', () => {
+    const rule: Pick<CycleValues, 'cutoffRuleType' | 'cutoffDates'> = { cutoffRuleType: 'fixed_dates', cutoffDates: [5, 20] }
+    expect(iso(suggestOpenCutoffDate(rule, d('2026-10-07'), SEPT_2569_CLOSED))).toBe('2026-10-05')
+    expect(iso(suggestOpenCutoffDate(rule, d('2026-10-03'), SEPT_2569_CLOSED))).toBe('2026-10-03')
+    expect(iso(suggestOpenCutoffDate(rule, d('2026-10-03'), NONE_CLOSED))).toBe('2026-09-20')
   })
 })

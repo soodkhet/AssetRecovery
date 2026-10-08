@@ -34,6 +34,7 @@
 | v3.17 | 07/10/2569 | **มติ PO 07/10/2569 (U137)** §6.14: `GET /api/bank-reconciliation/match-proposals` (คู่ที่ระบบเสนอ — สิทธิ์ view ของ `manage_bank_reconciliation`) · `PATCH /transactions/:id/match` รับ `fromProposal?: boolean` (audit ระบุที่มา · กติกาเหมือนจับคู่มือ) |
 | v3.18 | 07/10/2569 | **มติ PO 07/10/2569 (U170 · BUG-180)**: `GET /api/settings/assumptions?include=current_value` — เพิ่ม `currentValue` (ค่าที่ใช้อยู่) ต่อรายการสำหรับหน้ารวมในเมนูบัญชี · ไม่ส่ง = รูปแบบเดิม (ป้ายบนหน้าตั้งค่า) |
 | v3.19 | 07/10/2569 | **มติ PO 07/10/2569 (U127 · U140)**: เพิ่ม `PATCH /api/accounting/wht-filing-summary/:id/mark-supplementary-filed` (ล้างธงต้องยื่นเพิ่มเติม · `manage_wht` · reason บังคับ) · `GET /api/settings/assumptions` + `POST /api/settings/assumptions/:key/confirm` (ป้าย "รอนักบัญชียืนยัน" บนหน้าตั้งค่า · confirm = `manage_accountant_questions` · reason บังคับ) |
+| v3.20 | 08/10/2569 | **preship R7-009 · มติชั่วคราว P11 (รอ PO ยืนยัน)** — §6.9 เติม `GET /api/finance/closed-periods` (อ่านอย่างเดียว · สิทธิ์ view ของ `manage_billing` หรือ `manage_payout_batch` · คืน `{ closedPeriods: { yearBe, month }[] }` = งวด `locked`/`sent_to_accountant` · ไม่เปิดงวดใหม่ ไม่ลง audit) ให้หน้าสร้างรอบวางบิล/รอบจ่ายไม่เสนอวันตัดรอบในงวดที่ปิด · `POST /api/billing-batches` · `POST /api/payout-batches` วันตัดรอบในงวดปิด ⇒ `PERIOD_LOCKED_DIRECT_EDIT` เดิม + `reason: "cutoff_in_closed_period"` |
 
 ขอบเขตเอกสารนี้: รวม API Endpoint ทั้งหมดของโมดูล Finance/Accounting เป็นรายการเดียว จัดกลุ่มตาม resource เพื่อให้ backend implement ตาม REST convention เดียวกันทั้งระบบ
 
@@ -178,6 +179,7 @@ PATCH  /api/adjustments/:id/reject
 
 ```
 GET    /api/finance/dashboard-kpi
+GET    /api/finance/closed-periods                      (v3.20 — งวดที่สร้างเอกสารใหม่ไม่ได้ · หน้าสร้างรอบวางบิล/รอบจ่าย · P11)
 GET    /api/finance/exceptions
 GET    /api/reports/profitability
 GET    /api/reports/profitability/:dimension_id/drilldown

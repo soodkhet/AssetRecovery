@@ -163,6 +163,36 @@ export function suggestCutoffDate(values: Pick<CycleValues, 'cutoffRuleType' | '
   return new Date(Date.UTC(year, month - 1, prevMonth))
 }
 
+/** งวดบัญชีแบบ พ.ศ. + เดือน 1–12 (รูปแบบเดียวกับ `accounting_periods`) */
+export interface ClosedPeriodKey {
+  yearBe: number
+  month: number
+}
+
+/**
+ * ตัวตอบ "วันตัดรอบ (date-only) นี้อยู่ในงวดที่ปิดแล้วไหม" จากรายการงวดปิดของ `GET /api/finance/closed-periods`
+ * — date-only = เที่ยงคืน UTC ของวันไทย ⇒ ปี/เดือน UTC ตรงกับปฏิทินไทย · pure
+ */
+export function closedPeriodChecker(closed: readonly ClosedPeriodKey[]): (dateOnly: Date) => boolean {
+  const keys = new Set(closed.map((period) => `${period.yearBe}-${period.month}`))
+  return (dateOnly) => keys.has(`${dateOnly.getUTCFullYear() + 543}-${dateOnly.getUTCMonth() + 1}`)
+}
+
+/**
+ * วันตัดรอบที่เสนอ โดยไม่เสนอวันในงวดที่ปิดแล้ว (preship R7-009 · มติชั่วคราว P11 ต่อจากมติ PO U146)
+ * — วันตามกติกาของรอบ (`suggestCutoffDate`) อยู่ในงวดที่เปิด ⇒ ใช้ตามเดิม · อยู่ในงวดปิด ⇒ **วันนี้**
+ * (รอบใหม่ยังดึงรายการค้างของเดือนก่อนเข้ามาครบ เพราะคัดทุกรายการที่ยังไม่เข้ารอบจนถึงวันตัดรอบ)
+ * วันตามกติกาเป็นวันล่าสุดที่ ≤ วันนี้อยู่แล้ว ⇒ วันอื่นของกติกาที่ใหม่กว่าและอยู่ในงวดเปิดไม่มี
+ */
+export function suggestOpenCutoffDate(
+  values: Pick<CycleValues, 'cutoffRuleType' | 'cutoffDates'>,
+  today: Date,
+  isClosed: (dateOnly: Date) => boolean,
+): Date {
+  const byRule = suggestCutoffDate(values, today)
+  return isClosed(byRule) ? today : byRule
+}
+
 /** payload ที่ลง audit — โครงเดียวกันทั้ง create/update เพื่อให้ diff อ่านรู้เรื่อง (`90` §13) */
 export function toCycleAuditPayload(values: CycleValues): Record<string, unknown> {
   return {

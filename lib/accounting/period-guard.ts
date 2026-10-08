@@ -2,7 +2,7 @@ import { buildPeriodClosedLookup, periodKeyOf, type PeriodClosedLookup, type Per
 import type { AccountingPeriodStatus } from '@/lib/generated/prisma/enums'
 import { prisma } from '@/lib/prisma'
 import { parseBillingPeriodLabel } from '@/lib/revenue/revenue'
-import { assertPeriodEditable } from '@/lib/settings/period-lock'
+import { assertPeriodEditable, isDirectEditRejected } from '@/lib/settings/period-lock'
 
 /**
  * **Interceptor `PERIOD_LOCKED_DIRECT_EDIT` (cross-cutting)** — `13` §6.11 · `30` · `20`
@@ -142,4 +142,18 @@ export async function loadPeriodClosedLookup(organizationId: string): Promise<Pe
     select: { yearBe: true, month: true, status: true },
   })
   return buildPeriodClosedLookup(rows)
+}
+
+/**
+ * งวดที่สร้างเอกสารการเงินใหม่ไม่ได้แล้ว (`locked` / `sent_to_accountant` — นโยบายเดียวกับ `assertPeriodEditable`
+ * แบบกระทบยอด) — ให้หน้าสร้างรอบวางบิล/รอบจ่ายไม่เสนอวันตัดรอบในงวดเหล่านี้ (preship R7-009 · มติชั่วคราว P11)
+ * อ่านอย่างเดียว ไม่เปิดงวดใหม่ (ต่างจาก `GET /api/accounting/periods`)
+ */
+export async function listClosedPeriodKeys(organizationId: string): Promise<PeriodKey[]> {
+  const rows = await prisma.accountingPeriod.findMany({
+    where: { organizationId },
+    select: { yearBe: true, month: true, status: true },
+    orderBy: [{ yearBe: 'asc' }, { month: 'asc' }],
+  })
+  return rows.filter((row) => isDirectEditRejected(row.status, true)).map(({ yearBe, month }) => ({ yearBe, month }))
 }
