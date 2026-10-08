@@ -1,6 +1,8 @@
 'use client'
 
 import { useState } from 'react'
+import { useUrlFilter } from '@/components/ui/use-url-filter'
+import { FINANCE_FILTER_PARAMS } from '@/lib/finance/operation-tabs'
 import { usePermission } from '@/components/auth/permission-provider'
 import { AdvanceFormModal } from '@/components/finance/advance-form-modal'
 import { AdvanceRequestPdfLink, AdvanceReturnHistory } from '@/components/finance/advance-doc-links'
@@ -64,7 +66,8 @@ export function AdvanceTab() {
   const canRequestAdvance = advanceAccess.self || advanceAccess.onBehalf
   const canApproveAdvance = can('manage', APPROVE_ADVANCE)
 
-  const [filter, setFilter] = useState<AdvanceStatusFilter>('all')
+  // ตัวกรองอยู่ใน URL — refresh/Back กลับมายังกรองเหมือนเดิม (preship R6-008)
+  const [filter, setFilter] = useUrlFilter<AdvanceStatusFilter>(FINANCE_FILTER_PARAMS.advanceStatus, ADVANCE_STATUS_FILTERS, 'all')
   const { items, loading, error, reload } = useAdvances(filter)
 
   const [formOpen, setFormOpen] = useState(false)
@@ -171,7 +174,7 @@ export function AdvanceTab() {
                       <p className="font-semibold text-slate-900">{advance.payeeName}</p>
                       {advance.teamName !== null && <p className="text-[10px] text-slate-500">{advance.teamName}</p>}
                     </Td>
-                    <Td className="max-w-[220px] text-xs text-slate-600">
+                    <Td className="max-w-[160px] text-xs text-slate-600">
                       {advance.purpose}
                       {/* มติ PO U103 — ใบรับรองแทนใบเสร็จตอนเคลียร์ยอด (การเงินอัปโหลดฉบับเซ็นแทนได้) */}
                       {advance.substituteReceipt !== null && (

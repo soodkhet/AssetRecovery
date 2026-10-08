@@ -1,7 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { replaceUrlParams } from '@/components/ui/url-state'
+import { usePathname } from 'next/navigation'
+import { browserSearchParams, replaceUrlParams } from '@/components/ui/url-state'
 import { useSearchParamChange } from '@/components/ui/use-search-param-change'
 import { useSession } from '@/components/auth/permission-provider'
 import { BankReconTab } from '@/components/accounting/bank-recon-tab'
@@ -28,12 +29,17 @@ import { UNDER_DEVELOPMENT_TEXT } from '@/lib/nav/menu-registry'
  * ปุ่มเทากดไม่ได้พร้อมบอก Phase (แนวเดียวกับ `<FinanceShell>` ของ Phase 3)
  */
 export function AccountingShell({ initialTab }: { initialTab: string }) {
-  const [tab, setTab] = useState(initialTab)
+  const session = useSession()
+  const pathname = usePathname()
+  // Back กลับมาจากหน้าอื่น: `initialTab` จาก server เป็นของ URL ก่อนเปลี่ยนแท็บ (router cache) ⇒ อ่าน URL จริง (R6-004)
+  const [tab, setTab] = useState(() => {
+    const query = browserSearchParams(pathname)
+    return query === null || session === null ? initialTab : resolveAccountingTab(query.get('tab') ?? undefined, session)
+  })
   // แท็บอยู่ใน URL — refresh/Back กลับมาที่แท็บเดิม (preship PS-013)
   useEffect(() => {
     replaceUrlParams({ tab })
   }, [tab])
-  const session = useSession()
   // นำทางมา route เดิมด้วย `?tab=` ใหม่ (เช่น กดแจ้งเตือนตอนอยู่หน้านี้) — หน้าจอต้องตาม URL (preship R2-009)
   useSearchParamChange('tab', (value) => {
     if (session !== null) setTab(resolveAccountingTab(value ?? undefined, session))

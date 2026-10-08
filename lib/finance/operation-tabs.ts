@@ -136,3 +136,18 @@ export function resolveFinanceOperationTab(tab: string | undefined, viewer: Capa
   const fallback = selectable.find((item) => item.id === DEFAULT_FINANCE_OPERATION_TAB) ?? selectable[0]
   return fallback?.id ?? DEFAULT_FINANCE_OPERATION_TAB
 }
+
+/**
+ * key ใน URL ของตัวกรองย่อยแต่ละแท็บ (preship R6-008) — ชื่อไม่ซ้ำข้ามแท็บ · เปลี่ยนแท็บแล้วล้างทิ้งทั้งชุด
+ * (`FinanceShell`) ไม่ให้ตัวกรองของแท็บก่อนค้างใน URL
+ */
+export const FINANCE_FILTER_PARAMS = {
+  billingStatus: 'bill_status',
+  revenueStatus: 'rev_status',
+  payoutStatus: 'payout_status',
+  payoutSide: 'payout_side',
+  advanceStatus: 'adv_status',
+  claimStatus: 'claim_status',
+  adjustmentStatus: 'adj_status',
+  adjustmentTarget: 'adj_target',
+} as const

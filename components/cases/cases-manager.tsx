@@ -1,7 +1,8 @@
 'use client'
 
 import { usePathname } from 'next/navigation'
-import { initialUrlUuid, pickUuid, replaceUrlParams } from '@/components/ui/url-state'
+import { browserSearchParams, initialUrlUuid, pickUuid, replaceUrlParams } from '@/components/ui/url-state'
+import { EMPTY_CASE_LIST_FILTERS, parseCaseListParams, type CaseListFilters } from '@/components/cases/case-list-params'
 import { useSearchParamChange } from '@/components/ui/use-search-param-change'
 import { kpiValue } from '@/components/ui/kpi-value'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -74,23 +75,7 @@ const KPI_STATUSES = [
   { status: 'approved', label: 'รับเคสแล้ว', hint: 'ส่งต่อมอบหมายทีมแล้ว' },
 ] as const
 
-export interface CaseListFilters {
-  search: string
-  status: string
-  sourceChannel: string
-  financeCompanyId: string
-  province: string
-}
-
 type Filters = CaseListFilters
-
-const EMPTY_FILTERS: Filters = {
-  search: '',
-  status: 'all',
-  sourceChannel: 'all',
-  financeCompanyId: 'all',
-  province: 'all',
-}
 
 function buildListPath(filters: Filters, page: number): string {
   const query: Record<string, string | number> = { page, limit: PAGE_SIZE }
@@ -103,7 +88,7 @@ function buildListPath(filters: Filters, page: number): string {
 }
 
 export function CasesManager({
-  initialFilters = EMPTY_FILTERS,
+  initialFilters = EMPTY_CASE_LIST_FILTERS,
   initialPage = 1,
   initialDetailCaseId = null,
 }: {
@@ -118,8 +103,16 @@ export function CasesManager({
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<ApiCallError | null>(null)
 
-  const [filters, setFilters] = useState<Filters>(initialFilters)
-  const [page, setPage] = useState(initialPage)
+  // Back กลับมาจากหน้าอื่น: prop จาก server เป็นของ URL ก่อนกรอง (router cache) ⇒ อ่าน URL จริงของ browser (R6-004)
+  const pathname = usePathname()
+  const [initialFromUrl] = useState(() => {
+    const query = browserSearchParams(pathname)
+    return query === null
+      ? { filters: initialFilters, page: initialPage }
+      : parseCaseListParams((key) => query.get(key))
+  })
+  const [filters, setFilters] = useState<Filters>(initialFromUrl.filters)
+  const [page, setPage] = useState(initialFromUrl.page)
   // ตัวกรอง/หน้า อยู่ใน URL — refresh/Back กลับมาที่รายการเดิม (preship PS-013) · ค่าเริ่มต้นไม่ใส่ (URL สั้น)
   useEffect(() => {
     replaceUrlParams({
@@ -139,7 +132,6 @@ export function CasesManager({
   const [editing, setEditing] = useState<CaseDetailDto | null>(null)
   const [openingCaseId, setOpeningCaseId] = useState<string | null>(null)
   // อ่าน `?case=` จาก URL ปัจจุบัน — prop จาก server อาจเป็นของ entry เก่า (Forward แล้วเด้งเปิดเอง · R5-007)
-  const pathname = usePathname()
   const [detailCaseId, setDetailCaseId] = useState<string | null>(() => initialUrlUuid('case', initialDetailCaseId, pathname))
   // นำทางมา route เดิมด้วย `?case=` ใหม่ (เช่น กดแจ้งเตือนตอนอยู่หน้านี้) — เปิดรายละเอียดเคสนั้น (preship R2-009)
   // ค่าว่าง (ปิด dialog แล้วลบ `?case=` ออกเอง) ไม่ต้องทำอะไร

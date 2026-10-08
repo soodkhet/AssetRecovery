@@ -2,6 +2,8 @@
 
 import { buttonClass } from '@/components/ui/button'
 import { useState } from 'react'
+import { useUrlFilter } from '@/components/ui/use-url-filter'
+import { FINANCE_FILTER_PARAMS } from '@/lib/finance/operation-tabs'
 import { usePermission } from '@/components/auth/permission-provider'
 import { CancelPayoutModal } from '@/components/finance/cancel-payout-modal'
 import { CreatePayoutModal } from '@/components/finance/create-payout-modal'
@@ -67,8 +69,9 @@ export function PayoutTab() {
   const canDownloadFile = can('view', GENERATE_PAYMENT_FILE)
 
   const { showToast } = useToast()
-  const [status, setStatus] = useState<PayoutStatusFilter>('all')
-  const [side, setSide] = useState<PayoutSideFilter>('all')
+  // ตัวกรองอยู่ใน URL — refresh/Back กลับมายังกรองเหมือนเดิม (preship R6-008)
+  const [status, setStatus] = useUrlFilter<PayoutStatusFilter>(FINANCE_FILTER_PARAMS.payoutStatus, PAYOUT_STATUS_FILTERS, 'all')
+  const [side, setSide] = useUrlFilter<PayoutSideFilter>(FINANCE_FILTER_PARAMS.payoutSide, PAYOUT_SIDE_FILTERS, 'all')
   const { items, loading, error, reload } = usePayoutBatches(status, side)
 
   const [createOpen, setCreateOpen] = useState(false)

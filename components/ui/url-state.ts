@@ -56,14 +56,31 @@ export function pickPage(value: string | string[] | undefined): number {
 }
 
 /**
- * ค่าเริ่มต้นของ state ที่ผูกกับ `?key=<uuid>` (เช่นเปิดรายละเอียดเคสจาก `?case=`) — อ่านจาก URL จริงของ browser
- * prop จาก server (`fallback`) ใช้เฉพาะตอน render ฝั่ง server เท่านั้น: Back/Forward กลับมา entry ที่เคยลบ `?case=`
- * ด้วย `replaceUrlParams` แล้ว Next ใช้ payload เก่าที่ยังมี `?case=` ⇒ เดิมรายละเอียดเคสเด้งเปิดเอง (preship R5-007)
+ * ค่าเริ่มต้นของ state ที่ผูกกับ `?key=` — อ่านจาก URL จริงของ browser (preship R6-004)
+ * prop จาก server (`fallback`) ใช้ตอน render ฝั่ง server และตอนนำทางฝั่ง client มาจากหน้าอื่นเท่านั้น:
+ * Back/Forward กลับมาหน้าเดิม Next ใช้ payload/searchParams เก่าใน router cache (ก่อน `replaceUrlParams` เขียน
+ * ตัวกรอง/แท็บลง URL) ⇒ เดิมหน้าเริ่มด้วยค่าเริ่มต้นแล้ว effect เขียนทับ URL ที่ถูกต้อง ตัวกรอง/แท็บหาย
+ * ตอน hydrate URL ของ browser = URL ที่ server render ⇒ ผู้เรียกต้อง parse ด้วยกติกาเดียวกับ server (ไม่ mismatch)
+ */
+export function initialUrlParam(key: string, fallback: string | null, pathname?: string): string | null {
+  const query = browserSearchParams(pathname)
+  return query === null ? fallback : query.get(key)
+}
+
+/** query ของ URL จริงของ browser — ฝั่ง server / นำทางฝั่ง client มาจาก path อื่น = `null` (ใช้ prop จาก server) */
+export function browserSearchParams(pathname?: string): URLSearchParams | null {
+  if (typeof window === 'undefined') return null
+  // นำทางฝั่ง client (router.push จากแจ้งเตือน/เมนู) render หน้าใหม่ก่อน Next เปลี่ยน URL ของ browser ⇒ ตอนนี้
+  // window.location ยังเป็นหน้าเดิม — ใช้ค่าจาก server แทน (preship R6-003 · Back/Forward URL เปลี่ยนแล้วจึงอ่านจาก URL ได้)
+  if (pathname !== undefined && window.location.pathname !== pathname) return null
+  return new URLSearchParams(window.location.search)
+}
+
+/**
+ * ค่าเริ่มต้นของ state ที่ผูกกับ `?key=<uuid>` (เช่นเปิดรายละเอียดเคสจาก `?case=`) — กติกาเดียวกับ `initialUrlParam`
+ * Back/Forward กลับมา entry ที่เคยลบ `?case=` ด้วย `replaceUrlParams` แล้ว Next ใช้ payload เก่าที่ยังมี `?case=`
+ * ⇒ เดิมรายละเอียดเคสเด้งเปิดเอง (preship R5-007)
  */
 export function initialUrlUuid(key: string, fallback: string | null, pathname?: string): string | null {
-  if (typeof window === 'undefined') return fallback
-  // นำทางฝั่ง client (router.push จากแจ้งเตือน) render หน้าใหม่ก่อน Next เปลี่ยน URL ของ browser ⇒ ตอนนี้
-  // window.location ยังเป็นหน้าเดิม — ใช้ค่าจาก server แทน (preship R6-003 · Back/Forward URL เปลี่ยนแล้วจึงอ่านจาก URL ได้)
-  if (pathname !== undefined && window.location.pathname !== pathname) return fallback
-  return pickUuid(new URLSearchParams(window.location.search).get(key) ?? undefined)
+  return pickUuid(initialUrlParam(key, fallback, pathname) ?? undefined)
 }

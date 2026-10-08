@@ -31,7 +31,10 @@ export function SettleAdvanceButton({
       >
         เคลียร์ยอด
       </Button>
-      {blocked !== null && <span className="max-w-[16rem] text-right text-[10px] text-amber-700">{blocked}</span>}
+      {blocked !== null && (
+        // ตัดบรรทัดเสมอ — เดิมสืบ whitespace-nowrap ของช่องจัดการ ทำให้ตารางเงินทดรองกว้างเกินจอ 1280 (preship R6-005)
+        <span className="max-w-[11rem] text-right text-[10px] whitespace-normal text-amber-700">{blocked}</span>
+      )}
     </span>
   )
 }

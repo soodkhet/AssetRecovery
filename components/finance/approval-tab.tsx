@@ -1,6 +1,8 @@
 'use client'
 
 import { useState } from 'react'
+import { useUrlFilter } from '@/components/ui/use-url-filter'
+import { FINANCE_FILTER_PARAMS } from '@/lib/finance/operation-tabs'
 import { kpiValue } from '@/components/ui/kpi-value'
 import { usePermission } from '@/components/auth/permission-provider'
 import { AdvanceFormModal } from '@/components/finance/advance-form-modal'
@@ -82,7 +84,8 @@ export function ApprovalTab() {
   const canManageSubstituteReceipts = can('view', 'approve_expense_finance') || can('view', 'approve_expense_executive')
 
   const claims = useApprovalActions('/api/claims')
-  const [claimFilter, setClaimFilter] = useState<ClaimStatusFilter>('all')
+  // ตัวกรองอยู่ใน URL — refresh/Back กลับมายังกรองเหมือนเดิม (preship R6-008)
+  const [claimFilter, setClaimFilter] = useUrlFilter<ClaimStatusFilter>(FINANCE_FILTER_PARAMS.claimStatus, CLAIM_STATUS_FILTERS, 'all')
   const [formulaTarget, setFormulaTarget] = useState<CompensationApprovalDto | null>(null)
   // มติ PO U152 — กดแถวเห็นหมายเหตุ/คำชี้แจง/ใบเสร็จ/ผู้พักร่วมก่อนอนุมัติ
   const [detailTarget, setDetailTarget] = useState<CompensationApprovalDto | null>(null)

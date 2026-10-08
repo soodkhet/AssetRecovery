@@ -1,6 +1,8 @@
 'use client'
 
 import { useState } from 'react'
+import { useUrlFilter } from '@/components/ui/use-url-filter'
+import { FINANCE_FILTER_PARAMS } from '@/lib/finance/operation-tabs'
 import { kpiValue } from '@/components/ui/kpi-value'
 import { useAwaitingCreditNotes } from '@/components/accounting/use-credit-notes'
 import { usePermission } from '@/components/auth/permission-provider'
@@ -67,8 +69,9 @@ export function AdjustmentTab() {
   const canReview = (row: AdjustmentDto): boolean =>
     canActOnAdjustment(row.status) && can('manage', approvalCapabilityFor(row.periodStatusAtTarget))
 
-  const [status, setStatus] = useState<AdjustmentStatusFilter>('all')
-  const [targetType, setTargetType] = useState<AdjustmentTargetFilter>('all')
+  // ตัวกรองอยู่ใน URL — refresh/Back กลับมายังกรองเหมือนเดิม (preship R6-008)
+  const [status, setStatus] = useUrlFilter<AdjustmentStatusFilter>(FINANCE_FILTER_PARAMS.adjustmentStatus, ADJUSTMENT_STATUS_FILTERS, 'all')
+  const [targetType, setTargetType] = useUrlFilter<AdjustmentTargetFilter>(FINANCE_FILTER_PARAMS.adjustmentTarget, ADJUSTMENT_TARGET_FILTERS, 'all')
   const { items, loading, error, reload } = useAdjustments(status, targetType)
   // มติ PO U14 — ลดยอดหลังออกใบกำกับแล้วต้องมีใบลดหนี้ (สำนักงานบัญชีออก) · ลูกค้าเห็นยอดลดเมื่อบันทึกใบลดหนี้แล้ว
   const awaitingCreditNotes = useAwaitingCreditNotes()

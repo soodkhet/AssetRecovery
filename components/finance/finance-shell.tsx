@@ -2,7 +2,8 @@
 
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
-import { replaceUrlParams } from '@/components/ui/url-state'
+import { usePathname } from 'next/navigation'
+import { browserSearchParams, replaceUrlParams } from '@/components/ui/url-state'
 import { useSearchParamChange } from '@/components/ui/use-search-param-change'
 import { CustomerWhtTab } from '@/components/accounting/customer-wht-tab'
 import { AdjustmentTab } from '@/components/finance/adjustment-tab'
@@ -18,7 +19,11 @@ import { ScrollStrip } from '@/components/shell/scroll-strip'
 import { Card, EmptyState, PageHeader } from '@/components/ui'
 import { cn } from '@/components/ui/cn'
 import { useSession } from '@/components/auth/permission-provider'
-import { resolveFinanceOperationTab, visibleFinanceOperationTabs } from '@/lib/finance/operation-tabs'
+import {
+  FINANCE_FILTER_PARAMS,
+  resolveFinanceOperationTab,
+  visibleFinanceOperationTabs,
+} from '@/lib/finance/operation-tabs'
 import { UNDER_DEVELOPMENT_TEXT } from '@/lib/nav/menu-registry'
 
 /**
@@ -29,12 +34,25 @@ import { UNDER_DEVELOPMENT_TEXT } from '@/lib/nav/menu-registry'
  * ปุ่มเทากดไม่ได้พร้อมบอก Phase (แนวเดียวกับ `<SubNav>` / `<FinanceSettingsShell>`)
  */
 export function FinanceShell({ initialTab }: { initialTab: string }) {
-  const [tab, setTab] = useState(initialTab)
+  const session = useSession()
+  const pathname = usePathname()
+  // Back กลับมาจากหน้าอื่น: `initialTab` จาก server เป็นของ URL ก่อนเปลี่ยนแท็บ (router cache) ⇒ อ่าน URL จริง (R6-004)
+  const [tab, setTab] = useState(() => {
+    const query = browserSearchParams(pathname)
+    return query === null || session === null
+      ? initialTab
+      : resolveFinanceOperationTab(query.get('tab') ?? undefined, session)
+  })
   // แท็บอยู่ใน URL — refresh/Back กลับมาที่แท็บเดิม (preship PS-013)
   useEffect(() => {
     replaceUrlParams({ tab })
   }, [tab])
-  const session = useSession()
+  // เปลี่ยนแท็บ = ล้างตัวกรองย่อยของแท็บเดิมออกจาก URL ก่อน render แท็บใหม่ (แท็บใหม่อ่านตัวกรองจาก URL — R6-008)
+  const changeTab = (next: string) => {
+    if (next === tab) return
+    replaceUrlParams(Object.fromEntries(Object.values(FINANCE_FILTER_PARAMS).map((key) => [key, null])))
+    setTab(next)
+  }
   // นำทางมา route เดิมด้วย `?tab=` ใหม่ (เช่น กดแจ้งเตือนตอนอยู่หน้านี้) — หน้าจอต้องตาม URL (preship R2-009)
   useSearchParamChange('tab', (value) => {
     if (session !== null) setTab(resolveFinanceOperationTab(value ?? undefined, session))
@@ -93,7 +111,7 @@ export function FinanceShell({ initialTab }: { initialTab: string }) {
                 <button
                   key={item.id}
                   type="button"
-                  onClick={() => setTab(item.id)}
+                  onClick={() => changeTab(item.id)}
                   aria-current={active ? 'page' : undefined}
                   className={cn(
                     'focus-ring-inset border-b-2 py-2.5 text-sm font-semibold whitespace-nowrap transition-colors',

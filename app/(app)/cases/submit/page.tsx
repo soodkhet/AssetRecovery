@@ -1,5 +1,6 @@
 import { CasesManager } from '@/components/cases/cases-manager'
-import { pickPage, pickUuid } from '@/components/ui/url-state'
+import { parseCaseListParams } from '@/components/cases/case-list-params'
+import { pickUuid } from '@/components/ui/url-state'
 import { requireMenuPage } from '@/lib/nav/menu-guard'
 
 /**
@@ -12,24 +13,11 @@ export default async function CaseSubmitPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   await requireMenuPage('cases.submit')
-  // ตัวกรอง/หน้า อยู่ใน URL (preship PS-013) — ค่าแปลก ๆ ไม่อันตราย: API ตรวจ query ซ้ำด้วย Zod เสมอ
+  // ตัวกรอง/หน้า อยู่ใน URL (preship PS-013)
   const params = await searchParams
-  const text = (key: string, fallback: string) => {
+  const { filters, page } = parseCaseListParams((key) => {
     const value = params[key]
-    const single = Array.isArray(value) ? value[0] : value
-    return single === undefined || single === '' ? fallback : single.slice(0, 100)
-  }
-  return (
-    <CasesManager
-      initialFilters={{
-        search: text('search', ''),
-        status: text('status', 'all'),
-        sourceChannel: text('source', 'all'),
-        financeCompanyId: text('company', 'all'),
-        province: text('province', 'all'),
-      }}
-      initialPage={pickPage(params.page)}
-      initialDetailCaseId={pickUuid(params.case)}
-    />
-  )
+    return Array.isArray(value) ? value[0] : value
+  })
+  return <CasesManager initialFilters={filters} initialPage={page} initialDetailCaseId={pickUuid(params.case)} />
 }

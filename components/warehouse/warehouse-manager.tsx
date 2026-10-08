@@ -1,6 +1,7 @@
 'use client'
 
-import { pickParam, replaceUrlParams } from '@/components/ui/url-state'
+import { usePathname } from 'next/navigation'
+import { browserSearchParams, pickParam, replaceUrlParams } from '@/components/ui/url-state'
 import { useSearchParamChange } from '@/components/ui/use-search-param-change'
 import { useCallback, useEffect, useState } from 'react'
 import { usePermission } from '@/components/auth/permission-provider'
@@ -41,7 +42,12 @@ export function WarehouseManager({ initialTab = 'intake' }: { initialTab?: Asset
   // endpoint ↔ capability: `/api/finance-companies` + `/api/teams` = view_master_data · `/api/users` = manage_users (view)
   const canLoadMasterData = !isCompanyViewer && can('view', 'view_master_data')
   const canLoadUsers = !isCompanyViewer && can('view', 'manage_users')
-  const [tab, setTab] = useState<AssetTab>(initialTab)
+  const pathname = usePathname()
+  // Back กลับมาจากหน้าอื่น: `initialTab` จาก server เป็นของ URL ก่อนเปลี่ยนแท็บ (router cache) ⇒ อ่าน URL จริง (R6-004)
+  const [tab, setTab] = useState<AssetTab>(() => {
+    const query = browserSearchParams(pathname)
+    return query === null ? initialTab : pickParam(query.get('tab') ?? undefined, ASSET_TABS, 'intake')
+  })
   // แท็บอยู่ใน URL — refresh/Back กลับมาที่แท็บเดิม (preship PS-013)
   useEffect(() => {
     replaceUrlParams({ tab })

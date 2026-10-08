@@ -1,6 +1,8 @@
 'use client'
 
 import { useState } from 'react'
+import { useUrlFilter } from '@/components/ui/use-url-filter'
+import { FINANCE_FILTER_PARAMS } from '@/lib/finance/operation-tabs'
 import { kpiValue } from '@/components/ui/kpi-value'
 import { usePermission } from '@/components/auth/permission-provider'
 import { ArAgingPanel } from '@/components/finance/ar-aging-panel'
@@ -67,8 +69,9 @@ export function RevenueTab() {
 
   const [view, setView] = useState<'batches' | 'aging'>('batches')
   const [companyId, setCompanyId] = useState('')
-  const [batchStatus, setBatchStatus] = useState<BillingStatusFilter>('all')
-  const [revenueStatus, setRevenueStatus] = useState<RevenueStatusFilter>('all')
+  // ตัวกรองอยู่ใน URL — refresh/Back กลับมายังกรองเหมือนเดิม (preship R6-008)
+  const [batchStatus, setBatchStatus] = useUrlFilter<BillingStatusFilter>(FINANCE_FILTER_PARAMS.billingStatus, BILLING_STATUS_FILTERS, 'all')
+  const [revenueStatus, setRevenueStatus] = useUrlFilter<RevenueStatusFilter>(FINANCE_FILTER_PARAMS.revenueStatus, REVENUE_STATUS_FILTERS, 'all')
 
   const batches = useBillingBatches(batchStatus, companyId)
   const revenues = useRevenues(revenueStatus, companyId)
