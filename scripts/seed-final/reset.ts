@@ -74,6 +74,19 @@ export async function buildResetPlan(db: PrismaClient, organizationId: string): 
     throw new Error(`ตาราง ${table} ไม่มี organization_id และไม่รู้วิธีจำกัดขอบเขต — เพิ่มกติกาใน reset.ts ก่อน`)
   }
 
+  // ตารางที่ไม่มีใครอ้างถึง (ไม่มี FK ชี้เข้า) และไม่มีแถวขององค์กรอื่น ⇒ TRUNCATE แทน DELETE
+  // เหตุผล: DELETE ทิ้ง dead tuple ไว้จนจบทรานแซกชัน — ตารางพ่อที่ลบต่อจากนั้นต้องตรวจ FK (ON DELETE SET NULL) ด้วย seq scan
+  // ทุกแถว (device_tacs.device_model_id ไม่มี index) ⇒ ฐาน TAC จริงบน staging (2.5 แสน × 1.3 แสน) ไม่จบ · TRUNCATE ยัง rollback ได้
+  const referenced = new Set(fks.filter((row) => row.child !== row.parent).map((row) => row.parent))
+  const truncatable = new Set<string>()
+  for (const table of tables) {
+    if (referenced.has(table) || !orgColumn.has(table)) continue
+    const [other] = await db.$queryRawUnsafe<Array<{ found: boolean }>>(
+      `SELECT EXISTS (SELECT 1 FROM ${q(table)} WHERE organization_id <> ${org}) AS found`,
+    )
+    if (other?.found === false) truncatable.add(table)
+  }
+
   const statements: string[] = []
   for (const table of triggerTables) statements.push(`ALTER TABLE ${q(table)} DISABLE TRIGGER USER;`)
   // ผู้ใช้คงอยู่ แต่ปลดสังกัดทีม/บริษัท (ตารางปลายทางถูกล้าง) — seed ผูกใหม่เอง
@@ -90,7 +103,9 @@ export async function buildResetPlan(db: PrismaClient, organizationId: string): 
       (table) => !edges.some((edge) => edge.parent === table && remaining.has(edge.child)),
     )
     if (ready.length === 0) throw new Error(`กราฟ FK มีวงวน: ${[...remaining].join(', ')}`)
-    for (const table of ready) statements.push(`DELETE FROM ${q(table)} WHERE ${scope(table)};`)
+    for (const table of ready) {
+      statements.push(truncatable.has(table) ? `TRUNCATE ${q(table)};` : `DELETE FROM ${q(table)} WHERE ${scope(table)};`)
+    }
     remaining = new Set([...remaining].filter((table) => !ready.includes(table)))
   }
   for (const table of triggerTables) statements.push(`ALTER TABLE ${q(table)} ENABLE TRIGGER USER;`)
