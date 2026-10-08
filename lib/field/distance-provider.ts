@@ -137,10 +137,24 @@ export function googleDistanceProvider(apiKey: string, options: GoogleProviderOp
   }
 }
 
-/** provider ตาม env — ยังไม่ใส่ `GOOGLE_MAPS_API_KEY` = `null` (ไม่ throw ตอน boot) */
+/**
+ * key ฝั่ง server ของ Google Maps — `GOOGLE_MAPS_API_KEY` ก่อน · ไม่มีใช้ `GOOGLE_MAPS_SERVER_KEY` (ชื่อที่ตั้งไว้บน Vercel
+ * staging ก่อนโค้ดใช้ชื่อแรก — รับทั้งคู่ ไม่ต้องย้ายค่า secret) · ว่างทั้งคู่ = `null`
+ */
+export function resolveGoogleMapsKey(source: Record<string, string | undefined> = process.env): string | null {
+  for (const name of GOOGLE_MAPS_KEY_NAMES) {
+    const value = source[name]?.trim()
+    if (value !== undefined && value !== '') return value
+  }
+  return null
+}
+
+export const GOOGLE_MAPS_KEY_NAMES = ['GOOGLE_MAPS_API_KEY', 'GOOGLE_MAPS_SERVER_KEY'] as const
+
+/** provider ตาม env — ยังไม่ใส่ key = `null` (ไม่ throw ตอน boot) */
 export function getDistanceProvider(options: GoogleProviderOptions = {}): DistanceProvider | null {
-  const apiKey = process.env.GOOGLE_MAPS_API_KEY?.trim()
-  if (apiKey === undefined || apiKey === '') return null
+  const apiKey = resolveGoogleMapsKey()
+  if (apiKey === null) return null
   return googleDistanceProvider(apiKey, options)
 }
 

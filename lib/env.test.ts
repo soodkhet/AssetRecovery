@@ -86,6 +86,10 @@ describe('deploymentEnvWarnings (R2-004)', () => {
     expect(missing).not.toContain('CRON_SECRET')
   })
 
+  it('GOOGLE_MAPS_SERVER_KEY (ชื่อบน Vercel staging) ใช้แทน GOOGLE_MAPS_API_KEY ได้', () => {
+    expect(deploymentEnvWarnings({ VERCEL_ENV: 'preview', GOOGLE_MAPS_SERVER_KEY: 'k' })).not.toContain('GOOGLE_MAPS_API_KEY')
+  })
+
   it('ตั้งครบ ⇒ ไม่เตือน', () => {
     const all = Object.fromEntries(DEPLOYMENT_ENV_NAMES.map((name) => [name, 'set']))
     expect(deploymentEnvWarnings({ VERCEL_ENV: 'production', ...all })).toEqual([])

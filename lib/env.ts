@@ -34,7 +34,7 @@ export function getServerEnv(): ServerEnv {
  * ขาดแล้วฟีเจอร์นั้นเงียบหาย ⇒ เตือนตอน boot ({@link deploymentEnvWarnings}) · ชื่อทั้งหมดต้องมีใน `.env.example`
  * - `CRON_SECRET` — ขาดบน Vercel ⇒ `/api/cron/jobs` ปฏิเสธทุกคำขอ (fail closed — `app/api/cron/jobs/route.ts`)
  * - `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` / `VAPID_SUBJECT` / `NEXT_PUBLIC_VAPID_PUBLIC_KEY` — ขาด ⇒ ไม่มี Web Push
- * - `GOOGLE_MAPS_API_KEY` — ขาด ⇒ คำนวณระยะทางภาคสนามไม่ได้
+ * - `GOOGLE_MAPS_API_KEY` (หรือชื่อสำรอง `GOOGLE_MAPS_SERVER_KEY`) — ขาด ⇒ คำนวณระยะทางภาคสนามไม่ได้
  */
 export const DEPLOYMENT_ENV_NAMES = [
   'CRON_SECRET',
@@ -53,7 +53,17 @@ export function isVercelDeployment(source: Record<string, string | undefined> = 
 /** ชื่อ env ที่ deployment ยังไม่ได้ตั้ง (บอกแค่ชื่อ ห้ามมีค่า) — เครื่อง dev คืนว่างเสมอ */
 export function deploymentEnvWarnings(source: Record<string, string | undefined> = process.env): string[] {
   if (!isVercelDeployment(source)) return []
-  return DEPLOYMENT_ENV_NAMES.filter((name) => (source[name] ?? '').trim() === '')
+  const isSet = (name: string) => (source[name] ?? '').trim() !== ''
+  return DEPLOYMENT_ENV_NAMES.filter((name) => {
+    if (isSet(name)) return false
+    // ชื่อสำรองที่โค้ดรับแทนได้ (`lib/field/distance-provider.ts` resolveGoogleMapsKey)
+    return !(ENV_ALIASES[name] ?? []).some(isSet)
+  })
+}
+
+/** ชื่อสำรองของ env ที่โค้ดอ่านแทนได้ — ตั้งตัวใดตัวหนึ่งก็พอ */
+const ENV_ALIASES: Readonly<Partial<Record<(typeof DEPLOYMENT_ENV_NAMES)[number], readonly string[]>>> = {
+  GOOGLE_MAPS_API_KEY: ['GOOGLE_MAPS_SERVER_KEY'],
 }
 
 // ฝั่ง client อยู่ที่ `lib/env-public.ts` (แยกไฟล์เพื่อไม่ให้ schema ฝั่ง server ไปถึง browser) — re-export ให้ผู้เรียกเดิม

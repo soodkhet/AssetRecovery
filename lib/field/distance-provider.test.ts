@@ -4,6 +4,7 @@ import {
   DistanceUnavailableError,
   googleDistanceProvider,
   resolveRouteMeters,
+  resolveGoogleMapsKey,
 } from '@/lib/field/distance-provider'
 
 const origin = { latitude: 13.7563, longitude: 100.5018 }
@@ -92,6 +93,14 @@ describe('googleDistanceProvider (`41` §6.4.2)', () => {
 
     await expect(resolveRouteMeters([origin, stop1], provider)).resolves.toBe(0)
     expect(fetchImpl).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('resolveGoogleMapsKey', () => {
+  it('GOOGLE_MAPS_API_KEY ก่อน · ไม่มีใช้ GOOGLE_MAPS_SERVER_KEY · ว่างทั้งคู่ = null', () => {
+    expect(resolveGoogleMapsKey({ GOOGLE_MAPS_API_KEY: 'a', GOOGLE_MAPS_SERVER_KEY: 'b' })).toBe('a')
+    expect(resolveGoogleMapsKey({ GOOGLE_MAPS_API_KEY: ' ', GOOGLE_MAPS_SERVER_KEY: 'b' })).toBe('b')
+    expect(resolveGoogleMapsKey({})).toBeNull()
   })
 })
 
