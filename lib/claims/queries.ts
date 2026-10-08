@@ -107,6 +107,7 @@ export async function createManualClaim(
       hotelNights: null,
       sharedWithUserId: null,
       receiptInCompanyName: false,
+      actorId: user.id,
     })
 
     const claim = await insertManualClaim(tx as ExpenseTxClient, context, {

@@ -2,7 +2,8 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useState, type ReactNode } from 'react'
+import { Suspense, useState, type ReactNode } from 'react'
+import { SessionExpiredDialog } from '@/components/auth/session-expired-dialog'
 import { LogoutButton } from '@/components/auth/logout-button'
 import { PortalIcon, PortalLogo } from '@/components/portal/portal-icons'
 import { PortalScopeProvider } from '@/components/portal/portal-scope'
@@ -82,6 +83,10 @@ export function PortalShell({ companyName, userName, roleName, sections, childre
         </main>
 
         <PortalBottomNav sections={sections} activeKey={activeKey} viewAsCompanyId={viewAsCompanyId} />
+        {/* session หมดระหว่างใช้งาน ⇒ พาไปเข้าสู่ระบบ (preship R8-009) — Suspense: ใช้ useSearchParams */}
+        <Suspense fallback={null}>
+          <SessionExpiredDialog />
+        </Suspense>
       </div>
     </PortalScopeProvider>
   )

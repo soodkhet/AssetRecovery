@@ -938,6 +938,7 @@ export async function submitHotelClaim(
       hotelNights: input.hotelNights,
       sharedWithUserId: input.sharedWithUserId ?? null,
       receiptInCompanyName: input.receiptInCompanyName,
+      actorId: context.actor.id,
     })
 
     const row = await tx.expense.create({

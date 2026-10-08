@@ -469,6 +469,23 @@ suite('preship R5-001 — ใบเสร็จที่ใช้เคลีย
       userMessage: expect.stringContaining('เคลียร์เงินทดรองของคุณ'),
     })
 
+    // การเงินบันทึกแทนพนักงานด้วยใบเดิม ⇒ ยังถูกปฏิเสธ แต่ข้อความเป็น "ของผู้รับเงินรายนี้" ไม่ใช่ "ของคุณ" (preship R8-012)
+    const financePath = receiptPathOf(FINANCE_ID, 'r5-001-on-behalf.pdf')
+    expect(uploadPdf(financePath, `r5-001-receipt-${RUN}`)).toBe(hash)
+    await expect(
+      claims.createManualClaim({ actor: finance, meta }, {
+        claimType: 'receipt',
+        grossSatang: 80_000,
+        expenseDate: new Date('2026-10-05T00:00:00Z'),
+        payeeId: await payeeIdOf(AGENT_ID),
+        receiptFileUrl: financePath,
+        note: 'การเงินบันทึกแทนด้วยใบเสร็จที่เคลียร์เงินทดรองแล้ว',
+      }),
+    ).rejects.toMatchObject({
+      code: 'CLAIM_DUPLICATE_SUBMISSION',
+      userMessage: expect.stringContaining('เคลียร์เงินทดรองของผู้รับเงินรายนี้'),
+    })
+
     const secondId = await paidAdvance('ค่าเดินทางติดตามทรัพย์ R5-001 ก้อนสอง')
     await expectCode(
       () => advances.settleAdvance({ actor: agent, meta }, secondId, { usedSatang: 80_000, receiptFileUrl: copyPath, note: null }),

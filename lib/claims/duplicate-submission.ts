@@ -92,20 +92,24 @@ export function findReceiptReuse<T extends ReceiptHolder>(
 /** ผู้ถือใบเสร็จเดิม — ใบเบิก (`expenses`) หรือการเคลียร์เงินทดรอง (audit การเคลียร์ · preship R5-001) */
 export type ReceiptHolderKind = 'expense' | 'advance'
 
-/** ข้อความตามผู้ถือใบเสร็จเดิม — ใบของคนอื่นไม่บอกว่าเป็นรายการชนิดใด (ไม่ leak) · pure */
-export function receiptReusedMessage(samePayee: boolean, holder: ReceiptHolderKind): string {
+/**
+ * ข้อความตามผู้ถือใบเสร็จเดิม — ใบของคนอื่นไม่บอกว่าเป็นรายการชนิดใด (ไม่ leak) · `onBehalf` = การเงินบันทึกแทน
+ * ผู้รับเงิน ⇒ "ของผู้รับเงินรายนี้" ไม่ใช่ "ของคุณ" (preship R8-012) · pure
+ */
+export function receiptReusedMessage(samePayee: boolean, holder: ReceiptHolderKind, onBehalf = false): string {
   if (!samePayee) return 'ใบเสร็จไฟล์นี้ถูกใช้ในรายการอื่นแล้ว — ใบเสร็จหนึ่งใบใช้ได้ครั้งเดียว กรุณาแนบใบเสร็จของรายการนี้'
+  const owner = onBehalf ? 'ของผู้รับเงินรายนี้' : 'ของคุณ'
   // preship R6-009/R7-008 — เดิมบอกว่า "ใบเบิกอื่น" ทั้งที่ใช้เคลียร์เงินทดรองไป ผู้ใช้หาในรายการเบิกไม่เจอ
   return holder === 'advance'
-    ? 'ใบเสร็จไฟล์นี้ใช้เคลียร์เงินทดรองของคุณไปแล้ว — ใบเสร็จหนึ่งใบใช้ได้ครั้งเดียว ตรวจในรายการเงินทดรองก่อน หรือแนบใบเสร็จของรายการนี้'
-    : 'ใบเสร็จไฟล์นี้ถูกใช้ในใบเบิกอื่นของคุณแล้ว — ใบเสร็จหนึ่งใบเบิกได้ครั้งเดียว ตรวจในรายการเบิกก่อน หรือแนบใบเสร็จของรายการนี้'
+    ? `ใบเสร็จไฟล์นี้ใช้เคลียร์เงินทดรอง${owner}ไปแล้ว — ใบเสร็จหนึ่งใบใช้ได้ครั้งเดียว ตรวจในรายการเงินทดรองก่อน หรือแนบใบเสร็จของรายการนี้`
+    : `ใบเสร็จไฟล์นี้ถูกใช้ในใบเบิกอื่น${owner}แล้ว — ใบเสร็จหนึ่งใบเบิกได้ครั้งเดียว ตรวจในรายการเบิกก่อน หรือแนบใบเสร็จของรายการนี้`
 }
 
 export class ClaimReceiptReusedError extends ModuleError<'CLAIM_DUPLICATE_SUBMISSION'> {
-  constructor(existingId: string, samePayee: boolean, holder: ReceiptHolderKind = 'expense') {
+  constructor(existingId: string, samePayee: boolean, holder: ReceiptHolderKind = 'expense', onBehalf = false) {
     super(
       'CLAIM_DUPLICATE_SUBMISSION',
-      { title: 'ใบเสร็จนี้ใช้ไปแล้ว', message: receiptReusedMessage(samePayee, holder) },
+      { title: 'ใบเสร็จนี้ใช้ไปแล้ว', message: receiptReusedMessage(samePayee, holder, onBehalf) },
       409,
       // ใบของคนอื่นไม่ส่ง id ออกไปให้ FE (ไม่ leak) — เก็บไว้ใน detail สำหรับ log เท่านั้น
       {

@@ -17,7 +17,13 @@ import type { ExpenseType } from '@/lib/generated/prisma/enums'
  */
 export async function assertNoDuplicateClaimSubmission(
   tx: ExpenseTxClient,
-  input: ClaimSubmissionKey & { organizationId: string; expenseType: ExpenseType; now?: Date },
+  input: ClaimSubmissionKey & {
+    organizationId: string
+    expenseType: ExpenseType
+    now?: Date
+    /** ผู้ทำรายการ — การเงินบันทึกแทนผู้อื่น ⇒ ข้อความใบเสร็จซ้ำเป็นบุรุษที่สาม (R8-012) */
+    actorId?: string
+  },
 ): Promise<void> {
   const now = input.now ?? new Date()
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`claim_submission:${input.organizationId}:${input.payeeId}`}))`
@@ -58,6 +64,7 @@ export async function assertNoDuplicateClaimSubmission(
     organizationId: input.organizationId,
     payeeId: input.payeeId,
     receiptFileHash: input.receiptFileHash,
+    actorId: input.actorId,
   })
 }
 
@@ -76,7 +83,10 @@ export async function assertReceiptNotReused(
     selfExpenseId?: string
     /** เคลียร์เงินทดรองก้อนนี้อยู่ — ไม่นับ audit ของตัวเอง */
     selfAdvanceId?: string
-    /** ผู้ทำรายการ — ใบเสร็จที่ตัวเองใช้เคลียร์เงินทดรองไปแล้ว ⇒ ข้อความแบบ "ของคุณ" */
+    /**
+     * ผู้ทำรายการ (users.id) — ผู้รับเงินของรายการนี้ไม่ใช่ตัวผู้ทำ (การเงินบันทึกแทน) ⇒ ข้อความ "ของผู้รับเงินรายนี้"
+     * แทน "ของคุณ" (preship R8-012) · ไม่ส่ง = ถือว่าทำรายการของตัวเอง
+     */
     actorId?: string
   },
 ): Promise<void> {
@@ -95,8 +105,18 @@ export async function assertReceiptNotReused(
     select: { id: true, status: true, receiptFileHash: true, payeeId: true },
     orderBy: { createdAt: 'asc' },
   })
+  // ผู้รับเงินของรายการนี้คือผู้ทำรายการเองไหม (ถามเฉพาะตอนจะโยน error — ทางปกติไม่ query เพิ่ม)
+  const payeeIsActor = async (): Promise<boolean> => {
+    if (input.actorId === undefined) return true
+    const payee = await tx.payeeProfile.findUnique({ where: { id: input.payeeId }, select: { userId: true } })
+    return payee?.userId === input.actorId
+  }
+
   const reused = findReceiptReuse(hash, holders, input.selfExpenseId ?? null)
-  if (reused !== undefined) throw new ClaimReceiptReusedError(reused.id, reused.payeeId === input.payeeId)
+  if (reused !== undefined) {
+    const samePayee = reused.payeeId === input.payeeId
+    throw new ClaimReceiptReusedError(reused.id, samePayee, 'expense', samePayee && !(await payeeIsActor()))
+  }
 
   // preship R5-001 — ใบเสร็จที่ใช้เคลียร์เงินทดรองแล้ว (ตาราง `advances` ไม่มีคอลัมน์ไฟล์ — เก็บใน audit การเคลียร์ตาม `15` §13)
   // นับเป็นการใช้ใบเสร็จนั้นแล้วเช่นกัน ⇒ เบิกค่าที่พัก/เบิกมือ/เคลียร์เงินทดรองก้อนอื่นด้วยใบเดิมไม่ได้
@@ -113,15 +133,19 @@ export async function assertReceiptNotReused(
   })
   // ใบเบิกส่วนเกินที่เกิดจากการเคลียร์ครั้งนั้นเองใช้ใบเสร็จเดียวกันโดยชอบ — ตีกลับแล้วส่งใหม่ต้องผ่าน (preship L6-001)
   if (settledAdvance !== null && !isOwnExcessClaim(settledAdvance.afterData, input.selfExpenseId)) {
-    // "ของคุณ" = เงินทดรองของผู้รับเงินคนเดียวกัน (ทุกทางที่เรียก — เบิกใหม่ไม่มี actorId · preship R7-008)
-    // หรือผู้ทำรายการเป็นคนเคลียร์เอง
+    // เงินทดรองของผู้รับเงินคนเดียวกับรายการนี้ (preship R7-008) — ผู้ทำรายการเป็นผู้รับเงินเอง = "ของคุณ" ·
+    // การเงินบันทึกแทน = "ของผู้รับเงินรายนี้" (R8-012) · ผู้รับเงินคนอื่น = ข้อความกลาง (ไม่ leak)
     const advance =
       settledAdvance.targetId === null
         ? null
         : await tx.advance.findUnique({ where: { id: settledAdvance.targetId }, select: { payeeId: true } })
-    const own =
-      advance?.payeeId === input.payeeId || (settledAdvance.actorId !== null && settledAdvance.actorId === input.actorId)
-    throw new ClaimReceiptReusedError(settledAdvance.targetId ?? '-', own, 'advance')
+    const samePayee = advance?.payeeId === input.payeeId
+    throw new ClaimReceiptReusedError(
+      settledAdvance.targetId ?? '-',
+      samePayee,
+      'advance',
+      samePayee && !(await payeeIsActor()),
+    )
   }
 }
 

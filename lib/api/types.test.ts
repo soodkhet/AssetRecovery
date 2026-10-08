@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { callApi, describeApiFailure, labelFieldMessage, withContextSuffix, withFieldsSuffix } from '@/lib/api/types'
+import { loginUrlFor, SESSION_EXPIRED_EVENT } from '@/lib/api/session-expiry'
+import { callApi, describeApiFailure, jsonRequest, labelFieldMessage, withContextSuffix, withFieldsSuffix } from '@/lib/api/types'
 
 describe('withContextSuffix — ต่อท้ายรายชื่อจากข้อมูลประกอบของ error', () => {
   it('companies (TEMPLATE_IN_USE) ต่อท้ายเหมือนเดิม', () => {
@@ -124,5 +125,40 @@ describe('withFieldsSuffix — ข้อความรายช่องต่�
     expect(withFieldsSuffix('x', { note: 'ยาวเกิน 500 ตัวอักษร', reason: 'ยาวเกิน 500 ตัวอักษร' })).toBe(
       'x — หมายเหตุ: ยาวเกิน 500 ตัวอักษร · เหตุผล: ยาวเกิน 500 ตัวอักษร',
     )
+  })
+})
+
+describe('callApi — session หมดอายุ (preship R8-009)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  const stub = (status: number, code: string) => {
+    const dispatchEvent = vi.fn()
+    vi.stubGlobal('window', { dispatchEvent })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ success: false, data: null, error: { code, title: 't', message: 'm' } }), { status })),
+    )
+    return dispatchEvent
+  }
+
+  it('401 UNAUTHENTICATED ⇒ ประกาศ event ให้ shell เปิดกล่องเข้าสู่ระบบ · ผู้เรียกยังได้ error เดิม', async () => {
+    const dispatchEvent = stub(401, 'UNAUTHENTICATED')
+    const result = await callApi('/api/x', jsonRequest('POST', {}))
+    expect(result.error?.code).toBe('UNAUTHENTICATED')
+    expect(dispatchEvent).toHaveBeenCalledTimes(1)
+    expect((dispatchEvent.mock.calls[0]?.[0] as Event).type).toBe(SESSION_EXPIRED_EVENT)
+  })
+
+  it('403 / error อื่น ⇒ ไม่ประกาศ', async () => {
+    const dispatchEvent = stub(403, 'PERMISSION_DENIED')
+    await callApi('/api/x')
+    expect(dispatchEvent).not.toHaveBeenCalled()
+  })
+
+  it('loginUrlFor เก็บ path + query ไว้ใน next', () => {
+    expect(loginUrlFor('/finance', '?tab=revenue&bill_status=sent')).toBe('/login?next=%2Ffinance%3Ftab%3Drevenue%26bill_status%3Dsent')
+    expect(loginUrlFor('/', '')).toBe('/login')
   })
 })

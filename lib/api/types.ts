@@ -1,4 +1,5 @@
 import { readEnvelope, type ApiErrorPayload, type ApiWarning } from '@/lib/api/envelope'
+import { announceSessionExpired } from '@/lib/api/session-expiry'
 
 /**
  * ตัวเรียก API ฝั่ง client — **pure type + fetch ล้วน** (import เข้าไฟล์ `'use client'` ได้)
@@ -186,6 +187,8 @@ export async function callApi<T>(input: string, init?: RequestInit, options?: Ca
     const envelope = readEnvelope<T>(body, response.ok)
     if (!envelope.success) {
       const { code, title, message, fields } = envelope.error
+      // session หมดระหว่างใช้งาน ⇒ shell เปิดกล่องพาไปเข้าสู่ระบบ (preship R8-009) — ผู้เรียกยังได้ error ตามเดิม
+      if (response.status === 401 && code === 'UNAUTHENTICATED') announceSessionExpired()
       return {
         error: {
           code,

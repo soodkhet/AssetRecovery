@@ -3,7 +3,7 @@
 import { LinkPending } from '@/components/shell/link-pending'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react'
+import { Suspense, useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react'
 import { PermissionProvider } from '@/components/auth/permission-provider'
 import { FieldCasesProvider, useFieldCases } from '@/components/field/field-cases-provider'
 import {
@@ -25,6 +25,7 @@ import {
 import { NotificationBell } from '@/components/notifications/notification-bell'
 import { FieldPwaProvider } from '@/components/field/pwa-provider'
 import { FieldReassignmentProvider } from '@/components/field/reassignment-provider'
+import { SessionExpiredDialog } from '@/components/auth/session-expired-dialog'
 import { ToastProvider } from '@/components/ui'
 import { afterModalHistorySettled, guardModalHistory } from '@/components/ui/modal-history'
 import { requestLogout } from '@/lib/auth/logout-client'
@@ -400,6 +401,10 @@ export function FieldShell({ session, children }: { session: ClientSession; chil
           {/* auto-popup คำขอเปลี่ยนผู้รับผิดชอบอยู่ระดับ shell — เด้งได้ทุกหน้าใต้ `/field` (`41` §7.8) */}
           <FieldReassignmentProvider>
             <ShellFrame session={session}>{children}</ShellFrame>
+            {/* session หมดระหว่างใช้งาน ⇒ พาไปเข้าสู่ระบบ (preship R8-009) — Suspense: ใช้ useSearchParams */}
+            <Suspense fallback={null}>
+              <SessionExpiredDialog />
+            </Suspense>
           </FieldReassignmentProvider>
         </FieldCasesProvider>
       </ToastProvider>

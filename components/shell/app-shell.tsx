@@ -1,10 +1,11 @@
-import type { ReactNode } from 'react'
+import { Suspense, type ReactNode } from 'react'
 import { PermissionProvider } from '@/components/auth/permission-provider'
 import { SubNav } from '@/components/shell/sub-nav'
 import { TopNav } from '@/components/shell/top-nav'
 import { ToastProvider } from '@/components/ui/toast'
 import type { ClientSession } from '@/lib/auth/types'
 import type { MenuItem } from '@/lib/nav/menu-registry'
+import { SessionExpiredDialog } from '@/components/auth/session-expired-dialog'
 
 /**
  * เปลือกนอกของทุกหน้าที่ต้อง login (`06` §8 · mockup `reference/app-shell.html`)
@@ -31,6 +32,10 @@ export function AppShell({
           <TopNav menus={menus} session={session} />
           <SubNav menus={menus} />
           <main className="mx-auto w-full max-w-[1600px] flex-1 px-4 py-6 sm:px-6 lg:px-8">{children}</main>
+          {/* session หมดระหว่างใช้งาน ⇒ พาไปเข้าสู่ระบบ (preship R8-009) — Suspense: ใช้ useSearchParams */}
+          <Suspense fallback={null}>
+            <SessionExpiredDialog />
+          </Suspense>
         </div>
       </ToastProvider>
     </PermissionProvider>
