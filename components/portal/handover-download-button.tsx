@@ -5,6 +5,7 @@ import { usePortalApiUrl } from '@/components/portal/portal-scope'
 import { Button, cn } from '@/components/ui'
 import { readEnvelope } from '@/lib/api/envelope'
 import { FetchTimeoutError, fetchWithTimeout } from '@/lib/api/fetch-with-timeout'
+import { noticeSessionLost } from '@/lib/api/session-expiry'
 import { downloadFile } from '@/lib/imports/download-client'
 import {
   fileNameFromDisposition,
@@ -53,6 +54,8 @@ export function HandoverDownloadButton({
     try {
       // มี timeout — server ค้างแล้วปุ่มไม่หมุนค้าง (preship R2-017)
       const response = await fetchWithTimeout(apiUrl(portalLotDocumentApiUrl(lotId, kind)), { cache: 'no-store' })
+      // session หมด ⇒ กล่องเข้าสู่ระบบ (preship R9-014)
+      await noticeSessionLost(response)
       const contentType = response.headers.get('content-type') ?? ''
       if (response.ok && !contentType.includes('application/json')) {
         const bytes = await response.arrayBuffer()

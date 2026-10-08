@@ -8,6 +8,7 @@ import { ReconciliationLines } from '@/components/reports/reconciliation-lines'
 import { ReportTable } from '@/components/reports/report-table'
 import { useReportData } from '@/components/reports/use-report-data'
 import { FetchTimeoutError, fetchWithTimeout } from '@/lib/api/fetch-with-timeout'
+import { noticeSessionLost } from '@/lib/api/session-expiry'
 import { readEnvelope } from '@/lib/api/envelope'
 import { fmtDateTime } from '@/lib/format/datetime'
 import { reportEmptyDescription, type ReportDefinition } from '@/lib/reports/catalog'
@@ -88,6 +89,8 @@ export function ReportView({
             params,
           }),
         }, REPORT_EXPORT_TIMEOUT_MS)
+        // session หมด ⇒ กล่องเข้าสู่ระบบ (preship R9-014)
+        await noticeSessionLost(response)
 
         // ไฟล์ทำสด: ตอบเป็นไฟล์ตรง ๆ ไม่ใช่ envelope
         const contentType = response.headers.get('content-type') ?? ''

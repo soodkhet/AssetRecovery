@@ -4,6 +4,7 @@ import { Fragment, useCallback, useState } from "react";
 import { usePortalApiUrl } from "@/components/portal/portal-scope";
 import { usePortalData } from "@/components/portal/use-portal-data";
 import { FetchTimeoutError, fetchWithTimeout } from "@/lib/api/fetch-with-timeout";
+import { noticeSessionLost } from "@/lib/api/session-expiry";
 import {
   Button,
   Card,
@@ -64,6 +65,8 @@ export function PortalTaxInvoices({ canDownload }: { canDownload: boolean }) {
       const response = await fetchWithTimeout(
         apiUrl(portalTaxInvoiceDownloadUrl(invoice.id)),
       );
+      // session หมด ⇒ กล่องเข้าสู่ระบบ (preship R9-014)
+      await noticeSessionLost(response);
       const contentType = response.headers.get("content-type") ?? "";
       if (response.ok && contentType.includes("application/pdf")) {
         const blob = await response.blob();

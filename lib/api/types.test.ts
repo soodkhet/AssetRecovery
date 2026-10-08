@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { isSessionLost, loginUrlFor, SESSION_EXPIRED_EVENT } from '@/lib/api/session-expiry'
+import { isSessionLost, loginUrlFor, noticeSessionLost, SESSION_EXPIRED_EVENT } from '@/lib/api/session-expiry'
 import { callApi, describeApiFailure, jsonRequest, labelFieldMessage, withContextSuffix, withFieldsSuffix } from '@/lib/api/types'
 
 describe('withContextSuffix — ต่อท้ายรายชื่อจากข้อมูลประกอบของ error', () => {
@@ -169,6 +169,20 @@ describe('callApi — session หมดอายุ (preship R8-009)', () => {
     expect(isSessionLost(401, 'SESSION_EXPIRED')).toBe(true)
     expect(isSessionLost(401, 'INVALID_CREDENTIALS')).toBe(false)
     expect(isSessionLost(403, 'SESSION_EXPIRED')).toBe(false)
+  })
+
+  it('noticeSessionLost (ดาวน์โหลดที่ไม่ผ่าน callApi): 401 ของ session ⇒ ประกาศ · อื่น ๆ ไม่ · ผู้เรียกยังอ่าน body ได้ (R9-014)', async () => {
+    const dispatchEvent = vi.fn()
+    vi.stubGlobal('window', { dispatchEvent })
+    const envelope = (code: string) => JSON.stringify({ success: false, data: null, error: { code, title: 't', message: 'm' } })
+    const expired = new Response(envelope('SESSION_EXPIRED'), { status: 401 })
+    await noticeSessionLost(expired)
+    expect(dispatchEvent).toHaveBeenCalledTimes(1)
+    expect(await expired.json()).toMatchObject({ error: { code: 'SESSION_EXPIRED' } })
+    await noticeSessionLost(new Response(envelope('PERMISSION_DENIED'), { status: 403 }))
+    await noticeSessionLost(new Response('<html>401</html>', { status: 401 }))
+    await noticeSessionLost(new Response(new Blob(['%PDF']), { status: 200 }))
+    expect(dispatchEvent).toHaveBeenCalledTimes(1)
   })
 
   it('loginUrlFor เก็บ path + query ไว้ใน next', () => {

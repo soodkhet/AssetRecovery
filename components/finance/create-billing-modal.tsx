@@ -10,7 +10,7 @@ import {
   ClosedPeriodsUnavailableNote,
   useClosedPeriods,
 } from '@/components/finance/closed-period-cutoff-alert'
-import { callApi, jsonRequest } from '@/lib/api/types'
+import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
 import type { FinanceCompanyDto } from '@/lib/finance-companies/types'
 import { fmtDate, toInputDate } from '@/lib/format/datetime'
 import type { BillingBatchDetailDto } from '@/lib/revenue/types'
@@ -54,18 +54,24 @@ export function CreateBillingModal({
   const closedPeriods = useClosedPeriods(open)
   const isPeriodClosed = closedPeriods.isClosed
 
+  /** โหลดรายชื่อบริษัทไม่สำเร็จ — แจ้ง + ปุ่มลองใหม่ (เดิม dropdown ว่างเงียบ · preship R9-012) */
+  const [companiesError, setCompaniesError] = useState<ApiCallError | null>(null)
+  /** เพิ่มเพื่อโหลดรายชื่อบริษัทใหม่ (ปุ่มลองใหม่ — เช่นหลังเข้าสู่ระบบในแท็บใหม่) */
+  const [companiesVersion, setCompaniesVersion] = useState(0)
+
   useEffect(() => {
     if (!open) return
     let cancelled = false
     void (async () => {
       const companyResult = await callApi<FinanceCompanyDto[]>('/api/finance-companies?status=active')
       if (cancelled) return
+      setCompaniesError(companyResult.error ?? null)
       setCompanies(companyResult.data ?? [])
     })()
     return () => {
       cancelled = true
     }
-  }, [open])
+  }, [open, companiesVersion])
 
   if (!open) return null
 
@@ -155,6 +161,15 @@ export function CreateBillingModal({
             ))}
           </Select>
         </Field>
+
+        {companiesError !== null && (
+          <InlineAlert tone="error" title="โหลดรายชื่อบริษัทไม่สำเร็จ">
+            <p>{companiesError.message}</p>
+            <Button size="sm" variant="secondary" className="mt-2" onClick={() => setCompaniesVersion((value) => value + 1)}>
+              ลองใหม่
+            </Button>
+          </InlineAlert>
+        )}
 
         {selectedCompany !== undefined && selectedCompany.documentWarnings.length > 0 && (
           <InlineAlert tone="warning" title="เอกสารบริษัทยังไม่ครบ (สร้างรอบต่อได้)">

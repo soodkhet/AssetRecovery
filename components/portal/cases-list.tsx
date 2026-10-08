@@ -76,7 +76,9 @@ export function PortalCasesList({ canViewPhotos }: { canViewPhotos: boolean }) {
   const [syncedSearch, setSyncedSearch] = useState(filters.search)
   if (syncedSearch !== filters.search) {
     setSyncedSearch(filters.search)
-    setSearchDraft(filters.search)
+    // URL เก็บค่าที่ trim แล้ว — ช่องที่พิมพ์ค้างอยู่ตรงกับ URL แล้ว (ต่างแค่เว้นวรรคท้าย) ไม่เขียนทับ ไม่งั้นเว้นวรรค
+    // ที่เพิ่งพิมพ์หายระหว่างพิมพ์ชื่อสองคำ (preship รอบ 10) · Back/ลิงก์ที่เปลี่ยนคำค้นจริงยังเขียนทับตามเดิม
+    if (searchDraft.trim() !== filters.search) setSearchDraft(filters.search)
   }
   useEffect(() => {
     const draft = searchDraft.trim()

@@ -14,6 +14,7 @@ import {
   RefText,
 } from '@/components/ui'
 import { FetchTimeoutError, fetchWithTimeout } from '@/lib/api/fetch-with-timeout'
+import { noticeSessionLost } from '@/lib/api/session-expiry'
 import { callApi } from '@/lib/api/types'
 import {
   DOCUMENT_SAMPLE_GROUP_LABEL,
@@ -46,6 +47,8 @@ function pdfUrl(type: string): string {
 export async function fetchSamplePdf(type: string): Promise<PdfResult> {
   try {
     const response = await fetchWithTimeout(pdfUrl(type))
+    // session หมด ⇒ กล่องเข้าสู่ระบบ (preship R9-014)
+    await noticeSessionLost(response)
     if (response.ok) return { blob: await response.blob() }
     const body: unknown = await response.json().catch(() => null)
     const error =

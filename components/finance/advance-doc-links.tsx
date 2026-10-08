@@ -57,8 +57,9 @@ export function AdvanceReturnHistory({
         </ul>
       )}
       <details className="mt-0.5">
-        <summary className="focus-ring cursor-pointer text-[10px] font-semibold text-slate-600 pointer-coarse:min-h-11">
-          ดูการคืนก่อนหน้า ({earlier.length} รายการ)
+        {/* แบบเดียวกับ <details> อื่นในระบบ (import-template-help) · ตัวเลขในวงเล็บไม่ตัดบรรทัด (R9-004) */}
+        <summary className="focus-ring cursor-pointer text-[11px] font-semibold text-slate-700 pointer-coarse:min-h-11">
+          ดูการคืนก่อนหน้า <span className="whitespace-nowrap">({earlier.length} รายการ)</span>
         </summary>
         <ul className="mt-0.5 space-y-0.5">
           {earlier.map((entry) => (
@@ -71,26 +72,30 @@ export function AdvanceReturnHistory({
 }
 
 function ReturnEntry({ advanceId, entry }: { advanceId: string; entry: AdvanceDto['returns'][number] }) {
+  // 2 บรรทัดคงที่: เลขที่ + ยอด (ไม่ตัด) / ช่องทาง · รอบจ่ายหรือวันที่ + ลิงก์ — เดิมต่อกันยาวบรรทัดเดียว คอลัมน์แคบ
+  // ตัด 4–5 บรรทัดแบบสุ่มตำแหน่ง (preship R9-004)
   return (
     <li className="text-[10px] font-normal text-slate-500">
-      <span className={entry.reversedAt === null ? undefined : 'line-through'}>
-        <span className="font-mono whitespace-nowrap">{entry.returnNumber}</span> · {ADVANCE_RETURN_CHANNEL_LABEL[entry.channel]}{' '}
-        <span className="whitespace-nowrap">{fmtSatangSymbol(entry.amountSatang)}</span>
+      <div className={entry.reversedAt === null ? 'whitespace-nowrap' : 'whitespace-nowrap line-through'}>
+        <span className="font-mono">{entry.returnNumber}</span> · {fmtSatangSymbol(entry.amountSatang)}
+        {entry.reversedAt !== null && <span className="ml-1 font-semibold text-red-600 no-underline">ยกเลิก</span>}
+      </div>
+      <div>
+        {ADVANCE_RETURN_CHANNEL_LABEL[entry.channel]}
         {entry.payoutBatchName !== null
           ? ` · ${entry.payoutBatchName}`
           : entry.receivedDate !== null
             ? ` · ${fmtDate(entry.receivedDate)}`
-            : ''}
-      </span>
-      {entry.reversedAt !== null && <span className="ml-1 font-semibold text-red-600">ยกเลิก</span>}{' '}
-      <a
-        href={`/api/advances/${advanceId}/returns/${entry.id}/pdf`}
-        target="_blank"
-        rel="noreferrer"
-        className={LINK_CLASS}
-      >
-        ใบรับคืน PDF
-      </a>
+            : ''}{' '}
+        <a
+          href={`/api/advances/${advanceId}/returns/${entry.id}/pdf`}
+          target="_blank"
+          rel="noreferrer"
+          className={LINK_CLASS}
+        >
+          ใบรับคืน PDF
+        </a>
+      </div>
     </li>
   )
 }

@@ -31,7 +31,12 @@ export function useSearchParamChange(key: string, onChange: (value: string | nul
 export function useSearchQueryChange(onChange: (params: URLSearchParams) => void): void {
   const searchParams = useSearchParams()
   const query = searchParams.toString()
-  const [seen, setSeen] = useState(query)
+  // query ตอน mount = ที่มาจากการนำทาง — เดิมไม่บันทึก ⇒ หน้าถูก mount ใหม่ (เมนูที่ redirect มาหน้าเดิม) แล้ว Back กลับ
+  // URL ที่มีตัวกรอง (ค่าที่ instance เก่าเขียนเองล่าสุด) ถูกนับเป็น echo จอค้าง "ทั้งหมด" (preship R9-013)
+  const [seen, setSeen] = useState(() => {
+    markQueryAsCurrent(query)
+    return query
+  })
   if (query !== seen) {
     setSeen(query)
     // ค่าที่หน้าเพิ่งเขียนเองวนกลับมาช้า (transition) — ไม่ใช่การนำทาง ข้าม ไม่งั้นตัวกรองย้อนไปค่าก่อนหน้า

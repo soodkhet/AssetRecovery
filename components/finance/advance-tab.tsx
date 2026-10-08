@@ -173,11 +173,13 @@ export function AdvanceTab() {
                     </Td>
                     {/* กว้างขั้นต่ำ — เดิมถูกบีบเหลือ 81px ชื่อไทยแตก 3 บรรทัด (preship R7-002) */}
                     <Td className="min-w-[7.5rem]">
-                      {/* ตัดบรรทัดที่ช่องว่างเท่านั้น — ชื่อไทยไม่แตกกลางคำ (R8-001) */}
-                      <p className="font-semibold [word-break:keep-all] text-slate-900">{advance.payeeName}</p>
+                      {/* ตัดบรรทัดที่ช่องว่างเท่านั้น — ชื่อไทยไม่แตกกลางคำ (keep-all ใช้กับภาษาไทยไม่ได้ · R9-004) */}
+                      <p className="font-semibold text-slate-900">
+                        <NoBreakWords text={advance.payeeName} />
+                      </p>
                       {advance.teamName !== null && <p className="text-[10px] text-slate-500">{advance.teamName}</p>}
                     </Td>
-                    <Td className="max-w-[160px] text-xs text-slate-600">
+                    <Td className="max-w-[136px] text-xs text-slate-600">
                       {advance.purpose}
                       {/* มติ PO U103 — ใบรับรองแทนใบเสร็จตอนเคลียร์ยอด (การเงินอัปโหลดฉบับเซ็นแทนได้) */}
                       {advance.substituteReceipt !== null && (
@@ -332,5 +334,22 @@ export function AdvanceTab() {
         onSettled={() => void reload()}
       />
     </div>
+  )
+}
+
+/** แต่ละคำ (คั่นด้วยช่องว่าง) ไม่ตัดกลางคำ — ภาษาไทยไม่มีช่องว่างระหว่างพยางค์ browser จึงตัดกลางชื่อได้ */
+function NoBreakWords({ text }: { text: string }) {
+  return (
+    <>
+      {text.split(/(\s+)/).map((part, index) =>
+        /^\s+$/.test(part) ? (
+          part
+        ) : (
+          <span key={index} className="whitespace-nowrap">
+            {part}
+          </span>
+        ),
+      )}
+    </>
   )
 }

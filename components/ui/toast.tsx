@@ -1,7 +1,8 @@
 'use client'
 
-import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { cn } from '@/components/ui/cn'
+import { SESSION_EXPIRED_EVENT } from '@/lib/api/session-expiry'
 
 /**
  * Toast — ปลายทางของโครงหน้ามาตรฐาน Page → Header → Tabs → Table → Modal → **Toast** (`04` §9)
@@ -35,9 +36,26 @@ const ToastContext = createContext<ToastContextValue | null>(null)
 
 const DEFAULT_DURATION_MS = 4000
 
+/**
+ * session หมด ⇒ กล่อง "เซสชันหมดอายุ" บอกผู้ใช้อยู่แล้ว — toast error ของคำขอเดียวกันที่ผู้เรียกแสดงต่อ (เช่น
+ * "ยังไม่ได้เข้าสู่ระบบ") ซ้ำซ้อนและคนละถ้อยคำ ⇒ ไม่แสดงในช่วงสั้น ๆ หลัง event (preship R9-006)
+ */
+const SESSION_LOST_TOAST_QUIET_MS = 5000
+
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<readonly Toast[]>([])
   const nextId = useRef(1)
+  const sessionLostAt = useRef<number | null>(null)
+
+  useEffect(() => {
+    const onSessionLost = () => {
+      sessionLostAt.current = Date.now()
+      // toast error ที่ขึ้นก่อน event (คำขอที่ตอบ 401 ก่อนหน้าเล็กน้อย) ก็เก็บออก
+      setToasts((current) => current.filter((toast) => toast.tone !== 'error'))
+    }
+    window.addEventListener(SESSION_EXPIRED_EVENT, onSessionLost)
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, onSessionLost)
+  }, [])
 
   const dismissToast = useCallback((id: number) => {
     setToasts((current) => current.filter((toast) => toast.id !== id))
@@ -46,6 +64,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const showToast = useCallback(
     ({ tone = 'success', title, description, durationMs = DEFAULT_DURATION_MS }: ToastInput) => {
       const id = nextId.current++
+      const lostAt = sessionLostAt.current
+      if (tone === 'error' && lostAt !== null && Date.now() - lostAt < SESSION_LOST_TOAST_QUIET_MS) return id
       setToasts((current) => [...current, { id, tone, title, description }])
       if (durationMs > 0) {
         window.setTimeout(() => dismissToast(id), durationMs)
@@ -84,7 +104,8 @@ function ToastViewport({ toasts, onDismiss }: { toasts: readonly Toast[]; onDism
   if (toasts.length === 0) return null
 
   return (
-    <div className="pointer-events-none fixed right-4 bottom-4 z-[60] flex w-full max-w-sm flex-col gap-2">
+    // มือถือ: ยึดขอบซ้าย-ขวา 16px — เดิม `w-full` + `right-4` กว้างเท่าจอแล้วเลื่อนเข้ามา 16px ⇒ ขอบซ้ายถูกตัด (preship R9-008)
+    <div className="pointer-events-none fixed right-4 bottom-4 left-4 z-[60] flex flex-col gap-2 sm:left-auto sm:w-full sm:max-w-sm">
       {toasts.map((toast) => (
         <div
           key={toast.id}

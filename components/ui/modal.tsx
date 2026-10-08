@@ -219,7 +219,8 @@ export function Modal({
         )}
 
         {footer !== undefined && (
-          <div className="shrink-0 border-t border-slate-200 bg-slate-50 px-5 py-3">
+          // มุมล่างโค้งตามกรอบ — เดิมพื้น slate-50 มุมเหลี่ยมโผล่เกินขอบ rounded-xl (preship R9-007)
+          <div className="shrink-0 rounded-b-xl border-t border-slate-200 bg-slate-50 px-5 py-3">
             {/* ปุ่มใน footer (รวม "ยกเลิก") ล็อกระหว่างบันทึกด้วย — เดิมปุ่มยกเลิกปิด modal กลางคำขอได้ (preship R2-006) */}
             <fieldset disabled={isBusy} className="m-0 flex w-full min-w-0 items-center justify-end gap-2 border-0 p-0">
               {footer}

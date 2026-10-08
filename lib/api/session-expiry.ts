@@ -26,3 +26,19 @@ export function loginUrlFor(pathname: string, search: string): string {
   const next = `${pathname}${search}`
   return next === '/' ? '/login' : `/login?next=${encodeURIComponent(next)}`
 }
+
+/**
+ * สำหรับคำขอที่ไม่ผ่าน `callApi` (ดาวน์โหลดไฟล์ด้วย `fetchWithTimeout` — ใบส่งมอบ/ใบกำกับในพอร์ทัล · export รายงาน ·
+ * ตัวอย่างเอกสาร) — 401 ของ session ⇒ เปิดกล่องเซสชันหมดอายุเหมือนคำขอ API อื่น (preship R9-014)
+ * อ่าน body จากสำเนา (`clone`) ⇒ ผู้เรียกยังอ่าน response เดิมได้ตามปกติ
+ */
+export async function noticeSessionLost(response: Response): Promise<void> {
+  if (response.status !== 401) return
+  const body: unknown = await response
+    .clone()
+    .json()
+    .catch(() => null)
+  const error = typeof body === 'object' && body !== null && 'error' in body ? (body as { error: unknown }).error : null
+  const code = typeof error === 'object' && error !== null && 'code' in error ? (error as { code: unknown }).code : null
+  if (typeof code === 'string' && isSessionLost(response.status, code)) announceSessionExpired()
+}

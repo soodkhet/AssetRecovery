@@ -111,6 +111,16 @@ export function NotificationBell({
     }
   }
 
+  // Esc ปิดแผง (เดิมปิดได้แค่แตะนอกแผง/ปุ่ม X — preship รอบ 10)
+  useEffect(() => {
+    if (!open) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open])
+
   const badge = unreadBadgeText(data.unreadCount)
 
   return (
@@ -138,8 +148,9 @@ export function NotificationBell({
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} aria-hidden="true" />
           {/* มือถือ (< sm): ยึดกับขอบจอซ้าย-ขวาใต้แถบหัว 64px — เดิมยึดขอบขวาของปุ่มกระดิ่ง (มีปุ่มเมนูอยู่ทางขวาอีก)
-              แผงกว้าง 88vw จึงล้นขอบซ้าย 13–81px หัวข้อ/เลขเคสถูกตัด (preship R9-001) */}
-          <div className="fixed inset-x-2 top-16 z-50 max-h-[calc(100dvh-5rem)] overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg sm:absolute sm:inset-x-auto sm:top-auto sm:right-0 sm:mt-1 sm:max-h-none sm:w-[340px] sm:overflow-visible">
+              แผงกว้าง 88vw จึงล้นขอบซ้าย 13–81px หัวข้อ/เลขเคสถูกตัด (preship R9-001)
+              ทุกขนาด: สูงไม่เกินจอลบหัว+แถบเมนูล่างของแอปภาคสนาม แล้วเลื่อนในแผง — จอแนวนอนเตี้ย แถบล่างเคยบังรายการท้าย */}
+          <div className="fixed inset-x-2 top-16 z-50 max-h-[calc(100dvh-10rem)] overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg sm:absolute sm:inset-x-auto sm:top-auto sm:right-0 sm:mt-1 sm:w-[340px]">
             <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2">
               <span className="text-xs font-bold text-slate-700">แจ้งเตือนล่าสุด</span>
               <div className="flex items-center gap-1">
@@ -148,7 +159,11 @@ export function NotificationBell({
                   <button
                     type="button"
                     onClick={() => void markAllRead()}
-                    className="focus-ring rounded px-2 py-1 text-[11px] font-semibold text-blue-600 hover:bg-blue-50"
+                    // พื้นที่แตะ 44px บนจอสัมผัส — เดิม 68×25 (preship R9-010)
+                    className={cn(
+                      'focus-ring inline-flex items-center justify-center rounded px-2 py-1 text-[11px] font-semibold text-blue-600 hover:bg-blue-50',
+                      TOUCH_TARGET_CLASS,
+                    )}
                   >
                     อ่านทั้งหมด
                   </button>
@@ -216,7 +231,7 @@ export function NotificationBell({
               <Link
                 href={allHref}
                 onClick={() => setOpen(false)}
-                className="focus-ring block border-t border-slate-100 px-4 py-2 text-center text-[11px] font-semibold text-blue-600 hover:bg-blue-50"
+                className="focus-ring flex items-center justify-center border-t border-slate-100 px-4 py-2 text-center text-[11px] font-semibold text-blue-600 hover:bg-blue-50 pointer-coarse:min-h-11"
               >
                 ดูทั้งหมด
               </Link>

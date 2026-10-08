@@ -39,12 +39,15 @@ export function useClosedPeriods(open: boolean): ClosedPeriodState {
   return state
 }
 
-/** แจ้งเบา ๆ เมื่อโหลดงวดที่ปิดไม่สำเร็จ — วันที่เสนออาจอยู่ในงวดปิด (server ยังตรวจตอนสร้าง) · R8-008 */
+/**
+ * แจ้งเมื่อโหลดงวดที่ปิดไม่สำเร็จ — วันที่เสนออาจอยู่ในงวดปิด (server ยังตรวจตอนสร้าง) · R8-008
+ * กล่องแจ้งแยกจากช่องวันที่ (InlineAlert) — เดิมเป็นบรรทัดเทาชิดช่อง ดูเหมือนคำอธิบายช่อง มองข้ามง่าย (R9-009)
+ */
 export function ClosedPeriodsUnavailableNote() {
   return (
-    <p className="text-[11px] text-slate-500">
+    <InlineAlert tone="info" className="mt-2">
       ตรวจงวดบัญชีที่ปิดแล้วไม่ได้ในขณะนี้ — ถ้าวันตัดรอบอยู่ในงวดที่ปิด ระบบจะแจ้งตอนกดสร้าง
-    </p>
+    </InlineAlert>
   )
 }
 

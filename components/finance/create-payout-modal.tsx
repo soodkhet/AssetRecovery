@@ -45,7 +45,11 @@ export function CreatePayoutModal({
 }) {
   const { showToast } = useToast()
   const [side, setSide] = useState<'outsource' | 'inhouse'>('outsource')
-  const [cutoffDate, setCutoffDate] = useState('')
+  /**
+   * วันตัดรอบที่ผู้ใช้แก้เอง — `null` = ใช้วันที่ระบบเสนอตามรอบจ่าย (เติมให้ตั้งแต่เปิด เหมือน modal รอบวางบิล ·
+   * preship R9-005 — เดิมเปิดมาว่างแล้วมีแค่ลิงก์ให้กด)
+   */
+  const [cutoffOverride, setCutoffOverride] = useState<string | null>(null)
   const [name, setName] = useState('')
   const [saving, setSaving] = useState(false)
   /** วันตัดรอบที่ server ปฏิเสธเพราะงวดปิดแล้ว — แสดงคำแนะนำใต้ช่องจนกว่าจะเปลี่ยนวัน (R7-009) */
@@ -84,6 +88,7 @@ export function CreatePayoutModal({
   // วันตามกติกาของรอบอยู่ในงวดปิด ⇒ ค่าที่เสนอคือวันนี้ — ป้ายปุ่มต้องบอกตามจริง (R8-002)
   const suggestedIsFallback =
     cycleForCutoff !== null && suggestedCutoff !== suggestCutoffDate(cycleForCutoff, today).toISOString().slice(0, 10)
+  const cutoffDate = cutoffOverride ?? suggestedCutoff ?? ''
   const showClosedAlert =
     (closedCutoff !== null && closedCutoff === cutoffDate) || isCutoffInClosedPeriod(cutoffDate, isPeriodClosed)
 
@@ -118,7 +123,7 @@ export function CreatePayoutModal({
     if (result.warning !== undefined) {
       showToast({ tone: 'warning', title: result.warning.title, description: result.warning.message })
     }
-    setCutoffDate('')
+    setCutoffOverride(null)
     setName('')
     setCycleChoice(null)
     onCreated()
@@ -153,8 +158,9 @@ export function CreatePayoutModal({
             value={side}
             onChange={(event) => {
               setSide(event.target.value === 'inhouse' ? 'inhouse' : 'outsource')
-              // เปลี่ยนฝั่ง = ให้ระบบเลือกรอบที่ตรงฝั่งใหม่
+              // เปลี่ยนฝั่ง = ให้ระบบเลือกรอบที่ตรงฝั่งใหม่ และใช้วันตัดรอบที่รอบนั้นเสนอ
               setCycleChoice(null)
+              setCutoffOverride(null)
             }}
           >
             <option value="outsource">Outsource (หัก WHT ตาม Tax Profile ของผู้รับเงิน)</option>
@@ -163,14 +169,17 @@ export function CreatePayoutModal({
         </Field>
 
         <Field label="วันตัดรอบ (Cut-off Date)" required>
-          <Input type="date" value={cutoffDate} onChange={(event) => setCutoffDate(event.target.value)} />
+          <Input type="date" value={cutoffDate} onChange={(event) => setCutoffOverride(event.target.value)} />
+          {cutoffOverride === null && suggestedIsFallback && (
+            <p className="mt-1 text-[11px] text-slate-500">วันตัดรอบตามรอบจ่ายอยู่ในงวดที่ปิดแล้ว — ระบบใช้วันนี้แทน (แก้ได้)</p>
+          )}
           {/* วันตามรอบจ่ายที่ server เพิ่งปฏิเสธ (งวดปิด) ไม่เสนอซ้ำ (R7-009) · คำเตือนงวดปิดมีปุ่มใช้วันนี้อยู่แล้ว
               ไม่แสดงปุ่มซ้ำ (R8-002) */}
           {suggestedCutoff !== null && suggestedCutoff !== cutoffDate && suggestedCutoff !== closedCutoff && !showClosedAlert && (
             <button
               type="button"
               className="focus-ring mt-1 inline-flex items-center text-left text-[11px] font-semibold text-emerald-700 hover:underline pointer-coarse:min-h-11"
-              onClick={() => setCutoffDate(suggestedCutoff)}
+              onClick={() => setCutoffOverride(null)}
             >
               {suggestedIsFallback
                 ? `ใช้วันนี้ (${fmtDate(`${suggestedCutoff}T00:00:00Z`)}) — วันตัดรอบตามรอบจ่ายอยู่ในงวดที่ปิดแล้ว`
@@ -180,7 +189,7 @@ export function CreatePayoutModal({
           {closedPeriods.status === 'error' && <ClosedPeriodsUnavailableNote />}
         </Field>
 
-        {showClosedAlert && <ClosedPeriodCutoffAlert onUseToday={setCutoffDate} />}
+        {showClosedAlert && <ClosedPeriodCutoffAlert onUseToday={setCutoffOverride} />}
 
         <Field
           label="รอบจ่าย (AP) ที่ใช้กำหนดวันจ่าย"
@@ -190,7 +199,13 @@ export function CreatePayoutModal({
               : 'ระบบเลือกรอบที่ใช้กับฝั่งนี้ให้แล้ว — กำหนดจ่ายคิดจากวันตัดรอบตามเงื่อนไขของรอบ'
           }
         >
-          <Select value={selectedCycle} onChange={(event) => setCycleChoice(event.target.value)}>
+          <Select
+            value={selectedCycle}
+            onChange={(event) => {
+              setCycleChoice(event.target.value)
+              setCutoffOverride(null)
+            }}
+          >
             <option value={NO_CYCLE}>— ไม่ใช้รอบ (ไม่มีกำหนดจ่าย) —</option>
             {matchingCycles.map((cycle) => (
               <option key={cycle.id} value={cycle.id}>
