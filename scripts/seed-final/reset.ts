@@ -104,6 +104,8 @@ export function renderResetSql(plan: ResetPlan): string {
 export async function executeReset(db: PrismaClient, plan: ResetPlan): Promise<void> {
   await db.$transaction(
     async (tx) => {
+      // Supabase ตั้ง statement_timeout ของ role ไว้ (ค่าเริ่มต้นสั้น) — ฐาน TAC จริงหลายแสนแถวลบไม่ทัน ⇒ ปลดเฉพาะทรานแซกชันนี้
+      await tx.$executeRawUnsafe('SET LOCAL statement_timeout = 0')
       for (const statement of plan.statements) await tx.$executeRawUnsafe(statement)
     },
     { timeout: 600_000, maxWait: 60_000 },
