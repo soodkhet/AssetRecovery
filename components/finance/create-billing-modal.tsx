@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { REASON_MIN_LENGTH } from '@/components/settings/reason-confirm-modal'
 import { Button, Field, InlineAlert, Input, Modal, Select, Textarea, useToast } from '@/components/ui'
+import { ClosedPeriodCutoffAlert, isClosedPeriodCutoffError } from '@/components/finance/closed-period-cutoff-alert'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import type { FinanceCompanyDto } from '@/lib/finance-companies/types'
 import { fmtDate, toInputDate } from '@/lib/format/datetime'
@@ -41,6 +42,8 @@ export function CreateBillingModal({
   const [cutoffDate, setCutoffDate] = useState('')
   const [reason, setReason] = useState('')
   const [saving, setSaving] = useState(false)
+  /** วันตัดรอบที่ server ปฏิเสธเพราะงวดปิดแล้ว — แสดงคำแนะนำใต้ช่องจนกว่าจะเปลี่ยนวัน (R7-009) */
+  const [closedCutoff, setClosedCutoff] = useState<string | null>(null)
 
   useEffect(() => {
     if (!open) return
@@ -86,6 +89,10 @@ export function CreateBillingModal({
       }),
     )
     setSaving(false)
+    if (isClosedPeriodCutoffError(result.error)) {
+      setClosedCutoff(cutoffDate)
+      return
+    }
     if (result.error !== undefined) {
       showToast({ tone: 'error', title: result.error.title, description: result.error.message })
       return
@@ -170,6 +177,8 @@ export function CreateBillingModal({
         >
           <Input type="date" value={cutoffDate} onChange={(event) => setCutoffDate(event.target.value)} />
         </Field>
+
+        {closedCutoff !== null && closedCutoff === cutoffDate && <ClosedPeriodCutoffAlert onUseToday={setCutoffDate} />}
 
         <Field label="เหตุผล" required hint={`อย่างน้อย ${REASON_MIN_LENGTH} ตัวอักษร — บันทึกลง audit log`}>
           <Textarea

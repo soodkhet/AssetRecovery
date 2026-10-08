@@ -1,5 +1,5 @@
 import type { AccountingPeriodStatus } from '@/lib/generated/prisma/enums'
-import { PERIOD_LOCKED_MESSAGES_BY_STATUS, SettingsError } from '@/lib/settings/errors'
+import { PERIOD_LOCKED_CUTOFF_MESSAGE, PERIOD_LOCKED_MESSAGES_BY_STATUS, SettingsError } from '@/lib/settings/errors'
 
 /**
  * นโยบายล็อกรอบบัญชี (`13` §6.11) — **pure ล้วน**
@@ -98,13 +98,25 @@ export function assertPeriodEditable(input: {
   targetId?: string | null
   /** การเขียนนี้ขยับ "ยอด" ที่ส่งสำนักงานบัญชีไปแล้วหรือไม่ (default `true`) */
   affectsAmount?: boolean
+  /** สร้างเอกสารใหม่จาก "วันตัดรอบ" ที่ผู้ใช้เลือก ⇒ บอกให้เปลี่ยนวัน ไม่ใช่ไป Adjustment (preship R7-009) */
+  cutoffDate?: boolean
 }): void {
   if (input.periodStatus === null) return
   const affectsAmount = input.affectsAmount ?? true
   if (!isDirectEditRejected(input.periodStatus, affectsAmount)) return
   throw new SettingsError('PERIOD_LOCKED_DIRECT_EDIT', {
     detail: `target=${input.targetType}:${input.targetId ?? '-'} period_status=${input.periodStatus}`,
-    context: { targetType: input.targetType, periodStatus: input.periodStatus, affectsAmount },
-    messages: input.periodStatus === 'collecting' ? undefined : PERIOD_LOCKED_MESSAGES_BY_STATUS[input.periodStatus],
+    context: {
+      targetType: input.targetType,
+      periodStatus: input.periodStatus,
+      affectsAmount,
+      ...(input.cutoffDate === true ? { reason: 'cutoff_in_closed_period' } : {}),
+    },
+    messages:
+      input.cutoffDate === true
+        ? PERIOD_LOCKED_CUTOFF_MESSAGE
+        : input.periodStatus === 'collecting'
+          ? undefined
+          : PERIOD_LOCKED_MESSAGES_BY_STATUS[input.periodStatus],
   })
 }

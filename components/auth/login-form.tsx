@@ -5,6 +5,7 @@ import { useState, type FormEvent } from 'react'
 import { FetchTimeoutError, fetchWithTimeout } from '@/lib/api/fetch-with-timeout'
 import { userFacingIssueMessage } from '@/lib/api/validation'
 import { authErrorMessage, type AuthErrorCode } from '@/lib/auth/errors'
+import { postLoginPath } from '@/lib/auth/next-path'
 import { loginSchema } from '@/lib/auth/schemas'
 
 /**
@@ -61,7 +62,8 @@ export function LoginForm({ reason, nextPath }: { reason?: AuthErrorCode; nextPa
         return
       }
 
-      const redirectTo = extractRedirect(body) ?? nextPath ?? '/'
+      // กลับหน้าที่ตั้งใจเปิดก่อนถูกพามา login (session หมด/ลิงก์ตรง) — เดิมไปหน้าแรกของ role เสมอ (preship R7-006)
+      const redirectTo = postLoginPath(extractRedirect(body), nextPath ?? null)
       router.replace(redirectTo)
       router.refresh()
     } catch (caught) {

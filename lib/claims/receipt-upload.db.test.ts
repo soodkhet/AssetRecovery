@@ -453,18 +453,21 @@ suite('preship R5-001 — ใบเสร็จที่ใช้เคลีย
 
     const copyPath = receiptPathOf(AGENT_ID, 'r5-001-copy.pdf')
     expect(uploadPdf(copyPath, `r5-001-receipt-${RUN}`)).toBe(hash)
-    await expectCode(
-      () =>
-        claims.createManualClaim({ actor: agent, meta }, {
-          claimType: 'receipt',
-          grossSatang: 80_000,
-          expenseDate: new Date('2026-10-05T00:00:00Z'),
-          payeeId: null,
-          receiptFileUrl: copyPath,
-          note: 'เบิกซ้ำด้วยใบเสร็จที่เคลียร์เงินทดรองแล้ว',
-        }),
-      'CLAIM_DUPLICATE_SUBMISSION',
-    )
+    // เบิกใหม่ (ไม่มี actorId ในทางนี้) ⇒ ข้อความต้องบอกว่าใช้เคลียร์เงินทดรองของตัวเองแล้ว ไม่ใช่ "ใบเบิกอื่น" (preship R7-008)
+    await expect(
+      claims.createManualClaim({ actor: agent, meta }, {
+        claimType: 'receipt',
+        grossSatang: 80_000,
+        expenseDate: new Date('2026-10-05T00:00:00Z'),
+        payeeId: null,
+        receiptFileUrl: copyPath,
+        note: 'เบิกซ้ำด้วยใบเสร็จที่เคลียร์เงินทดรองแล้ว',
+      }),
+    ).rejects.toMatchObject({
+      code: 'CLAIM_DUPLICATE_SUBMISSION',
+      context: { reason: 'receipt_reused', existingAdvanceId: firstId },
+      userMessage: expect.stringContaining('เคลียร์เงินทดรองของคุณ'),
+    })
 
     const secondId = await paidAdvance('ค่าเดินทางติดตามทรัพย์ R5-001 ก้อนสอง')
     await expectCode(

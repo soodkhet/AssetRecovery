@@ -120,11 +120,22 @@ describe('ClaimReceiptReusedError', () => {
     expect(own.context).toEqual({ reason: 'receipt_reused', existingExpenseId: 'e1' })
     const other = new ClaimReceiptReusedError('e9', false)
     expect(other.context).toEqual({ reason: 'receipt_reused' })
+    expect(own.userMessage).toContain('ใบเบิกอื่นของคุณ')
+    expect(other.userMessage).toContain('รายการอื่น')
     for (const error of [own, other]) {
       expect(error.userMessage).toContain('ใบเสร็จ')
-      expect(error.userMessage).toContain('ใบเบิกอื่น')
       expect(error.userMessage).not.toMatch(/§|ไฟล์ \d/)
     }
+  })
+
+  it('ใบเสร็จที่ใช้เคลียร์เงินทดรองของตัวเอง ⇒ บอกว่าเป็นเงินทดรอง (preship R7-008) · ของคนอื่นไม่บอกชนิดรายการ', () => {
+    const own = new ClaimReceiptReusedError('a1', true, 'advance')
+    expect(own.userMessage).toContain('เคลียร์เงินทดรองของคุณ')
+    expect(own.userMessage).not.toContain('ใบเบิกอื่น')
+    expect(own.context).toEqual({ reason: 'receipt_reused', existingAdvanceId: 'a1' })
+    const other = new ClaimReceiptReusedError('a9', false, 'advance')
+    expect(other.userMessage).not.toContain('เงินทดรอง')
+    expect(other.context).toEqual({ reason: 'receipt_reused' })
   })
 })
 

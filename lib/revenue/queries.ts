@@ -429,11 +429,12 @@ export async function createBillingBatch(
 
   const period = billingPeriodLabel(input.cutoffDate)
 
-  // Period Lock (`13` §6.11 · Phase 4.1) — งวดที่ปิดแล้วห้ามสร้างรอบวางบิลย้อนหลัง ต้องใช้ Adjustment
+  // Period Lock (`13` §6.11 · Phase 4.1) — งวดที่ปิดแล้วห้ามสร้างรอบวางบิลย้อนหลัง · ข้อความให้เลือกวันตัดรอบใหม่ (R7-009)
   await assertPeriodOpenForLabel({
     organizationId: user.organizationId,
     periodLabel: period,
     targetType: 'billing_batches',
+    cutoffDate: true,
   })
 
   const { dueDate, source } = await resolveBatchDueDate({

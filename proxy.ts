@@ -55,7 +55,8 @@ export default async function proxy(request: NextRequest): Promise<NextResponse>
     const redirectUrl = request.nextUrl.clone()
     redirectUrl.pathname = LOGIN_PATH
     redirectUrl.search = ''
-    redirectUrl.searchParams.set('next', pathname)
+    // เก็บ query ไว้ด้วย (แท็บ/ตัวกรอง/`?case=`) — login แล้วกลับมาที่เดิมครบ (preship R7-006) · หน้าแรกไม่ต้องจำ
+    if (pathname !== '/') redirectUrl.searchParams.set('next', `${pathname}${request.nextUrl.search}`)
     return NextResponse.redirect(redirectUrl)
   }
 

@@ -232,6 +232,16 @@ export const PERIOD_LOCKED_MESSAGES_BY_STATUS: Record<'sent_to_accountant' | 'lo
   locked: MESSAGES.PERIOD_LOCKED_DIRECT_EDIT,
 }
 
+/**
+ * `PERIOD_LOCKED_DIRECT_EDIT` ตอน**สร้างเอกสารใหม่**จากวันตัดรอบ (รอบวางบิล/รอบจ่าย) — preship R7-009
+ * ทางแก้คือเลือกวันตัดรอบในงวดที่ยังเปิด ไม่ใช่ Adjustment (ซึ่งใช้แก้รายการเดิมในงวดที่ปิด)
+ */
+export const PERIOD_LOCKED_CUTOFF_MESSAGE: ErrorMessage = {
+  title: 'วันตัดรอบอยู่ในงวดที่ปิดแล้ว',
+  message:
+    'งวดบัญชีของวันตัดรอบที่เลือกปิดแล้ว (หรือส่งสำนักงานบัญชีแล้ว) — เลือกวันตัดรอบในงวดที่ยังเปิดอยู่ เช่น วันนี้ แล้วสร้างใหม่',
+}
+
 export function settingsErrorStatus(code: SettingsErrorCode): number {
   return HTTP_STATUS[code]
 }

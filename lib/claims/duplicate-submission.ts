@@ -89,21 +89,32 @@ export function findReceiptReuse<T extends ReceiptHolder>(
   )
 }
 
+/** ผู้ถือใบเสร็จเดิม — ใบเบิก (`expenses`) หรือการเคลียร์เงินทดรอง (audit การเคลียร์ · preship R5-001) */
+export type ReceiptHolderKind = 'expense' | 'advance'
+
+/** ข้อความตามผู้ถือใบเสร็จเดิม — ใบของคนอื่นไม่บอกว่าเป็นรายการชนิดใด (ไม่ leak) · pure */
+export function receiptReusedMessage(samePayee: boolean, holder: ReceiptHolderKind): string {
+  if (!samePayee) return 'ใบเสร็จไฟล์นี้ถูกใช้ในรายการอื่นแล้ว — ใบเสร็จหนึ่งใบใช้ได้ครั้งเดียว กรุณาแนบใบเสร็จของรายการนี้'
+  // preship R6-009/R7-008 — เดิมบอกว่า "ใบเบิกอื่น" ทั้งที่ใช้เคลียร์เงินทดรองไป ผู้ใช้หาในรายการเบิกไม่เจอ
+  return holder === 'advance'
+    ? 'ใบเสร็จไฟล์นี้ใช้เคลียร์เงินทดรองของคุณไปแล้ว — ใบเสร็จหนึ่งใบใช้ได้ครั้งเดียว ตรวจในรายการเงินทดรองก่อน หรือแนบใบเสร็จของรายการนี้'
+    : 'ใบเสร็จไฟล์นี้ถูกใช้ในใบเบิกอื่นของคุณแล้ว — ใบเสร็จหนึ่งใบเบิกได้ครั้งเดียว ตรวจในรายการเบิกก่อน หรือแนบใบเสร็จของรายการนี้'
+}
+
 export class ClaimReceiptReusedError extends ModuleError<'CLAIM_DUPLICATE_SUBMISSION'> {
-  constructor(existingId: string, samePayee: boolean) {
+  constructor(existingId: string, samePayee: boolean, holder: ReceiptHolderKind = 'expense') {
     super(
       'CLAIM_DUPLICATE_SUBMISSION',
-      {
-        title: 'ใบเสร็จนี้ใช้เบิกไปแล้ว',
-        message: samePayee
-          ? 'ใบเสร็จไฟล์นี้ถูกใช้ในใบเบิกอื่นของคุณแล้ว — ใบเสร็จหนึ่งใบเบิกได้ครั้งเดียว ตรวจในรายการเบิกก่อน หรือแนบใบเสร็จของรายการนี้'
-          : 'ใบเสร็จไฟล์นี้ถูกใช้ในใบเบิกอื่นแล้ว — ใบเสร็จหนึ่งใบเบิกได้ครั้งเดียว กรุณาแนบใบเสร็จของรายการนี้',
-      },
+      { title: 'ใบเสร็จนี้ใช้ไปแล้ว', message: receiptReusedMessage(samePayee, holder) },
       409,
       // ใบของคนอื่นไม่ส่ง id ออกไปให้ FE (ไม่ leak) — เก็บไว้ใน detail สำหรับ log เท่านั้น
       {
-        detail: `receipt hash already used by expense ${existingId}`,
-        context: samePayee ? { reason: 'receipt_reused', existingExpenseId: existingId } : { reason: 'receipt_reused' },
+        detail: `receipt hash already used by ${holder} ${existingId}`,
+        context: !samePayee
+          ? { reason: 'receipt_reused' }
+          : holder === 'advance'
+            ? { reason: 'receipt_reused', existingAdvanceId: existingId }
+            : { reason: 'receipt_reused', existingExpenseId: existingId },
       },
     )
     this.name = 'ClaimReceiptReusedError'

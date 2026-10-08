@@ -60,6 +60,8 @@ export interface PeriodGuardInput {
    * `false` = งานจัดหมวดที่ไม่ขยับตัวเลข ⇒ รอบ `sent_to_accountant` ยังทำได้ (`13` §6.11)
    */
   affectsAmount?: boolean
+  /** สร้างเอกสารใหม่จากวันตัดรอบ ⇒ ข้อความให้เปลี่ยนวัน (preship R7-009) */
+  cutoffDate?: boolean
 }
 
 /**
@@ -74,6 +76,7 @@ export async function assertPeriodOpenAt(input: PeriodGuardInput, client: QueryC
     targetType: input.targetType,
     targetId: input.targetId ?? null,
     affectsAmount: input.affectsAmount,
+    cutoffDate: input.cutoffDate,
   })
 }
 
@@ -85,6 +88,7 @@ export async function assertPeriodOpenForKey(
     targetType: string
     targetId?: string | null
     affectsAmount?: boolean
+    cutoffDate?: boolean
   },
   client: QueryClient = prisma,
 ): Promise<void> {
@@ -94,6 +98,7 @@ export async function assertPeriodOpenForKey(
     targetType: input.targetType,
     targetId: input.targetId ?? null,
     affectsAmount: input.affectsAmount,
+    cutoffDate: input.cutoffDate,
   })
 }
 
@@ -108,6 +113,7 @@ export async function assertPeriodOpenForLabel(
     targetType: string
     targetId?: string | null
     affectsAmount?: boolean
+    cutoffDate?: boolean
   },
   client: QueryClient = prisma,
 ): Promise<void> {
@@ -120,6 +126,7 @@ export async function assertPeriodOpenForLabel(
       targetType: input.targetType,
       targetId: input.targetId,
       affectsAmount: input.affectsAmount,
+      cutoffDate: input.cutoffDate,
     },
     client,
   )

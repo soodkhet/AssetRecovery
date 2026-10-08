@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { Button, Field, InlineAlert, Input, Modal, Select, useToast } from '@/components/ui'
+import { ClosedPeriodCutoffAlert, isClosedPeriodCutoffError } from '@/components/finance/closed-period-cutoff-alert'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import type { PayoutBatchDto } from '@/lib/payout/types'
 import { fmtDate, toInputDate } from '@/lib/format/datetime'
@@ -41,6 +42,8 @@ export function CreatePayoutModal({
   const [cutoffDate, setCutoffDate] = useState('')
   const [name, setName] = useState('')
   const [saving, setSaving] = useState(false)
+  /** วันตัดรอบที่ server ปฏิเสธเพราะงวดปิดแล้ว — แสดงคำแนะนำใต้ช่องจนกว่าจะเปลี่ยนวัน (R7-009) */
+  const [closedCutoff, setClosedCutoff] = useState<string | null>(null)
   const [cycles, setCycles] = useState<readonly CycleDto[]>([])
   /** `null` = ให้ระบบเลือกตามฝั่ง · `NO_CYCLE` = ไม่ใช้รอบ · อื่น = id รอบที่ผู้ใช้เลือกเอง */
   const [cycleChoice, setCycleChoice] = useState<string | null>(null)
@@ -82,6 +85,10 @@ export function CreatePayoutModal({
       }),
     )
     setSaving(false)
+    if (isClosedPeriodCutoffError(result.error)) {
+      setClosedCutoff(cutoffDate)
+      return
+    }
     if (result.error !== undefined) {
       showToast({ tone: 'error', title: result.error.title, description: result.error.message })
       return
@@ -142,7 +149,8 @@ export function CreatePayoutModal({
 
         <Field label="วันตัดรอบ (Cut-off Date)" required>
           <Input type="date" value={cutoffDate} onChange={(event) => setCutoffDate(event.target.value)} />
-          {suggestedCutoff !== null && suggestedCutoff !== cutoffDate && (
+          {/* วันตามรอบจ่ายที่ server เพิ่งปฏิเสธ (งวดปิด) ไม่เสนอซ้ำ (R7-009) */}
+          {suggestedCutoff !== null && suggestedCutoff !== cutoffDate && suggestedCutoff !== closedCutoff && (
             <button
               type="button"
               className="focus-ring mt-1 inline-flex items-center text-left text-[11px] font-semibold text-emerald-700 hover:underline pointer-coarse:min-h-11"
@@ -152,6 +160,8 @@ export function CreatePayoutModal({
             </button>
           )}
         </Field>
+
+        {closedCutoff !== null && closedCutoff === cutoffDate && <ClosedPeriodCutoffAlert onUseToday={setCutoffDate} />}
 
         <Field
           label="รอบจ่าย (AP) ที่ใช้กำหนดวันจ่าย"

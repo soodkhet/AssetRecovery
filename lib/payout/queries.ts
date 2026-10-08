@@ -881,6 +881,7 @@ export async function createPayoutBatch(
     organizationId: user.organizationId,
     at: input.cutoffDate,
     targetType: 'payout_batches',
+    cutoffDate: true,
   })
 
   // ค่าตั้งภาษีที่มีผล ณ วันสร้างรอบ (มติ PO 05/10/2569 UAT U8) — snapshot ลงรอบด้านล่าง

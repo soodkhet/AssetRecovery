@@ -125,3 +125,25 @@ describe('assertPeriodEditable', () => {
     }
   })
 })
+
+describe('assertPeriodEditable — สร้างเอกสารจากวันตัดรอบ (preship R7-009)', () => {
+  it('งวดปิด ⇒ code เดิม แต่ข้อความให้เลือกวันตัดรอบใหม่ ไม่ใช่ Adjustment · context บอกเหตุ', () => {
+    for (const periodStatus of ['locked', 'sent_to_accountant'] as const) {
+      try {
+        assertPeriodEditable({ periodStatus, targetType: 'billing_batches', cutoffDate: true })
+        expect.unreachable()
+      } catch (error) {
+        expect(isSettingsError(error) && error.code).toBe('PERIOD_LOCKED_DIRECT_EDIT')
+        const settingsError = error as { userMessage: string; context?: Record<string, unknown> }
+        expect(settingsError.userMessage).toContain('เลือกวันตัดรอบ')
+        expect(settingsError.userMessage).not.toContain('Adjustment')
+        expect(settingsError.context?.reason).toBe('cutoff_in_closed_period')
+      }
+    }
+  })
+
+  it('งวดเปิด ⇒ ผ่าน', () => {
+    expect(() => assertPeriodEditable({ periodStatus: 'collecting', targetType: 'payout_batches', cutoffDate: true })).not.toThrow()
+    expect(() => assertPeriodEditable({ periodStatus: null, targetType: 'payout_batches', cutoffDate: true })).not.toThrow()
+  })
+})

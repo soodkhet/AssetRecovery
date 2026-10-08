@@ -113,7 +113,15 @@ export async function assertReceiptNotReused(
   })
   // ใบเบิกส่วนเกินที่เกิดจากการเคลียร์ครั้งนั้นเองใช้ใบเสร็จเดียวกันโดยชอบ — ตีกลับแล้วส่งใหม่ต้องผ่าน (preship L6-001)
   if (settledAdvance !== null && !isOwnExcessClaim(settledAdvance.afterData, input.selfExpenseId)) {
-    throw new ClaimReceiptReusedError(`advance:${settledAdvance.targetId ?? '-'}`, settledAdvance.actorId !== null && settledAdvance.actorId === input.actorId)
+    // "ของคุณ" = เงินทดรองของผู้รับเงินคนเดียวกัน (ทุกทางที่เรียก — เบิกใหม่ไม่มี actorId · preship R7-008)
+    // หรือผู้ทำรายการเป็นคนเคลียร์เอง
+    const advance =
+      settledAdvance.targetId === null
+        ? null
+        : await tx.advance.findUnique({ where: { id: settledAdvance.targetId }, select: { payeeId: true } })
+    const own =
+      advance?.payeeId === input.payeeId || (settledAdvance.actorId !== null && settledAdvance.actorId === input.actorId)
+    throw new ClaimReceiptReusedError(settledAdvance.targetId ?? '-', own, 'advance')
   }
 }
 

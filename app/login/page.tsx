@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { LoginForm } from '@/components/auth/login-form'
 import { AUTH_ERROR_CODES, type AuthErrorCode } from '@/lib/auth/errors'
+import { safeNextPath } from '@/lib/auth/next-path'
 
 export const metadata: Metadata = {
   title: 'เข้าสู่ระบบ — AssetRecovery',
@@ -18,7 +19,8 @@ export default async function LoginPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const params = await searchParams
-  const next = typeof params.next === 'string' && params.next.startsWith('/') ? params.next : undefined
+  // ตรวจว่าเป็น path ภายในเว็บนี้จริง (`//host` ผ่าน `startsWith('/')` ได้ — preship R7-006)
+  const next = safeNextPath(params.next) ?? undefined
 
   return <LoginForm reason={parseReason(params.reason)} nextPath={next} />
 }
