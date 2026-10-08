@@ -134,6 +134,16 @@ describe('toBahtInput / parseBahtInput (ช่องกรอกเงินใ�
     expect(bahtInputError('', 'จำนวนเงิน')).toBeNull()
   })
 
+  it('สัญกรณ์วิทยาศาสตร์/ฐานสิบหก/Infinity = NaN ไม่ตีความเงียบ ๆ (preship R9-016)', () => {
+    for (const value of ['1e5', '1E5', '2.5e3', '0x10', 'Infinity', '1_000', '+5', '1.2.3']) {
+      expect(parseBahtInput(value)).toBeNaN()
+    }
+    expect(bahtInputError('1e5', 'จำนวนเงิน')).toBe('จำนวนเงินต้องเป็นตัวเลข')
+    expect(parseBahtInput('.5')).toBe(50)
+    expect(parseBahtInput('-12.30')).toBe(-1230)
+    expect(parseBahtInput('100.')).toBe(10_000)
+  })
+
   it('ช่องว่าง = ไม่กำหนดค่า (null) · ข้อความที่ไม่ใช่ตัวเลข = NaN', () => {
     expect(parseBahtInput('   ')).toBeNull()
     expect(parseBahtInput('abc')).toBeNaN()

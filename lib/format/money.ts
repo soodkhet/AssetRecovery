@@ -133,6 +133,8 @@ export function parseBahtInput(value: string): number | null | typeof NaN {
   const trimmed = value.trim().replace(/,/g, '')
   if (trimmed === '') return null
   if (hasExcessBahtDecimals(trimmed)) return Number.NaN
+  // รูปแบบเลขทศนิยมธรรมดาเท่านั้น — `Number()` รับ "1e5" (= ฿100,000) / "0x10" / "Infinity" เงียบ ๆ (preship R9-016)
+  if (!/^-?(\d+(\.\d*)?|\.\d+)$/.test(trimmed)) return Number.NaN
   const baht = Number(trimmed)
   if (!Number.isFinite(baht)) return Number.NaN
   return Math.round(baht * 100)

@@ -559,7 +559,8 @@ export function exceptionCreatedMessage(input: {
   return {
     eventCode: 'exception.created',
     title: 'ข้อยกเว้นระดับ critical ใหม่',
-    body: `งวด ${input.periodLabel} · ${clip(input.title) ?? '-'} — ต้องเคลียร์ก่อนส่งงวด (\`37\`)`,
+    // ข้อความที่ผู้ใช้เห็นห้ามมีเลขอ้างอิงสเปค (Rule 05 · preship R9-017) — เดิมต่อท้าย "(`37`)" · ที่มา: `37` export gate
+    body: `งวด ${input.periodLabel} · ${clip(input.title) ?? '-'} — ต้องเคลียร์ก่อนส่งงวดให้สำนักงานบัญชี`,
     linkPath: '/accounting?tab=documents',
   }
 }

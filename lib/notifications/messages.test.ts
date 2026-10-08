@@ -183,6 +183,12 @@ describe('ข้อความแจ้งเตือนทุกตัว', (
     )
   })
 
+  it('ไม่มีเลขอ้างอิงสเปคในข้อความที่ผู้ใช้เห็น (Rule 05 · preship R9-017)', () => {
+    for (const message of ALL) {
+      expect(`${message.title} ${message.body ?? ''}`).not.toMatch(/`\d{2}`|§|ไฟล์ \d{2}/)
+    }
+  })
+
   it('ไม่มีปี ค.ศ. หลุดลงข้อความ — วันที่ต้องเป็น พ.ศ. (Rule 01)', () => {
     for (const message of ALL) {
       expect(`${message.title} ${message.body ?? ''}`).not.toMatch(/\b20\d{2}\b/)
