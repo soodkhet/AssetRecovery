@@ -50,7 +50,17 @@ export const PERSONAS: readonly PersonaSpec[] = [
   { username: 'uat.temp2', fullName: 'ชั่วคราว สอง', phone: '0810000018', role: 'ธุรการ', roleGroup: 'system', isNew: true, finalStatus: 'deleted' },
 ]
 
-export const SUPERADMIN = 'admin'
+/**
+ * Superadmin ที่ใช้เป็นผู้ตั้งค่า — dev = `admin` (dev alias) · staging = `superadmin` (ผู้ใช้จาก prisma seed — index.ts ตั้งให้)
+ */
+export const SUPERADMIN = process.env['SEED_FINAL_SUPERADMIN'] ?? 'admin'
+
+/**
+ * โดเมนอีเมลของ persona — dev = `uat.test` · staging = `stg.uat.test` (index.ts ตั้งให้)
+ * ⚠️ Supabase Auth ใช้ร่วมกันระหว่าง localhost กับ staging: ถ้าสร้างบน staging ด้วยอีเมลเดิม `createAuthAccount`
+ * จะมองบัญชีของ localhost เป็น "กำพร้า" (ฐาน staging ไม่มีใครถือ uid) แล้ว **ลบทิ้งสร้างใหม่** ⇒ localhost login ไม่ได้
+ */
+const EMAIL_DOMAIN = process.env['SEED_FINAL_EMAIL_DOMAIN'] ?? 'uat.test'
 
 /** ข้อมูลรับเงินของผู้ใช้ภาคสนาม (ฟิลด์เดียวกับฟอร์ม Payee) — ใช้ทั้งตอนสร้างผู้ใช้ใหม่ (U131) และตอนผูกหลัง reset */
 export function payeeFieldsFor(username: string, fullName: string): Record<string, unknown> | null {
@@ -117,6 +127,8 @@ function rememberPassword(spec: PersonaSpec, password: string): void {
     roleGroup: spec.roleGroup,
     scope: spec.team ?? spec.company ?? null,
     password,
+    email: `${spec.username}@${EMAIL_DOMAIN}`,
+    mustChangePassword: true,
     note: 'U123 บัญชีตัวอย่าง Final Test — ลบก่อน go-live',
   }
   writeFileSync(file, `${JSON.stringify(data, null, 2)}\n`, { mode: 0o600 })
@@ -128,6 +140,8 @@ export interface UserSyncOptions {
   /** สร้างบัญชีใหม่ 4 ตัวของ U123 (Auth จริงเมื่อ realAuth) */
   createNew: boolean
   realAuth: boolean
+  /** staging: สร้าง persona ที่ยังไม่มีทั้ง 18 คนด้วย Auth จริง (ฐาน staging ไม่มี persona 14 คนเดิม) */
+  createAllMissing?: boolean
 }
 
 /**
@@ -148,7 +162,7 @@ export async function syncUsers(
     const values = {
       roleId,
       username: spec.username,
-      email: `${spec.username}@uat.test`,
+      email: `${spec.username}@${EMAIL_DOMAIN}`,
       fullName: spec.fullName,
       phone: spec.phone,
       employeeCode: null,
@@ -160,12 +174,13 @@ export async function syncUsers(
       select: { id: true, deletedAt: true, email: true, phone: true, fullName: true },
     })
     if (existing === null) {
-      const allowed = options.bootstrap || (spec.isNew === true && options.createNew)
+      const allowed = options.bootstrap || (options.createNew && (spec.isNew === true || options.createAllMissing === true))
       if (!allowed) {
         missing.push(spec.username)
         continue
       }
-      const password = `Fin-${randomBytes(9).toString('base64url')}`
+      // ต่อท้ายตัวเลข ⇒ ผ่านกติการหัสผ่าน (ตัวอักษร + ตัวเลข) เสมอ — ใช้ในหน้าเปลี่ยนรหัสครั้งแรกได้
+      const password = `Fin-${randomBytes(9).toString('base64url')}${randomBytes(1).readUInt8(0) % 10}`
       // U131 — ผู้ใช้ภาคสนามสร้างพร้อมข้อมูลรับเงินในฟอร์มเดียว (ติ๊กยืนยัน)
       const fields = payeeFieldsFor(spec.username, spec.fullName)
       if (fields !== null && typeof fields['idDocumentUrl'] === 'string') await stored(fields['idDocumentUrl'])

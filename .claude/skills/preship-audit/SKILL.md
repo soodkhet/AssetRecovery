@@ -13,6 +13,7 @@ description: ตรวจความพร้อมก่อนขึ้น sta
 - ตรวจจากสิ่งที่มีอยู่จริงใน repository เท่านั้น — ห้ามเดา feature · ห้ามเดา business rule · ห้ามสร้าง issue สมมุติ
 - **ทุก finding ต้องมี evidence** (file:line · component · route/API · ผล test/build · screenshot · ขั้นตอนทำซ้ำ) ไม่มีหลักฐาน = ไม่รายงาน
 - ทดสอบบน dev server + ฐาน dev เท่านั้น (ข้อมูลบนฐาน dev เปลี่ยนได้จากการทดสอบ — snapshot ก่อนเริ่ม และบอกวิธี restore ในรายงาน) · ห้ามแตะ staging/production/Supabase dashboard/Vercel · ห้ามพิมพ์รหัสผ่าน/secret ลงรายงาน
+- **โหมด staging** (ผู้ใช้สั่งตรวจบน staging ชัดเจน): ใช้ [STAGING-MODE.md](STAGING-MODE.md) แทนข้อ "ทดสอบบน dev" ด้านบน — session จาก `uat/.auth-staging/` · ห้าม login/สร้างบัญชี/เขียนฐานตรง/restore
 - `pnpm build` ห้ามรันในโฟลเดอร์หลักขณะ dev server ทำงาน — ใช้สำเนาชั่วคราว (`git archive HEAD | tar -x -C <scratch>/build`)
 
 ## ขั้นตอน

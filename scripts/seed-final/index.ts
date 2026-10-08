@@ -79,6 +79,15 @@ async function main(): Promise<void> {
     // บน dev บัญชี Auth อยู่บน Supabase cloud — สั่งจริงได้ แต่ต้องยืนยันด้วย env อีกชั้น (กันรันเผลอระหว่างพัฒนา)
     throw new Error('--create-auth-users ยิง Supabase Auth จริง — ตั้ง SEED_FINAL_ALLOW_LOCAL_AUTH=1 เพื่อยืนยัน')
   }
+  if (flags.target === 'staging') {
+    // ค่าเฉพาะ staging (ต้องตั้งก่อน import users.ts) — ดูเหตุผลที่ EMAIL_DOMAIN ใน users.ts
+    process.env['SEED_FINAL_SUPERADMIN'] ??= 'superadmin'
+    process.env['SEED_FINAL_EMAIL_DOMAIN'] ??= 'stg.uat.test'
+    process.env['SEED_FINAL_PERSONAS_FILE'] ??= 'uat/personas-staging.json'
+    if (process.env['SEED_FINAL_EMAIL_DOMAIN'] === 'uat.test' || process.env['SEED_FINAL_PERSONAS_FILE'] === 'uat/personas.json') {
+      throw new Error('staging ห้ามใช้อีเมล @uat.test / uat/personas.json ของ localhost (Auth ใช้ร่วมกัน — จะลบบัญชี localhost)')
+    }
+  }
   prepareRuntime({ withStorage: flags.withStorage, realAuth: flags.createAuthUsers })
   console.log(`[seed-final] ฐาน: ${where} · target=${flags.target}`)
 

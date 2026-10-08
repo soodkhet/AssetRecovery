@@ -42,6 +42,7 @@ export async function runCli(flags: CliFlags): Promise<void> {
         bootstrap: flags.bootstrapPersonas,
         createNew: flags.createAuthUsers || flags.bootstrapPersonas,
         realAuth: flags.createAuthUsers,
+        createAllMissing: flags.createAuthUsers && flags.target === 'staging',
         full: flags.seed,
       })
     }

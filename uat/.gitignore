@@ -4,3 +4,5 @@ personas.json
 snapshots/
 traces/
 shots/
+personas-staging.json
+.auth-staging/

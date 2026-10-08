@@ -7,6 +7,8 @@ export interface SeedOptions {
   bootstrap: boolean
   createNew: boolean
   realAuth: boolean
+  /** staging: สร้าง persona ที่ขาดทั้งหมด (ไม่ใช่แค่บัญชีใหม่ U123) */
+  createAllMissing: boolean
   /** false = ขั้น --create-auth-users อย่างเดียว (master + ผู้ใช้ ไม่สร้างข้อมูลทดสอบ) */
   full: boolean
 }
