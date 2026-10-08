@@ -1,6 +1,6 @@
 // ตัวช่วยกลางของ UAT — ใช้ร่วมทุก role agent
 import { chromium, devices } from '@playwright/test'
-import { readFileSync, existsSync, mkdirSync } from 'node:fs'
+import { readFileSync, existsSync, mkdirSync, renameSync } from 'node:fs'
 import { dirname } from 'node:path'
 
 export const STAGING_URL = 'https://asset-recovery-git-staging-prototype24.vercel.app'
@@ -72,6 +72,22 @@ export async function openAs(username, opts = {}) {
   if (new URL(page.url()).pathname.startsWith('/login') && !IS_LOCAL) {
     await browser.close()
     throw new Error(`โหมด staging: session ของ ${username} หมดอายุ/ใช้ไม่ได้ — ให้ผู้ใช้รัน node uat/bin/staging-login.mjs ${username} ใหม่`)
+  }
+  if (!IS_LOCAL) {
+    // Supabase หมุน refresh token ทุกครั้งที่ต่ออายุ — หลาย agent ใช้ persona เดียวกัน ⇒ เขียน session ล่าสุดกลับไฟล์
+    // (atomic) ทันทีและตอนปิด ไม่งั้นตัวถัดไปใช้ refresh token เก่า = reuse → Supabase เพิกถอน session ทั้งชุด
+    const save = async () => {
+      const tmp = `${statePath}.${process.pid}.tmp`
+      await context.storageState({ path: tmp })
+      renameSync(tmp, statePath)
+    }
+    await save()
+    const close = browser.close.bind(browser)
+    browser.close = async () => {
+      try { await save() } catch { /* context ปิดไปแล้ว */ }
+      return close()
+    }
+    return { browser, context, page, consoleErrors, serverErrors, saveSession: save }
   }
   if (page.url().includes('/login')) {
     const { password } = credentials(username)
