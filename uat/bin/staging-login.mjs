@@ -60,16 +60,32 @@ for (const username of usernames) {
   await applyBypass(context)
   const page = await context.newPage()
   try {
-    await page.goto(`${BASE}/login`, { waitUntil: 'domcontentloaded' })
-    if (page.url().includes('vercel.com')) throw new Error('ติด Vercel Deployment Protection')
-    await page.locator('#identifier').fill(username)
-    await page.locator('#password').fill(persona.password)
-    await page.getByRole('button', { name: 'เข้าสู่ระบบ' }).click()
-    const outcome = await Promise.race([
-      page.waitForURL(u => !u.pathname.startsWith('/login'), { timeout: 30000 }).then(() => 'moved', () => null),
-      page.locator('div.rounded-xl [role="alert"]').first().waitFor({ timeout: 30000 }).then(() => 'alert', () => null),
-    ])
-    if (outcome === null) throw new Error('login ไม่ตอบใน 30 วินาที')
+    // staging (Vercel cold start) ช้ากว่า local: กรอกก่อน React hydrate เสร็จ = ค่าหาย ("ข้อมูลไม่ครบ" ฝั่ง browser — ยังไม่ส่ง server)
+    // ⇒ รอ network ว่าง + ตรวจค่าหลังกรอก · ลองใหม่ได้ 3 ครั้งเฉพาะกรณีที่ยังไม่ถึง server หรือ server ไม่ตอบ
+    let outcome = null
+    for (let attempt = 1; attempt <= 3 && outcome !== 'moved'; attempt++) {
+      await page.goto(`${BASE}/login`, { waitUntil: 'networkidle', timeout: 60000 })
+      if (page.url().includes('vercel.com')) throw new Error('ติด Vercel Deployment Protection')
+      if (!new URL(page.url()).pathname.startsWith('/login')) { outcome = 'moved'; break }
+      await page.waitForTimeout(1000)
+      await page.locator('#identifier').fill(username)
+      await page.locator('#password').fill(persona.password)
+      await page.waitForTimeout(300)
+      if ((await page.locator('#identifier').inputValue()) !== username || (await page.locator('#password').inputValue()) === '') continue
+      await page.getByRole('button', { name: 'เข้าสู่ระบบ' }).click()
+      outcome = await Promise.race([
+        page.waitForURL(u => !u.pathname.startsWith('/login'), { timeout: 60000 }).then(() => 'moved', () => null),
+        page.locator('div.rounded-xl [role="alert"]').first().waitFor({ timeout: 60000 }).then(() => 'alert', () => null),
+      ])
+      if (outcome === 'alert') {
+        const title = (await page.locator('div.rounded-xl [role="alert"]').first().innerText()).trim()
+        // ข้อมูลไม่ครบ = ฝั่ง browser (ไม่ถึง server) · เชื่อมต่อไม่สำเร็จ = server ไม่ตอบทันเวลา ⇒ ลองใหม่ · อื่น ๆ (รหัสผิด/ระงับ) = หยุด
+        if (/^(ข้อมูลไม่ครบ|เชื่อมต่อไม่สำเร็จ)/.test(title) && attempt < 3) { outcome = null; continue }
+        break
+      }
+      if (outcome === null && !new URL(page.url()).pathname.startsWith('/login')) outcome = 'moved'
+    }
+    if (outcome === null) throw new Error('login ไม่สำเร็จใน 3 ครั้ง (หน้าไม่ตอบ/ค่าหาย)')
     if (outcome === 'alert') {
       const text = (await page.locator('div.rounded-xl [role="alert"]').first().innerText()).trim().slice(0, 120)
       results.push([username, EXPECTED_BLOCKED.has(username) ? `⏭️  login ไม่ได้ตามตั้งใจ (${text})` : `❌ ${text}`])
@@ -82,11 +98,13 @@ for (const username of usernames) {
       const all = readAll()
       all[username] = { ...all[username], previousPassword: persona.password, password: next, mustChangePassword: false, changedAt: new Date().toISOString() }
       writeAll(all)
+      await page.waitForLoadState('networkidle', { timeout: 60000 }).catch(() => undefined)
+      await page.waitForTimeout(1000)
       await page.locator('#current-password').fill(persona.password)
       await page.locator('#new-password').fill(next)
       await page.locator('#confirm-password').fill(next)
       await page.getByRole('button', { name: 'บันทึกรหัสผ่านใหม่' }).click()
-      await page.waitForURL(u => !u.pathname.startsWith('/auth/change-password'), { timeout: 30000 })
+      await page.waitForURL(u => !u.pathname.startsWith('/auth/change-password'), { timeout: 90000 })
       if (new URL(page.url()).pathname.startsWith('/login')) throw new Error('เปลี่ยนรหัสแล้วแต่ระบบพากลับหน้า login — รันซ้ำเฉพาะคนนี้')
       const done = readAll()
       delete done[username].previousPassword
