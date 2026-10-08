@@ -188,7 +188,7 @@ export async function syncUsers(
       const payment = fields === null ? undefined : userPaymentSchema.parse({ fields, verify: true, reason: `ข้อมูลรับเงิน ${spec.username} (Final Test seed)` })
       await createUser({ actor: admin, meta, reason: null }, values, password, payment)
       if (options.realAuth) rememberPassword(spec, password)
-      console.log(`[users] สร้าง ${spec.username}${options.realAuth ? ' (Auth จริง — รหัสอยู่ใน personas.json)' : ' (Auth จำลอง)'}`)
+      console.log(`[users] สร้าง ${spec.username}${options.realAuth ? ` (Auth จริง — รหัสอยู่ใน ${personasFile()})` : ' (Auth จำลอง)'}`)
     } else if (existing.deletedAt === null) {
       // คงชื่อ/อีเมล/เบอร์เดิมของ persona (อาจต่างจากชุดนี้บน dev) — เปลี่ยนแค่สังกัด
       const current = await getUser(admin, existing.id)
