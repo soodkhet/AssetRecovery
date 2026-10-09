@@ -1,3 +1,5 @@
+import type { RequestMeta } from '@/lib/auth/request-meta'
+import type { SessionUser } from '@/lib/auth/types'
 import type { DeviceAssetKind, DeviceCatalogSourceCode, DeviceCatalogStatusCode } from '@/lib/device-catalog/catalog'
 
 /** ค่าตั้งตัวกรองของ Model Phone (มติ PO U159) — `updatedAt = null` = ยังไม่เคยบันทึก (ค่าเริ่มต้น) */
@@ -175,4 +177,11 @@ export interface DeviceTacHistoryDto {
 export interface DeviceAttributeOptionsDto {
   capacityOptions: string[]
   colorOptions: string[]
+}
+
+/** บริบทของคำสั่งแก้ฐานรุ่นมือถือ (ผู้กระทำ + meta คำขอ + เหตุผลลง audit) */
+export interface DeviceCatalogMutationContext {
+  actor: SessionUser
+  meta: RequestMeta
+  reason: string | null
 }

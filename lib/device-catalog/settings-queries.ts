@@ -11,7 +11,7 @@ import {
   DEFAULT_STALE_ALERT_DAYS,
 } from '@/lib/device-catalog/device-attributes'
 import type { Prisma } from '@/lib/generated/prisma/client'
-import type { DeviceCatalogMutationContext } from '@/lib/device-catalog/queries'
+import type { DeviceCatalogMutationContext } from '@/lib/device-catalog/types'
 import type { DeviceCatalogSettingsDto, DeviceCatalogSettingsValues } from '@/lib/device-catalog/types'
 import { prisma } from '@/lib/prisma'
 

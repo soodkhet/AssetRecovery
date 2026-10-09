@@ -1,7 +1,7 @@
 import { emitAudit, type AuditClient } from '@/lib/audit/audit'
 import { classifyDeviceKind, deviceSnapshotText } from '@/lib/device-catalog/catalog'
 import { DEVICE_TAC_SYNC_JOB_TYPE } from '@/lib/device-catalog/permissions'
-import type { DeviceCatalogMutationContext } from '@/lib/device-catalog/queries'
+import type { DeviceCatalogMutationContext } from '@/lib/device-catalog/types'
 import { splitBrandModelText, tacLabel, tacOfImei, TAC_LENGTH } from '@/lib/device-catalog/tac'
 import type { DeviceTacBindInput, DeviceTacListQuery } from '@/lib/device-catalog/schemas'
 import type {

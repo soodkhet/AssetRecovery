@@ -1,7 +1,5 @@
 import { emitAudit } from '@/lib/audit/audit'
 import { isUniqueViolation } from '@/lib/api/unique-violation'
-import type { RequestMeta } from '@/lib/auth/request-meta'
-import type { SessionUser } from '@/lib/auth/types'
 import {
   buildCatalogMatcher,
   cleanCatalogName,
@@ -23,6 +21,7 @@ import type {
   DeviceModelListQuery,
 } from '@/lib/device-catalog/schemas'
 import { getCatalogFilter } from '@/lib/device-catalog/settings-queries'
+import type { DeviceCatalogMutationContext } from '@/lib/device-catalog/types'
 import type {
   DeviceBrandDto,
   DeviceBrandListDto,
@@ -46,11 +45,8 @@ import { SettingsError } from '@/lib/settings/errors'
  * ทุก mutation อยู่ใน `$transaction` เดียวกับ `emitAudit()` · เหตุผลไม่บังคับ (ตารางไม่อ่อนไหว — reason-policy)
  */
 
-export interface DeviceCatalogMutationContext {
-  actor: SessionUser
-  meta: RequestMeta
-  reason: string | null
-}
+// อยู่ types.ts — settings-queries ใช้ด้วยและไฟล์นี้ import settings-queries (กัน import วน · staging S-008)
+export type { DeviceCatalogMutationContext } from '@/lib/device-catalog/types'
 
 // ─── where ของการแสดง (ต้องตรงกับ pure ใน catalog.ts) ───────────────────
 
