@@ -1,6 +1,6 @@
-import { PrismaPg } from '@prisma/adapter-pg'
 import { PrismaClient } from '@/lib/generated/prisma/client'
 import { auditLogImmutableExtension } from '@/lib/audit/immutable'
+import { createPgAdapter } from '@/lib/prisma-adapter'
 
 /**
  * Prisma client singleton — ทุก data access ของข้อมูลธุรกิจต้องผ่านที่นี่ (DEC-001/002)
@@ -15,7 +15,8 @@ function createPrismaClient() {
     throw new Error('[prisma] ไม่พบ DATABASE_URL — ดู .env.example')
   }
   const client = new PrismaClient({
-    adapter: new PrismaPg({ connectionString }),
+    // ต่อคิว query ต่อ connection — กัน DeprecationWarning ของ pg ใน $transaction (staging S-022)
+    adapter: createPgAdapter(connectionString),
     log: process.env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error'],
   })
 

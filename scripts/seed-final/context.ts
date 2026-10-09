@@ -1,6 +1,6 @@
-import { PrismaPg } from '@prisma/adapter-pg'
 import { PrismaClient } from '@/lib/generated/prisma/client'
 import type { SessionUser } from '@/lib/auth/types'
+import { createPgAdapter } from '@/lib/prisma-adapter'
 
 /** องค์กรเดียวของระบบ (`prisma/seed.ts` · `02` §12) */
 export const ORG_ID = '00000000-0000-0000-0000-000000000001'
@@ -15,7 +15,7 @@ export function rawDb(): PrismaClient {
   if (raw === null) {
     const connectionString = process.env['DATABASE_URL']
     if (connectionString === undefined) throw new Error('ไม่มี DATABASE_URL')
-    raw = new PrismaClient({ adapter: new PrismaPg({ connectionString }) })
+    raw = new PrismaClient({ adapter: createPgAdapter(connectionString) })
   }
   return raw
 }
