@@ -2,6 +2,7 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { LOGIN_PATH, SET_PASSWORD_PATH } from '@/lib/auth/constants'
 import { getPublicEnv } from '@/lib/env'
+import { SUPABASE_COOKIE_OPTIONS } from '@/lib/supabase/cookie-options'
 
 /**
  * Next.js proxy (เดิมชื่อ middleware — Next 16 เปลี่ยนชื่อ convention เป็น `proxy.ts`)
@@ -29,6 +30,7 @@ export default async function proxy(request: NextRequest): Promise<NextResponse>
   let response = NextResponse.next({ request })
 
   const supabase = createServerClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_ANON_KEY, {
+    cookieOptions: SUPABASE_COOKIE_OPTIONS,
     cookies: {
       getAll() {
         return request.cookies.getAll()

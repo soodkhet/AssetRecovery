@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers'
 import { createServerClient } from '@supabase/ssr'
 import { getPublicEnv, getServerEnv } from '@/lib/env'
+import { SUPABASE_COOKIE_OPTIONS } from '@/lib/supabase/cookie-options'
 
 /**
  * Supabase client ฝั่ง server (อ่าน session จาก cookie) — ใช้ verify JWT / อ่านผู้ใช้ปัจจุบัน
@@ -12,6 +13,7 @@ export async function createSupabaseServerClient() {
   const env = getPublicEnv()
 
   return createServerClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_ANON_KEY, {
+    cookieOptions: SUPABASE_COOKIE_OPTIONS,
     cookies: {
       getAll() {
         return cookieStore.getAll()

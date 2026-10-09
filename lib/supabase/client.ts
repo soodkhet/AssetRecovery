@@ -1,5 +1,6 @@
 import { createBrowserClient } from '@supabase/ssr'
 import { getPublicEnv } from '@/lib/env-public'
+import { SUPABASE_COOKIE_OPTIONS } from '@/lib/supabase/cookie-options'
 
 /**
  * Supabase client ฝั่ง browser — ใช้เพื่อ Auth (JWT) และ signed URL ของ Storage เท่านั้น (DEC-001/003)
@@ -8,5 +9,7 @@ import { getPublicEnv } from '@/lib/env-public'
  */
 export function createSupabaseBrowserClient() {
   const env = getPublicEnv()
-  return createBrowserClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
+  return createBrowserClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_ANON_KEY, {
+    cookieOptions: SUPABASE_COOKIE_OPTIONS,
+  })
 }
