@@ -100,8 +100,9 @@ export function FieldDashboard() {
       <h2 className="mb-3 text-[13px] font-extrabold text-slate-800 lg:mb-4 lg:text-sm">แนวโน้มผลงาน 7 วันล่าสุด</h2>
       <div className="flex h-24 items-end justify-between gap-1.5 lg:h-32 lg:gap-2.5">
         {trend.map((day) => (
-          <div key={day.dateIso} className="flex flex-1 flex-col items-center gap-1">
-            <div className="flex w-full flex-1 items-end">
+          // h-full: แถวเป็น items-end ⇒ คอลัมน์ไม่ยืดเอง ความสูงแท่งแบบ % จึงเป็น 0 (staging S-001)
+          <div key={day.dateIso} className="flex h-full flex-1 flex-col items-center gap-1">
+            <div className="flex min-h-0 w-full flex-1 items-end">
               <div
                 className="flex w-full flex-col-reverse overflow-hidden rounded-t-md"
                 style={{ height: `${day.heightPct}%` }}
