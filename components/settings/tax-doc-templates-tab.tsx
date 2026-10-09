@@ -220,7 +220,12 @@ export function TaxDocTemplatesTab() {
                   id={`footer-${template.documentType}`}
                   label="ข้อความท้ายเอกสาร"
                   error={fieldErrors.footerNote}
-                  hint={`พิมพ์เหนือช่องลายเซ็น · เว้นว่าง = ไม่พิมพ์ · ไม่เกิน ${MAX_FOOTER_NOTE_LENGTH} ตัวอักษร`}
+                  hint={
+                    // ใบเสร็จ/ใบกำกับมีประโยคเงื่อนไขตายตัวอยู่แล้ว — เตือนกันพิมพ์ซ้ำ (staging S-011)
+                    template.documentType === 'tax_invoice'
+                      ? `ระบบพิมพ์ "ได้รับเงินตามรายการข้างต้นถูกต้องแล้ว…ใบเสร็จรับเงินนี้จะสมบูรณ์เมื่อบริษัทได้รับเงิน…" ให้ทุกใบอยู่แล้ว ไม่ต้องใส่ซ้ำ · พิมพ์เหนือช่องลายเซ็น · เว้นว่าง = ไม่พิมพ์ · ไม่เกิน ${MAX_FOOTER_NOTE_LENGTH} ตัวอักษร`
+                      : `พิมพ์เหนือช่องลายเซ็น · เว้นว่าง = ไม่พิมพ์ · ไม่เกิน ${MAX_FOOTER_NOTE_LENGTH} ตัวอักษร`
+                  }
                 >
                   <Textarea
                     id={`footer-${template.documentType}`}

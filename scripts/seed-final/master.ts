@@ -275,7 +275,8 @@ async function seedSettings(): Promise<void> {
     printSignature: true,
   })
   await tpl.updateTaxDocTemplate(await sctx('ข้อความท้ายใบกำกับภาษี'), 'tax_invoice', {
-    footerNote: 'ใบเสร็จรับเงินจะสมบูรณ์เมื่อบริษัทได้รับเงินแล้ว',
+    // ไม่ซ้ำประโยคเงื่อนไขที่ระบบพิมพ์ให้ทุกใบอยู่แล้ว (staging S-011)
+    footerNote: 'ขอบคุณที่ใช้บริการ — สอบถามเอกสารภาษีได้ที่ฝ่ายบัญชี 02-000-0000',
     printSignature: true,
   })
   await tpl.updateTaxDocTemplate(await sctx('ข้อความท้ายใบส่งมอบ เว้นช่องเซ็นมือ'), 'handover_note', {
