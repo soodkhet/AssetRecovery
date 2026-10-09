@@ -101,9 +101,11 @@ export function assertAdvanceRejectionReason(reason: string | null | undefined):
 export function resolveApprovedSatang(requestedSatang: number, approvedSatang: number | null | undefined): number {
   if (approvedSatang === null || approvedSatang === undefined) return requestedSatang
   if (approvedSatang > requestedSatang) {
+    // ไม่ใช่ปัญหาสถานะ — บอกตรง ๆ ว่ายอดเกิน (staging S-021) · code คงเดิมตาม `24` §6.4
     throw new AdvanceError('ADVANCE_INVALID_STATUS', {
       detail: `approved=${approvedSatang} > requested=${requestedSatang}`,
       context: { requestedSatang, approvedSatang },
+      message: `ยอดที่อนุมัติต้องไม่เกินยอดที่ขอ (${fmtSatangSymbol(requestedSatang)}) — ถ้าต้องการมากกว่านี้ให้ผู้ขอยื่นคำขอใหม่`,
     })
   }
   return approvedSatang

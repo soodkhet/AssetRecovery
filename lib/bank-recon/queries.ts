@@ -1181,7 +1181,9 @@ export async function resolveUnmatchedTransaction(
           : 'รายการนี้จับคู่ไปแล้ว — ปิดโดยไม่จับคู่ได้เฉพาะรายการที่ยังไม่จับคู่',
     })
   }
-  if (!hasNote(input.matchNote)) throw new BankReconError('MATCH_NOTE_REQUIRED')
+  if (!hasNote(input.matchNote)) {
+    throw new BankReconError('MATCH_NOTE_REQUIRED', { message: 'ต้องระบุเหตุผลที่ปิดรายการนี้โดยไม่จับคู่' })
+  }
 
   await assertPeriodOpenAt({
     organizationId: ctx.actor.organizationId,
@@ -1252,7 +1254,10 @@ export async function moveToSuspense(
           : 'ย้ายเป็นเงินรับรอตรวจสอบได้เฉพาะรายการที่ยังไม่จับคู่',
     })
   }
-  if (!hasNote(input.reason)) throw new BankReconError('MATCH_NOTE_REQUIRED')
+  // ข้อความเฉพาะกรณี — ข้อความกลางของ code พูดถึงยอดจับคู่ไม่ตรง ซึ่งไม่เกี่ยวกับการย้ายเป็นเงินรอตรวจสอบ (staging S-020)
+  if (!hasNote(input.reason)) {
+    throw new BankReconError('MATCH_NOTE_REQUIRED', { message: 'ต้องระบุเหตุผลที่ย้ายรายการนี้เป็นเงินรับรอตรวจสอบ' })
+  }
 
   await assertPeriodOpenAt({
     organizationId: ctx.actor.organizationId,
@@ -1320,7 +1325,9 @@ export async function refundSuspense(
       message: 'คืนเงินผู้โอนได้เฉพาะรายการที่เป็นเงินรับรอตรวจสอบ',
     })
   }
-  if (!hasNote(input.reason)) throw new BankReconError('MATCH_NOTE_REQUIRED')
+  if (!hasNote(input.reason)) {
+    throw new BankReconError('MATCH_NOTE_REQUIRED', { message: 'ต้องระบุเหตุผลที่คืนเงินให้ผู้โอน' })
+  }
 
   for (const at of [before.transactionDate, input.refundDate]) {
     await assertPeriodOpenAt({ organizationId: ctx.actor.organizationId, at, targetType: TARGET, targetId: before.id })

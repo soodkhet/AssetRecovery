@@ -136,7 +136,7 @@ const MESSAGES: Record<CaseErrorCode, ErrorMessage> = {
   },
   CASE_RECYCLE_INVALID_STATUS: {
     title: 'รีไซเกิลเคสนี้ไม่ได้',
-    message: 'ขอรีไซเกิลได้เฉพาะเคสที่ปิดงานด้วยผลไม่สำเร็จ (`closed_fail`) เท่านั้น',
+    message: 'ขอรีไซเกิลได้เฉพาะเคสที่ปิดงานด้วยผลไม่สำเร็จเท่านั้น',
   },
   CASE_RECYCLE_NOTE_REQUIRED: {
     title: 'ต้องระบุหมายเหตุ',

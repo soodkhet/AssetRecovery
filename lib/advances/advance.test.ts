@@ -138,6 +138,8 @@ describe('ยอดที่อนุมัติ (`02` §5 แยก approved �
 
   it('อนุมัติเกินยอดที่ขอไม่ได้', () => {
     expect(() => resolveApprovedSatang(500_000, 600_000)).toThrowError(AdvanceError)
+    // staging S-021 — ข้อความบอกว่ายอดเกิน ไม่ใช่ "สถานะไม่ถูกต้อง"
+    expect(() => resolveApprovedSatang(500_000, 600_000)).toThrowError(expect.objectContaining({ userMessage: expect.stringContaining('ไม่เกินยอดที่ขอ (฿5,000.00)') }))
   })
 })
 
