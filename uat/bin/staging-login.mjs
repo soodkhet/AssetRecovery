@@ -121,6 +121,6 @@ for (const username of usernames) {
 }
 await browser.close()
 for (const [username, status] of results) console.log(`${username.padEnd(16)} ${status}`)
-const failed = results.filter(([u, s]) => s.startsWith('❌')).length
+const failed = results.filter(([, s]) => s.startsWith('❌')).length
 console.log(`\nสรุป: ✅ ${results.filter(([, s]) => s.startsWith('✅')).length} · ⏭️  ${results.filter(([, s]) => s.startsWith('⏭️')).length} · ❌ ${failed} — session อยู่ ${AUTH_DIR}/`)
 if (failed > 0) process.exitCode = 1
