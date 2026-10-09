@@ -135,11 +135,14 @@ export function describeApiFailure(kind: FailureKind, method: string, status?: n
       return { title: 'ระบบตอบช้าเกินไป', message: `รอนานเกินกำหนดจึงหยุดรอ กรุณาลองใหม่${checkFirst}` }
     case 'network':
       return { title: 'เชื่อมต่อระบบไม่สำเร็จ', message: `ตรวจสอบอินเทอร์เน็ตแล้วลองใหม่${checkFirst}` }
-    case 'server':
+    case 'server': {
+      // 502/503/504 จาก proxy/Vercel (ไม่มี envelope) = server อาจทำรายการเสร็จแล้วแต่คำตอบหาย เหมือน timeout (staging S-024)
+      const gateway = status === 502 || status === 503 || status === 504
       return {
         title: 'ระบบขัดข้องชั่วคราว',
-        message: `ระบบทำรายการไม่สำเร็จ (HTTP ${status ?? 500}) กรุณาลองใหม่ — ถ้ายังไม่ได้ให้แจ้งผู้ดูแลระบบ`,
+        message: `ระบบทำรายการไม่สำเร็จ (HTTP ${status ?? 500}) กรุณาลองใหม่${gateway ? checkFirst : ''} — ถ้ายังไม่ได้ให้แจ้งผู้ดูแลระบบ`,
       }
+    }
     case 'client':
       return { title: 'ทำรายการไม่สำเร็จ', message: `ระบบปฏิเสธคำขอ (HTTP ${status ?? 400}) กรุณาโหลดหน้าใหม่แล้วลองอีกครั้ง` }
     case 'invalid_response':

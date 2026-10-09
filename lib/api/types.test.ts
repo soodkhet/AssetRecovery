@@ -94,6 +94,13 @@ describe('callApi — ข้อความเมื่อไม่มี envelo
 })
 
 describe('describeApiFailure', () => {
+  it('502/504 ของคำขอเขียนข้อมูลเตือนให้ตรวจรายการก่อนส่งซ้ำ (staging S-024) · 500 ไม่เตือน', () => {
+    expect(describeApiFailure('server', 'POST', 504).message).toContain('ตรวจในรายการก่อนส่งซ้ำ')
+    expect(describeApiFailure('server', 'PATCH', 502).message).toContain('ตรวจในรายการก่อนส่งซ้ำ')
+    expect(describeApiFailure('server', 'GET', 504).message).not.toContain('ตรวจในรายการ')
+    expect(describeApiFailure('server', 'POST', 500).message).not.toContain('ตรวจในรายการ')
+  })
+
   it('4xx ที่ไม่มี envelope บอกสถานะ', () => {
     expect(describeApiFailure('client', 'GET', 413).message).toContain('HTTP 413')
   })

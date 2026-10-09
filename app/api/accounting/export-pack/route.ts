@@ -8,6 +8,8 @@ import { EXPORT_ACCOUNTING_PACK } from '@/lib/exports/pack'
 
 /** ประกอบไฟล์ PDF/Excel ต้องใช้ Node API — บังคับ runtime ไม่ให้ตกไป Edge */
 export const runtime = 'nodejs'
+/** ประกอบ PDF ใบกำกับทั้งงวดได้ถึง `PACK_TAX_INVOICE_PDF_TIME_BUDGET_MS` + ไฟล์อื่น/อัปโหลด — ระบุเพดานให้ชัด (staging S-013) */
+export const maxDuration = 300
 
 /**
  * `POST /api/accounting/export-pack` (`37` §14) — สร้างชุดใหม่ของรอบ → `generated`

@@ -9,6 +9,8 @@ import type { ExportRecordDto } from '@/lib/exports/types'
 import { fmtCount } from '@/lib/format/money'
 import { downloadFromUrl } from '@/lib/imports/download-client'
 
+const EXPORT_PACK_TIMEOUT_MS = 240_000
+
 /**
  * Modal "Export Pack" (`37` §8 · mockup `accounting.html` `export-pack`)
  *
@@ -45,6 +47,8 @@ export function ExportPackModal({
     const result = await callApi<ExportRecordDto>(
       '/api/accounting/export-pack',
       jsonRequest('POST', { periodId: targetId, ...(note.trim() === '' ? {} : { note: note.trim() }) }),
+      // งบ PDF ฝั่ง server 60 วิ + ไฟล์อื่น/อัปโหลด — รอให้นานกว่า (route maxDuration 300) ไม่งั้นงวดใหญ่ขึ้นว่าล้มทั้งที่สร้างสำเร็จ (staging S-013)
+      { timeoutMs: EXPORT_PACK_TIMEOUT_MS },
     )
     setSaving(false)
 
