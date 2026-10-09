@@ -90,6 +90,9 @@ export function exceptionLinkOf(sourceModule: string): string | null {
       return '/finance?tab=advances'
     case 'adjustment':
       return '/finance?tab=adjustment'
+    // ระบบสร้างเองเมื่อลูกค้าหักภาษีแต่ยังไม่ได้ 50 ทวิ (staging S-015)
+    case 'customer_wht':
+      return '/finance?tab=customer-wht'
     case 'warehouse':
       return '/warehouse'
     case 'case':

@@ -19,6 +19,7 @@ import {
   buttonClass,
 } from '@/components/ui'
 import { cn } from '@/components/ui/cn'
+import { usePermission } from '@/components/auth/permission-provider'
 import { callApi, type ApiCallResult } from '@/lib/api/types'
 import { FIELD_TRACKER_PATH } from '@/lib/auth/constants'
 import {
@@ -35,6 +36,7 @@ import { fmtDateTime } from '@/lib/format/datetime'
 import { fmtCount, fmtRatioPct, fmtSatangSymbol } from '@/lib/format/money'
 import { notificationDisplay } from '@/lib/notifications/events'
 import type { NotificationListDto } from '@/lib/notifications/queries'
+import { canViewMenu } from '@/lib/nav/menu-registry'
 import { KPI_TONE_CLASS } from '@/lib/reports/dashboard'
 import type { ReportKpi } from '@/lib/reports/payload'
 
@@ -157,12 +159,15 @@ function ExecutiveKpiRow({ arAgingKpis }: { arAgingKpis: readonly ReportKpi[] | 
 /** การเงิน/บัญชี — KPI 4 ตัวชุดเดียวกับแท็บ "ภาพรวม" ของเมนูการเงิน */
 function FinanceKpiRow() {
   const dashboard = useDashboardKpi()
+  // บัญชีเห็น KPI ชุดนี้แต่ไม่มีเมนูการเงิน — ซ่อนลิงก์แทนการพาไปหน้าที่เด้งกลับ (staging S-016)
+  const { session } = usePermission()
+  const canOpenFinance = session !== null && canViewMenu(session, 'finance')
 
   return (
     <section className="space-y-2" aria-label="ตัวชี้วัดการเงิน">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-sm font-semibold text-slate-700">ภาพรวมการเงิน</h2>
-        <SectionLink href="/finance?tab=dashboard">ไปที่ การเงิน › ภาพรวม</SectionLink>
+        {canOpenFinance && <SectionLink href="/finance?tab=dashboard">ไปที่ การเงิน › ภาพรวม</SectionLink>}
       </div>
       {dashboard.loading && dashboard.data.kpis.length === 0 ? (
         <KpiSkeletonRow />

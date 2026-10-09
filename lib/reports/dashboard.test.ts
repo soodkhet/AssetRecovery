@@ -51,6 +51,7 @@ describe('compareExceptionLevel', () => {
 describe('exceptionLinkOf (`14` §15 — คลิกแล้วต้องไปถึงหน้าที่เกี่ยวข้องจริง)', () => {
   it('โมดูลการเงินลิงก์เข้าแท็บที่เปิดใช้งานแล้ว', () => {
     expect(exceptionLinkOf('billing')).toBe('/finance?tab=revenue')
+    expect(exceptionLinkOf('customer_wht')).toBe('/finance?tab=customer-wht')
     expect(exceptionLinkOf('payout')).toBe('/finance?tab=payout')
     expect(exceptionLinkOf('expense')).toBe('/finance?tab=approval')
     expect(exceptionLinkOf('advance')).toBe('/finance?tab=advances')
