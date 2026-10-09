@@ -1,4 +1,4 @@
-import type { CapabilityAccessLevel } from '@/lib/generated/prisma/enums'
+import type { CapabilityAccessLevel, RoleGroup } from '@/lib/generated/prisma/enums'
 import { prisma } from '@/lib/prisma'
 import { RoleError } from '@/lib/roles/errors'
 import { planPermissionChanges } from '@/lib/roles/guards'
@@ -38,7 +38,7 @@ function isFunctionalCapability(capability: CapabilityInfo): capability is Capab
 interface RoleRow {
   id: string
   name: string
-  roleGroup: string
+  roleGroup: RoleGroup
   isEditable: boolean
   assignments: Record<string, CapabilityAccessLevel>
 }

@@ -1,4 +1,4 @@
-import type { CapabilityAccessLevel, FunctionalGroup } from '@/lib/generated/prisma/enums'
+import type { CapabilityAccessLevel, FunctionalGroup, RoleGroup } from '@/lib/generated/prisma/enums'
 import { SUPERADMIN_ROLE_NAME } from '@/lib/auth/constants'
 import { capabilityLockOwner, type CapabilityLockOwner } from '@/lib/roles/capability-locks'
 
@@ -58,7 +58,16 @@ export interface CapabilityInfo {
 
 export interface MatrixRoleInput {
   name: string
+  roleGroup: RoleGroup
   isEditable: boolean
+}
+
+/**
+ * role กลุ่มบริษัทไฟแนนซ์ (seed `is_editable = false`) แต่ capability หมวดพอร์ทัล `portal_*` Superadmin ปรับได้เสมอ
+ * (มติ PO 05/10/2569 U6/O43 D1 · `07` §5.3 · `97` §3.3) — สิทธิ์ภายในอื่นของกลุ่มนี้ยังแก้ไม่ได้ (ผู้ใช้บริษัทไม่เข้าหน้า/API ภายใน · D2)
+ */
+export function isPortalCapabilityOfCompanyRole(role: MatrixRoleInput, code: string): boolean {
+  return role.roleGroup === 'finance_company' && code.startsWith(`${PORTAL_MODULE}_`)
 }
 
 export interface MatrixRow extends CapabilityInfo {
@@ -93,7 +102,7 @@ export function resolveLevel(
 /** แถวนี้แก้ได้ไหม — Superadmin (implicit) / role ที่ปิดแก้สิทธิ์ / capability ที่ถูกล็อก = แก้ไม่ได้ */
 export function isRowEditable(role: MatrixRoleInput, code: string): boolean {
   if (isSuperadminRole(role)) return false
-  if (!role.isEditable) return false
+  if (!role.isEditable && !isPortalCapabilityOfCompanyRole(role, code)) return false
   return capabilityLockOwner(code) === null
 }
 

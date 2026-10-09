@@ -10,8 +10,8 @@ import {
   planPermissionChanges,
 } from '@/lib/roles/guards'
 
-const seedRole = { name: 'ผู้จัดการทีมติดตามทรัพย์', isSeed: true, isEditable: false }
-const customRole = { name: 'ผู้ตรวจสอบภายใน', isSeed: false, isEditable: true }
+const seedRole = { name: 'ผู้จัดการทีมติดตามทรัพย์', roleGroup: 'inhouse' as const, isSeed: true, isEditable: false }
+const customRole = { name: 'ผู้ตรวจสอบภายใน', roleGroup: 'system' as const, isSeed: false, isEditable: true }
 const knownCodes = new Set(['manage_billing', 'view_finance_dashboard', 'unlock_period', 'manage_roles'])
 
 function codeOf(run: () => void): string {
@@ -44,7 +44,7 @@ describe('seed role guards (`07` §10/§11/§16)', () => {
   })
 
   it('ลบบทบาท Superadmin ที่ยังมีคนใช้ = LAST_SUPERADMIN_REMOVAL (แรงกว่า seed guard)', () => {
-    const role = { name: SUPERADMIN_ROLE_NAME, isSeed: true, isEditable: false }
+    const role = { name: SUPERADMIN_ROLE_NAME, roleGroup: 'system' as const, isSeed: true, isEditable: false }
     expect(codeOf(() => assertRoleDeletable({ role, userCount: 1, activeSuperadminCount: 1 }))).toBe(
       'LAST_SUPERADMIN_REMOVAL',
     )
@@ -78,7 +78,7 @@ describe('permission editability (`07` §9 · DEC-009)', () => {
 
   it('Superadmin แก้สิทธิ์ไม่ได้ (implicit manage ไม่เก็บ record)', () => {
     expect(
-      codeOf(() => assertRolePermissionsEditable({ name: SUPERADMIN_ROLE_NAME, isEditable: true })),
+      codeOf(() => assertRolePermissionsEditable({ name: SUPERADMIN_ROLE_NAME, roleGroup: 'system' as const, isEditable: true })),
     ).toBe('ROLE_NOT_EDITABLE')
   })
 
@@ -135,12 +135,44 @@ describe('planPermissionChanges', () => {
 
   it('ส่งรายการที่ล็อกมาโดยค่าไม่เปลี่ยน = ผ่าน (idempotent จาก UI ที่ส่งทั้งตาราง)', () => {
     const plan = planPermissionChanges(
-      { name: 'บริหาร', isEditable: true },
+      { name: 'บริหาร', roleGroup: 'system' as const, isEditable: true },
       { unlock_period: 'manage' },
       [{ capabilityCode: 'unlock_period', level: 'manage' }],
       knownCodes,
     )
 
     expect(plan.changes).toHaveLength(0)
+  })
+
+  describe('role กลุ่มบริษัทไฟแนนซ์ (is_editable = false) — แก้ได้เฉพาะ portal_* (มติ O43 D1 · staging S-004)', () => {
+    const companyRole = { name: 'ผู้จัดการ', roleGroup: 'finance_company' as const, isEditable: false }
+    const codes = new Set([...knownCodes, 'portal_cases', 'portal_finance'])
+
+    it('ปรับ portal_cases ได้', () => {
+      const plan = planPermissionChanges(companyRole, { portal_cases: 'view' }, [{ capabilityCode: 'portal_cases', level: 'manage' }], codes)
+      expect(plan.changes).toEqual([{ code: 'portal_cases', from: 'view', to: 'manage' }])
+    })
+
+    it('capability ภายในยังแก้ไม่ได้ = ROLE_NOT_EDITABLE (ทั้งชุดถูกปฏิเสธ)', () => {
+      expect(
+        codeOf(() =>
+          planPermissionChanges(
+            companyRole,
+            {},
+            [
+              { capabilityCode: 'portal_finance', level: 'view' },
+              { capabilityCode: 'manage_billing', level: 'view' },
+            ],
+            codes,
+          ),
+        ),
+      ).toBe('ROLE_NOT_EDITABLE')
+    })
+
+    it('role ภายในที่ is_editable = false ยังแก้ portal_* ไม่ได้', () => {
+      expect(
+        codeOf(() => planPermissionChanges(seedRole, {}, [{ capabilityCode: 'portal_cases', level: 'view' }], codes)),
+      ).toBe('ROLE_NOT_EDITABLE')
+    })
   })
 })

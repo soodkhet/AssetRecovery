@@ -125,7 +125,10 @@ export function PermissionMatrixModal({
   const reasonTooShort = reason.trim().length < REASON_MIN_LENGTH
   // ผู้ดูที่ไม่มีสิทธิ์จัดการบทบาท (เช่นบริหาร) เห็นแบบอ่านอย่างเดียว — เดิมเห็นปุ่มบันทึกแล้วได้ 403 (preship R3-019)
   const canManageRoles = can('manage', 'manage_roles')
-  const editableRole = role !== null && role.isEditable && role.name !== 'Superadmin' && canManageRoles
+  // role ที่ปิดแก้สิทธิ์ยังมีแถวที่แก้ได้ (กลุ่มบริษัทไฟแนนซ์ → หมวดพอร์ทัล `portal_*` · มติ O43 D1) ⇒ ดูจากแถวจริงที่ server คำนวณ
+  const anyRowEditable = sections.some((section) => section.rows.some((row) => row.editable))
+  const editableRole = role !== null && role.name !== 'Superadmin' && canManageRoles && anyRowEditable
+  const partiallyEditable = editableRole && !role.isEditable
 
   return (
     <Modal
@@ -170,12 +173,16 @@ export function PermissionMatrixModal({
             <InlineAlert tone="info">ดูอย่างเดียว — บัญชีของคุณไม่มีสิทธิ์แก้สิทธิ์ของบทบาท</InlineAlert>
           )}
 
-          {role !== null && canManageRoles && !editableRole && (
+          {role !== null && canManageRoles && !editableRole && !state.loading && (
             <InlineAlert tone="warning">
               {role.name === 'Superadmin'
                 ? 'Superadmin มีสิทธิ์ทุกรายการโดยนิยาม (ไม่เก็บ record) จึงแก้ไม่ได้'
                 : 'บทบาทนี้ถูกกำหนดสิทธิ์ตายตามสเปค แก้ไขไม่ได้'}
             </InlineAlert>
+          )}
+
+          {partiallyEditable && (
+            <InlineAlert tone="info">บทบาทนี้แก้ได้เฉพาะสิทธิ์หมวดพอร์ทัลบริษัทไฟแนนซ์ — สิทธิ์อื่นถูกกำหนดตายตามสเปค</InlineAlert>
           )}
 
           {sections.map((section) => (

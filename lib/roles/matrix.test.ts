@@ -19,7 +19,7 @@ const capabilities: CapabilityInfo[] = [
 
 describe('buildRoleMatrix (DEC-009 · `13` §6.10)', () => {
   it('จัดกลุ่ม 4 กลุ่มตามลำดับ + กลุ่ม "อื่นๆ" ท้ายสุด', () => {
-    const sections = buildRoleMatrix({ name: 'การเงิน', isEditable: true }, capabilities, {})
+    const sections = buildRoleMatrix({ name: 'การเงิน', roleGroup: 'system' as const, isEditable: true }, capabilities, {})
     expect(sections.map((section) => section.id)).toEqual(['ops', 'finance', 'accounting', 'admin', 'other'])
   })
 
@@ -29,7 +29,7 @@ describe('buildRoleMatrix (DEC-009 · `13` §6.10)', () => {
       { code: 'portal_cases', label: 'พอร์ทัล: เคส', module: 'portal', functionalGroup: null, description: null },
       { code: 'view_own_company_data', label: 'ดูของบริษัท', module: 'portal', functionalGroup: 'ops', description: null },
     ]
-    const sections = buildRoleMatrix({ name: 'ผู้จัดการ', isEditable: true }, withPortal, { portal_cases: 'view' })
+    const sections = buildRoleMatrix({ name: 'ผู้จัดการ', roleGroup: 'finance_company' as const, isEditable: true }, withPortal, { portal_cases: 'view' })
 
     expect(sections.map((section) => section.id)).toEqual(['ops', 'finance', 'accounting', 'admin', 'portal', 'other'])
     const portal = sections.find((section) => section.id === 'portal')
@@ -43,7 +43,7 @@ describe('buildRoleMatrix (DEC-009 · `13` §6.10)', () => {
 
   it('ไม่มี record = none · view/manage อ่านจาก assignments', () => {
     const sections = buildRoleMatrix(
-      { name: 'การเงิน', isEditable: true },
+      { name: 'การเงิน', roleGroup: 'system' as const, isEditable: true },
       capabilities,
       { manage_billing: 'manage', approve_case: 'view' },
     )
@@ -55,7 +55,7 @@ describe('buildRoleMatrix (DEC-009 · `13` §6.10)', () => {
   })
 
   it('Superadmin = manage ทุกแถวโดยไม่มี record และแก้ไม่ได้', () => {
-    const sections = buildRoleMatrix({ name: SUPERADMIN_ROLE_NAME, isEditable: true }, capabilities, {})
+    const sections = buildRoleMatrix({ name: SUPERADMIN_ROLE_NAME, roleGroup: 'system' as const, isEditable: true }, capabilities, {})
     const rows = sections.flatMap((section) => section.rows)
 
     expect(rows.every((row) => row.level === 'manage')).toBe(true)
@@ -63,7 +63,7 @@ describe('buildRoleMatrix (DEC-009 · `13` §6.10)', () => {
   })
 
   it('แถวที่ถูกล็อกแก้ไม่ได้แม้ role จะ editable + ติดธง lockOwner', () => {
-    const sections = buildRoleMatrix({ name: 'ผู้ตรวจสอบ', isEditable: true }, capabilities, {})
+    const sections = buildRoleMatrix({ name: 'ผู้ตรวจสอบ', roleGroup: 'system' as const, isEditable: true }, capabilities, {})
     const rows = sections.flatMap((section) => section.rows)
 
     const locked = rows.find((row) => row.code === 'unlock_period')
@@ -76,16 +76,23 @@ describe('buildRoleMatrix (DEC-009 · `13` §6.10)', () => {
   })
 
   it('role ที่ is_editable = false ทุกแถวแก้ไม่ได้', () => {
-    expect(isRowEditable({ name: 'การเงิน', isEditable: false }, 'manage_billing')).toBe(false)
+    expect(isRowEditable({ name: 'การเงิน', roleGroup: 'system' as const, isEditable: false }, 'manage_billing')).toBe(false)
+  })
+
+  it('role กลุ่มบริษัทไฟแนนซ์ที่ is_editable = false แก้ได้เฉพาะแถว portal_*', () => {
+    const company = { name: 'แอดมิน', roleGroup: 'finance_company' as const, isEditable: false }
+    expect(isRowEditable(company, 'portal_cases')).toBe(true)
+    expect(isRowEditable(company, 'manage_billing')).toBe(false)
+    expect(isRowEditable({ name: 'การเงิน', roleGroup: 'system' as const, isEditable: false }, 'portal_cases')).toBe(false)
   })
 
   it('resolveLevel/countGrantedLevels สอดคล้องกัน', () => {
-    const role = { name: 'บัญชี', isEditable: false }
+    const role = { name: 'บัญชี', roleGroup: 'system' as const, isEditable: false }
     const assignments = { manage_billing: 'view', unlock_period: 'manage' } as const
 
     expect(resolveLevel(role, 'manage_billing', assignments)).toBe('view')
     expect(countGrantedLevels(role, capabilities, assignments)).toEqual({ manage: 1, view: 1 })
-    expect(countGrantedLevels({ name: SUPERADMIN_ROLE_NAME, isEditable: false }, capabilities, {})).toEqual({
+    expect(countGrantedLevels({ name: SUPERADMIN_ROLE_NAME, roleGroup: 'system' as const, isEditable: false }, capabilities, {})).toEqual({
       manage: capabilities.length,
       view: 0,
     })

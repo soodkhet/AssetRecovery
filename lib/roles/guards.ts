@@ -2,7 +2,7 @@ import type { CapabilityAccessLevel } from '@/lib/generated/prisma/enums'
 import { AuthError } from '@/lib/auth/errors'
 import { capabilityLockOwner } from '@/lib/roles/capability-locks'
 import { RoleError } from '@/lib/roles/errors'
-import { isSuperadminRole, type MatrixLevel, type MatrixRoleInput } from '@/lib/roles/matrix'
+import { isPortalCapabilityOfCompanyRole, isSuperadminRole, type MatrixLevel, type MatrixRoleInput } from '@/lib/roles/matrix'
 
 /**
  * ยามของโมดูล Roles & Permissions — **pure ทั้งไฟล์** (ห้าม import อะไรที่แตะ DB)
@@ -64,7 +64,8 @@ export function assertRolePermissionsEditable(role: MatrixRoleInput): void {
   if (isSuperadminRole(role)) {
     throw new RoleError('ROLE_NOT_EDITABLE', 'superadmin implicit manage')
   }
-  if (!role.isEditable) {
+  // กลุ่มบริษัทไฟแนนซ์ยังเข้ามาวางแผนได้ — ตรวจรายตัวใน planPermissionChanges (แก้ได้เฉพาะ `portal_*`)
+  if (!role.isEditable && role.roleGroup !== 'finance_company') {
     throw new RoleError('ROLE_NOT_EDITABLE', `role=${role.name}`)
   }
 }
@@ -119,6 +120,9 @@ export function planPermissionChanges(
     const from: MatrixLevel = current[entry.capabilityCode] ?? 'none'
     if (from === entry.level) continue
 
+    if (!role.isEditable && !isPortalCapabilityOfCompanyRole(role, entry.capabilityCode)) {
+      throw new RoleError('ROLE_NOT_EDITABLE', `role=${role.name} capability=${entry.capabilityCode}`)
+    }
     assertCapabilityAssignable(entry.capabilityCode)
 
     changes.push({ code: entry.capabilityCode, from, to: entry.level })

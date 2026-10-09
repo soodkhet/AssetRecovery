@@ -34,7 +34,7 @@ export const GET = withRolePermission<RouteContext>(
 /**
  * `PATCH /api/roles/:id/permissions` (`07` §14) — แก้ Permission Matrix (audit required)
  *
- * กติกาที่บังคับ: role ต้อง `is_editable = true` และไม่ใช่ Superadmin (`ROLE_NOT_EDITABLE`) ·
+ * กติกาที่บังคับ: role ต้อง `is_editable = true` และไม่ใช่ Superadmin (`ROLE_NOT_EDITABLE`) — ยกเว้นกลุ่มบริษัทไฟแนนซ์แก้ได้เฉพาะ `portal_*` (มติ O43 D1) ·
  * capability ที่ติด "✅ only" แก้ไม่ได้ (`CAPABILITY_LOCKED` — `25` §16.1 · มติ PO 14/08/2569 ล็อก 9 รายการ) ·
  * ทุกครั้งต้องมี `reason` และล้าง session cache เพราะกระทบผู้ใช้ทุกคนในบทบาทนั้น (`90` §13 · `05` §17)
  * สิทธิ์: `manage:manage_roles` = Superadmin เท่านั้น
