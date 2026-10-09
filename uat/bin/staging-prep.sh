@@ -10,6 +10,8 @@
 #   uat/bin/staging-prep.sh login [user…]    login ทุก persona เก็บ session → uat/.auth-staging/
 #   uat/bin/staging-prep.sh login --manual superadmin   เปิด Chrome ให้ผู้ใช้ login เอง แล้วเก็บ session
 #   uat/bin/staging-prep.sh q "SELECT …"     SQL อ่านอย่างเดียว (READ ONLY) — subagent ใช้ตรวจข้อมูลได้
+#   uat/bin/staging-prep.sh preset [--dry-run] [--preset=<ไฟล์>]   ตั้งค่ามาตรฐานไทย (หลัง reset แทน seed)
+#   uat/bin/staging-prep.sh preset-export <ไฟล์>                   เก็บค่าตั้งปัจจุบันเป็น preset
 #
 # - ไม่พิมพ์ค่า connection/รหัส · ค่า env อ่านจาก .env.staging (DIRECT_URL) + .env.local (Supabase 3 ตัว — project เดียวกับ staging)
 # - รหัส persona ของ staging อยู่ uat/personas-staging.json (แยกจาก localhost — Auth ใช้ร่วมกัน ห้ามใช้อีเมล @uat.test เดิม)
@@ -60,6 +62,16 @@ case "${1:-}" in
     load_env
     seed_final --verify
     ;;
+  preset)
+    # ค่าตั้งมาตรฐาน (scripts/settings-preset) — ใส่ --dry-run เพื่อดูก่อน · --preset=<ไฟล์> ใช้ preset ที่ export ไว้
+    load_env
+    shift
+    pnpm -s settings:preset --apply --target=staging "$@"
+    ;;
+  preset-export)
+    load_env
+    pnpm -s settings:preset --target=staging --export="${2:?ใส่ชื่อไฟล์ เช่น manual/presets/staging-$(date +%Y%m%d).json}"
+    ;;
   q)
     load_env >/dev/null
     pnpm -s tsx uat/bin/staging-q.ts "${2:?ใส่ SQL (SELECT เท่านั้น — ทรานแซกชัน READ ONLY)}"
@@ -69,6 +81,6 @@ case "${1:-}" in
     node uat/bin/staging-login.mjs "$@"
     ;;
   *)
-    sed -n 2,16p "$0"; exit 1
+    sed -n 2,18p "$0"; exit 1
     ;;
 esac

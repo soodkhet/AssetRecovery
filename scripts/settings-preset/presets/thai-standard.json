@@ -1,0 +1,126 @@
+{
+  "name": "thai-standard",
+  "title": "ค่าตั้งเริ่มต้นตามมาตรฐานการเงิน/ภาษีไทย (พร้อมใช้งาน)",
+  "version": "2569.10",
+  "description": "ค่าตั้งที่ไม่ขึ้นกับข้อมูลธุรกิจเฉพาะราย — VAT · ภาษีหัก ณ ที่จ่าย · นโยบายการเงิน · ระยะเก็บเอกสาร · วันหยุดราชการ · สายอนุมัติ/รอบจ่ายแนะนำ · ข้อมูลเฉพาะธุรกิจ (องค์กร · บัญชีธนาคาร · รูปแบบไฟล์ธนาคาร · แผนค่าตอบแทน · ทีม · บริษัทไฟแนนซ์ · ผู้ใช้) ตั้งผ่านหน้าจอตามคู่มือผู้ดูแลระบบ",
+  "sections": {
+    "vatRates": {
+      "basis": "ประมวลรัษฎากร ม.80 (10%) + พ.ร.ฎ. ลดอัตราเหลือ 6.3% + ภาษีท้องถิ่น 0.7% = 7% · ต่ออายุเป็นรายปีงบประมาณ — ตรวจพระราชกฤษฎีกาทุกเดือน ก.ย. แล้วเพิ่มแถวใหม่ (ห้ามแก้แถวเดิม)",
+      "needsAccountant": false,
+      "rows": [
+        { "ratePct": 7, "effectiveFrom": "2025-10-01", "effectiveTo": null, "note": "7% (6.3% + ท้องถิ่น 0.7%) — ตรวจการต่ออายุมาตรการทุกปีงบประมาณ" }
+      ]
+    },
+    "taxProfiles": {
+      "basis": "ประมวลรัษฎากร ม.3 เตรส + คำสั่งกรมสรรพากร ท.ป.4/2528 — ค่าจ้างทำของ/ค่าบริการ 3% · ค่าขนส่ง 1% · คำนวณจากยอดก่อน VAT · จ่ายต่ำกว่า 1,000 บาทต่อครั้งไม่ต้องหัก · บุคคลธรรมดายื่น ภ.ง.ด.3 · นิติบุคคลยื่น ภ.ง.ด.53",
+      "needsAccountant": false,
+      "rows": [
+        { "name": "บุคคลธรรมดา ค่าจ้างทำของ 3%", "whtPct": 3, "whtBasis": "before_vat", "whtMinThresholdSatang": 100000, "incomeTypeCode": "hire_of_work_40_8", "incomeType": "", "filingForm": "PND3" },
+        { "name": "นิติบุคคล ค่าบริการ/จ้างทำของ 3%", "whtPct": 3, "whtBasis": "before_vat", "whtMinThresholdSatang": 100000, "incomeTypeCode": "service_or_hire_of_work", "incomeType": "", "filingForm": "PND53" },
+        { "name": "บุคคลธรรมดา ค่าขนส่ง 1%", "whtPct": 1, "whtBasis": "before_vat", "whtMinThresholdSatang": 100000, "incomeTypeCode": "transport", "incomeType": "", "filingForm": "PND3" },
+        { "name": "นิติบุคคล ค่าขนส่ง 1%", "whtPct": 1, "whtBasis": "before_vat", "whtMinThresholdSatang": 100000, "incomeTypeCode": "transport", "incomeType": "", "filingForm": "PND53" }
+      ]
+    },
+    "taxProfileDefaults": {
+      "basis": "ค่าเริ่มต้นตามประเภทผู้รับเงิน — ผู้รับที่ไม่ได้ผูก Tax Profile รายคนใช้ค่านี้ (Tax Profile รายคนชนะเสมอ) · ทีมใน-นิติบุคคลไม่มีในธุรกิจนี้จึงว่าง",
+      "needsAccountant": true,
+      "slots": {
+        "inhouseIndividual": "บุคคลธรรมดา ค่าจ้างทำของ 3%",
+        "inhouseCorporate": null,
+        "outsourceIndividual": "บุคคลธรรมดา ค่าจ้างทำของ 3%",
+        "outsourceCorporate": "นิติบุคคล ค่าบริการ/จ้างทำของ 3%"
+      }
+    },
+    "whtPolicy": {
+      "basis": "ฐานภาษีรวมค่าคอมมิชชั่น/เบี้ยไม่สำเร็จ/ค่าน้ำมัน/เบี้ยเลี้ยงที่จ่ายเป็นค่าตอบแทน (ไม่ใช่เงินชดใช้ตามใบเสร็จในนามบริษัท) · ออก 50 ทวิ ต่อรายการ · พนักงานทีมในเป็นเงินได้ ม.40(2) ออก 50 ทวิ แม้อัตรา 0% · ทีมนอกเป็น ม.40(8) · ยื่นแบบกระดาษเป็นค่าเริ่มต้น (กำหนดยื่นวันที่ 7 ของเดือนถัดไป · e-Filing วันที่ 15) — เปลี่ยนเป็น e-Filing ได้ในหน้าตั้งค่า",
+      "needsAccountant": true,
+      "rows": [
+        {
+          "effectiveFrom": "2025-10-01",
+          "baseExpenseTypes": ["commission", "no_success_fee", "fuel", "allowance"],
+          "certificateMode": "per_item",
+          "incomeTypeMode": "all_40_8",
+          "issueZeroRate402Certificate": true,
+          "inhouseIncomeCategory": "sec_40_2",
+          "outsourceIncomeCategory": "sec_40_8",
+          "allowGrossUpConditions": false,
+          "filingMethod": "paper"
+        }
+      ]
+    },
+    "financePolicy": {
+      "basis": "อายุลูกหนี้ 30/60/90 วัน (รูปแบบรายงาน aging มาตรฐาน) · ยอดตัดจำหน่ายส่วนต่างเล็กน้อยไม่เกิน ฿50 ต่อรายการ · ใบรับรองแทนใบเสร็จรับเงินใช้เมื่อไม่ได้รับใบเสร็จจริง — วงเงินเป็นนโยบายภายใน (ไม่มีเพดานในกฎหมาย)",
+      "needsAccountant": true,
+      "values": {
+        "advanceMaxAmountPerRequestSatang": null,
+        "requirePayeeIdDocument": true,
+        "arAgingBuckets": [30, 60, 90],
+        "writeOffToleranceSatang": 5000,
+        "substituteReceiptMaxPerDocSatang": 50000,
+        "substituteReceiptMaxPerMonthSatang": 300000
+      }
+    },
+    "dataRetention": {
+      "basis": "ประมวลรัษฎากร ม.87/3 และ พ.ร.บ.การบัญชี 2543 ม.14 — เก็บเอกสารประกอบการลงบัญชีอย่างน้อย 5 ปี · เอกสารลูกหนี้ (ข้อมูลส่วนบุคคล — PDPA) ลบเมื่อพ้นระยะ",
+      "needsAccountant": false,
+      "values": { "debtorDocumentRetentionYears": 5 }
+    },
+    "holidays": {
+      "basis": "วันหยุดราชการประจำปี 2569 ตามประกาศคณะรัฐมนตรี — เพิ่มชุดของปีถัดไปทุกเดือน ธ.ค. (ใช้คำนวณกำหนดยื่นแบบ/วันตัดรอบที่ตรงวันหยุด)",
+      "needsAccountant": false,
+      "rows": [
+        ["2026-01-01", "วันขึ้นปีใหม่"], ["2026-03-03", "วันมาฆบูชา"], ["2026-04-06", "วันจักรี"],
+        ["2026-04-13", "วันสงกรานต์"], ["2026-04-14", "วันสงกรานต์"], ["2026-04-15", "วันสงกรานต์"],
+        ["2026-05-01", "วันแรงงานแห่งชาติ"], ["2026-05-04", "วันฉัตรมงคล"], ["2026-06-01", "ชดเชยวันวิสาขบูชา"],
+        ["2026-06-03", "วันเฉลิมพระชนมพรรษาพระราชินี"], ["2026-07-28", "วันเฉลิมพระชนมพรรษา ร.10"],
+        ["2026-07-29", "วันอาสาฬหบูชา"], ["2026-08-12", "วันแม่แห่งชาติ"], ["2026-10-13", "วันนวมินทรมหาราช"],
+        ["2026-10-23", "วันปิยมหาราช"], ["2026-12-05", "วันพ่อแห่งชาติ"], ["2026-12-10", "วันรัฐธรรมนูญ"],
+        ["2026-12-31", "วันสิ้นปี"]
+      ]
+    },
+    "approvalMatrices": {
+      "basis": "การควบคุมภายในขั้นพื้นฐาน — แยกหน้าที่ผู้ขอ/ผู้อนุมัติ (segregation of duties) · ยอดสูงต้องผ่านผู้บริหาร · วงเงินแบ่งเป็นนโยบายภายในที่ปรับได้",
+      "needsAccountant": true,
+      "rows": [
+        { "condition": "รายการไม่เกิน ฿5,000", "conditionThresholdSatang": 500000, "approvalFlowRoles": [["ผู้จัดการทีมติดตามทรัพย์", "inhouse"], ["การเงิน", "system"]], "enforceSegregationOfDuties": true },
+        { "condition": "รายการเกิน ฿5,000", "conditionThresholdSatang": null, "approvalFlowRoles": [["ผู้จัดการทีมติดตามทรัพย์", "inhouse"], ["การเงิน", "system"], ["บริหาร", "system"]], "enforceSegregationOfDuties": true }
+      ]
+    },
+    "payoutCycles": {
+      "basis": "รอบจ่ายค่าตอบแทน 2 ครั้ง/เดือน (วันที่ 15 และสิ้นเดือน) — นโยบายภายใน · รอบวางบิลลูกค้า (AR) ตั้งหลังสร้างบริษัทไฟแนนซ์",
+      "needsAccountant": false,
+      "rows": [
+        { "name": "AP จ่ายพนักงาน ทุกวันที่ 15 และสิ้นเดือน", "type": "AP", "cutoffRuleType": "fixed_dates", "cutoffDates": [15, 31], "dueRuleType": "month_end", "dueRuleValue": null, "scopeKind": "all_teams", "companyIds": [] }
+      ]
+    },
+    "costCenters": {
+      "basis": "แยกต้นทุนทีมใน/ทีมนอก ให้ส่งสำนักงานบัญชีได้ตรงศูนย์ต้นทุน",
+      "needsAccountant": true,
+      "rows": [
+        { "name": "CC-IN ทีมใน", "description": "ทีมติดตามทรัพย์ inhouse", "isActive": true },
+        { "name": "CC-OUT ทีมนอก", "description": "ทีมติดตามทรัพย์ outsource", "isActive": true }
+      ]
+    },
+    "documentTemplates": {
+      "basis": "ใบกำกับภาษี/ใบเสร็จมีข้อความเงื่อนไขตามกฎหมายพิมพ์ให้แล้ว — ข้อความท้ายเอกสารใช้เพิ่มเติมเท่านั้น (อย่าใส่ซ้ำ)",
+      "needsAccountant": false,
+      "rows": [
+        { "documentType": "billing_invoice", "footerNote": "กรุณาชำระภายในกำหนดตามใบแจ้งหนี้", "printSignature": true },
+        { "documentType": "tax_invoice", "footerNote": null, "printSignature": true },
+        { "documentType": "handover_note", "footerNote": "ผู้รับมอบตรวจสภาพเครื่องและ IMEI ครบถ้วนแล้ว", "printSignature": false }
+      ]
+    },
+    "operations": {
+      "basis": "SLA แจ้งเตือนเคสค้าง 72 ชม. · ขอย้ายงานรอความยินยอม 3 ชม. แล้วย้ายอัตโนมัติ · หัวหน้าทีมมอบหมายงานได้",
+      "needsAccountant": false,
+      "values": {
+        "slaAlertHours": 72,
+        "reassignTimeoutHours": 3,
+        "supervisorCanAssignSystem": true,
+        "supervisorCanAssignInhouse": true,
+        "supervisorCanAssignOutsource": true,
+        "acceptDeadlineHours": null
+      }
+    }
+  }
+}
