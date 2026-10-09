@@ -1,5 +1,8 @@
+import type { Metadata } from 'next'
 import { ServiceFeeTemplatesManager } from '@/components/service-fee/service-fee-templates-manager'
 import { requireMenuPage } from '@/lib/nav/menu-guard'
+
+export const metadata: Metadata = { title: 'เทมเพลตค่าบริการ' }
 
 /**
  * ตั้งค่าทั่วไป → เทมเพลตค่าบริการ (`12` §8 · `06` §9 · DEC-008 แสดงเป็นการ์ด)

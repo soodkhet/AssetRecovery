@@ -11,7 +11,8 @@ const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'sw
 const notoSansThai = Noto_Sans_Thai({ subsets: ['thai'], variable: '--font-noto-sans-thai', display: 'swap' })
 
 export const metadata: Metadata = {
-  title: APP_NAME,
+  // ชื่อแท็บตามหน้า: แต่ละ page.tsx ตั้ง `metadata.title` เป็นชื่อหน้า (ชื่อเดียวกับเมนู/หัวหน้า) — staging S-009
+  title: { template: `%s — ${APP_NAME}`, default: APP_NAME },
   description: 'Operations Platform สำหรับธุรกิจรับจ้างติดตามทรัพย์คืนจากลูกหนี้ให้บริษัทไฟแนนซ์',
   // PWA ของงานภาคสนาม (`41` §15) — iOS ต้อง "เพิ่มลงหน้าจอโฮม" ก่อนถึงจะได้ Web Push
   manifest: '/manifest.webmanifest',

@@ -1,8 +1,11 @@
+import type { Metadata } from 'next'
 import { AssignmentsManager } from '@/components/assignments/assignments-manager'
 import { ASSIGNMENT_STATE_FILTERS } from '@/lib/assignments/schemas'
 import { canPerformAssignmentAction } from '@/lib/assignments/policy'
 import { getAssignmentPolicy } from '@/lib/assignments/policy-queries'
 import { requireMenuPage } from '@/lib/nav/menu-guard'
+
+export const metadata: Metadata = { title: 'มอบหมายงาน' }
 
 /**
  * จัดการเคส → มอบหมายงาน (`40` §5/§7 · `06` §7.1.1)

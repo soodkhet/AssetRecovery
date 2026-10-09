@@ -1,8 +1,11 @@
+import type { Metadata } from 'next'
 import { Suspense } from 'react'
 import { PortalHandover } from '@/components/portal/handover-page'
 import { LoadingState } from '@/components/ui'
 import { canAccess } from '@/lib/portal/access'
 import { requirePortalPage } from '@/lib/portal/page-guard'
+
+export const metadata: Metadata = { title: 'ใบส่งมอบทรัพย์' }
 
 /**
  * `/portal/handover` — ใบส่งมอบทรัพย์ (`97` §6.4 · หมวด `portal_handover`) · อ่านอย่างเดียว

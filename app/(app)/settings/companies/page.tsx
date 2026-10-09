@@ -1,5 +1,8 @@
+import type { Metadata } from 'next'
 import { CompaniesManager } from '@/components/finance-companies/companies-manager'
 import { requireMenuPage } from '@/lib/nav/menu-guard'
+
+export const metadata: Metadata = { title: 'บริษัทไฟแนนซ์' }
 
 /**
  * ตั้งค่าทั่วไป → บริษัทไฟแนนซ์ (`10` §8 — การ์ด ไม่ใช่ตาราง · `06` §9)

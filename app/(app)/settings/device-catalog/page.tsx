@@ -1,6 +1,9 @@
+import type { Metadata } from 'next'
 import { DeviceCatalogTab } from '@/components/settings/device-catalog-tab'
 import { PageHeader } from '@/components/ui'
 import { requireMenuPage } from '@/lib/nav/menu-guard'
+
+export const metadata: Metadata = { title: 'Model Phone' }
 
 /**
  * ตั้งค่าทั่วไป → Model Phone (มติ PO U155 → U159 · mockup `settings.html` แท็บ `modelphone`)

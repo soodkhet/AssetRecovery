@@ -1,6 +1,9 @@
+import type { Metadata } from 'next'
 import { SettingAssumptionsView } from '@/components/accounting/setting-assumptions-view'
 import { requireMenuPage } from '@/lib/nav/menu-guard'
 import { settingAssumptionHrefs } from '@/lib/settings/assumption-overview'
+
+export const metadata: Metadata = { title: 'ค่าตั้งรอนักบัญชียืนยัน' }
 
 /**
  * บัญชี → "ค่าตั้งรอนักบัญชียืนยัน" (มติ PO 07/10/2569 U170 · BUG-180 · `06` §7.2/§8)

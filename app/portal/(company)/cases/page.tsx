@@ -1,8 +1,11 @@
+import type { Metadata } from 'next'
 import { Suspense } from 'react'
 import { PortalCasesList } from '@/components/portal/cases-list'
 import { Card, LoadingState } from '@/components/ui'
 import { canAccess } from '@/lib/portal/access'
 import { requirePortalPage } from '@/lib/portal/page-guard'
+
+export const metadata: Metadata = { title: 'เคสของเรา' }
 
 /**
  * `/portal/cases` — เคสของบริษัท (`97` §6.1 · หมวด `portal_cases`) · อ่านอย่างเดียว

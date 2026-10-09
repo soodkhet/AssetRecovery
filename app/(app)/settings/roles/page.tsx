@@ -1,5 +1,8 @@
+import type { Metadata } from 'next'
 import { RolesManager } from '@/components/roles/roles-manager'
 import { requireMenuPage } from '@/lib/nav/menu-guard'
+
+export const metadata: Metadata = { title: 'สิทธิ์การใช้งาน' }
 
 /**
  * ตั้งค่าทั่วไป → สิทธิ์การใช้งาน (`07` §8 · `06` §9)

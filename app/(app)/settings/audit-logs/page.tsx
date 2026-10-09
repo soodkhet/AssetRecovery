@@ -1,5 +1,8 @@
+import type { Metadata } from 'next'
 import { AuditLogsManager } from '@/components/audit/audit-logs-manager'
 import { requireMenuPage } from '@/lib/nav/menu-guard'
+
+export const metadata: Metadata = { title: 'บันทึกการใช้งาน (Audit Log)' }
 
 /**
  * ตั้งค่าทั่วไป → บันทึกการใช้งาน (Audit Log) — `90` §8 · `06` §9 (แท็บ `auditlog`)

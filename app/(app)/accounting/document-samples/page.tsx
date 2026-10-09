@@ -1,5 +1,8 @@
+import type { Metadata } from 'next'
 import { DocumentSamplesView } from '@/components/accounting/document-samples-view'
 import { requireMenuPage } from '@/lib/nav/menu-guard'
+
+export const metadata: Metadata = { title: 'ตัวอย่างเอกสารทั้งหมด' }
 
 /**
  * บัญชี → "ตัวอย่างเอกสารทั้งหมด" (มติ PO 06/10/2569 U104 · `06` §7.2/§8)

@@ -1,7 +1,10 @@
+import type { Metadata } from 'next'
 import { pickParam } from '@/components/ui/url-state'
 import { WarehouseManager } from '@/components/warehouse/warehouse-manager'
 import { ASSET_TABS } from '@/lib/warehouse/asset-status'
 import { requireMenuPage } from '@/lib/nav/menu-guard'
+
+export const metadata: Metadata = { title: 'คลังสินค้า' }
 
 /**
  * คลังสินค้า — 4 แท็บ รับเข้าคลัง/ในคลัง/รอส่งมอบ/ส่งมอบแล้ว (`44` §8 · `06` §7.1.1)

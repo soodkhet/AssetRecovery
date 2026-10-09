@@ -1,5 +1,8 @@
+import type { Metadata } from 'next'
 import { TeamsManager } from '@/components/teams/teams-manager'
 import { requireMenuPage } from '@/lib/nav/menu-guard'
+
+export const metadata: Metadata = { title: 'ทีมติดตามทรัพย์' }
 
 /**
  * ตั้งค่าทั่วไป → ทีมติดตามทรัพย์ (`09` §8 · `06` §9)

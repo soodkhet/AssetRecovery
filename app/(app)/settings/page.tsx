@@ -1,7 +1,10 @@
+import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { DASHBOARD_PATH } from '@/lib/auth/constants'
 import { requireMenuPage } from '@/lib/nav/menu-guard'
 import { firstVisibleChildPath } from '@/lib/nav/menu-registry'
+
+export const metadata: Metadata = { title: 'การตั้งค่า' }
 
 /**
  * การตั้งค่า — mockup `settings.html` ไม่มีหน้า "ราก" ของตัวเอง แต่เปิดมาที่แท็บแรกเสมอ

@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 import { PageHeader } from '@/components/ui'
 import { ReportCatalogList, type ReportCatalogItem } from '@/components/reports/report-catalog-list'
 import { requireMenuPage } from '@/lib/nav/menu-guard'
@@ -5,6 +6,8 @@ import { requireSession } from '@/lib/auth/session'
 import { canViewReport } from '@/lib/reports/access'
 import { REPORT_CATEGORY_LABEL, REPORT_DEFINITIONS } from '@/lib/reports/catalog'
 import { hasReportProvider } from '@/lib/reports/providers'
+
+export const metadata: Metadata = { title: 'รายงาน' }
 
 /**
  * รายงาน (ไฟล์ 96) — หน้ารวม 17 รายงาน 4 หมวด

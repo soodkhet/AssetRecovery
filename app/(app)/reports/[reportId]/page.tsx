@@ -1,3 +1,4 @@
+import type { Metadata } from 'next'
 import { notFound, redirect } from 'next/navigation'
 import { Card, EmptyState, PageHeader } from '@/components/ui'
 import { ReportScreen } from '@/components/reports/report-screen'
@@ -9,6 +10,18 @@ import { hasReportProvider } from '@/lib/reports/providers'
 const REPORTS_INDEX_PATH = '/reports'
 
 type PageProps = { params: Promise<{ reportId: string }> }
+
+/**
+ * ชื่อแท็บ = ชื่อรายงาน เฉพาะผู้ที่มีสิทธิ์ดูรายงานนั้น — ไม่มีสิทธิ์/ไม่พบ ใช้ "รายงาน" (ไม่ leak หัวเรื่อง)
+ * ยามจริงยังเป็นตัวหน้า (redirect/notFound ด้านล่าง)
+ */
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const user = await requireMenuPage('reports')
+  const { reportId } = await params
+  const report = findReport(reportId)
+  if (report === null || !canViewReport(user, report)) return { title: 'รายงาน' }
+  return { title: `${report.code} ${report.title}` }
+}
 
 /**
  * หน้ารายงานหนึ่งตัว (ไฟล์ 96) — ใช้โครงกลาง `<ReportView>` ทั้งหมด

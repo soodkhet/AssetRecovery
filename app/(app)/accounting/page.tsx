@@ -1,9 +1,12 @@
+import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { AccountingShell } from '@/components/accounting/accounting-shell'
 import { DASHBOARD_PATH } from '@/lib/auth/constants'
 import { resolveAccountingTab } from '@/lib/accounting/accounting-tabs'
 import { requireMenuPage } from '@/lib/nav/menu-guard'
 import { canViewMenu, firstVisibleChildPath } from '@/lib/nav/menu-registry'
+
+export const metadata: Metadata = { title: 'บัญชี' }
 
 /**
  * บัญชี — 9 แท็บตามไฟล์ 30–37 (`06` §8) เปิดใช้งานครบแล้ว (Phase 4.2–4.7)

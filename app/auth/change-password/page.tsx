@@ -6,7 +6,7 @@ import { isAuthError } from '@/lib/auth/errors'
 import { getSessionUser } from '@/lib/auth/session'
 
 export const metadata: Metadata = {
-  title: 'เปลี่ยนรหัสผ่าน — AssetRecovery',
+  title: 'เปลี่ยนรหัสผ่าน',
 }
 
 /**

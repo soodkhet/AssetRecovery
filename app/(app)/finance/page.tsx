@@ -1,6 +1,9 @@
+import type { Metadata } from 'next'
 import { FinanceShell } from '@/components/finance/finance-shell'
 import { resolveFinanceOperationTab } from '@/lib/finance/operation-tabs'
 import { requireMenuPage } from '@/lib/nav/menu-guard'
+
+export const metadata: Metadata = { title: 'การเงิน' }
 
 /**
  * การเงิน — 9 แท็บตามไฟล์ 14–21 (`06` §8) เปิดใช้งานครบแล้ว (Phase 3.3–3.8)

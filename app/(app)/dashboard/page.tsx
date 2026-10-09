@@ -1,6 +1,9 @@
+import type { Metadata } from 'next'
 import { MainDashboard } from '@/components/dashboard/main-dashboard'
 import { PageHeader } from '@/components/ui/card'
 import { requireInternalSessionPage } from '@/lib/auth/page-guard'
+
+export const metadata: Metadata = { title: 'แดชบอร์ด' }
 
 /**
  * แดชบอร์ดหลัก — เมนูแรกของ Top Nav (Phase 6.6 · มติ PO 2026-08-16: ตาม mockup `dashboard.html`

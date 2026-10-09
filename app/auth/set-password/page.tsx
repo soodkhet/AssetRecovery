@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { SetPasswordForm } from '@/components/auth/set-password-form'
 
 export const metadata: Metadata = {
-  title: 'ตั้งรหัสผ่าน — AssetRecovery',
+  title: 'ตั้งรหัสผ่าน',
 }
 
 /**

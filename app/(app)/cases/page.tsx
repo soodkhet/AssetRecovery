@@ -1,8 +1,11 @@
+import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { ModulePlaceholder } from '@/components/shell/module-placeholder'
 import { requireMenuPage } from '@/lib/nav/menu-guard'
 import { canViewMenu, findMenu } from '@/lib/nav/menu-registry'
 import { PORTAL_HOME_PATH } from '@/lib/portal/nav'
+
+export const metadata: Metadata = { title: 'จัดการเคส' }
 
 /**
  * จัดการเคส — เมนูนี้ไม่มีหน้าของตัวเอง มีแต่แท็บย่อยตาม `06` §7.1.1

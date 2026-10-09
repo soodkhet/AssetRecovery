@@ -1,6 +1,9 @@
+import type { Metadata } from 'next'
 import { PortalTaxInvoices } from '@/components/portal/tax-invoices-list'
 import { canAccess } from '@/lib/portal/access'
 import { requirePortalPage } from '@/lib/portal/page-guard'
+
+export const metadata: Metadata = { title: 'ใบกำกับภาษี' }
 
 /**
  * `/portal/tax-invoices` — ใบกำกับภาษี (`97` §6.3 · หมวด `portal_finance`) · อ่านอย่างเดียว

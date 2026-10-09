@@ -4,7 +4,7 @@ import { AUTH_ERROR_CODES, type AuthErrorCode } from '@/lib/auth/errors'
 import { safeNextPath } from '@/lib/auth/next-path'
 
 export const metadata: Metadata = {
-  title: 'เข้าสู่ระบบ — AssetRecovery',
+  title: 'เข้าสู่ระบบ',
 }
 
 function parseReason(value: string | string[] | undefined): AuthErrorCode | undefined {

@@ -1,6 +1,9 @@
+import type { Metadata } from 'next'
 import { FinanceSettingsShell } from '@/components/settings/finance-settings-shell'
 import { requireMenuPage } from '@/lib/nav/menu-guard'
 import { resolveFinanceSettingsTab } from '@/lib/settings/finance-tabs'
+
+export const metadata: Metadata = { title: 'ตั้งค่าบัญชี/การเงิน' }
 
 /**
  * ตั้งค่าบัญชี/การเงิน 13 แท็บ (ไฟล์ `13` · `06` §9)

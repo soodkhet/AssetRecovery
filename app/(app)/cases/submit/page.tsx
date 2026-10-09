@@ -1,7 +1,10 @@
+import type { Metadata } from 'next'
 import { CasesManager } from '@/components/cases/cases-manager'
 import { parseCaseListParams } from '@/components/cases/case-list-params'
 import { pickUuid } from '@/components/ui/url-state'
 import { requireMenuPage } from '@/lib/nav/menu-guard'
+
+export const metadata: Metadata = { title: 'รับเคส' }
 
 /**
  * จัดการเคส → รับเคส (`38` §5/§7 · `06` §7.1.1)

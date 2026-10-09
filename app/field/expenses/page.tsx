@@ -1,5 +1,8 @@
+import type { Metadata } from 'next'
 import { ExpensesTab } from '@/components/field/expenses-tab'
 import { EXPENSE_VIEW_TYPES, type ExpenseViewType } from '@/lib/field/schemas'
+
+export const metadata: Metadata = { title: 'เบิกค่าใช้จ่าย' }
 
 /**
  * เบิกค่าใช้จ่าย (`41` §7.9) — 2 ขอบแท็บ (ผูกกับเคส / เบิกแยก)

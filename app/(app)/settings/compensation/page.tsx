@@ -1,5 +1,8 @@
+import type { Metadata } from 'next'
 import { CompensationPlansManager } from '@/components/compensation/compensation-plans-manager'
 import { requireMenuPage } from '@/lib/nav/menu-guard'
+
+export const metadata: Metadata = { title: 'แผนค่าตอบแทน' }
 
 /**
  * ตั้งค่าทั่วไป → แผนค่าตอบแทน (`11` §8 · `06` §9)

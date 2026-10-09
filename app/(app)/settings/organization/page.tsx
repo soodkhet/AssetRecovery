@@ -1,6 +1,9 @@
+import type { Metadata } from 'next'
 import { OrganizationProfileTab } from '@/components/settings/organization-profile-tab'
 import { PageHeader } from '@/components/ui'
 import { requireMenuPage } from '@/lib/nav/menu-guard'
+
+export const metadata: Metadata = { title: 'ข้อมูลองค์กร' }
 
 /**
  * ตั้งค่าทั่วไป → ข้อมูลองค์กร (มติ PO U99 · mockup `settings.html` แท็บ `organization`)
