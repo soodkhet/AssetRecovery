@@ -149,15 +149,26 @@ export async function applyPreset(
   }
 
   // ── นโยบายภาษีหัก ณ ที่จ่าย ─────────────────────────────────────────
+  // ระบบห้ามมีผลย้อนหลัง (รอบจ่ายที่สร้างแล้วใช้ค่าเดิม) ⇒ วันที่ในอดีต/"today" = วันนี้ (เวลาไทย)
+  // ข้ามเมื่อนโยบายล่าสุดมีค่าตรงกับ preset แล้ว (รันซ้ำ/ข้ามวันไม่สร้างแถวซ้ำ)
   if (want('whtPolicy')) {
     const q = await import('@/lib/settings/queries/wht-policy')
+    const todayBkk = new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 10)
     let created = 0
     let skipped = 0
     for (const raw of preset.sections.whtPolicy?.rows ?? []) {
-      const parsed = s.whtPolicyCreateSchema.parse({ ...raw, reason: R('whtPolicy', 'นโยบายภาษีหัก ณ ที่จ่าย') })
-      const exists = await db.whtPolicyHistory.findFirst({ where: { organizationId: org, effectiveFrom: parsed.effectiveFrom }, select: { id: true } })
-      if (exists !== null) { skipped++; continue }
-      if (!options.dryRun) await q.createWhtPolicy(ctx.mutation(R('whtPolicy', 'นโยบายภาษีหัก ณ ที่จ่าย')), strip(parsed))
+      const from = typeof raw['effectiveFrom'] === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(raw['effectiveFrom']) ? raw['effectiveFrom'] : todayBkk
+      const wanted = from > todayBkk ? from : todayBkk
+      const parsed = s.whtPolicyCreateSchema.parse({ ...raw, effectiveFrom: wanted, reason: R('whtPolicy', 'นโยบายภาษีหัก ณ ที่จ่าย') })
+      const latest = await db.whtPolicyHistory.findFirst({ where: { organizationId: org }, orderBy: { effectiveFrom: 'desc' } })
+      const same = latest !== null &&
+        [...latest.baseExpenseTypes].sort().join() === [...parsed.baseExpenseTypes].sort().join() &&
+        latest.certificateMode === parsed.certificateMode && latest.incomeTypeMode === parsed.incomeTypeMode &&
+        latest.issueZeroRate402Certificate === parsed.issueZeroRate402Certificate &&
+        latest.inhouseIncomeCategory === parsed.inhouseIncomeCategory && latest.outsourceIncomeCategory === parsed.outsourceIncomeCategory &&
+        latest.allowGrossUpConditions === parsed.allowGrossUpConditions && latest.filingMethod === parsed.filingMethod
+      if (same) { skipped++; continue }
+      if (!options.dryRun) await q.createWhtPolicy(ctx.mutation(R('whtPolicy', `นโยบายภาษีหัก ณ ที่จ่าย มีผล ${isoOf(parsed.effectiveFrom)}`)), strip(parsed))
       created++
     }
     done('whtPolicy', created, skipped)

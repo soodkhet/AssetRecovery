@@ -36,7 +36,7 @@
       "needsAccountant": true,
       "rows": [
         {
-          "effectiveFrom": "2025-10-01",
+          "effectiveFrom": "today",
           "baseExpenseTypes": ["commission", "no_success_fee", "fuel", "allowance"],
           "certificateMode": "per_item",
           "incomeTypeMode": "all_40_8",
