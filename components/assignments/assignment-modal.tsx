@@ -77,6 +77,17 @@ export function AssignmentModal({
             jsonRequest('POST', { agentId: agent.agentId, reason: reason.trim() }),
           )
 
+      // หน้าค้าง/คนอื่นมอบหมายไปก่อน (staging S-014) — ปิด modal + โหลดรายการใหม่ แทนการค้างข้อมูลเก่าไว้
+      if (response.error?.code === 'ASSIGNMENT_INVALID_STATUS') {
+        showToast({
+          tone: 'error',
+          title: 'เคสนี้ถูกดำเนินการไปแล้ว',
+          description: `${target.caseRef} — มีผู้มอบหมาย/เปลี่ยนผู้รับผิดชอบไปก่อนแล้ว โหลดรายการล่าสุดให้แล้ว`,
+        })
+        onDone()
+        close()
+        return
+      }
       if (response.error !== undefined || response.data === undefined) {
         setError(response.error ?? { title: 'ทำรายการไม่สำเร็จ', message: 'กรุณาลองใหม่' })
         return

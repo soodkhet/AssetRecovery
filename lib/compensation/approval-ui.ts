@@ -4,6 +4,7 @@ import type { ApprovalHistoryEntry } from '@/lib/compensation/approval'
 import type { CompensationApprovalDto } from '@/lib/compensation/approval-types'
 import { isManualClaim } from '@/lib/claims/claim'
 import { canExpenseAction } from '@/lib/field/expense-status'
+import { EXPENSE_STATUS_LABEL } from '@/lib/field/expense-ui'
 import type { ExpenseStatus, ExpenseType } from '@/lib/generated/prisma/enums'
 import type { StatusBadgeGroup } from '@/lib/ui/status-badge'
 
@@ -124,6 +125,17 @@ export function approvalErrorToast(error: ApiCallError): { title: string; messag
     return {
       title: 'รายการนี้ผ่านขั้นของคุณแล้ว',
       message: 'รายการนี้ผ่านขั้นของคุณแล้ว — รีเฟรชหน้า',
+      stale: true,
+    }
+  }
+  // แท็บเก่า/คนอื่นทำไปก่อน (staging S-014) — server ปฏิเสธถูกแล้ว แต่ต้องบอกให้ชัดและโหลดคิวใหม่
+  // (ยกเว้น "ปฏิเสธถาวรได้เฉพาะค่าที่พัก" ที่ใช้ code เดียวกันแต่ส่ง expenseType มา — ไม่ใช่เรื่องสถานะเปลี่ยน)
+  if (error.code === 'EXPENSE_INVALID_STATUS' && error.payload?.expenseType === undefined) {
+    const status = error.payload?.status
+    const label = typeof status === 'string' && status in EXPENSE_STATUS_LABEL ? EXPENSE_STATUS_LABEL[status as ExpenseStatus] : null
+    return {
+      title: 'รายการนี้ถูกดำเนินการไปแล้ว',
+      message: `มีผู้ทำรายการนี้ไปก่อนแล้ว${label === null ? '' : ` (สถานะล่าสุด: ${label})`} — โหลดรายการล่าสุดให้แล้ว`,
       stale: true,
     }
   }

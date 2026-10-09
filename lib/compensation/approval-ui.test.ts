@@ -186,6 +186,27 @@ describe('รายละเอียดตาราง', () => {
   })
 })
 
+describe('approvalErrorToast — EXPENSE_INVALID_STATUS จากแท็บเก่า (staging S-014)', () => {
+  const base = { code: 'EXPENSE_INVALID_STATUS', title: 'สถานะรายการเบิกไม่ถูกต้อง', message: 'm' }
+
+  it('มีคนทำไปแล้ว → บอกสถานะล่าสุด + stale (โหลดคิวใหม่)', () => {
+    const toast = approvalErrorToast({ ...base, payload: { ...base, status: 'approved', action: 'approve' } })
+    expect(toast.stale).toBe(true)
+    expect(toast.title).toBe('รายการนี้ถูกดำเนินการไปแล้ว')
+    expect(toast.message).toContain('สถานะล่าสุด')
+  })
+
+  it('ไม่มีสถานะแนบมา (ชนกันระหว่างทาง) → ยัง stale แต่ไม่ระบุสถานะ', () => {
+    const toast = approvalErrorToast(base)
+    expect(toast.stale).toBe(true)
+    expect(toast.message).not.toContain('สถานะล่าสุด')
+  })
+
+  it('ปฏิเสธถาวรผิดประเภท (มี expenseType) → ข้อความจาก API ตรงๆ', () => {
+    expect(approvalErrorToast({ ...base, payload: { ...base, status: 'pending_manager_approval', expenseType: 'commission' } }).stale).toBe(false)
+  })
+})
+
 describe('approvalErrorToast — ทิศของ APPROVAL_STEP_OUT_OF_ORDER (BUG-105)', () => {
   const base = { code: 'APPROVAL_STEP_OUT_OF_ORDER', title: 'อนุมัติข้ามขั้น', message: 'รายการนี้ยังไม่ถึงขั้นอนุมัติของคุณ' }
   const payload = (requestedStep: number, currentStep: number) => ({ ...base, requestedStep, currentStep })

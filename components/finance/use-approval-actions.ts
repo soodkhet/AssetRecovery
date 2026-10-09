@@ -125,7 +125,9 @@ export function useApprovalActions(endpoint: '/api/compensation' | '/api/claims'
       try {
         const result = await callApi(`${endpoint}/${item.id}/reject`, jsonRequest('PATCH', { reason: reason.trim() }))
         if (result.error !== undefined) {
-          showToast({ tone: 'error', title: result.error.title, description: result.error.message })
+          const toast = approvalErrorToast(result.error)
+          showToast({ tone: 'error', title: toast.title, description: toast.message })
+          if (toast.stale) await reload()
           return false
         }
         showToast({
@@ -151,7 +153,9 @@ export function useApprovalActions(endpoint: '/api/compensation' | '/api/claims'
           jsonRequest('PATCH', { reason: reason.trim() }),
         )
         if (result.error !== undefined) {
-          showToast({ tone: 'error', title: result.error.title, description: result.error.message })
+          const toast = approvalErrorToast(result.error)
+          showToast({ tone: 'error', title: toast.title, description: toast.message })
+          if (toast.stale) await reload()
           return false
         }
         showToast({
