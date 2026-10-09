@@ -6,6 +6,7 @@ import { DeviceBrandList, DeviceModelList } from '@/components/settings/device-c
 import { DeviceTacHistory, DeviceTacList } from '@/components/settings/device-tac-panels'
 import { MANAGE_DEVICE_CATALOG } from '@/components/settings/shared'
 import { Button, Card, Field, InlineAlert, Input, Textarea, cn, useToast } from '@/components/ui'
+import { TOUCH_TARGET_CLASS } from '@/components/ui/button'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { toFieldErrors } from '@/lib/api/validation'
 import { parseBrandListText } from '@/lib/device-catalog/catalog'
@@ -154,8 +155,8 @@ export function DeviceCatalogTab() {
                 อัปเดตตอนนี้
               </Button>
             </div>
-            <label className="flex items-center gap-1.5 text-[11px] text-slate-500">
-              <input type="checkbox" checked={force} onChange={(event) => setForce(event.target.checked)} />
+            <label className={cn(TOUCH_TARGET_CLASS, "flex items-center gap-1.5 text-[11px] text-slate-500")}>
+              <input type="checkbox" className="h-4 w-4" checked={force} onChange={(event) => setForce(event.target.checked)} />
               บังคับดึงไฟล์ใหม่ (แม้ไฟล์ต้นทางไม่เปลี่ยน)
             </label>
             <input

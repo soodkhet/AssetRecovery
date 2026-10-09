@@ -20,8 +20,10 @@ import {
   Td,
   Th,
   Tr,
+  cn,
   useToast,
 } from '@/components/ui'
+import { TOUCH_TARGET_CLASS } from '@/components/ui/button'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { fmtDateTime } from '@/lib/format/datetime'
 import { fmtCount } from '@/lib/format/money'
@@ -201,7 +203,7 @@ export function SettingAssumptionsView({ links }: { links: Readonly<Record<Setti
                       <Td className="whitespace-nowrap text-right align-top">
                         <div className="flex items-center justify-end gap-3">
                           {href !== null && (
-                            <Link href={href} className="text-xs font-semibold text-emerald-700 hover:underline">
+                            <Link href={href} className={cn(TOUCH_TARGET_CLASS, "inline-flex items-center text-xs font-semibold text-emerald-700 hover:underline")}>
                               ไปหน้าตั้งค่า
                             </Link>
                           )}

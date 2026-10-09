@@ -18,8 +18,10 @@ import {
   Modal,
   Select,
   Textarea,
+  cn,
   useToast,
 } from '@/components/ui'
+import { TOUCH_TARGET_CLASS } from '@/components/ui/button'
 import { EMPTY_ADDRESS, type AddressValue } from '@/lib/address/address-value'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { REASON_MAX, toFieldErrors } from '@/lib/api/validation'
@@ -404,7 +406,7 @@ export function OrganizationProfileTab() {
               <button
                 type="button"
                 onClick={() => openImage('logo')}
-                className="text-xs font-semibold text-blue-600 hover:underline"
+                className={cn(TOUCH_TARGET_CLASS, "inline-flex items-center justify-center px-1 text-xs font-semibold text-blue-600 hover:underline")}
               >
                 {profile.logoPath === null ? 'อัปโหลดโลโก้' : 'เปลี่ยนโลโก้'}
               </button>
@@ -415,7 +417,7 @@ export function OrganizationProfileTab() {
                     setRemoveReason('')
                     setRemoveKind('logo')
                   }}
-                  className="text-xs font-semibold text-red-600 hover:underline"
+                  className={cn(TOUCH_TARGET_CLASS, "inline-flex items-center justify-center px-1 text-xs font-semibold text-red-600 hover:underline")}
                 >
                   ลบโลโก้
                 </button>
@@ -443,7 +445,7 @@ export function OrganizationProfileTab() {
                 <button
                   type="button"
                   onClick={() => openImage('signature')}
-                  className="text-xs font-semibold text-blue-600 hover:underline"
+                  className={cn(TOUCH_TARGET_CLASS, "inline-flex items-center justify-center px-1 text-xs font-semibold text-blue-600 hover:underline")}
                 >
                   {profile.hasSignature ? 'เปลี่ยนรูปลายเซ็น' : 'อัปโหลดรูปลายเซ็น'}
                 </button>
@@ -454,7 +456,7 @@ export function OrganizationProfileTab() {
                       setRemoveReason('')
                       setRemoveKind('signature')
                     }}
-                    className="text-xs font-semibold text-red-600 hover:underline"
+                    className={cn(TOUCH_TARGET_CLASS, "inline-flex items-center justify-center px-1 text-xs font-semibold text-red-600 hover:underline")}
                   >
                     ลบรูปลายเซ็น
                   </button>
