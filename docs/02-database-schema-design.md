@@ -89,6 +89,7 @@
 | v4.62 | 07/10/2569 | **มติ PO U166 — ความจุ/สีของเครื่อง** (migration `20261008150000_device_tac`): `cases.asset_capacity` / `cases.asset_color` (TEXT · ข้อความ snapshot ที่เลือกบนฟอร์มเคส/นำเข้า · "ไม่ระบุในสัญญา" เป็นค่าหนึ่ง · NULL = เคสก่อนมติ) · `assets.device_capacity` / `assets.device_color` (TEXT · snapshot จากเคสตอนปิดงานสำเร็จคู่กับ `device_desc`) · `assets.color_capacity_matched` (BOOLEAN · ผลติ๊ก "สี/ความจุตรงกับสัญญา" ตอนรับเข้าคลัง · NULL = ยังไม่ตรวจรับ · ไม่ติ๊ก = false ไม่ block) · **มติ PO U166 → U167 → U168 — ฐาน TAC แทน RapidAPI (DEC-017 แทน DEC-016)** (migration `20261008150000_device_tac` + `20261008150100_device_tac_updates`): ลบแถวแคตตาล็อก `source = 'api'` (เคสคง `asset_description` · `device_model_id` → NULL) · enum `device_catalog_source` = (`tacdb`, `manual`) · `device_brands` ลบ `external_id`/`last_synced_at` (+ index) · `device_models.external_id` = คีย์ชื่อรุ่นจาก TAC แบบ normalize · enum ใหม่ `device_tac_source` (`tacdb`/`learned`/`manual`) · `device_tac_update_trigger` (`daily`/`manual`/`file`) · `device_tac_update_status` (`success`/`not_modified`/`failed`) · ตารางใหม่ **`device_tacs`** (TAC CHAR(8) CHECK 8 หลัก · ยี่ห้อ/รุ่น/รุ่นย่อย/ปี 1980–2100 · ผูก `device_models` ON DELETE SET NULL · UNIQUE `uniq_device_tacs_org_tac`) + **`device_tac_updates`** (insert-only ประวัติการอัปเดต · idx `(org, created_at DESC)`) · `device_catalog_settings` + `tac_etag`/`tac_checked_at`/`tac_imported_at`/`capacity_options`/`color_options`/`tac_source_sha`/`tac_source_updated_at`/`stale_alert_days` (1–3650 · ค่าเริ่มต้น 90) · ยกเลิกงาน `device_catalog_sync` ที่ค้างคิว |
 | v4.63 | 07/10/2569 | **มติ O75** (migration `20261008153000_billing_status_debit_note_backfill` — ข้อมูลเท่านั้น ไม่เปลี่ยนโครงสร้าง): enum `billing_batch_status` เดิม · state machine เพิ่มเส้น `paid → partially_paid` (`23` §6.8) · backfill รอบ `paid` ที่ยอดตามเอกสาร (ใบแจ้งหนี้ − ใบลดหนี้ + ใบเพิ่มหนี้ active) ยังค้าง > 0 ⇒ `partially_paid` + `audit_logs` (actor system · reason ระบุ migration) · รันซ้ำได้ |
 | v4.64 | 07/10/2569 | **มติ O77** (migration `20261008180000_asset_color_capacity_note`): `assets.color_capacity_note TEXT` (สิ่งที่พบเมื่อผลตรวจสี/ความจุ = ไม่ตรง) + CHECK `chk_assets_color_capacity_note` (มีข้อความได้เฉพาะ `color_capacity_matched = false`) · `color_capacity_matched` บังคับเลือกตอนรับเข้า (ระดับ API) |
+| v4.65 | 09/10/2569 | **ดัชนี FK ของแคตตาล็อกรุ่น** (migration `20261009100000_device_model_fk_indexes` — เพิ่ม index เท่านั้น ไม่เปลี่ยนคอลัมน์): `idx_device_tacs_model (device_model_id)` + `idx_cases_device_model (device_model_id)` — FK ทั้งสอง `ON DELETE SET NULL` ไป `device_models` ต้องหาแถวลูกด้วย `WHERE device_model_id = ?` ต่อทุกรุ่นที่ลบ · `idx_device_tacs_org_model` ขึ้นต้น `organization_id` ใช้ค้นแบบนี้ไม่ได้ → seq scan `device_tacs` ทั้งตารางต่อรุ่น (staging ~130k รุ่น × ~255k TAC: reset ค้าง > 16 นาที) · คงแบบเดียวกับดัชนี FK ลูกอื่นที่ไม่ขึ้นต้น org (เช่น `idx_case_contacts_case`) · `device_models.brand_id` มี `uniq_device_models_brand_name` ขึ้นต้น `brand_id` อยู่แล้ว |
 
 ขอบเขตเอกสารนี้: Full Production Database Schema — ทุก table, column, type, FK, index, unique constraint, enum, migration order และ seed data สรุปจาก spec ไฟล์ทั้งหมดไว้ในที่เดียว ใช้เป็น source of truth เดียวก่อนเขียน Prisma schema
 
@@ -1155,6 +1156,7 @@ CREATE INDEX idx_cases_org_status     ON cases(organization_id, status);
 CREATE INDEX idx_cases_org_company    ON cases(organization_id, company_id);
 CREATE INDEX idx_cases_org_team       ON cases(organization_id, assigned_team_id);
 CREATE INDEX idx_cases_closed         ON cases(organization_id, outcome, closed_at);
+CREATE INDEX idx_cases_device_model   ON cases(device_model_id);  -- v4.65 FK ON DELETE SET NULL (ลบรุ่นไม่ seq scan)
 
 -- ── case_documents ───────────────────────────────────────────
 -- เอกสารแนบต่อเคส (ตามไฟล์ 38 §6.3)
@@ -1430,6 +1432,7 @@ CREATE TABLE device_tacs (
 );
 CREATE UNIQUE INDEX uniq_device_tacs_org_tac ON device_tacs(organization_id, tac);
 CREATE INDEX idx_device_tacs_org_model ON device_tacs(organization_id, device_model_id);
+CREATE INDEX idx_device_tacs_model ON device_tacs(device_model_id);  -- v4.65 FK ON DELETE SET NULL — ดัชนีบนขึ้นต้น org ใช้ค้นตาม FK ไม่ได้
 CREATE INDEX idx_device_tacs_org_source ON device_tacs(organization_id, source);
 
 -- ── device_tac_updates (v4.62 — มติ PO U167) ─────────────────────

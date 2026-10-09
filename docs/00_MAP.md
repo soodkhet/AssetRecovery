@@ -119,7 +119,7 @@
 | 392 | ### 8.3 — Final Test ทั้งระบบ (ด่านของ orchestrator) |
 | 398 | ## สรุปยอดรวม (ประมาณการ) |
 
-### `docs/02-database-schema-design.md` (299 KB, 2913 บรรทัด — v4.64)
+### `docs/02-database-schema-design.md` (299 KB, 2915 บรรทัด — v4.65)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -127,26 +127,26 @@
 | 3 | # 02 — Database Schema Design (Full Production Schema) |
 | 4 | ## AssetRecovery — Asset Recovery Operations Platform |
 | 11 | ## Changelog |
-| 99 | ## 1. Summary |
-| 102 | ## 2. Conventions (กฎที่ใช้ทั้งไฟล์) |
-| 104 | ### 2.1 Naming |
-| 114 | ### 2.2 Money |
-| 121 | ### 2.3 Timestamps |
-| 126 | ### 2.4 Common Columns (ทุก table มีครบ) |
-| 137 | ### 2.5 Permission Architecture |
-| 144 | ## 3. Enum Types (ทั้งหมด) |
-| 518 | ## 4. Schema Group A — Identity & Access |
-| 623 | ## 5. Schema Group B — Master Data |
-| 1060 | ## 6. Schema Group C — Case Workflow |
-| 1564 | ## 7. Schema Group D — Warehouse (ไฟล์ 44) |
-| 1658 | ## 8. Schema Group E — Finance Operation |
-| 2129 | ## 9. Schema Group F — Accounting Handover |
-| 2555 | ## 10. Schema Group G — Platform |
-| 2717 | ## 11. Migration Order (ลำดับที่ต้อง run) |
-| 2795 | ## 12. Seed Data |
-| 2869 | ## 13. Immutable Rules (ห้ามแก้ไขย้อนหลัง) |
-| 2892 | ## 14. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
-| 2902 | ## 15. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
+| 100 | ## 1. Summary |
+| 103 | ## 2. Conventions (กฎที่ใช้ทั้งไฟล์) |
+| 105 | ### 2.1 Naming |
+| 115 | ### 2.2 Money |
+| 122 | ### 2.3 Timestamps |
+| 127 | ### 2.4 Common Columns (ทุก table มีครบ) |
+| 138 | ### 2.5 Permission Architecture |
+| 145 | ## 3. Enum Types (ทั้งหมด) |
+| 519 | ## 4. Schema Group A — Identity & Access |
+| 624 | ## 5. Schema Group B — Master Data |
+| 1061 | ## 6. Schema Group C — Case Workflow |
+| 1567 | ## 7. Schema Group D — Warehouse (ไฟล์ 44) |
+| 1661 | ## 8. Schema Group E — Finance Operation |
+| 2132 | ## 9. Schema Group F — Accounting Handover |
+| 2558 | ## 10. Schema Group G — Platform |
+| 2720 | ## 11. Migration Order (ลำดับที่ต้อง run) |
+| 2798 | ## 12. Seed Data |
+| 2872 | ## 13. Immutable Rules (ห้ามแก้ไขย้อนหลัง) |
+| 2895 | ## 14. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
+| 2905 | ## 15. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
 ### `docs/02_OPEN_DECISIONS.md` (72 KB, 300 บรรทัด)
 
