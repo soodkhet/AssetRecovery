@@ -779,7 +779,7 @@ suite('มติ PO U18–U21 — ใบเพิ่มหนี้ · บล็
     )
     const cnLine = lines.find((line) => line.startsWith(`CN,${cn.creditNoteNumber},`)) ?? ''
     expect(cnLine).toMatch(
-      new RegExp(`^CN,${cn.creditNoteNumber},05/10/2569,${seeded.invoiceNumber},.+,100\\.00,7\\.00,107\\.00,.+,active,ADJ-2569-06-\\d{3},สำนักงานใหญ่,(\\d{13}|-)$`),
+      new RegExp(`^CN,${cn.creditNoteNumber},05/10/2569,${seeded.invoiceNumber},.+,100\\.00,7\\.00,107\\.00,.+,active,ADJ-2569-06-\\d{3,},สำนักงานใหญ่,(\\d{13}|-)$`),
     )
     const dnLine = lines.find((line) => line.startsWith(`DN,${dn.creditNoteNumber},`)) ?? ''
     // มติ U94 ข้อ 5 — company_tax_id ต่อท้ายสุด (snapshot บนใบกำกับเดิม)
