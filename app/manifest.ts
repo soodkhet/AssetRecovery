@@ -20,7 +20,10 @@ export default function manifest(): MetadataRoute.Manifest {
     lang: 'th',
     icons: [
       { src: '/icons/app-icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
-      { src: '/icons/app-icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'maskable' },
+      // PNG สำหรับ Android/Chrome ที่ต้องการขนาดตายตัว · maskable = ไอคอน 80% กลางพื้นสีเดียวกัน (อยู่ใน safe zone)
+      { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+      { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+      { src: '/icons/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
     ],
   }
 }

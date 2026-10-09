@@ -16,7 +16,16 @@ export const metadata: Metadata = {
   // PWA ของงานภาคสนาม (`41` §15) — iOS ต้อง "เพิ่มลงหน้าจอโฮม" ก่อนถึงจะได้ Web Push
   manifest: '/manifest.webmanifest',
   appleWebApp: { capable: true, title: APP_NAME, statusBarStyle: 'default' },
-  icons: { icon: '/icons/app-icon.svg', apple: '/icons/app-icon.svg' },
+  // iOS ไม่ใช้ SVG เป็น apple-touch-icon ⇒ PNG 180 พื้นทึบ (iOS ปัดมุมเอง) · favicon.ico (32+48) กัน /favicon.ico 404
+  // PNG ทั้งหมดเรนเดอร์จาก public/icons/app-icon.svg — แก้โลโก้ต้องเรนเดอร์ใหม่ทุกขนาด (staging S-006)
+  icons: {
+    icon: [
+      { url: '/favicon.ico', sizes: '32x32 48x48' },
+      { url: '/icons/app-icon.svg', type: 'image/svg+xml' },
+      { url: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+    ],
+    apple: [{ url: '/icons/apple-touch-icon.png', sizes: '180x180', type: 'image/png' }],
+  },
 }
 
 export const viewport: Viewport = {

@@ -47,7 +47,7 @@ self.addEventListener('push', (event) => {
   event.waitUntil(
     self.registration.showNotification(title, {
       body: payload.body || '',
-      icon: '/icons/app-icon.svg',
+      icon: '/icons/icon-192.png',
       badge: '/icons/app-icon.svg',
       tag: payload.eventCode || 'field-notification',
       data: { linkPath: payload.linkPath || '/field' },
