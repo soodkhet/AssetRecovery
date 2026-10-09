@@ -1,6 +1,8 @@
 import { toInputDate } from '@/lib/format/datetime'
-import type { PortalKpiTone } from '@/lib/portal/nav'
 import { portalBillingStatusDisplay, type PortalBillingStatusCode } from '@/lib/portal/status-map'
+
+/** โทนสีการ์ด/ตัวเลขของพอร์ทัล — ใช้ร่วม `lib/portal/nav.ts` (re-export ที่นั่น) */
+export type PortalKpiTone = 'slate' | 'emerald' | 'amber' | 'blue' | 'red'
 
 /**
  * ตัวช่วยหน้า "วางบิล" / "ใบกำกับภาษี" / กราฟภาพรวมของพอร์ทัล — **pure ล้วน** (Portal-P9 · `97` §6.2/§6.3)

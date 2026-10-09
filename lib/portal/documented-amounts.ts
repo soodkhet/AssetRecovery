@@ -1,4 +1,4 @@
-import { sumCreditNotesByInvoice } from '@/lib/credit-notes/queries'
+import { sumCreditNotesByInvoice } from '@/lib/credit-notes/totals'
 import { arOutstandingSatang, type BillingBatchAmounts } from '@/lib/finance/ar-calc'
 import { allocateLargestRemainder } from '@/lib/finance/wht-calc'
 import type { CreditNoteType } from '@/lib/generated/prisma/enums'

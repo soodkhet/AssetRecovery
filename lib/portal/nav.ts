@@ -1,5 +1,5 @@
 import type { PortalSection } from '@/lib/portal/access'
-import { portalAlertTone } from '@/lib/portal/finance-ui'
+import { portalAlertTone, type PortalKpiTone } from '@/lib/portal/finance-ui'
 import type { PortalDashboardDto } from '@/lib/portal/serializers'
 
 /**
@@ -84,7 +84,8 @@ export function portalOverviewLoads(sections: readonly PortalSection[]): PortalO
   return { dashboard: sections.includes('cases'), financeReports: sections.includes('finance') }
 }
 
-export type PortalKpiTone = 'slate' | 'emerald' | 'amber' | 'blue' | 'red'
+// นิยามอยู่ finance-ui.ts (ไฟล์ปลายทาง) — กัน import วน nav ↔ finance-ui (staging S-008)
+export type { PortalKpiTone } from '@/lib/portal/finance-ui'
 
 export type PortalKpiCardKey = 'inProgressCases' | 'arOutstanding' | 'latestTaxInvoice' | 'pendingLots'
 
