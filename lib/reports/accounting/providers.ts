@@ -25,7 +25,7 @@ import {
 import { pickParam } from '@/lib/reports/finance/providers'
 import type { ReportData } from '@/lib/reports/payload'
 import { resolveReportPeriod, toIsoDateOnly } from '@/lib/reports/period'
-import type { ReportContext, ReportProvider } from '@/lib/reports/providers'
+import type { ReportContext, ReportProvider } from '@/lib/reports/provider-types'
 
 /**
  * ตัวคำนวณของ **รายงานหมวด A (A1–A4)** — ชั้น DB ของ `96` §6-A

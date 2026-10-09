@@ -1,11 +1,8 @@
-import type { SessionUser } from '@/lib/auth/types'
 import { ACCOUNTING_REPORT_PROVIDERS } from '@/lib/reports/accounting/providers'
 import { EXECUTIVE_REPORT_PROVIDERS } from '@/lib/reports/executive/providers'
 import { FINANCE_REPORT_PROVIDERS } from '@/lib/reports/finance/providers'
 import { OPERATIONS_REPORT_PROVIDERS } from '@/lib/reports/operations/providers'
-import type { ReportDefinition } from '@/lib/reports/catalog'
-import type { ReportData } from '@/lib/reports/payload'
-import type { ReportRange } from '@/lib/reports/range'
+import type { ReportProvider } from '@/lib/reports/provider-types'
 
 /**
  * ทะเบียนตัวคำนวณของรายงานแต่ละตัว — **ไม่มี business logic ในไฟล์นี้**
@@ -23,25 +20,14 @@ import type { ReportRange } from '@/lib/reports/range'
  * - ห้ามอ่านแคชเอง: ตัวรัน (`runReport()`) ห่อแคชตามโหมดของ `96` §8 ให้แล้ว
  */
 
-export interface ReportContext {
-  readonly user: SessionUser
-  readonly report: ReportDefinition
-  readonly range: ReportRange
-  /** ทีมที่ผู้เรียกเห็นได้ — `null` = ทุกทีมในองค์กร (`lib/reports/access.ts`) */
-  readonly teamIds: readonly string[] | null
-  /** พารามิเตอร์เฉพาะรายงาน (เช่น `dimension`, `companyId`) — มาจาก query string ที่ผ่าน Zod แล้ว */
-  readonly params: Readonly<Record<string, string>>
-  readonly now: Date
-}
-
-export type ReportProvider = (context: ReportContext) => Promise<ReportData>
+export type { ReportContext, ReportProvider } from '@/lib/reports/provider-types'
 
 /**
  * report id → provider (6.2–6.5 เติมที่นี่)
  *
  * โมดูลเจ้าของงานส่งทะเบียนของหมวดตัวเองเข้ามา (แนวเดียวกับ `JOB_HANDLERS`) — ทิศทางการ import
- * เป็น "ทะเบียนกลาง → โมดูลหมวด" ทางเดียวเสมอ ส่วนโมดูลหมวดอ้าง `ReportContext` ด้วย `import type`
- * เท่านั้น ⇒ ไม่มี cycle ตอนรันจริง
+ * เป็น "ทะเบียนกลาง → โมดูลหมวด" ทางเดียวเสมอ ส่วนโมดูลหมวดอ้างรูป provider จาก
+ * `lib/reports/provider-types.ts` ⇒ ไม่มี import วน
  */
 export const REPORT_PROVIDERS: Partial<Record<string, ReportProvider>> = {
   ...FINANCE_REPORT_PROVIDERS,

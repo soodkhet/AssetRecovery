@@ -54,7 +54,7 @@ import { resolveReportPeriod, toIsoDateOnly } from '@/lib/reports/period'
 import { PROFIT_DIMENSIONS, summarizeProfitability, type ProfitDimension } from '@/lib/reports/profitability'
 import { loadProfitEntries } from '@/lib/reports/queries'
 import { previousReportRange, type ReportRange } from '@/lib/reports/range'
-import type { ReportContext, ReportProvider } from '@/lib/reports/providers'
+import type { ReportContext, ReportProvider } from '@/lib/reports/provider-types'
 import { getFinancePolicy } from '@/lib/settings/queries/finance-policy'
 
 /**

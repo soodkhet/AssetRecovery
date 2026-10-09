@@ -26,7 +26,7 @@ import { elapsedHours } from '@/lib/reports/operations/sla'
 import type { ReportData } from '@/lib/reports/payload'
 import { loadProfitEntries } from '@/lib/reports/queries'
 import { summarizeProfitability } from '@/lib/reports/profitability'
-import type { ReportContext, ReportProvider } from '@/lib/reports/providers'
+import type { ReportContext, ReportProvider } from '@/lib/reports/provider-types'
 import { previousReportRange } from '@/lib/reports/range'
 
 /**
