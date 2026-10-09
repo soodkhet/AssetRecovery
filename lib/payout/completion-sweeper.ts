@@ -1,4 +1,5 @@
 import { loadSessionUser } from '@/lib/auth/session'
+import { enqueueJob, type RunJobById } from '@/lib/jobs/enqueue'
 import type { SessionUser } from '@/lib/auth/types'
 import { finishPayoutPostCompletion, type PayoutPostCompletionResult } from '@/lib/payout/post-completion'
 import { prisma } from '@/lib/prisma'
@@ -39,8 +40,12 @@ export interface PayoutCompletionSweepResult {
   failed: number
 }
 
+/**
+ * @param options.runJob ตัวรันงานรายตัว (`runJobById` ของ `lib/jobs/engine`) — ฉีดเข้ามาเพราะทะเบียน handler import ไฟล์นี้
+ *   และตัวรันงานกลาง import ทะเบียน ⇒ import ตรงจะเกิด import วน (staging S-008)
+ */
 export async function runPayoutCompletionSweep(
-  options: { now?: Date; organizationId?: string } = {},
+  options: { now?: Date; organizationId?: string; runJob: RunJobById },
 ): Promise<PayoutCompletionSweepResult> {
   const now = options.now ?? new Date()
   const result: PayoutCompletionSweepResult = { pending: 0, enqueued: 0, existing: 0, completed: 0, failed: 0 }
@@ -60,9 +65,6 @@ export async function runPayoutCompletionSweep(
   result.pending = stuck.length
   if (stuck.length === 0) return result
 
-  // import ตอนใช้ — ตัวรันงานกลาง import ทะเบียน handler ซึ่ง import ไฟล์นี้ (กัน import วน)
-  const { enqueueJob, runJobById } = await import('@/lib/jobs/engine')
-
   for (const batch of stuck) {
     const { job, duplicate } = await enqueueJob({
       organizationId: batch.organizationId,
@@ -77,7 +79,7 @@ export async function runPayoutCompletionSweep(
       continue
     }
     result.enqueued += 1
-    const outcome = await runJobById(job.id, now)
+    const outcome = await options.runJob(job.id, now)
     if (outcome === 'completed') result.completed += 1
     else if (outcome !== 'skipped') result.failed += 1
   }

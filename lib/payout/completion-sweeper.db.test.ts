@@ -2,6 +2,7 @@ import { PrismaPg } from '@prisma/adapter-pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { SessionUser } from '@/lib/auth/types'
 import { PrismaClient } from '@/lib/generated/prisma/client'
+import type { RunJobById } from '@/lib/jobs/enqueue'
 
 /**
  * มติ PO 07/10/2569 U134 — รอบจ่าย `completed` แต่ขั้นหลัง commit (บันทึกจ่าย/ออก 50 ทวิ) ล้ม
@@ -43,6 +44,7 @@ type Registry = typeof import('@/lib/jobs/registry')
 let sweeper: Sweeper
 let payout: PayoutQueries
 let registry: Registry
+let runJob: RunJobById
 
 function db(): PrismaClient {
   if (!url) throw new Error('ไม่มี TEST_DATABASE_URL')
@@ -153,6 +155,7 @@ beforeAll(async () => {
   sweeper = await import('@/lib/payout/completion-sweeper')
   payout = await import('@/lib/payout/queries')
   registry = await import('@/lib/jobs/registry')
+  runJob = (await import('@/lib/jobs/engine')).runJobById
 
   const tx = db()
   await tx.$executeRawUnsafe(`
@@ -193,7 +196,7 @@ suite('U134 — ตัวกวาดขั้นหลังรอบจ่า�
     expect(state.records).toBe(1)
     expect(state.certificates).toBe(1)
 
-    const swept = await sweeper.runPayoutCompletionSweep({ now: LATER(), organizationId: ORG_ID })
+    const swept = await sweeper.runPayoutCompletionSweep({ now: LATER(), organizationId: ORG_ID, runJob })
     expect(swept.pending).toBe(0)
     expect((await stateOf(seeded)).jobs).toHaveLength(0)
   })
@@ -207,10 +210,10 @@ suite('U134 — ตัวกวาดขั้นหลังรอบจ่า�
     expect(broken.records).toBe(0)
 
     // ยังอยู่ในช่วงผ่อนผัน ⇒ ไม่แตะ (คำขอเดิมอาจกำลังทำอยู่)
-    const early = await sweeper.runPayoutCompletionSweep({ now: new Date(), organizationId: ORG_ID })
+    const early = await sweeper.runPayoutCompletionSweep({ now: new Date(), organizationId: ORG_ID, runJob })
     expect(early.pending).toBe(0)
 
-    const sweep = await registry.runSweeperJobs({ now: LATER(), organizationId: ORG_ID })
+    const sweep = await registry.runSweeperJobs({ now: LATER(), organizationId: ORG_ID, runJob })
     expect(sweep.payoutCompletion).toMatchObject({ pending: 1, enqueued: 1, completed: 1, failed: 0 })
 
     const repaired = await stateOf(seeded)
@@ -228,7 +231,7 @@ suite('U134 — ตัวกวาดขั้นหลังรอบจ่า�
     expect(audit.actorId).toBe(USER_ID)
 
     // กวาดซ้ำ ⇒ ไม่มีอะไรค้าง ไม่สร้างซ้ำ
-    const again = await registry.runSweeperJobs({ now: LATER(), organizationId: ORG_ID })
+    const again = await registry.runSweeperJobs({ now: LATER(), organizationId: ORG_ID, runJob })
     expect(again.payoutCompletion).toMatchObject({ pending: 0 })
     const after = await stateOf(seeded)
     expect(after.records).toBe(1)
@@ -241,8 +244,8 @@ suite('U134 — ตัวกวาดขั้นหลังรอบจ่า�
     const now = LATER()
 
     await Promise.all([
-      sweeper.runPayoutCompletionSweep({ now, organizationId: ORG_ID }),
-      sweeper.runPayoutCompletionSweep({ now, organizationId: ORG_ID }),
+      sweeper.runPayoutCompletionSweep({ now, organizationId: ORG_ID, runJob }),
+      sweeper.runPayoutCompletionSweep({ now, organizationId: ORG_ID, runJob }),
     ])
 
     const state = await stateOf(seeded)

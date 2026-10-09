@@ -7,7 +7,7 @@ import { createExportPack } from '@/lib/exports/queries'
 import { runDeviceTacSyncJob, tacSyncOptionsFromPayload } from '@/lib/device-catalog/tac-sync-job'
 import { runDailyFieldAllowanceJob } from '@/lib/field/daily-allowance-job'
 import { runFuelDistanceRetryJob } from '@/lib/field/fuel-distance-job'
-import type { JobRow } from '@/lib/jobs/engine'
+import type { JobRow, RunJobById } from '@/lib/jobs/enqueue'
 import { DEV_TRIGGER_PAYLOAD_FLAG, simulatedAsOfInstant, type JobTypeCode } from '@/lib/jobs/job-types'
 import { drainNotificationOutboxSafely, type OutboxDrainResult } from '@/lib/notifications/outbox'
 import {
@@ -265,7 +265,12 @@ export interface SweeperResult {
  * (DEC-015 · มติ PO U120 — retry แถวที่ส่งไม่สำเร็จจากรอบก่อน ๆ · ใช้เวลาจริงเสมอ)
  * ระหว่างนั้นกวาด **รอบจ่ายที่ขั้นหลัง commit ยังไม่ครบ** (มติ PO U134 — `runPayoutCompletionSweep()`)
  */
-export async function runSweeperJobs(options: { now?: Date; organizationId?: string } = {}): Promise<SweeperResult> {
+export async function runSweeperJobs(options: {
+  now?: Date
+  organizationId?: string
+  /** `runJobById` ของ `lib/jobs/engine` — ฉีดเข้ามา (ไฟล์นี้ถูก engine import · กัน import วน) */
+  runJob: RunJobById
+}): Promise<SweeperResult> {
   const fuelDistance = await runFuelDistanceRetryJob({
     ...(options.now === undefined ? {} : { now: options.now }),
     ...(options.organizationId === undefined ? {} : { organizationId: options.organizationId }),
@@ -283,6 +288,7 @@ export async function runSweeperJobs(options: { now?: Date; organizationId?: str
 async function runPayoutCompletionSweepSafely(options: {
   now?: Date
   organizationId?: string
+  runJob: RunJobById
 }): Promise<PayoutCompletionSweepResult | null> {
   try {
     return await runPayoutCompletionSweep(options)

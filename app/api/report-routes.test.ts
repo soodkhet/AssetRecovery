@@ -24,7 +24,7 @@ const requireSessionMock = vi.hoisted(() => vi.fn())
 vi.mock('@/lib/auth/session', () => ({ requireSession: requireSessionMock, loadSessionUser: vi.fn() }))
 
 const enqueueJobMock = vi.hoisted(() => vi.fn())
-vi.mock('@/lib/jobs/engine', () => ({ enqueueJob: enqueueJobMock }))
+vi.mock('@/lib/jobs/enqueue', () => ({ enqueueJob: enqueueJobMock }))
 
 /** ร่องรอย export (`90` §13) เขียนลง DB จริง — เทสต์ระดับ route ไม่มีฐาน จึงดักไว้แล้วตรวจ argument */
 const emitAuditMock = vi.hoisted(() => vi.fn())

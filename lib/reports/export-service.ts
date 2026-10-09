@@ -1,7 +1,7 @@
 import { emitAudit } from '@/lib/audit/audit'
 import type { RequestMeta } from '@/lib/auth/request-meta'
 import type { SessionUser } from '@/lib/auth/types'
-import { enqueueJob } from '@/lib/jobs/engine'
+import { enqueueJob } from '@/lib/jobs/enqueue'
 import { jobTypeLabel } from '@/lib/jobs/job-types'
 import type { ReportDefinition } from '@/lib/reports/catalog'
 import {

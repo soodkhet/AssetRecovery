@@ -2,7 +2,7 @@ import type { NextRequest } from 'next/server'
 import { apiFailure, apiSuccess } from '@/lib/api/envelope'
 import { authErrorMessage } from '@/lib/auth/errors'
 import { isCronAuthorized } from '@/lib/jobs/cron-auth'
-import { enqueueScheduledJobs, reclaimStaleJobs, runDueJobs } from '@/lib/jobs/engine'
+import { enqueueScheduledJobs, reclaimStaleJobs, runDueJobs, runJobById } from '@/lib/jobs/engine'
 import { runSweeperJobs } from '@/lib/jobs/registry'
 import type { JobRunSummaryDto } from '@/lib/jobs/types'
 
@@ -42,7 +42,7 @@ export async function GET(request: NextRequest): Promise<Response> {
   const reclaimed = await reclaimStaleJobs(now)
   const scheduled = await enqueueScheduledJobs(now)
   const tally = await runDueJobs({ now })
-  const sweepers = await runSweeperJobs({ now })
+  const sweepers = await runSweeperJobs({ now, runJob: runJobById })
 
   const summary: JobRunSummaryDto = {
     enqueued: scheduled.enqueued,

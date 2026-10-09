@@ -13,7 +13,7 @@ import type {
   DeviceTacUpdateDto,
 } from '@/lib/device-catalog/types'
 import type { Prisma } from '@/lib/generated/prisma/client'
-import { enqueueJob } from '@/lib/jobs/engine'
+import { enqueueJob } from '@/lib/jobs/enqueue'
 import { prisma } from '@/lib/prisma'
 import { SettingsError } from '@/lib/settings/errors'
 
