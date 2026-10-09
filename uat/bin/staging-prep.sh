@@ -12,6 +12,7 @@
 #   uat/bin/staging-prep.sh q "SELECT …"     SQL อ่านอย่างเดียว (READ ONLY) — subagent ใช้ตรวจข้อมูลได้
 #   uat/bin/staging-prep.sh preset [--dry-run] [--preset=<ไฟล์>]   ตั้งค่ามาตรฐานไทย (หลัง reset แทน seed)
 #   uat/bin/staging-prep.sh preset-export <ไฟล์>                   เก็บค่าตั้งปัจจุบันเป็น preset
+#   uat/bin/staging-prep.sh job-allowance <YYYY-MM-DD>            แทน cron: สรุปวันลงพื้นที่ (ทำให้รายได้เกิดได้)
 #
 # - ไม่พิมพ์ค่า connection/รหัส · ค่า env อ่านจาก .env.staging (DIRECT_URL) + .env.local (Supabase 3 ตัว — project เดียวกับ staging)
 # - รหัส persona ของ staging อยู่ uat/personas-staging.json (แยกจาก localhost — Auth ใช้ร่วมกัน ห้ามใช้อีเมล @uat.test เดิม)
@@ -62,6 +63,11 @@ case "${1:-}" in
     load_env
     seed_final --verify
     ;;
+  job-allowance)
+    # แทน cron บน staging: สรุปวันลงพื้นที่ (ค่าน้ำมันเหมาจ่าย/เบี้ยเลี้ยง) — เงื่อนไขหนึ่งของการเกิดรายได้
+    load_env
+    pnpm -s tsx uat/bin/staging-job.ts "${2:?ใส่วันที่ YYYY-MM-DD}"
+    ;;
   preset)
     # ค่าตั้งมาตรฐาน (scripts/settings-preset) — ใส่ --dry-run เพื่อดูก่อน · --preset=<ไฟล์> ใช้ preset ที่ export ไว้
     load_env
@@ -81,6 +87,6 @@ case "${1:-}" in
     node uat/bin/staging-login.mjs "$@"
     ;;
   *)
-    sed -n 2,18p "$0"; exit 1
+    sed -n 2,19p "$0"; exit 1
     ;;
 esac
