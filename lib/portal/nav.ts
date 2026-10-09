@@ -113,7 +113,8 @@ export function portalKpiCards(dto: PortalDashboardDto): PortalKpiCardModel[] {
     cards.push({
       key: 'inProgressCases',
       label: 'เคสกำลังดำเนินการ',
-      hint: 'อยู่ระหว่างตรวจสอบและติดตาม',
+      // นับเฉพาะรหัส `tracking` ตามสเปค — ไม่รวมเคสที่รอตรวจสอบ (staging S-017)
+      hint: 'อยู่ระหว่างติดตามทรัพย์',
       tone: 'amber',
       href: '/portal/cases',
       value: { kind: 'count', count: dto.inProgressCases.count },
