@@ -33,6 +33,20 @@ export function Label({
   )
 }
 
+/**
+ * เลื่อนไปข้อความผิดพลาดของช่องแรก (`[data-field-error]` ภายใน root) แล้วย้าย focus ไปช่องกรอกของมัน
+ * — ฟอร์มยาวใน modal: error อยู่นอกจอแล้วผู้ใช้เห็นว่ากดแล้วไม่มีอะไรเกิดขึ้น (staging S-003)
+ * @returns false เมื่อไม่พบข้อความผิดพลาดที่แสดงอยู่ (ผู้เรียกควรแจ้งทางอื่น เช่น toast)
+ */
+export function revealFirstFieldError(root: HTMLElement | null): boolean {
+  const message = root?.querySelector<HTMLElement>('[data-field-error]')
+  if (!message) return false
+  message.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  const control = message.parentElement?.querySelector<HTMLElement>('input:not([type=hidden]), select, textarea')
+  control?.focus({ preventScroll: true })
+  return true
+}
+
 /** ห่อ label + field + inline error ให้ครบชุดในที่เดียว */
 export function Field({
   id,
@@ -58,7 +72,7 @@ export function Field({
       </Label>
       {children}
       {error ? (
-        <p className="mt-1 text-[11px] font-semibold text-red-600">{error}</p>
+        <p data-field-error className="mt-1 text-[11px] font-semibold text-red-600">{error}</p>
       ) : (
         hint !== undefined && <p className="mt-1 text-[11px] text-slate-400">{hint}</p>
       )}

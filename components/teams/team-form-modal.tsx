@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { Button, Field, InlineAlert, Input, Modal, Select, Textarea, useToast } from '@/components/ui'
+import { useEffect, useRef, useState } from 'react'
+import { Button, Field, InlineAlert, Input, Modal, Select, Textarea, revealFirstFieldError, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import type { CompensationPlanListDto } from '@/lib/compensation/types'
 import { TeamTaxRuleNotice } from '@/components/teams/team-tax-rule-notice'
@@ -90,6 +90,16 @@ export function TeamFormModal({
     team === null ? emptyForm(plans.find((plan) => plan.side === 'inhouse')?.id ?? '') : formOf(team),
   )
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const bodyRef = useRef<HTMLDivElement>(null)
+  // ช่องที่ผิดอาจอยู่นอกจอของ modal — หลังกดบันทึกแล้วมี error เลื่อน/ย้าย focus ไปช่องแรก (staging S-003)
+  // นับครั้งที่กดบันทึก (ไม่ผูกกับ errors ตรง ๆ) ⇒ พิมพ์แก้ช่องอื่นแล้วไม่เด้งกลับ
+  const [revealTick, setRevealTick] = useState(0)
+  useEffect(() => {
+    if (revealTick === 0) return
+    if (!revealFirstFieldError(bodyRef.current)) {
+      showToast({ tone: 'error', title: 'ข้อมูลไม่ครบหรือไม่ถูกต้อง', description: 'กรุณาตรวจข้อมูลในฟอร์มแล้วลองใหม่' })
+    }
+  }, [revealTick, showToast])
   const [saving, setSaving] = useState(false)
 
   const isEdit = team !== null
@@ -150,6 +160,7 @@ export function TeamFormModal({
         if (fields[path] === undefined) fields[path] = issue.message
       }
       setErrors(fields)
+      setRevealTick((tick) => tick + 1)
       return
     }
 
@@ -162,7 +173,10 @@ export function TeamFormModal({
       )
       if (result.error !== undefined) {
         // field error จาก API (เช่น เลือกแผน/หัวหน้า/ผู้จัดการคนละฝั่งกับทีม — UAT Q12) แสดงใต้ช่องนั้น
-        if (result.error.fields !== undefined) setErrors(result.error.fields)
+        if (result.error.fields !== undefined) {
+          setErrors(result.error.fields)
+          setRevealTick((tick) => tick + 1)
+        }
         showToast({ tone: 'error', title: result.error.title, description: result.error.message })
         return
       }
@@ -197,7 +211,7 @@ export function TeamFormModal({
         </>
       }
     >
-      <div className="space-y-4">
+      <div ref={bodyRef} className="space-y-4">
         {plans.length === 0 && (
           <InlineAlert tone="warning" title="ยังไม่มีแผนค่าตอบแทนที่ใช้งานอยู่">
             สร้างแผนค่าตอบแทนที่หน้า “แผนค่าตอบแทน” ก่อน — ทีมที่ไม่มีแผนสร้างไม่ได้
@@ -312,7 +326,7 @@ export function TeamFormModal({
               ))}
             </div>
           )}
-          {errors.managerIds !== undefined && <p className="mt-1 text-xs text-red-600">{errors.managerIds}</p>}
+          {errors.managerIds !== undefined && <p data-field-error className="mt-1 text-xs text-red-600">{errors.managerIds}</p>}
         </fieldset>
 
         <fieldset className="rounded-lg border border-slate-200 p-3">
