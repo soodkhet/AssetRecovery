@@ -7,7 +7,7 @@ import {
   isDuplicateClaimSubmission,
   type ClaimSubmissionKey,
 } from '@/lib/claims/duplicate-submission'
-import type { ExpenseTxClient } from '@/lib/field/expense-queries'
+import type { ExpenseTxClient } from '@/lib/field/expense-tx'
 import type { ExpenseType } from '@/lib/generated/prisma/enums'
 
 /**

@@ -1,5 +1,6 @@
 import { assertPeriodOpenAt, periodStatusAt } from '@/lib/accounting/period-guard'
 import { assertNoDuplicateClaimSubmission, assertReceiptNotReused } from '@/lib/claims/duplicate-submission-queries'
+import type { ExpenseTxClient } from '@/lib/field/expense-tx'
 import { emitAudit } from '@/lib/audit/audit'
 import type { RequestMeta } from '@/lib/auth/request-meta'
 import type { SessionUser } from '@/lib/auth/types'
@@ -68,8 +69,8 @@ export interface ExpenseMutationContext {
   meta: RequestMeta
 }
 
-/** ชนิด tx ของ client ที่ต่อ extension แล้ว */
-export type ExpenseTxClient = Omit<typeof prisma, '$connect' | '$disconnect' | '$on' | '$transaction' | '$extends'>
+// อยู่ expense-tx.ts (กัน import วน) — re-export ให้ผู้เรียกเดิม
+export type { ExpenseTxClient } from '@/lib/field/expense-tx'
 
 /** วันที่เชิงธุรกิจ (เวลาไทย) ของ instant หนึ่ง → เที่ยงคืน UTC สำหรับคอลัมน์ `DATE` (Rule 01 · E7) */
 export function bangkokBusinessDate(at: Date): Date {
