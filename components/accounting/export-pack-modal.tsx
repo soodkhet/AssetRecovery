@@ -7,6 +7,7 @@ import type { AccountingPeriodDto } from '@/lib/accounting/types'
 import { exportVersionLabel, PACK_FILES } from '@/lib/exports/pack'
 import type { ExportRecordDto } from '@/lib/exports/types'
 import { fmtCount } from '@/lib/format/money'
+import { downloadFromUrl } from '@/lib/imports/download-client'
 
 /**
  * Modal "Export Pack" (`37` §8 · mockup `accounting.html` `export-pack`)
@@ -59,7 +60,7 @@ export function ExportPackModal({
       title: `สร้างชุดเอกสาร ${record.periodLabel} ${record.versionLabel} แล้ว`,
       description: 'กำลังดาวน์โหลดไฟล์ .zip — ชุดนี้ถูกเก็บไว้ในประวัติแล้ว ดาวน์โหลดซ้ำได้เสมอ',
     })
-    window.open(`/api/accounting/export-history/${record.id}/download`, '_blank', 'noreferrer')
+    downloadFromUrl(`/api/accounting/export-history/${record.id}/download`)
     onExported(record)
     onClose()
   }

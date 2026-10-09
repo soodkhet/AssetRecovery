@@ -17,6 +17,21 @@ export function downloadFile(fileName: string, content: BlobPart, mimeType: stri
 }
 
 /**
+ * ให้ browser ดาวน์โหลดไฟล์จาก URL ของเรา (endpoint ที่ตอบ `Content-Disposition: attachment`) โดยไม่เปิดแท็บใหม่
+ * ใช้แทน `window.open` เมื่อเรียก**หลังรอ API** — `window.open` ที่ห่างจากการคลิกเกิน ~5 วิ ถูกบล็อกเป็น popup
+ * (staging S-002: สร้าง Accounting Pack ~11 วิ แล้วไฟล์ไม่มา) · ลิงก์ `download` same-origin ไม่ติด popup blocker
+ */
+export function downloadFromUrl(url: string): void {
+  const link = document.createElement('a')
+  link.href = url
+  link.download = ''
+  link.rel = 'noreferrer'
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+}
+
+/**
  * ให้ browser ดาวน์โหลดข้อความเป็นไฟล์ (ใช้กับไฟล์ตัวอย่าง CSV ของจุดนำเข้า)
  * ข้อความที่ขึ้นต้นด้วย BOM (`﻿`) จะถูกเขียนเป็นไบต์ `EF BB BF` เพราะ `Blob` เข้ารหัส UTF-8 เสมอ
  */
