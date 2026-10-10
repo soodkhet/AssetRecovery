@@ -51,7 +51,7 @@ description: ล้างข้อมูล staging ทั้งหมดแล�
 2. `uat/bin/staging-prep.sh reset` — ล้างข้อมูลธุรกิจทั้งหมด (คง org/ผู้ใช้/role/capability)
 3. `set -a && source .env.staging && set +a && DATABASE_URL="$DIRECT_URL" PRISMA_ENV_FILE=.env.staging pnpm db:seed` — ค่าพื้นฐานแบบติดตั้งใหม่ (upsert)
 4. `uat/bin/staging-prep.sh check` — Claude ตรวจ: เคส 0 · ผู้ใช้ครบ · แล้วใช้ `q` ยืนยันว่าทีม/บริษัท/แผนค่าตอบแทน/ผู้รับเงิน = 0
-5. ถ้า session หมดอายุ/ไม่ครบ: `uat/bin/staging-prep.sh login` และ `uat/bin/staging-prep.sh login --manual superadmin`
+5. **login ใหม่ทุก persona ทุกครั้งก่อนเริ่มช่วง A** (session มีอายุสูงสุด 24 ชม. นับจากเวลา login — ต่ออายุไม่ได้ · ของเก่าจะหมดกลางรอบ): `uat/bin/staging-prep.sh login` แล้ว `uat/bin/staging-prep.sh login --manual superadmin` · บัญชีพอร์ทัล 3 ตัว login ได้หลังช่วง A ผูกบริษัทแล้วเท่านั้น (ก่อนนั้นขึ้น "บริษัทถูกระงับ" — ข้ามได้) · รอบยาวเกิน 24 ชม. ⇒ login ซ้ำก่อนหมด
 6. smoke: subagent เปิดหน้าแรกของทุก persona ด้วย session — ผ่านหมดจึงไปขั้น 2
 
 ### ขั้น 2 — ทดสอบแบบวันทำงานจริง (Claude ส่ง subagent ทีละช่วง ตามลำดับ)
