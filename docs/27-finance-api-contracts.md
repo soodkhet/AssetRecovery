@@ -38,6 +38,7 @@
 | v3.21 | 10/10/2569 | **staging E-012 (มติ PO 10/10/2569)** — §6.4 เพิ่ม `PATCH /api/advances/:id/clear-review` และ `PATCH /api/advances/:id/reopen-clear` (การเงินเท่านั้น `manage:approve_advance` · ไม่ใช่การเงิน = 404 ไม่ leak) · `AdvanceDto` เพิ่ม `receiptFileUrl`/`clearReviewedAt`/`clearReviewedByName` |
 | v3.22 | 10/10/2569 | **staging E-052** — §6.12 `GET /api/accounting/wht-certificates` รับ `?payoutBatchId=<uuid>` กรองใบของรอบจ่ายเดียว (หน้ารอบจ่ายที่ `completed` แสดงปุ่ม "50 ทวิ" ต่อผู้รับ) · สิทธิ์เดิม |
 | v3.23 | 10/10/2569 | **staging E-008 (มติ PO 10/10/2569)** — §6.9 เพิ่ม `GET /api/finance/revenue-pending` (อ่านอย่างเดียว · สิทธิ์ view ของ `manage_billing` · scope ภายในองค์กรเท่านั้น ฝั่งบริษัทได้ว่าง · ไม่ลง audit) คืนเคสที่ปิดงานแล้วแต่รายได้รอบปัจจุบันยังไม่เกิด + `reason` (`field_days_not_settled`/`expense_not_approved`/`warehouse_gate`/`no_snapshot`/`missing_basis`/`gates_passed`) + `reasonText` — ตัดสินด้วยเกตเดียวกับ `tryCreateRevenue` (`19` §6.1) |
+| v3.24 | 11/10/2569 | **staging E-065** — §6.11 เพิ่ม `POST /api/accounting/expenses/cost-center/bulk` (`{ expenseRecordIds[], costCenterId, reason }` · manage `map_cost_center` · all-or-nothing · `32` §14) |
 
 ขอบเขตเอกสารนี้: รวม API Endpoint ทั้งหมดของโมดูล Finance/Accounting เป็นรายการเดียว จัดกลุ่มตาม resource เพื่อให้ backend implement ตาม REST convention เดียวกันทั้งระบบ
 
@@ -205,6 +206,7 @@ GET    /api/accounting/cash-receipts
 ```
 GET    /api/accounting/expenses
 PATCH  /api/accounting/expenses/:id/cost-center
+POST   /api/accounting/expenses/cost-center/bulk         (v3.24 — map หลายรายการ เหตุผลเดียว all-or-nothing · E-065)
 ```
 
 ### 6.12 Accounting: WHT (ไฟล์ 33)

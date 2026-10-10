@@ -132,7 +132,7 @@ export const EXPORT_FORMATS: readonly ExportFormatSpec[] = [
   {
     fileName: '10_Customer_WHT.csv',
     format: 'CSV UTF-8',
-    content: 'ภาษีที่ลูกค้าหัก ณ ที่จ่าย + สถานะหนังสือ 50 ทวิ — company, withheld, cert_no, cert_date, status',
+    content: 'ภาษีที่ลูกค้าหัก ณ ที่จ่าย + สถานะหนังสือ 50 ทวิ — company, withheld, cert_no, cert_date, status, cert_file_name',
     sourceFile: '31',
   },
   // มติ PO 05/10/2569 U41 — เงินรับรอตรวจสอบ (ไม่ทราบที่มา)

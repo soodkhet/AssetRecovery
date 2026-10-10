@@ -120,7 +120,7 @@ export const PACK_FILES: readonly PackFile[] = [
   { no: '07', fileName: '07_Adjustment_Log.csv', kind: 'csv', description: 'รายการปรับปรุงยอดทั้งหมดของรอบนั้น', sourceDoc: '20' },
   { no: '08', fileName: '08_Document_Checklist.xlsx', kind: 'xlsx', description: 'source_ref, doc_status, exception summary', sourceDoc: '34' },
   { no: '09', fileName: '09_Credit_Notes.csv', kind: 'csv', description: 'ใบลดหนี้/ใบเพิ่มหนี้ที่ออกในรอบ — document_type, number, tax_invoice_ref, amount, vat, company_tax_id', sourceDoc: '31' },
-  { no: '10', fileName: '10_Customer_WHT.csv', kind: 'csv', description: 'ภาษีที่ลูกค้าหัก ณ ที่จ่าย + สถานะหนังสือ 50 ทวิ — company, withheld, cert_no, cert_date, status', sourceDoc: '31' },
+  { no: '10', fileName: '10_Customer_WHT.csv', kind: 'csv', description: 'ภาษีที่ลูกค้าหัก ณ ที่จ่าย + สถานะหนังสือ 50 ทวิ — company, withheld, cert_no, cert_date, status, cert_file_name', sourceDoc: '31' },
   { no: '11', fileName: '11_Suspense_Receipts.csv', kind: 'csv', description: 'เงินรับรอตรวจสอบ (ไม่ทราบที่มา) — amount, reason, status, resolved_ref, refund_date', sourceDoc: '35' },
   { no: '12', fileName: '12_Tax_Invoices.csv', kind: 'csv', description: 'ใบเสร็จรับเงิน/ใบกำกับภาษี (ออกตอนรับเงิน) และใบกำกับภาษีแบบเดิมที่ออก/ยกเลิกในรอบ ตามวันที่เอกสาร — number, date, company, tax_id, before_vat, vat, total, status, สาขาผู้ซื้อ, ชนิดเอกสาร, วันรับเงิน (+ PDF ในโฟลเดอร์ tax_invoices/ · ใบแจ้งหนี้ที่ส่งในรอบอยู่ใน billing_invoices/)', sourceDoc: '31' },
   { no: '13', fileName: '13_Advance_Returns.csv', kind: 'csv', description: 'รับคืนเงินทดรอง (หักในรอบจ่าย/เงินสด/โอน) — date, advance_ref, payee, amount, channel, status, return_number', sourceDoc: '15' },
@@ -685,6 +685,8 @@ export const CUSTOMER_WHT_HEADERS = [
   'cert_wht_baht',
   'status',
   'billing_batch_number',
+  // staging E-066 (มติ PO 10/10/2569) — ชื่อไฟล์สแกนหนังสือ 50 ทวิ ของลูกค้า (ไม่แนบไฟล์ลง zip) · ยังไม่มีไฟล์ = `-`
+  'cert_file_name',
 ] as const
 
 export interface CustomerWhtExportRow {
@@ -700,6 +702,16 @@ export interface CustomerWhtExportRow {
   status: 'pending' | 'received'
   /** เลขรอบวางบิล (มติ U79 — คอลัมน์ต่อท้าย · `billing_ref` คงเป็นรอบเดือน) */
   billingBatchNumber: string | null
+  /** staging E-066 — path ไฟล์สแกนใน Storage · CSV แสดงเฉพาะชื่อไฟล์ (`storedFileName()`) · ไม่ระบุ/`null` = ไม่มี */
+  certificateFileUrl?: string | null
+}
+
+/** ชื่อไฟล์ท้าย path ใน Storage (ไม่เปิดเผยโครง path ภายใน) · ว่าง/`null` ⇒ `null` */
+export function storedFileName(path: string | null | undefined): string | null {
+  const trimmed = (path ?? '').trim()
+  if (trimmed === '') return null
+  const name = trimmed.split('/').pop() ?? ''
+  return name === '' ? null : name
 }
 
 export function customerWhtCsv(rows: readonly CustomerWhtExportRow[]): string {
@@ -717,6 +729,7 @@ export function customerWhtCsv(rows: readonly CustomerWhtExportRow[]): string {
       row.whtSatang === null ? CSV_EMPTY : csvBaht(row.whtSatang),
       row.status,
       csvText(row.billingBatchNumber),
+      csvText(storedFileName(row.certificateFileUrl)),
     ]),
   )
 }

@@ -813,6 +813,7 @@ describe('10_Customer_WHT.csv (มติ PO 05/10/2569 U40)', () => {
         whtSatang: 11_190,
         status: 'received',
         billingBatchNumber: 'BL-2569-004',
+        certificateFileUrl: 'customer-wht/org-1/cert-123/สฟ-0451.pdf',
       },
       {
         withheldDate: new Date('2026-09-28T00:00:00Z'),
@@ -832,9 +833,10 @@ describe('10_Customer_WHT.csv (มติ PO 05/10/2569 U40)', () => {
     const lines = csv.slice(CSV_BOM.length).split('\r\n')
     expect(lines[0]).toBe(CUSTOMER_WHT_HEADERS.join(','))
     expect(lines[1]).toBe(
-      '12/09/2569,บริษัท สยามไฟแนนซ์ จำกัด,0105555000111,2569-08,INV-2569-0014,111.90,สฟ-2569/0451,10/09/2569,111.90,received,BL-2569-004',
+      '12/09/2569,บริษัท สยามไฟแนนซ์ จำกัด,0105555000111,2569-08,INV-2569-0014,111.90,สฟ-2569/0451,10/09/2569,111.90,received,BL-2569-004,สฟ-0451.pdf',
     )
-    expect(lines[2]).toBe('28/09/2569,บริษัท ไทยลีสซิ่ง จำกัด,-,-,-,240.00,-,-,-,pending,-')
+    // staging E-066 — ไม่มีไฟล์สแกน ⇒ "-" · CSV ใส่แค่ชื่อไฟล์ ไม่เปิดเผย path ใน Storage
+    expect(lines[2]).toBe('28/09/2569,บริษัท ไทยลีสซิ่ง จำกัด,-,-,-,240.00,-,-,-,pending,-,-')
   })
 
   it('ไม่มีรายการ ⇒ มีแต่หัวคอลัมน์', () => {

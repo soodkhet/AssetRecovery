@@ -112,6 +112,12 @@ export function ExportPackModal({
             รายการระดับ warning ไม่บล็อกการส่งมอบ แต่ยังแสดงไว้ในไฟล์ 08_Document_Checklist.xlsx
           </InlineAlert>
         )}
+        {/* staging E-058 — ยังไม่ map ศูนย์ต้นทุน ⇒ เตือน ไม่บล็อก */}
+        {(selected?.unmappedCostCenterCount ?? 0) > 0 && (
+          <InlineAlert tone="warning" title={`มีบัญชีค่าใช้จ่ายยังไม่ระบุศูนย์ต้นทุน ${fmtCount(selected?.unmappedCostCenterCount ?? 0)} รายการ`}>
+            ช่องศูนย์ต้นทุนในไฟล์ค่าใช้จ่ายจะว่าง — ระบุได้ที่แท็บบัญชีค่าใช้จ่ายก่อน หรือสร้างชุดเอกสารต่อได้
+          </InlineAlert>
+        )}
 
         {/* BUG-160 — บอกเวอร์ชันจริงของรอบที่เลือก (ล่าสุด → ชุดที่จะสร้าง) ไม่ใช่ v1.0 ตายตัว */}
         {latestVersion === null ? (

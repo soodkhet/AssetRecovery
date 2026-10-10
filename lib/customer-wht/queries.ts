@@ -503,6 +503,7 @@ export async function customerWhtExportSources(
       certificateDate: true,
       whtSatang: true,
       status: true,
+      fileUrl: true,
       company: { select: { name: true, taxId: true } },
       billingBatch: {
         select: {
@@ -526,5 +527,6 @@ export async function customerWhtExportSources(
     certificateDate: row.certificateDate,
     whtSatang: row.whtSatang,
     status: row.status,
+    certificateFileUrl: row.fileUrl,
   }))
 }

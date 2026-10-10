@@ -270,6 +270,36 @@ suite('Phase 4.4 — map Cost Center (`32` §10/§11)', () => {
     expect(audit?.reason).toBe('ค่าคอมมิชชั่นทีมกลาง (เทสต์ 4.4)')
   })
 
+  it('staging E-065 — map หลายรายการด้วยเหตุผลเดียว · มีรายการที่ไม่มีอยู่ ⇒ ไม่เขียนเลยสักแถว (all-or-nothing)', async () => {
+    const first = await seedBatch()
+    const second = await seedBatch()
+    const [recordA] = await expenses.syncExpenseRecordsFromPayout(ctx, first.batchId)
+    const [recordB] = await expenses.syncExpenseRecordsFromPayout(ctx, second.batchId)
+    const ids = [recordA?.id ?? '', recordB?.id ?? '']
+
+    await expectCode(
+      () =>
+        expenses.mapExpenseCostCenterBulk(ctx, {
+          expenseRecordIds: [...ids, MISSING_COST_CENTER_ID],
+          costCenterId: COST_CENTER_ID,
+          reason: 'จัดศูนย์ต้นทุนรวด (เทสต์ E-065)',
+        }),
+      'EXPENSE_RECORD_NOT_FOUND',
+    )
+    expect(await db().expenseRecord.count({ where: { id: { in: ids }, costCenterId: COST_CENTER_ID } })).toBe(0)
+
+    const updated = await expenses.mapExpenseCostCenterBulk(ctx, {
+      expenseRecordIds: ids,
+      costCenterId: COST_CENTER_ID,
+      reason: 'จัดศูนย์ต้นทุนรวด (เทสต์ E-065)',
+    })
+    expect(updated.map((row) => row.costCenterId)).toEqual([COST_CENTER_ID, COST_CENTER_ID])
+    const audits = await db().auditLog.count({
+      where: { organizationId: ORG_ID, targetType: 'expense_records', targetId: { in: ids }, reason: 'จัดศูนย์ต้นทุนรวด (เทสต์ E-065)' },
+    })
+    expect(audits).toBe(2)
+  })
+
   it('ไม่ระบุเหตุผล = ไม่ผ่านนโยบาย audit (`90` §13)', async () => {
     const seeded = await seedBatch()
     const [record] = await expenses.syncExpenseRecordsFromPayout(ctx, seeded.batchId)

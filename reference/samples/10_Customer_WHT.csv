@@ -1,3 +1,3 @@
-﻿received_date,company,company_tax_id,billing_ref,tax_invoice_ref,withheld_baht,cert_no,cert_date,cert_wht_baht,status,billing_batch_number
-12/09/2569,บริษัท สยามไฟแนนซ์ จำกัด,0105555000111,2569-08,INV-2569-0014,111.90,สฟ-2569/0451,10/09/2569,111.90,received,BL-2569-004
-28/09/2569,บริษัท ไทยลีสซิ่ง จำกัด,0105555000222,2569-09,INV-2569-0018,240.00,-,-,-,pending,BL-2569-006
+﻿received_date,company,company_tax_id,billing_ref,tax_invoice_ref,withheld_baht,cert_no,cert_date,cert_wht_baht,status,billing_batch_number,cert_file_name
+12/09/2569,บริษัท สยามไฟแนนซ์ จำกัด,0105555000111,2569-08,INV-2569-0014,111.90,สฟ-2569/0451,10/09/2569,111.90,received,BL-2569-004,สฟ-2569-0451.pdf
+28/09/2569,บริษัท ไทยลีสซิ่ง จำกัด,0105555000222,2569-09,INV-2569-0018,240.00,-,-,-,pending,BL-2569-006,-

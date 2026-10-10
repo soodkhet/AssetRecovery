@@ -36,3 +36,18 @@ export const costCenterMapSchema = z.object({
 })
 
 export type CostCenterMapInput = z.infer<typeof costCenterMapSchema>
+
+/** staging E-065 (มติ PO 10/10/2569) — map หลายรายการพร้อมกันด้วยศูนย์ต้นทุน + เหตุผลเดียว (all-or-nothing) */
+export const COST_CENTER_BULK_MAX = 200
+
+export const costCenterBulkMapSchema = z.object({
+  expenseRecordIds: z
+    .array(uuidSchema)
+    .min(1, 'เลือกรายการอย่างน้อย 1 รายการ')
+    .max(COST_CENTER_BULK_MAX, `เลือกได้ไม่เกิน ${COST_CENTER_BULK_MAX} รายการต่อครั้ง`)
+    .refine((ids) => new Set(ids).size === ids.length, 'เลือกรายการซ้ำ'),
+  costCenterId: uuidSchema,
+  reason: z.string().trim().min(1, 'ต้องระบุเหตุผล/หมายเหตุการ mapping').max(1000),
+})
+
+export type CostCenterBulkMapInput = z.infer<typeof costCenterBulkMapSchema>

@@ -369,6 +369,8 @@ export interface ReadinessInput {
   openPayoutBatches?: readonly OpenPayoutBatch[]
   /** มติ PO U99 — ข้อมูลองค์กรยังเป็นค่าตัวอย่าง (เลขผู้เสียภาษี/ที่อยู่) · **เตือน ไม่บล็อก** */
   organizationProfileIssues?: readonly string[]
+  /** staging E-058 (มติ PO 10/10/2569) — บัญชีค่าใช้จ่ายของงวดที่ยังไม่ map ศูนย์ต้นทุน · **เตือน ไม่บล็อก** */
+  unmappedCostCenter?: { count: number; amountSatang: number }
 }
 
 export interface ReadinessResult {
@@ -399,6 +401,15 @@ export function unbilledRevenueWarning(summary: UnbilledRevenueSummary): string 
   return (
     `มีรายได้ค้างรับยังไม่วางบิล ${fmtCount(summary.count)} รายการ ${fmtSatangSymbol(summary.totalSatang)}${draftNote} — ` +
     'ส่งให้สำนักงานบัญชีบันทึกรายได้ค้างรับ (รายละเอียดอยู่ใน 14_Unbilled_Revenue.csv ของชุดเอกสารบัญชี) · ปิดงวดได้'
+  )
+}
+
+/** staging E-058 — ข้อความเตือนบัญชีค่าใช้จ่ายที่ยังไม่ map ศูนย์ต้นทุน (ปิดงวด/สร้างชุดเอกสารได้) */
+export function unmappedCostCenterWarning(summary: { count: number; amountSatang: number } | undefined): string | null {
+  if (summary === undefined || summary.count === 0) return null
+  return (
+    `มีบัญชีค่าใช้จ่ายยังไม่ระบุศูนย์ต้นทุน ${fmtCount(summary.count)} รายการ (${fmtSatangSymbol(summary.amountSatang)}) — ` +
+    'ชุดเอกสารบัญชีจะมีช่องศูนย์ต้นทุนว่าง · ระบุได้ที่แท็บบัญชีค่าใช้จ่าย · ปิดงวดได้'
   )
 }
 
@@ -499,6 +510,8 @@ export function evaluateReadiness(input: ReadinessInput): ReadinessResult {
   if (draftWarning !== null) warnings.push(draftWarning)
   const profileWarning = organizationProfileWarning(input.organizationProfileIssues ?? [])
   if (profileWarning !== null) warnings.push(profileWarning)
+  const costCenterWarning = unmappedCostCenterWarning(input.unmappedCostCenter)
+  if (costCenterWarning !== null) warnings.push(costCenterWarning)
 
   return {
     ready: checks.every((check) => check.passed),

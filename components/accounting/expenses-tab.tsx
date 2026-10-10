@@ -5,6 +5,8 @@ import { useUrlFilter } from '@/components/ui/use-url-filter'
 import { ACCOUNTING_FILTER_PARAMS } from '@/lib/accounting/accounting-tabs'
 import { kpiValue } from '@/components/ui/kpi-value'
 import { CostCenterMapModal } from '@/components/accounting/cost-center-map-modal'
+import { CostCenterBulkMapModal } from '@/components/accounting/cost-center-bulk-map-modal'
+import { bulkMappableIds, effectiveBulkSelection, toggleAllBulkSelection } from '@/lib/expenses/cost-center-bulk'
 import { ExpenseDetailModal } from '@/components/accounting/expense-detail-modal'
 import { useExpenseRecords, type ExpenseDocumentFilter } from '@/components/accounting/use-expense-records'
 import { usePermission } from '@/components/auth/permission-provider'
@@ -61,6 +63,20 @@ export function ExpensesTab() {
 
   const [mapping, setMapping] = useState<ExpenseRecordDto | null>(null)
   const [viewing, setViewing] = useState<ExpenseRecordDto | null>(null)
+  // staging E-065 — เลือกหลายรายการ map ศูนย์ต้นทุนพร้อมกัน (เฉพาะรายการ manual)
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
+  const [bulkOpen, setBulkOpen] = useState(false)
+  const selection = effectiveBulkSelection(selected, data.items)
+  const mappableCount = bulkMappableIds(data.items).length
+  const allSelected = mappableCount > 0 && selection.length === mappableCount
+  const toggleRow = (id: string, checked: boolean): void => {
+    setSelected((current) => {
+      const next = new Set(current)
+      if (checked) next.add(id)
+      else next.delete(id)
+      return next
+    })
+  }
 
   return (
     <div className="space-y-6">
@@ -85,6 +101,20 @@ export function ExpensesTab() {
         />
       </div>
 
+      {canMap && selection.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs">
+          <span className="text-slate-700">เลือกแล้ว {fmtCount(selection.length)} รายการ</span>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}>
+              ล้างที่เลือก
+            </Button>
+            <Button size="sm" onClick={() => setBulkOpen(true)}>
+              ระบุศูนย์ต้นทุน ({fmtCount(selection.length)} รายการ)
+            </Button>
+          </div>
+        </div>
+      )}
+
       {data.summary.unmappedCount > 0 && (
         <InlineAlert tone="warning" title={`ยังไม่ได้ map Cost Center ${fmtCount(data.summary.unmappedCount)} รายการ`}>
           บัญชีต้องเลือกศูนย์ต้นทุนให้ครบก่อนรวมเข้าชุดเอกสารส่งสำนักงานบัญชี
@@ -95,6 +125,18 @@ export function ExpensesTab() {
         <Table>
           <THead>
             <Tr>
+              {canMap && (
+                <Th className="w-8">
+                  <input
+                    type="checkbox"
+                    aria-label="เลือกทุกรายการที่ระบุศูนย์ต้นทุนได้"
+                    checked={allSelected}
+                    disabled={mappableCount === 0}
+                    onChange={() => setSelected(toggleAllBulkSelection(selected, data.items))}
+                    className="focus-ring h-4 w-4 rounded border-slate-300"
+                  />
+                </Th>
+              )}
               <Th>ผู้รับเงิน</Th>
               <Th>ประเภท</Th>
               <Th>วันที่จ่าย</Th>
@@ -113,13 +155,26 @@ export function ExpensesTab() {
             isEmpty={data.items.length === 0}
             emptyTitle="ยังไม่มีรายการค่าใช้จ่ายตามตัวกรองนี้"
             emptyDescription="รายการจะเกิดเองเมื่อรอบจ่ายเงินถูกยืนยันว่าจ่ายจริงแล้ว"
-            colSpan={9}
+            colSpan={canMap ? 10 : 9}
           />
           <TBody>
             {!loading &&
               error === null &&
               data.items.map((row) => (
                 <Tr key={row.id} className={row.documentStatus === 'incomplete' ? 'bg-red-50/30' : undefined}>
+                  {canMap && (
+                    <Td>
+                      {row.mappingRule === 'manual' && (
+                        <input
+                          type="checkbox"
+                          aria-label={`เลือกรายการของ ${row.payeeName}`}
+                          checked={selected.has(row.id)}
+                          onChange={(event) => toggleRow(row.id, event.target.checked)}
+                          className="focus-ring h-4 w-4 rounded border-slate-300"
+                        />
+                      )}
+                    </Td>
+                  )}
                   <Td>
                     <div className="text-sm font-semibold text-slate-900">{row.payeeName}</div>
                     <p className="mt-0.5 font-mono text-[10px] whitespace-nowrap text-slate-400">{row.payoutBatchName}</p>
@@ -181,6 +236,18 @@ export function ExpensesTab() {
         costCenters={data.costCenters}
         onClose={() => setMapping(null)}
         onMapped={() => void reload()}
+      />
+
+      <CostCenterBulkMapModal
+        key={bulkOpen ? 'bulk-open' : 'bulk-closed'}
+        open={bulkOpen}
+        expenseRecordIds={selection}
+        costCenters={data.costCenters}
+        onClose={() => setBulkOpen(false)}
+        onMapped={() => {
+          setSelected(new Set())
+          void reload()
+        }}
       />
 
       <ExpenseDetailModal record={viewing} onClose={() => setViewing(null)} />

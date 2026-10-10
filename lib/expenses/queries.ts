@@ -15,7 +15,7 @@ import {
   type DocumentSource,
   type DocumentStatus,
 } from '@/lib/expenses/expense-record'
-import type { CostCenterMapInput, ExpenseRecordListQuery } from '@/lib/expenses/schemas'
+import type { CostCenterBulkMapInput, CostCenterMapInput, ExpenseRecordListQuery } from '@/lib/expenses/schemas'
 import type { CostCenterOptionDto, ExpenseRecordDto, ExpenseRecordListDto } from '@/lib/expenses/types'
 import { Prisma } from '@/lib/generated/prisma/client'
 import { prisma } from '@/lib/prisma'
@@ -370,4 +370,71 @@ export async function mapExpenseCostCenter(
   })
 
   return toDto(updated)
+}
+
+// ── POST /api/accounting/expenses/cost-center/bulk (staging E-065) ─────────────
+
+/**
+ * staging E-065 (มติ PO 10/10/2569) — map ศูนย์ต้นทุนหลายรายการพร้อมกันด้วยเหตุผลเดียว · **all-or-nothing**:
+ * ตรวจทุกแถวก่อน (มีอยู่ · map แบบ manual ได้ · งวดไม่ locked) ข้อใดไม่ผ่าน ⇒ ไม่เขียนเลยสักแถว
+ * · audit 1 แถวต่อรายการ (เหตุผลเดียวกัน) เหมือนการ map ทีละรายการ
+ */
+export async function mapExpenseCostCenterBulk(
+  ctx: AccountingMutationContext,
+  input: CostCenterBulkMapInput,
+): Promise<ExpenseRecordDto[]> {
+  assertOrgWideReadable(ctx.actor, 'expense-records')
+  const records = await prisma.expenseRecord.findMany({
+    where: { id: { in: [...input.expenseRecordIds] }, organizationId: ctx.actor.organizationId },
+    select: RECORD_SELECT,
+  })
+  const byId = new Map(records.map((record) => [record.id, record]))
+  for (const id of input.expenseRecordIds) {
+    const record = byId.get(id)
+    if (record === undefined) throw new ExpenseRecordError('EXPENSE_RECORD_NOT_FOUND', { detail: `expense_record=${id}` })
+    assertCostCenterEditable(toDto(record).mappingRule, id)
+    assertPeriodEditable({ periodStatus: record.period.status, targetType: TARGET, targetId: id, affectsAmount: false })
+  }
+
+  const costCenter = await prisma.costCenter.findFirst({
+    where: { id: input.costCenterId, organizationId: ctx.actor.organizationId, deletedAt: null, isActive: true },
+    select: { id: true, code: true, name: true },
+  })
+  if (costCenter === null) {
+    throw new SettingsError('COST_CENTER_NOT_FOUND', { detail: `cost_center=${input.costCenterId}` })
+  }
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const rows: RecordRow[] = []
+    for (const id of input.expenseRecordIds) {
+      const before = byId.get(id)!
+      const row = await tx.expenseRecord.update({ where: { id }, data: { costCenterId: costCenter.id }, select: RECORD_SELECT })
+      await emitAudit(
+        {
+          organizationId: ctx.actor.organizationId,
+          actorId: ctx.actor.id,
+          actorRole: ctx.actor.roleName,
+          action: 'update',
+          targetType: TARGET,
+          targetId: id,
+          before: { cost_center_id: before.costCenterId },
+          after: {
+            cost_center_id: costCenter.id,
+            cost_center_code: costCenter.code,
+            mapping_rule: 'manual',
+            bulk_count: input.expenseRecordIds.length,
+          },
+          reason: input.reason,
+          ipAddress: ctx.meta.ipAddress,
+          userAgent: ctx.meta.userAgent,
+          diffOnly: false,
+        },
+        tx,
+      )
+      rows.push(row)
+    }
+    return rows
+  })
+
+  return updated.map(toDto)
 }

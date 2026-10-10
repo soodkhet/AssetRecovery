@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { isAccountingError } from '@/lib/accounting/errors'
 import {
+  unmappedCostCenterWarning,
   assertNoOpenPayouts,
   assertPeriodActionStatus,
   assertPeriodEnded,
@@ -454,5 +455,18 @@ describe('มติ PO U112 — รอบจ่ายค้างบล็อก
       start: new Date('2026-07-31T17:00:00Z'),
       end: new Date('2026-08-31T17:00:00Z'),
     })
+  })
+})
+
+describe('staging E-058 — บัญชีค่าใช้จ่ายที่ยังไม่ map ศูนย์ต้นทุน', () => {
+  it('เป็นคำเตือน ไม่บล็อกการปิดงวด/สร้างชุดเอกสาร', () => {
+    const result = evaluateReadiness({ ...readyInput, unmappedCostCenter: { count: 3, amountSatang: 450_000 } })
+    expect(result.ready).toBe(true)
+    expect(result.warnings.some((warning) => warning.includes('ยังไม่ระบุศูนย์ต้นทุน 3 รายการ'))).toBe(true)
+  })
+
+  it('map ครบ ⇒ ไม่มีคำเตือน', () => {
+    expect(unmappedCostCenterWarning({ count: 0, amountSatang: 0 })).toBeNull()
+    expect(unmappedCostCenterWarning(undefined)).toBeNull()
   })
 })

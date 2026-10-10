@@ -415,7 +415,7 @@ suite('Phase 4.6 — สร้างชุดเอกสารส่งบั�
     )
     // มติ PO 05/10/2569 (U40/U41) — รอบนี้ไม่มีรายการ ⇒ มีแต่หัวคอลัมน์
     expect(fileAt([...storage.keys()].find((path) => path.endsWith('10_Customer_WHT.csv')) ?? '')).toBe(
-      `${CSV_BOM}received_date,company,company_tax_id,billing_ref,tax_invoice_ref,withheld_baht,cert_no,cert_date,cert_wht_baht,status,billing_batch_number\r\n`,
+      `${CSV_BOM}received_date,company,company_tax_id,billing_ref,tax_invoice_ref,withheld_baht,cert_no,cert_date,cert_wht_baht,status,billing_batch_number,cert_file_name\r\n`,
     )
     expect(fileAt([...storage.keys()].find((path) => path.endsWith('11_Suspense_Receipts.csv')) ?? '')).toBe(
       `${CSV_BOM}bank_txn_date,bank_ref,amount_baht,suspended_date,suspense_reason,status,resolved_ref,resolved_date,refund_reason,billing_batch_number\r\n`,

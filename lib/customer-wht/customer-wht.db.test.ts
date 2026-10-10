@@ -625,7 +625,7 @@ suite('มติ PO U40/U41 — Export Pack 10_Customer_WHT.csv + 11_Suspense_Re
 
     const customer = fileText('10_Customer_WHT.csv').slice(CSV_BOM.length).split('\r\n')
     // มติ U79 — `billing_ref` คงเป็นรอบเดือน · เลขรอบจริง BL-<พ.ศ.>-NNN อยู่คอลัมน์ต่อท้าย
-    expect(customer[1]).toMatch(/^05\/08\/2569,ไฟแนนซ์ CO1 U40,0105540400001,2569-05,-,111\.90,-,-,-,pending,BL-25\d{2}-\d{3,}$/)
+    expect(customer[1]).toMatch(/^05\/08\/2569,ไฟแนนซ์ CO1 U40,0105540400001,2569-05,-,111\.90,-,-,-,pending,BL-25\d{2}-\d{3,},-$/)
 
     const suspense = fileText('11_Suspense_Receipts.csv').slice(CSV_BOM.length).split('\r\n')
     expect(suspense).toHaveLength(3)

@@ -249,6 +249,8 @@ function toPeriodDto(
   summary: ExceptionSummary,
   lastExport: LastExport | undefined,
   now: Date,
+  /** staging E-058 — บัญชีค่าใช้จ่ายของงวดที่ยังไม่ map ศูนย์ต้นทุน (ไม่ระบุ = 0) */
+  unmappedCostCenterCount = 0,
 ): AccountingPeriodDto {
   const key: PeriodKey = { yearBe: row.yearBe, month: row.month }
   return {
@@ -273,7 +275,19 @@ function toPeriodDto(
     lockedAt: row.lockedAt?.toISOString() ?? null,
     lockedByName: row.lockedByUser?.fullName ?? null,
     directEditLabel: periodLockPolicyFor(row.status).directEditLabel,
+    unmappedCostCenterCount,
   }
+}
+
+/** staging E-058 — จำนวนบัญชีค่าใช้จ่ายที่ยังไม่ map ศูนย์ต้นทุน ต่องวด (query เดียว) */
+async function unmappedCostCenterByPeriod(organizationId: string, periodIds: readonly string[]): Promise<Map<string, number>> {
+  if (periodIds.length === 0) return new Map()
+  const rows = await prisma.expenseRecord.groupBy({
+    by: ['periodId'],
+    where: { organizationId, periodId: { in: [...periodIds] }, costCenterId: null },
+    _count: { _all: true },
+  })
+  return new Map(rows.map((row) => [row.periodId, row._count._all]))
 }
 
 /**
@@ -299,11 +313,14 @@ export async function listPeriods(
   })
 
   const ids = rows.map((row) => row.id)
-  const [counts, exports] = await Promise.all([
+  const [counts, exports, unmapped] = await Promise.all([
     exceptionSummaryByPeriod(ctx.actor.organizationId, ids),
     lastExportByPeriod(ctx.actor.organizationId, ids),
+    unmappedCostCenterByPeriod(ctx.actor.organizationId, ids),
   ])
-  return rows.map((row) => toPeriodDto(row, counts.get(row.id) ?? summarizeExceptionCounts([]), exports.get(row.id), now))
+  return rows.map((row) =>
+    toPeriodDto(row, counts.get(row.id) ?? summarizeExceptionCounts([]), exports.get(row.id), now, unmapped.get(row.id) ?? 0),
+  )
 }
 
 /** อ่านรอบบัญชีตาม id ในองค์กรของผู้เรียก — 404 แบบไม่ leak ข้ามองค์กร (ใช้ร่วมกับไฟล์ 36) */
@@ -475,6 +492,7 @@ async function readinessOf(organizationId: string, row: PeriodRow, now: Date): P
     awaitingReceiptInvoice,
     organizationProfileIssues,
     openPayoutBatches,
+    unmappedCostCenter,
   ] = await Promise.all([
     prisma.exception.findMany({
       where: { organizationId, periodId: row.id, status: 'open' },
@@ -517,6 +535,12 @@ async function readinessOf(organizationId: string, row: PeriodRow, now: Date): P
     getOrganizationProfileIssues(organizationId),
     // มติ PO U112 — รอบจ่ายของงวดที่ยังไม่จ่ายสำเร็จ/ยกเลิก ⇒ บล็อก
     openPayoutBatchesOf(organizationId, key),
+    // staging E-058 — บัญชีค่าใช้จ่ายของงวดที่ยังไม่ map ศูนย์ต้นทุน ⇒ เตือนอย่างเดียว
+    prisma.expenseRecord.aggregate({
+      where: { organizationId, periodId: row.id, costCenterId: null },
+      _count: { _all: true },
+      _sum: { grossSatang: true },
+    }),
   ])
 
   return evaluateReadiness({
@@ -533,6 +557,7 @@ async function readinessOf(organizationId: string, row: PeriodRow, now: Date): P
     draftBillingBatches: draftBatches,
     organizationProfileIssues,
     openPayoutBatches,
+    unmappedCostCenter: { count: unmappedCostCenter._count._all, amountSatang: unmappedCostCenter._sum.grossSatang ?? 0 },
     receiptsAwaitingTaxInvoice: {
       count: awaitingReceiptInvoice._count._all,
       amountSatang:

@@ -16,6 +16,7 @@ vi.mock('@/lib/auth/session', () => ({ requireSession: requireSessionMock }))
 const expenseQueriesMock = vi.hoisted(() => ({
   listExpenseRecords: vi.fn(),
   mapExpenseCostCenter: vi.fn(),
+  mapExpenseCostCenterBulk: vi.fn(),
   syncExpenseRecordsFromPayout: vi.fn(),
 }))
 vi.mock('@/lib/expenses/queries', () => expenseQueriesMock)
@@ -29,6 +30,7 @@ vi.mock('@/lib/accounting/question-queries', () => questionQueriesMock)
 
 const expensesRoute = await import('@/app/api/accounting/expenses/route')
 const { PATCH: mapCostCenter } = await import('@/app/api/accounting/expenses/[id]/cost-center/route')
+const { POST: mapCostCenterBulk } = await import('@/app/api/accounting/expenses/cost-center/bulk/route')
 const questionsRoute = await import('@/app/api/accounting/questions/route')
 const { PATCH: answerQuestion } = await import('@/app/api/accounting/questions/[id]/answer/route')
 
@@ -254,5 +256,34 @@ describe('ข้อซักถามจากสำนักงานบัญ�
       QUESTION_ID,
       { answerText: 'เป็นเงินรับจากบริษัท เร็วดี จำกัด' },
     )
+  })
+})
+
+describe('staging E-065 — map Cost Center หลายรายการ', () => {
+  const url = 'http://localhost/api/accounting/expenses/cost-center/bulk'
+  const body = { expenseRecordIds: [EXPENSE_ID], costCenterId: COST_CENTER_ID, reason: 'จัดศูนย์ต้นทุนรวด' }
+
+  it('การเงิน (ไม่มี map_cost_center) = 403 · ไม่แตะ service', async () => {
+    requireSessionMock.mockResolvedValue(FINANCE)
+    const response = await mapCostCenterBulk(jsonRequest(url, 'POST', body), undefined)
+    expect(response.status).toBe(403)
+    expect(expenseQueriesMock.mapExpenseCostCenterBulk).not.toHaveBeenCalled()
+  })
+
+  it('แนบยอดเงินมา ⇒ EDIT_AMOUNT_DIRECTLY · ไม่เลือกรายการ ⇒ 400', async () => {
+    requireSessionMock.mockResolvedValue(ACCOUNTANT)
+    const withAmount = await mapCostCenterBulk(jsonRequest(url, 'POST', { ...body, grossSatang: 1 }), undefined)
+    expect(await codeOf(withAmount)).toBe('EDIT_AMOUNT_DIRECTLY')
+    const empty = await mapCostCenterBulk(jsonRequest(url, 'POST', { ...body, expenseRecordIds: [] }), undefined)
+    expect(empty.status).toBe(400)
+    expect(expenseQueriesMock.mapExpenseCostCenterBulk).not.toHaveBeenCalled()
+  })
+
+  it('สำนักงานบัญชี ⇒ ส่งต่อ service พร้อมรายการ/เหตุผลเดียว', async () => {
+    requireSessionMock.mockResolvedValue(ACCOUNTANT)
+    expenseQueriesMock.mapExpenseCostCenterBulk.mockResolvedValue([])
+    const response = await mapCostCenterBulk(jsonRequest(url, 'POST', body), undefined)
+    expect(response.status).toBe(200)
+    expect(expenseQueriesMock.mapExpenseCostCenterBulk).toHaveBeenCalledWith(expect.objectContaining({ actor: ACCOUNTANT }), body)
   })
 })

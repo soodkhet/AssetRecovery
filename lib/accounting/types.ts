@@ -71,6 +71,8 @@ export interface AccountingPeriodDto {
   exportedAt: string | null
   /** เวอร์ชัน Export ล่าสุดของรอบ (เลขลำดับ · `null` = ยังไม่เคย Export) — BUG-160 modal บอกเวอร์ชันจริง */
   latestExportVersion: number | null
+  /** staging E-058 — บัญชีค่าใช้จ่ายของงวดที่ยังไม่ map ศูนย์ต้นทุน (เตือน ไม่บล็อก) · ไม่ระบุ = 0 */
+  unmappedCostCenterCount?: number
   sentAt: string | null
   sentByName: string | null
   lockedAt: string | null

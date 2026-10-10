@@ -14,6 +14,7 @@
 |---|---|---|
 | v1 | (เดิม) | Drafted from UI Reference — Expense Record (accounting view), Cost Center mapping, Document Completeness Check |
 | v2 | 03/07/2569 | Reformat ตามมาตรฐานเอกสารชุดใหม่ + แยก Decisions/Open Items ชัดเจน — **เนื้อหาเดิมคงไว้ครบ ไม่มีการเปลี่ยน business logic** |
+| v2.1 | 11/10/2569 | **staging E-065 (มติ PO 10/10/2569)** — §14 เพิ่ม `POST /api/accounting/expenses/cost-center/bulk` map ศูนย์ต้นทุนหลายรายการ (สูงสุด 200) ด้วยศูนย์ต้นทุน + เหตุผลเดียว **all-or-nothing** · กติกาเดียวกับ map ทีละรายการ (manual เท่านั้น · งวด locked ห้าม · แนบยอดเงิน ⇒ `EDIT_AMOUNT_DIRECTLY`) · audit 1 แถวต่อรายการ · หน้าจอติ๊กเลือกหลายรายการ · auto-map ตามทีมรอคำตอบ Q11 |
 
 ขอบเขตเอกสารนี้: มุมมองฝั่งบัญชีของรายจ่าย (ต่อจากไฟล์ 17 ฝั่งการเงิน) — บันทึกรายการค่าใช้จ่าย/จ่ายเงินตามมาตรฐานบัญชี พร้อม Cost Center mapping และตรวจสอบความครบถ้วนของเอกสารก่อนส่งสำนักงานบัญชี
 
@@ -115,6 +116,7 @@ sync อัตโนมัติจาก Payout Batch Item (ไฟล์ 17 §7
 |---|---|---|
 | GET | /api/accounting/expenses | list |
 | PATCH | /api/accounting/expenses/:id/cost-center | map cost center (เฉพาะ manual) |
+| POST | /api/accounting/expenses/cost-center/bulk | map cost center หลายรายการ เหตุผลเดียว all-or-nothing (staging E-065) |
 
 ## 15. Acceptance Criteria
 
