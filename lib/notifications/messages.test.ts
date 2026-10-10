@@ -8,7 +8,9 @@ import { FINANCE_OPERATION_TABS } from '@/lib/finance/operation-tabs'
 import { NOTIFICATION_ONLY_EVENTS, isNotificationEvent, type NotificationEventCode } from '@/lib/notifications/events'
 import {
   accountantQuestionMessage,
+  advanceDecidedMessage,
   advanceOverdueMessage,
+  payoutPaidToPayeeMessage,
   assetIntakeRejectedMessage,
   caseClosedFailMessage,
   caseClosedSuccessMessage,
@@ -108,6 +110,15 @@ const ALL: readonly NotificationMessage[] = [
   expenseRejectedMessage({ grossSatang: 80000, reason: 'ใบเสร็จไม่ชัด', caseBound: false }),
   payoutBatchCompletedMessage({ batchId: 'b1', batchName: 'รอบจ่าย Outsource', netSatang: 9900000, source: 'manual' }),
   advanceOverdueMessage({ advanceId: 'a1', dueClearDate: new Date('2026-08-10T00:00:00Z') }, 'payee'),
+  payoutPaidToPayeeMessage({ batchId: 'b1', userId: 'u1', transferSatang: 97_000 }),
+  advanceDecidedMessage(
+    { advanceId: 'a1', approvedSatang: 250_000, requestedSatang: 300_000, dueClearDate: new Date('2026-10-20T00:00:00Z'), reason: null },
+    'approved',
+  ),
+  advanceDecidedMessage(
+    { advanceId: 'a1', approvedSatang: null, requestedSatang: 300_000, dueClearDate: new Date('2026-10-20T00:00:00Z'), reason: 'ยังไม่เคลียร์ใบเก่า' },
+    'rejected',
+  ),
   evidenceRejectedMessage({ caseId: '00000000-0000-4000-8000-0000000000c9', caseRef: 'CASE-26-0009', reason: 'รูปไม่ชัด' }),
   exceptionCreatedMessage({ title: 'ใบกำกับหาย', periodLabel: 'สิงหาคม 2569' }),
   whtFilingDueMessage({
@@ -441,5 +452,41 @@ describe('ลิงก์แจ้งเตือนเปิดเคสที�
   })
   it('หลักฐานถูกตีกลับ → รายละเอียดเคสในแท็บกำลังติดตาม', () => {
     expect(evidenceRejectedMessage({ caseId, caseRef: 'X', reason: 'y' }).linkPath).toBe(`/field/tracking?case=${caseId}`)
+  })
+})
+
+describe('แจ้งผู้รับเงิน/ผู้ขอโดยตรง (staging E-011)', () => {
+  const due = new Date('2026-10-20T00:00:00Z')
+
+  it('อนุมัติเงินทดรองแบบปรับลด — บอกยอดอนุมัติ ยอดที่ขอ และกำหนดเคลียร์ (พ.ศ.) · ลิงก์หน้าเงินทดรองของผู้ขอ', () => {
+    const message = advanceDecidedMessage(
+      { advanceId: 'a1', approvedSatang: 250_000, requestedSatang: 300_000, dueClearDate: due, reason: null },
+      'approved',
+    )
+    expect(message.eventCode).toBe('advance.approved')
+    expect(message.body).toContain('อนุมัติ ฿2,500.00 (ขอ ฿3,000.00)')
+    expect(message.body).toContain('20/10/2569')
+    expect(message.linkPath).toBe('/field/advances')
+  })
+
+  it('อนุมัติเต็มจำนวนไม่แสดงยอดที่ขอซ้ำ · ไม่อนุมัติแสดงเหตุผล', () => {
+    const full = advanceDecidedMessage(
+      { advanceId: 'a1', approvedSatang: 300_000, requestedSatang: 300_000, dueClearDate: due, reason: null },
+      'approved',
+    )
+    expect(full.body).not.toContain('(ขอ')
+    const rejected = advanceDecidedMessage(
+      { advanceId: 'a1', approvedSatang: null, requestedSatang: 300_000, dueClearDate: due, reason: 'ยังไม่เคลียร์ใบเก่า' },
+      'rejected',
+    )
+    expect(rejected.eventCode).toBe('advance.rejected')
+    expect(rejected.body).toContain('ยังไม่เคลียร์ใบเก่า')
+  })
+
+  it('โอนแล้ว — ยอดโอนของคนนั้น · กันซ้ำต่อรอบ+ผู้รับ · ลิงก์สรุปรายได้', () => {
+    const message = payoutPaidToPayeeMessage({ batchId: 'b1', userId: 'u1', transferSatang: 97_000 })
+    expect(message.body).toContain('฿970.00')
+    expect(message.dedupeKey).toBe('payout-paid-b1-u1')
+    expect(message.linkPath).toBe('/field/income')
   })
 })

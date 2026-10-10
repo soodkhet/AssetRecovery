@@ -152,12 +152,12 @@ export function LotTab({
   }, [])
 
   function updateFilter(next: Partial<LotFilterState>): void {
-    if (!delivered) setLoading(true)
+    startFilterLoad()
     setFilters((current) => ({ ...current, ...next }))
   }
 
   function updateDate(date: string): void {
-    if (!delivered) setLoading(true)
+    startFilterLoad()
     setFilters((current) => (delivered ? withDeliveredDate(current, date) : { ...current, date }))
   }
 
@@ -173,6 +173,13 @@ export function LotTab({
   function reload(): void {
     setLoading(true)
     setVersion((current) => current + 1)
+  }
+
+  /** แท็บ "ส่งมอบแล้ว" โหลดเองใน `<DeliveredLotGroups>` · แท็บอื่นบังคับโหลดใหม่ทุกครั้ง — ค่าตัวกรองเดิมทำให้
+   * `listPath` เดิม effect ไม่รันซ้ำ ตารางค้าง "กำลังโหลด" (staging E-006) */
+  function startFilterLoad(): void {
+    if (delivered) return
+    reload()
   }
 
   /** โหลดล็อตฉบับเต็ม (พร้อมรายการเครื่อง + url เอกสาร) แล้วส่งต่อให้ผู้เรียก */

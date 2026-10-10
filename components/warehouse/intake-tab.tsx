@@ -112,6 +112,8 @@ export function IntakeTab({
 
   function updateFilter(next: Partial<AssetFilterState>): void {
     setLoading(true)
+    // บังคับโหลดใหม่ทุกครั้ง — ค่าตัวกรองเดิมทำให้ `listPath` เดิม effect ไม่รันซ้ำ ตารางค้าง "กำลังโหลด" (staging E-006)
+    setVersion((current) => current + 1)
     setPage(1)
     setFilters((current) => ({ ...current, ...next }))
   }

@@ -110,6 +110,22 @@ export const EVENT_REGISTRY: Readonly<Record<DomainEventName, DomainEventContrac
     source: '90 §6.3 (mockup `notifications.html`) · 15 §9.1',
     description: 'job มาร์คเงินทดรองที่เลย `due_clear_date` เป็น `overdue` — ไม่มีปุ่มให้กดเอง (`15` §10)',
   },
+  // staging E-011 (`90` §6.3 v4.9 · `45` v1.12) — แจ้งผู้รับเงิน/ผู้ขอโดยตรง
+  'advance.approved': {
+    module: 'finance',
+    source: '90 §6.3 v4.9 · 15 §9',
+    description: 'การเงินอนุมัติเงินทดรอง — แจ้งผู้ขอพร้อมยอดอนุมัติและกำหนดเคลียร์',
+  },
+  'advance.rejected': {
+    module: 'finance',
+    source: '90 §6.3 v4.9 · 15 §9',
+    description: 'การเงินไม่อนุมัติเงินทดรอง (ต้องมีเหตุผล) — แจ้งผู้ขอ',
+  },
+  'payout.paid_to_payee': {
+    module: 'finance',
+    source: '90 §6.3 v4.9 · 17 §9',
+    description: 'รอบจ่าย completed — แจ้งผู้รับเงินแต่ละคนพร้อมยอดโอนสุทธิของตัวเอง',
+  },
 
   // ── Accounting (30/33/34/36) — เข้าทะเบียนที่ Phase 5.2 ────────────────
   'wht.filing_due_reminder': {

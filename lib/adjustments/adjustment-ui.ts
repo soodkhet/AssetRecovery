@@ -79,3 +79,15 @@ export const ADJUSTMENT_TARGET_FILTERS: readonly { value: AdjustmentTargetFilter
   { value: 'billing_batch', label: ADJUSTMENT_TARGET_LABEL.billing_batch },
   { value: 'payout_batch', label: ADJUSTMENT_TARGET_LABEL.payout_batch },
 ]
+
+/**
+ * สถานะกล่องผลค้นหารายการต้นทางของฟอร์ม Adjustment (staging E-070) — ผลที่ได้ผูกกับคำขอ (`key`)
+ * ⇒ คำขอปัจจุบันยังไม่กลับ = `loading` · error กับ "ไม่พบรายการ" ไม่แสดงพร้อมกัน
+ */
+export function targetSearchState(
+  result: { key: string; error: string | null } | null,
+  requestKey: string,
+): 'loading' | 'error' | 'ready' {
+  if (result === null || result.key !== requestKey) return 'loading'
+  return result.error === null ? 'ready' : 'error'
+}

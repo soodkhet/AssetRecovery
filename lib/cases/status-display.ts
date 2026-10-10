@@ -61,6 +61,25 @@ export function caseReviewActionLabel(status: string): string {
   return 'รับเคส'
 }
 
+/**
+ * กล่องเหตุผลของผู้ตรวจบนหน้าเคส (staging E-003) — `review_note` ถูกเขียนโดย "ขอข้อมูลเพิ่ม"/"ไม่รับเคส"
+ * และคงอยู่ตอนธุรการกดกลับไปแก้ไขเป็นร่าง/ส่งตรวจใหม่ ⇒ ธุรการต้องเห็นว่าต้องแก้อะไร
+ * · สถานะอื่น (รับเคสแล้วเป็นต้นไป) ไม่แสดง — หมายเหตุตอนรับเคสไม่ใช่สิ่งที่ต้องแก้
+ */
+export function caseReviewNoteNotice(
+  status: string,
+  reviewNote: string | null,
+): { tone: 'warning' | 'error'; title: string; message: string } | null {
+  const note = reviewNote?.trim() ?? ''
+  if (note === '') return null
+  if (status === 'rejected') return { tone: 'error', title: 'เหตุผลที่ไม่รับเคส', message: note }
+  if (status === 'need_info') return { tone: 'warning', title: 'ผู้ตรวจขอข้อมูลเพิ่ม', message: note }
+  if (status === 'draft' || status === 'pending_review') {
+    return { tone: 'warning', title: 'ผู้ตรวจขอข้อมูลเพิ่ม (รอบก่อน)', message: note }
+  }
+  return null
+}
+
 /** กลุ่มสีของสถานะ — สถานะที่ไม่รู้จักตกกลุ่มเทากลาง (เหมือน mapper กลาง) */
 export function caseStatusBadgeGroup(status: string | null | undefined): StatusBadgeGroup {
   if (typeof status !== 'string' || !isCaseStatus(status)) return 'neutral'

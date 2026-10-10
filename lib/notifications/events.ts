@@ -184,6 +184,24 @@ export const NOTIFICATION_EVENTS = {
     source: '90 §6.3 · 17 §9',
     description: 'รอบจ่ายล้มเหลว — ต้องตรวจไฟล์โอน/บัญชีปลายทางก่อนทำใหม่',
   },
+  'payout.paid_to_payee': {
+    module: 'การเงิน',
+    level: 'success',
+    source: '90 §6.3 v4.9 · 17 §9 (staging E-011)',
+    description: 'รอบจ่ายโอนสำเร็จ — แจ้งผู้รับเงินแต่ละคนพร้อมยอดโอนสุทธิของตัวเอง',
+  },
+  'advance.approved': {
+    module: 'การเงิน',
+    level: 'success',
+    source: '90 §6.3 v4.9 · 15 §9 (staging E-011)',
+    description: 'เงินทดรองได้รับอนุมัติ — แจ้งผู้ขอ (ยอดอนุมัติ + กำหนดเคลียร์)',
+  },
+  'advance.rejected': {
+    module: 'การเงิน',
+    level: 'warning',
+    source: '90 §6.3 v4.9 · 15 §9 (staging E-011)',
+    description: 'คำขอเงินทดรองไม่ได้รับอนุมัติ — แจ้งผู้ขอพร้อมเหตุผล',
+  },
   'advance.approval_requested': {
     module: 'การเงิน',
     level: 'sent',

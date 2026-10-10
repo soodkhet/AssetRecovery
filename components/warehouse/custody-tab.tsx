@@ -140,6 +140,8 @@ export function CustodyTab({
 
   function updateFilter(next: Partial<AssetFilterState>): void {
     setLoading(true)
+    // บังคับโหลดใหม่ทุกครั้ง — ค่าตัวกรองเดิมทำให้ `listPath` เดิม effect ไม่รันซ้ำ ตารางค้าง "กำลังโหลด" (staging E-006)
+    setVersion((current) => current + 1)
     setSelected([])
     setFilters((current) => ({ ...current, ...next }))
   }

@@ -46,6 +46,7 @@ import {
   nextPayoutBatchStatus,
   paymentFileName,
   paymentFileStoragePath,
+  payoutItemTrackingRound,
   resolvePayoutSide,
   whtFallbackWarning,
 } from '@/lib/payout/payout'
@@ -55,6 +56,7 @@ import {
   enqueuePayoutCompletedNotice,
   finishPayoutPostCompletionSafely,
   payoutCompletedNoticeRecipients,
+  payoutPayeeNotices,
 } from '@/lib/payout/post-completion'
 import type {
   PaymentFileResultDto,
@@ -481,6 +483,8 @@ async function collectExpenseCandidates(
       expenseType: true,
       compPlan: { select: { whtPct: true } },
       case: { select: { trackingRound: true } },
+      // รอบของงานที่ทำให้เกิดรายการ — เคสรีไซเคิลแล้ว `case.trackingRound` เป็นรอบปัจจุบัน ไม่ใช่รอบของรายการ (staging E-050)
+      assignment: { select: { trackingRound: true } },
       payee: {
         select: {
           id: true,
@@ -611,7 +615,7 @@ async function collectExpenseCandidates(
       payeeName: row.payee.user.fullName,
       isVerified: row.payee.isVerified,
       side: payeeSide,
-      trackingRound: row.case?.trackingRound ?? 1,
+      trackingRound: payoutItemTrackingRound(row),
       // U105 — ผู้จ่ายออกภาษีให้ ⇒ gross = ยอดรายการ + ภาษีที่ออกให้ (เงินได้บนใบ 50 ทวิ) · net = ยอดรายการเต็ม
       grossSatang: wht.payoutGrossSatang,
       whtSatang: wht.whtSatang,
@@ -1388,6 +1392,7 @@ export async function completePayoutBatch(
 
   // ผู้รับแจ้งเตือน resolve ก่อนเปิด tx — แถวคิวเขียนใน tx เดียวกับสถานะ (มติ PO U134 · DEC-015)
   const noticeRecipients = await payoutCompletedNoticeRecipients(user.organizationId)
+  const payeeNotices = await payoutPayeeNotices(user.organizationId, batchId)
 
   const updated = await prisma.$transaction(async (tx) => {
     // แข่งกับการยกเลิก (มติ PO U67) — ยืนยันจ่ายได้เฉพาะเมื่อยังเป็น `file_generated` อยู่จริง
@@ -1424,6 +1429,7 @@ export async function completePayoutBatch(
       userIds: noticeRecipients,
       batch: row,
       source: 'manual',
+      payees: payeeNotices,
     })
 
     return row
@@ -1461,6 +1467,7 @@ export async function syncPayoutBatchCompleted(input: {
 
   const status = nextPayoutBatchStatus(batch.status, 'complete')
   const noticeRecipients = await payoutCompletedNoticeRecipients(input.organizationId)
+  const payeeNotices = await payoutPayeeNotices(input.organizationId, batch.id)
 
   await prisma.$transaction(async (tx) => {
     // แข่งกับการยกเลิก (มติ PO U67) — รอบที่ถูกยกเลิกไปก่อนห้ามถูกจับคู่ปิดเป็นจ่ายสำเร็จ
@@ -1498,6 +1505,7 @@ export async function syncPayoutBatchCompleted(input: {
       userIds: noticeRecipients,
       batch,
       source: 'bank_reconciliation',
+      payees: payeeNotices,
     })
   })
 

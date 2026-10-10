@@ -13,6 +13,7 @@ import {
   nextPayoutBatchStatus,
   paymentFileName,
   paymentFileStoragePath,
+  payoutItemTrackingRound,
   requirePayoutCancelReason,
   resolvePayoutSide,
   statusesAllowing,
@@ -247,5 +248,15 @@ describe('ชื่อ/เวอร์ชันไฟล์โอน (ห้า�
         extension: 'csv',
       }),
     ).toBe('payout-batches/batch-1/PB-OUT-25690815-AAA-v2.csv')
+  })
+})
+
+describe('payoutItemTrackingRound (staging E-050)', () => {
+  it('ใช้รอบของงานที่ทำให้เกิดรายการ แม้เคสรีไซเคิลไปรอบใหม่แล้ว', () => {
+    expect(payoutItemTrackingRound({ assignment: { trackingRound: 1 }, case: { trackingRound: 2 } })).toBe(1)
+  })
+  it('รายการไม่ผูกงาน ⇒ รอบปัจจุบันของเคส · ไม่มีเคส ⇒ 1', () => {
+    expect(payoutItemTrackingRound({ assignment: null, case: { trackingRound: 3 } })).toBe(3)
+    expect(payoutItemTrackingRound({ assignment: null, case: null })).toBe(1)
   })
 })

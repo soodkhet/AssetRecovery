@@ -61,6 +61,10 @@ export const EVENT_NAMES = [
   // Payout (17 §9) + Advance job (15 §9.1) — ชื่อตาม `90` §6.3 (ไฟล์ต้นทางไม่มีตาราง event ของตัวเอง)
   'payout_batch.completed',
   'advance.overdue',
+  // staging E-011 (`90` §6.3 v4.9) — แจ้งผู้รับเงิน/ผู้ขอโดยตรง
+  'payout.paid_to_payee',
+  'advance.approved',
+  'advance.rejected',
   // Accounting (30/33/34/36) — `90` §6.3 + mockup `notifications.html`
   'wht.filing_due_reminder',
   // มติ PO 07/10/2569 U127 — ยกเลิก/ออกใบ 50 ทวิ ในเดือนที่ยื่น ภ.ง.ด. แล้ว ⇒ ต้องยื่นเพิ่มเติม

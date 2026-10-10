@@ -5,6 +5,7 @@ import {
   assertNoUnclearedAdvance,
   assertWithinAdvanceMax,
   canAdvanceAction,
+  effectiveAdvanceReturnSatang,
   isAdvanceOverdue,
   nextAdvanceStatus,
   resolveApprovedSatang,
@@ -275,5 +276,17 @@ describe('มติ PO U83 — เคลียร์ยอดได้เฉพ�
     expect(settlePayoutBlockMessage(null, true)).toBeNull()
     expect(settlePayoutBlockMessage({ id: 'pb-1', name: 'รอบ A', status: 'checking' }, false)).toContain('รอบ A')
     expect(ADVANCE_NOT_PAID_SETTLE_MESSAGE).not.toMatch(/§|ไฟล์ \d/)
+  })
+})
+
+describe('effectiveAdvanceReturnSatang (staging E-048)', () => {
+  it('ก่อนเคลียร์ยอด (อนุมัติ/เลยกำหนด/รออนุมัติ) ยังไม่มียอดคืน แม้ generated column เท่ายอดอนุมัติ', () => {
+    expect(effectiveAdvanceReturnSatang('approved', 250_000)).toBe(0)
+    expect(effectiveAdvanceReturnSatang('overdue', 250_000)).toBe(0)
+    expect(effectiveAdvanceReturnSatang('pending_approval', 0)).toBe(0)
+  })
+
+  it('เคลียร์แล้ว = ยอดคืนจริง', () => {
+    expect(effectiveAdvanceReturnSatang('cleared', 32_000)).toBe(32_000)
   })
 })

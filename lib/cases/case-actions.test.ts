@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { caseDetailMode, caseModalActions, caseRowActions, showsReasonBox } from '@/lib/cases/case-actions'
+import { caseDetailMode, caseModalActions, caseRowActions, caseRowOpensReview, showsReasonBox } from '@/lib/cases/case-actions'
 
 /** `38` §7.5 — 4 โหมดของ Case Detail/Review Modal + ปุ่มต่อโหมด */
 
@@ -87,5 +87,18 @@ describe('confirmRequired — action ที่ย้อนกลับไม่�
     expect(buttons.find((b) => b.action === 'reject')?.confirmRequired).toBe(true)
     expect(buttons.find((b) => b.action === 'request_more_info')?.confirmRequired).toBe(false)
     expect(buttons.find((b) => b.action === 'accept')?.confirmRequired).toBe(false)
+  })
+})
+
+describe('caseRowOpensReview (staging E-025)', () => {
+  it('ปุ่ม "พิจารณา" เฉพาะผู้ตัดสินได้ — ธุรการ/ผู้ไม่มีสิทธิ์เห็น "ดูรายละเอียด"', () => {
+    expect(caseRowOpensReview('pending_review', approver)).toBe(true)
+    expect(caseRowOpensReview('pending_recycle_review', approver)).toBe(true)
+    expect(caseRowOpensReview('pending_review', admin)).toBe(false)
+    expect(caseRowOpensReview('pending_review', nobody)).toBe(false)
+  })
+  it('สถานะที่ไม่ใช่การรอตัดสินใจ ⇒ ดูรายละเอียดเสมอ', () => {
+    expect(caseRowOpensReview('closed_fail', approver)).toBe(false)
+    expect(caseRowOpensReview('draft', approver)).toBe(false)
   })
 })

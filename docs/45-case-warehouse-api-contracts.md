@@ -24,6 +24,7 @@
 | v1.4 | 05/10/2569 | sync `44` v2.4 (มติ PO U64 · UAT BUG-075): body ของ `reject-intake` รับ `imeiActual?`/`serialActual?` ที่ตรวจพบ (ไม่บังคับ) — ไม่มีการเปลี่ยน endpoint/สิทธิ์ |
 | v1.10 | 07/10/2569 | **มติ PO 07/10/2569 U127** — ขึ้นทะเบียน event `wht.supplementary_filing_required` (กลุ่ม Notification §7): ยกเลิก/ออกใบ 50 ทวิ ในเดือนที่รอบ ภ.ง.ด. เป็น `filed` แล้ว ⇒ ติดธงต้องยื่นเพิ่มเติม + แจ้งผู้ถือ `manage_wht` (คิว outbox ในทรานแซกชันเดียวกับการยกเลิก/ออกใบ) |
 | v1.11 | 07/10/2569 | **มติ PO U166 → U167 (DEC-017)** — ขึ้นทะเบียน event `device_catalog.tac_update_failed` (กลุ่ม Notification §7): job `device_tac_sync` / "อัปเดตตอนนี้" / "นำเข้าไฟล์เอง" ล้มเหลว ⇒ แจ้งผู้ดูแล Model Phone (`13` §6.18 · `91` §6.1) |
+| v1.12 | 10/10/2569 | **staging E-011 (มติ PO 10/10/2569)** — ขึ้นทะเบียน event `payout.paid_to_payee` · `advance.approved` · `advance.rejected` (กลุ่ม Notification §7 · `90` §6.3 v4.9): แจ้งผู้รับเงิน/ผู้ขอโดยตรง — ไม่มี endpoint ใหม่ |
 
 ขอบเขตเอกสารนี้: รวม API Endpoint ทั้งหมดของโมดูล Case Workflow (รับเคส/มอบหมาย/ภาคสนาม) และ Warehouse (คลังสินค้า) เป็นรายการเดียว จัดกลุ่มตาม resource เพื่อให้ backend implement ตาม REST convention เดียวกันทั้งระบบ — คู่กันกับ `27-finance-api-contracts.md` ที่รวม endpoint ฝั่ง Finance/Accounting
 
@@ -146,6 +147,7 @@ Notification (90 §6.3): expense.rejected / payout_batch.completed / advance.ove
                    expense.approval_requested / advance.approval_requested /
                    adjustment.approval_requested / field_allowance.period_locked /
                    wht.supplementary_filing_required (มติ PO 07/10/2569 U127)
+                   payout.paid_to_payee / advance.approved / advance.rejected (`90` §6.3 v4.9 — staging E-011)
                    device_catalog.tac_update_failed (มติ PO 07/10/2569 U167 · DEC-017 — อัปเดตฐาน TAC
                    ไม่สำเร็จ · โมดูลตั้งค่า · ระดับ critical · ถึงผู้ถือ manage_device_catalog ระดับ manage ·
                    เข้าคิวผ่าน notification_outbox ในทรานแซกชันเดียวกับแถวประวัติ · กันซ้ำวันละครั้งตามวันไทย)

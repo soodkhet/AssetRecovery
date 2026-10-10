@@ -69,6 +69,8 @@ export function Modal({
   const guardRef = useRef({ closeLocked, confirming, confirmDiscard })
   useEffect(() => {
     guardRef.current = { closeLocked, confirming, confirmDiscard }
+    // ผู้เรียกปิดการถามหลังบันทึกสำเร็จ (หน้าจอผลลัพธ์) ⇒ ล้างสถานะ "กรอกค้าง" ไปด้วย (staging E-051)
+    if (!confirmDiscard) dirtyRef.current = false
   }, [closeLocked, confirming, confirmDiscard])
   // ผู้เรียกมักส่ง `onClose` เป็น arrow ใหม่ทุก render — เก็บใน ref เพื่อให้ effect ด้านล่างผูกกับ `open` อย่างเดียว
   // (ไม่งั้น modal ข้างหลังที่ re-render จะลงทะเบียนชั้นใหม่ขึ้นไปทับตัวบน + แย่ง focus กลับมา)

@@ -268,7 +268,12 @@ export function TeamFormModal({
             >
               <option value="">— ยังไม่กำหนด —</option>
               {supervisorOptions.map((member) => (
-                <option key={member.id} value={member.id}>
+                <option
+                  key={member.id}
+                  value={member.id}
+                  // หัวหน้า 1 คนสังกัดได้ทีมเดียว (`09` §7.1) — คนที่เป็นหัวหน้าทีมอื่นอยู่เลือกไม่ได้ (staging E-022)
+                  disabled={member.supervisedTeamId !== null && member.supervisedTeamId !== team?.id}
+                >
                   {member.fullName} ({member.roleName})
                   {member.supervisedTeamId !== null && member.supervisedTeamId !== team?.id
                     ? ` — เป็นหัวหน้าทีม ${member.supervisedTeamName ?? ''} อยู่แล้ว`

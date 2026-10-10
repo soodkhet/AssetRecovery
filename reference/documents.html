@@ -467,7 +467,7 @@ function docPayslip() {
     ${header('สลิปค่าตอบแทน', 'Payslip', { noCopy: true })}
     ${metaRow('31/10/2569', 'PV-2569-0031', [['ชื่อ', EMP.name], ['ทีม', EMP.team], ['รอบ', 'ค่าตอบแทน ต.ค. 2569 รอบ 2'], ['วันที่โอน', '31/10/2569']])}
     <div class="grid grid-cols-4 mt-4 party text-center">
-      ${[['เคสสำเร็จ', '6 เคส'], ['วันทำงานภาคสนาม', '5 วัน'], ['คืนที่พัก', '2 คืน'], ['ยอดโอนสุทธิ', money(c.net) + ' บาท']].map(([k, v], i) =>
+      ${[['เคสสำเร็จ', '6 เคส'], ['วันทำงานที่จ่ายในรอบนี้', '5 วัน'], ['คืนที่พัก', '2 คืน'], ['ยอดโอนสุทธิ', money(c.net) + ' บาท']].map(([k, v], i) =>
         `<div class="p-3 ${i < 3 ? 'border-r border-slate-900' : ''}"><div class="text-[11px] text-slate-600">${k}</div><div class="font-bold text-[15px]">${v}</div></div>`).join('')}
     </div>
     ${payTable(c)}

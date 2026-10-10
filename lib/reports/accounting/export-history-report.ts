@@ -11,8 +11,9 @@ import { comparePeriodKeys } from '@/lib/reports/accounting/period-window'
  *   ⇒ รายงานที่โชว์เฉพาะเวอร์ชันล่าสุดจะซ่อนประวัติการส่งซ้ำซึ่งเป็นสิ่งที่สำนักงานบัญชีต้องตรวจ
  * - **งวดที่ยังไม่เคย export ต้องมีแถวของตัวเอง** — "ไม่มีแถว" กับ "ยังไม่ได้ส่ง" คนละเรื่อง
  *   (ค่าของงวดแบบนี้เป็น `null` ทั้งแถว ห้ามใส่ 0 แทนความว่าง — สัญญาของ `ReportData`)
- * - จำนวนไฟล์นับเฉพาะไฟล์หลัก 01–08 (`37` §6.1) ไม่รวมหน้าปก/ไฟล์ .zip · **เอกสารแนบยังไม่รวมใน
- *   ชุด export รอบนี้** (`37` §7.1) ⇒ ค่าเป็น `null` (ไม่มีข้อมูล) ไม่ใช่ 0 (มีข้อมูลว่าเป็นศูนย์)
+ * - จำนวนไฟล์นับเฉพาะไฟล์ข้อมูลเลขกำกับ 00–18 (`37` §6.1 v2.15) ไม่รวมหน้าปก/ไฟล์ .zip
+ * - เอกสารแนบ (PDF ในโฟลเดอร์ของ zip — U94 · BUG-167) นับจาก audit ตอนสร้าง **ตัวเดียวกับหน้าประวัติการส่งมอบ**
+ *   (staging E-059 — เดิมเป็นค่าว่างตายตัวและหมายเหตุบอกว่า "ยังไม่รวม" ทั้งที่รวมแล้ว) · งวดที่ยังไม่ export = `null`
  */
 
 /** 1 แถว = 1 เวอร์ชันของการ export · `recordId = null` ⇒ งวดที่ยังไม่เคย export เลย */
@@ -27,8 +28,10 @@ export interface ExportHistoryEntry {
   /** เวลาที่ส่งให้สำนักงานบัญชี (`sent_at`) — ยังไม่ส่ง = `null` */
   sentAt: Date | null
   sentByName: string | null
-  /** จำนวนไฟล์หลัก 01–08 ในชุด */
+  /** จำนวนไฟล์ข้อมูลเลขกำกับ 00–18 ในชุด */
   fileCount: number | null
+  /** จำนวนเอกสารแนบ PDF ในชุด (ตัวเดียวกับหน้าประวัติการส่งมอบ) */
+  attachmentCount: number | null
 }
 
 const COLUMNS: readonly ReportColumn[] = [
@@ -60,8 +63,7 @@ export function buildExportHistoryReport(input: { entries: readonly ExportHistor
     sentBy: entry.sentByName,
     statusLabel: exportHistoryStatusLabel(entry.status),
     fileCount: entry.fileCount,
-    // เอกสารแนบยังไม่รวมในชุด (`37` §7.1) — ค่าว่างเสมอจนกว่าจะมีการตัดสินใจเพิ่มไฟล์แนบเข้าชุด
-    attachmentCount: null,
+    attachmentCount: entry.attachmentCount,
   }))
 
   const periodIds = new Set(sorted.map((entry) => entry.periodId))
@@ -92,7 +94,7 @@ export function buildExportHistoryReport(input: { entries: readonly ExportHistor
     totalRow: null,
     note:
       'แสดงทุกเวอร์ชันของแต่ละงวด — การส่งออกซ้ำจะขึ้นเวอร์ชันใหม่เสมอ ไม่ทับของเดิม · ' +
-      'จำนวนไฟล์นับเฉพาะไฟล์ข้อมูล 01–08 ไม่รวมหน้าปกและไฟล์ .zip · ' +
-      'เอกสารแนบ (ใบเสร็จ/หลักฐาน) ยังไม่รวมอยู่ในชุดส่งออกรอบนี้ จึงแสดงเป็นค่าว่าง',
+      'จำนวนไฟล์นับเฉพาะไฟล์ข้อมูลเลขกำกับ 00–18 ไม่รวมหน้าปกและไฟล์ .zip · ' +
+      'เอกสารแนบ = PDF ในโฟลเดอร์ของชุด (ใบแจ้งหนี้ · ใบกำกับภาษี · ใบสำคัญจ่าย · 50 ทวิ) ตรงกับประวัติในแท็บส่งมอบ',
   }
 }

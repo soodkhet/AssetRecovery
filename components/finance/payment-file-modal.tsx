@@ -142,6 +142,8 @@ export function PaymentFileModal({
     <Modal
       open
       onClose={close}
+      // สร้างไฟล์แล้ว = บันทึกแล้ว ⇒ Esc/X ปิดได้ทันที ไม่ถาม "ทิ้งข้อมูลที่กรอกไว้?" (staging E-051)
+      confirmDiscard={generated === null}
       size="lg"
       title={confirming ? '⚠️ สร้างไฟล์โอนซ้ำ' : 'สร้างไฟล์โอนเงินธนาคาร'}
       description={batch.name}

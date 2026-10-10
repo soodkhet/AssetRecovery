@@ -36,7 +36,7 @@ import {
 } from '@/lib/cases/case-form'
 import { CaseError } from '@/lib/cases/errors'
 import { caseCreateSchema, caseUpdateSchema } from '@/lib/cases/schemas'
-import { ASSET_TYPE_LABEL } from '@/lib/cases/status-display'
+import { ASSET_TYPE_LABEL, caseReviewNoteNotice } from '@/lib/cases/status-display'
 import type { CaseDetailDto, CaseDocumentDto, CaseTeamOptionDto, CaseTeamOptionsDto } from '@/lib/cases/types'
 import { uploadCaseFile } from '@/lib/cases/upload-client'
 import { parseBahtInput } from '@/lib/format/money'
@@ -122,6 +122,8 @@ export function CaseFormModal({
   }
 
   const isEdit = editing !== null
+  // เหตุผลที่ผู้ตรวจขอข้อมูลเพิ่ม — ธุรการต้องเห็นตอนเปิดแก้ (staging E-003)
+  const reviewNotice = editing === null ? null : caseReviewNoteNotice(editing.status, editing.reviewNote)
   const identityKind = identityFieldOf(form.debtorNationality)
   const duplicate = readDuplicateCase(formError)
 
@@ -327,6 +329,12 @@ export function CaseFormModal({
                 )}
               </p>
             )}
+          </InlineAlert>
+        )}
+
+        {reviewNotice !== null && (
+          <InlineAlert tone={reviewNotice.tone} title={reviewNotice.title}>
+            <p className="whitespace-pre-line">{reviewNotice.message}</p>
           </InlineAlert>
         )}
 

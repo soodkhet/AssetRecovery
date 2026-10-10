@@ -97,6 +97,15 @@ export function caseModalActions(status: string, can: (capability: string) => bo
   return allowed(status, MODE_ACTIONS[caseDetailMode(status)], can)
 }
 
+/**
+ * ปุ่มเปิดรายละเอียดบนแถวชื่อ "พิจารณา" (เด่น) เฉพาะเคสที่รอการตัดสินใจ **และผู้ใช้กดตัดสินได้จริง**
+ * — ธุรการเห็นปุ่ม "พิจารณา" แล้วเปิดไปไม่มีปุ่มตัดสินใจ (staging E-025) ⇒ คนอื่นเห็น "ดูรายละเอียด"
+ */
+export function caseRowOpensReview(status: string, can: (capability: string) => boolean): boolean {
+  if (status !== 'pending_review' && status !== 'pending_recycle_review') return false
+  return caseModalActions(status, can).length > 0
+}
+
 /** ปุ่ม workflow บนแถวรายการ/การ์ด (ส่งตรวจสอบ · กลับไปแก้ไขเป็นร่าง) */
 export function caseRowActions(status: string, can: (capability: string) => boolean): CaseActionButton[] {
   return allowed(status, ROW_ACTIONS, can)

@@ -51,6 +51,8 @@ export interface CompensationApprovalDto {
   whtPayerBorne: boolean
   /** BUG-176 — true = ยอด WHT/Net มาจากรายการรอบจ่ายที่บันทึกแล้ว (ยอดโอนจริง) · false = คาดการณ์ */
   whtFromPayout: boolean
+  /** ยอดคาดการณ์ต่ำกว่าเกณฑ์ขั้นต่ำ ⇒ ไม่หัก (staging E-039) */
+  whtBelowThreshold: boolean
   status: ExpenseStatus
   approvalStepCurrent: number
   approvalStepTotal: number

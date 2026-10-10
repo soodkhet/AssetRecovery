@@ -166,6 +166,8 @@ export function CaseImportWizard({
         reset()
         onClose()
       }}
+      // นำเข้าเสร็จแล้ว (หน้าผลลัพธ์) ⇒ ปิดได้ทันที ไม่ถามทิ้งข้อมูล (staging E-051)
+      confirmDiscard={result === null}
       size="lg"
       title="นำเข้าเคสจากไฟล์"
       description="อัปโหลดไฟล์ → จับคู่คอลัมน์ → ตรวจสอบผลก่อนยืนยัน — เคสที่นำเข้าได้จะเป็นสถานะ “ร่าง” ทั้งหมด"

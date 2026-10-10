@@ -77,7 +77,12 @@ export function TeamsManager() {
   }, [side, status, province, search])
 
   const reload = useCallback(async () => {
-    const result = await fetchTeams()
+    // โหลดผู้ใช้ที่เลือกได้ใหม่ด้วย — หัวหน้าที่เพิ่งถูกผูกทีมต้องขึ้น "เป็นหัวหน้าทีม … อยู่แล้ว" ในฟอร์มถัดไป (staging E-022)
+    const [result, memberResult] = await Promise.all([
+      fetchTeams(),
+      callApi<EligibleMemberDto[]>('/api/teams/eligible-members'),
+    ])
+    if (memberResult.data !== undefined) setMembers(memberResult.data)
     if (result.error !== undefined) {
       setError({ title: result.error.title, message: result.error.message })
       setLoading(false)

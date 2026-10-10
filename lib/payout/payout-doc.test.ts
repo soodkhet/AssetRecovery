@@ -330,7 +330,7 @@ describe('มติ PO U100/U101 — ข้อมูลผู้รับ · ร
     expect(slip?.payeeName).toBe('นายประยุทธ์ บุญมี')
     expect(slip?.stats).toEqual([
       { label: 'เคสสำเร็จ', value: '2 เคส' },
-      { label: 'วันทำงานภาคสนาม', value: '3 วัน' },
+      { label: 'วันทำงานที่จ่ายในรอบนี้', value: '3 วัน' },
       { label: 'คืนที่พัก', value: '2 คืน' },
       { label: 'ยอดโอนสุทธิ', value: '5,856.00 บาท' },
     ])

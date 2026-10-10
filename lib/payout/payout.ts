@@ -291,3 +291,14 @@ export function paymentFileStoragePath(input: {
 }): string {
   return `payout-batches/${input.batchId}/${paymentFileName(input)}`
 }
+
+/**
+ * รอบติดตามของรายการในรอบจ่าย — ใช้รอบของงาน (assignment) ที่ทำให้เกิดรายการก่อน · รายการที่ไม่ผูกงาน
+ * (เช่น เบิกแยก) ใช้รอบปัจจุบันของเคส · ไม่มีทั้งคู่ = 1 (staging E-050: เคสรีไซเคิลแล้วสลิปขึ้น "รอบที่ 2" ผิด)
+ */
+export function payoutItemTrackingRound(row: {
+  assignment?: { trackingRound: number } | null
+  case?: { trackingRound: number } | null
+}): number {
+  return row.assignment?.trackingRound ?? row.case?.trackingRound ?? 1
+}

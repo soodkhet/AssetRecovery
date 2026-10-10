@@ -24,6 +24,7 @@
 | v4.5 | 06/10/2569 | **มติ PO 06/10/2569 (U97 — PDPA)** — §6.2 Data Retention ของเอกสารลูกหนี้ใช้งานแล้ว: ค่าตั้งจำนวนปีหลังปิดเคส (`13` §6.16 ค่าเริ่มต้น 5 ปี) + job `purge_debtor_documents` (`91` §6.1) ลบไฟล์เอกสารลูกหนี้บน Storage เมื่อครบ · เก็บข้อมูลเคสที่ไม่ใช่ไฟล์ + วันที่ลบ · audit ต่อเคส (`delete` · actor = ระบบ + job id) |
 | v4.6 | 07/10/2569 | **มติ PO U141** — (1) การเปิดไฟล์**ฉบับเซ็นของใบรับรองแทนใบเสร็จ** (`substitute-receipts/<id>/signed/…` — มีชื่อ/เลขบัตร/ที่อยู่ผู้รับเงิน) ลง audit `view` แบบเดียวกับ U90 (`target_type = substitute_receipts`) · (2) โหมดดู portal แทนลูกค้าที่เรียก API ตรงลง `view_as` ด้วย (`97` §13.1) |
 | v4.7 | 07/10/2569 | **มติ PO U135** — §6.3 `field_allowance.period_locked` ครอบค่าน้ำมัน `PER_KM` ที่ job `fuel_distance_retry` คำนวณได้หลังงวดปิดด้วย (ผู้รับ/ปลายทางเดียวกับ U50) — ไม่เพิ่มชื่อ event ใหม่ |
+| v4.9 | 10/10/2569 | **staging E-011 (มติ PO 10/10/2569)** — §6.3 เติม 3 event ถึง**ผู้รับเงิน/ผู้ขอโดยตรง** (เดิมแจ้งเฉพาะการเงิน): `advance.approved` · `advance.rejected` · `payout.paid_to_payee` (ยอดโอนสุทธิต่อคน เข้าคิว outbox ในทรานแซกชันเดียวกับรอบจ่าย `completed` — DEC-015) · ลิงก์ไปหน้า Field ของผู้รับเอง |
 | v4.8 | 07/10/2569 | **มติ PO U166 → U167 (DEC-017)** — §6.3 เติมแถว `device_catalog.tac_update_failed` (อัปเดตฐาน TAC ของ Model Phone ไม่สำเร็จ ⇒ แจ้งผู้ดูแลแคตตาล็อกผ่าน outbox) |
 
 ขอบเขตเอกสารนี้: ระบบกลางสำหรับ Audit Log, Notification, Exception และ Reporting ที่ใช้ร่วมกันข้ามทุกโมดูล
@@ -139,7 +140,8 @@ sequenceDiagram
 | Field Tracker (41) | `case.closed_success`, `case.closed_fail`, `evidence.reject_evidence` | `41-field-tracker-mobile.md` |
 | Warehouse (44) | `asset.intake_rejected` (IMEI ไม่ตรง), `lot.confirmed` | `44-asset-custody-handover.md` |
 | Finance (15/16) | `expense.rejected`, `expense.approved` | `16-compensation-approval.md` |
-| Finance (17) | `payout_batch.completed` | `17-payroll-and-payout.md` |
+| Finance (17) | `payout_batch.completed` (ผู้ดูแลรอบจ่าย) · `payout.paid_to_payee` (ผู้รับเงินแต่ละคน พร้อมยอดโอนสุทธิของตัวเอง · ไม่แจ้งคนที่ยอดโอน 0 · กันซ้ำต่อรอบ+ผู้รับ) — v4.9 | `17-payroll-and-payout.md` |
+| Finance (15) | `advance.approved` (ผู้ขอ: ยอดอนุมัติ · ยอดที่ขอถ้าถูกปรับลด · กำหนดเคลียร์) · `advance.rejected` (ผู้ขอ พร้อมเหตุผล) — v4.9 | `15-claims-and-advances.md` §9 |
 | Accounting (33) | WHT ใกล้ครบกำหนดยื่น (reminder) | `33-accounting-wht-data.md` |
 | Accounting (34) | Exception ใหม่ (ระดับ critical) | `34-accounting-document-checklist-exceptions.md` |
 | คิวอนุมัติ (15/16/20) | `expense.approval_requested` (ผู้ถือ capability ของขั้นที่รออยู่ · ผู้จัดการเฉพาะทีมของรายการ) · `advance.approval_requested` (ผู้ถือ `approve_advance`) · `adjustment.approval_requested` (บทบาทที่ยังขาดตามสถานะงวด) — แจ้งทันทีเมื่อเข้าคิว/ขยับขั้น · ผู้ขอไม่ได้รับของตัวเอง — v4.3 มติ PO 05/10/2569 U29 | `16` §9.1 · `15` · `20` §6.2 |

@@ -751,3 +751,16 @@ export function buildWhtCertificateDoc(source: WhtCertificateDocSource): WhtCert
     payerSignerTitle: textOrNull(source.payerSigner?.title ?? null),
   }
 }
+
+/**
+ * คำอธิบายกำหนดนำส่งใต้หัวตารางสรุปรอบ ภ.ง.ด. (staging E-055) — สร้างจากวิธียื่นของรอบที่แสดงจริง
+ * เดิมเขียนตายตัว "วันที่ 15 (ยื่นอินเทอร์เน็ต)" ขัดกับแถวที่ตั้งยื่นแบบกระดาษ (วันที่ 7)
+ */
+export function whtFilingDeadlineNote(methods: readonly ('online' | 'paper')[]): string {
+  const unique = [...new Set(methods)]
+  const base = 'ยอดคิดจากใบ 50 ทวิ ที่ยังใช้งานอยู่ของรอบนั้น — '
+  const holiday = ' · ตรงวันหยุดเลื่อนเป็นวันทำการถัดไป (วันที่จริงอยู่ในคอลัมน์กำหนดนำส่ง)'
+  if (unique.length === 1 && unique[0] === 'paper') return `${base}กำหนดนำส่ง = วันที่ 7 ของเดือนถัดไป (ยื่นแบบกระดาษ)${holiday}`
+  if (unique.length === 1 && unique[0] === 'online') return `${base}กำหนดนำส่ง = วันที่ 15 ของเดือนถัดไป (ยื่นออนไลน์)${holiday}`
+  return `${base}กำหนดนำส่ง = วันที่ 7 (ยื่นแบบกระดาษ) หรือวันที่ 15 (ยื่นออนไลน์) ของเดือนถัดไป ตามวิธียื่นของแต่ละรอบ${holiday}`
+}

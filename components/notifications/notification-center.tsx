@@ -182,12 +182,10 @@ function NotificationRow({
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-semibold text-slate-900">{item.title}</span>
           <StatusBadge group={display.level} label={display.module} />
-          <span className="font-mono text-[10px] text-slate-400">{item.eventCode}</span>
         </div>
         {item.body !== null && <p className="mt-1 text-xs leading-relaxed text-slate-600">{item.body}</p>}
         <div className="mt-1.5 flex flex-wrap items-center gap-3 text-[10px] text-slate-400">
           <span>{fmtDateTime(item.createdAt)}</span>
-          {item.linkPath !== null && <span className="font-mono text-blue-500">{item.linkPath}</span>}
           {item.readAt !== null && <span>อ่านแล้ว {fmtDateTime(item.readAt)}</span>}
         </div>
       </div>

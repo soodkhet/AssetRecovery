@@ -5,6 +5,7 @@ import {
   approvalHistoryLabel,
   approvalStepText,
   approvalStepTone,
+  whtAmountHint,
   claimSourceLabel,
   CLAIM_STATUS_FILTERS,
   expenseRowActions,
@@ -39,6 +40,7 @@ function dto(overrides: Partial<CompensationApprovalDto> = {}): CompensationAppr
     whtWarning: null,
     whtPayerBorne: false,
     whtFromPayout: false,
+    whtBelowThreshold: false,
     status: 'pending_approval',
     approvalStepCurrent: 1,
     approvalStepTotal: 2,
@@ -234,5 +236,24 @@ describe('approvalErrorToast — ทิศของ APPROVAL_STEP_OUT_OF_ORDER (
       message: 'm',
       stale: false,
     })
+  })
+})
+
+describe('whtAmountHint — ต่ำกว่าเกณฑ์ (staging E-039)', () => {
+  const pct = (value: number): string => `${value.toFixed(2)}%`
+  it('อัตรา 3% แต่ไม่หัก ⇒ บอกว่าต่ำกว่าเกณฑ์ และเกณฑ์จริงเทียบยอดรวมในรอบจ่าย', () => {
+    const hint = whtAmountHint(
+      { whtPctUsed: 3, whtRateSource: 'type_default', whtPayerBorne: false, whtFromPayout: false, whtBelowThreshold: true },
+      pct,
+    )
+    expect(hint).toContain('3.00%')
+    expect(hint).toContain('ต่ำกว่าเกณฑ์ขั้นต่ำ')
+  })
+  it('ถึงเกณฑ์ ⇒ ไม่มีข้อความต่ำกว่าเกณฑ์', () => {
+    const hint = whtAmountHint(
+      { whtPctUsed: 3, whtRateSource: 'payee', whtPayerBorne: false, whtFromPayout: false, whtBelowThreshold: false },
+      pct,
+    )
+    expect(hint).not.toContain('ต่ำกว่าเกณฑ์')
   })
 })

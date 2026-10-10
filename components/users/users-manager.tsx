@@ -218,12 +218,15 @@ export function UsersManager() {
           tab={tab}
           tabs={visibleTabs}
           onTabChange={(next) => {
+            // กดแท็บที่เลือกอยู่ (ไม่มีตัวกรองบทบาท) ⇒ คำขอเดิม effect ไม่รันซ้ำ — ถ้า setLoading แล้วค้าง (staging E-001)
+            if (next === tab && roleId === 'all') return
             setLoading(true)
             setRoleId('all')
             setTab(next)
           }}
           subGroup={subGroup}
           onSubGroupChange={(group) => {
+            if (group === subGroup && roleId === 'all') return
             setLoading(true)
             setRoleId('all')
             setSubGroup(group)

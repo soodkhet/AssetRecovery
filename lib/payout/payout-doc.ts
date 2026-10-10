@@ -592,11 +592,13 @@ export function buildPayslipDocs(
     teamName: orDash(group.teamName),
     batchName: batch.name,
     batchRef: ref,
-    voucherNo: orDash(voucherNumberOf(group.items)),
+    // เลข PV ออกตอนสร้างไฟล์โอน — สลิปที่พิมพ์ก่อนนั้นบอกให้ชัดแทนขีด (staging E-050)
+    voucherNo: voucherNumberOf(group.items) ?? 'ออกเมื่อสร้างไฟล์โอน',
     issuedAtLabel: fmtDate(batch.paymentFileGeneratedAt ?? batch.createdAt),
     stats: [
       { label: 'เคสสำเร็จ', value: `${fmtCount(info.stats.successCases)} เคส` },
-      { label: 'วันทำงานภาคสนาม', value: `${fmtCount(info.stats.fieldDays)} วัน` },
+      // นับเฉพาะวันที่จ่ายในรอบนี้ (แถวรายวันที่สรุปแล้ว) — ไม่ใช่วันทำงานทั้งหมด (staging E-050)
+      { label: 'วันทำงานที่จ่ายในรอบนี้', value: `${fmtCount(info.stats.fieldDays)} วัน` },
       { label: 'คืนที่พัก', value: `${fmtCount(info.stats.hotelNights)} คืน` },
       { label: 'ยอดโอนสุทธิ', value: `${fmtSatang(group.transferSatang)} บาท` },
     ],

@@ -163,9 +163,12 @@ export function AssignmentsManager({
   }, [fetchList, fetchCounts])
 
   function updateFilter(next: Partial<Filters>): void {
+    const nextFilters = { ...filters, ...next }
+    // ค่าตัวกรองเดิม ⇒ `listPath` เดิม effect ไม่รันซ้ำ — ถ้า setLoading แล้วตารางค้าง "กำลังโหลด" (staging E-006)
+    if (buildListPath(nextFilters, 1) === listPath) return
     setLoading(true)
     setPage(1)
-    setFilters((current) => ({ ...current, ...next }))
+    setFilters(nextFilters)
   }
 
   const items = result?.items ?? []

@@ -18,7 +18,8 @@ function entry(overrides: Partial<ExportHistoryEntry> = {}): ExportHistoryEntry 
     status: 'sent',
     sentAt: new Date('2026-07-03T02:15:00Z'),
     sentByName: 'พี่เบียร์',
-    fileCount: 8,
+    fileCount: 19,
+    attachmentCount: 12,
     ...overrides,
   }
 }
@@ -49,6 +50,7 @@ describe('buildExportHistoryReport', () => {
           sentAt: null,
           sentByName: null,
           fileCount: null,
+          attachmentCount: null,
         }),
       ],
     })
@@ -95,9 +97,11 @@ describe('buildExportHistoryReport', () => {
     expect(report.kpis?.find((kpi) => kpi.key === 'sent')?.value).toBe(0)
   })
 
-  it('เอกสารแนบยังไม่รวมในชุด ⇒ ค่าว่างทุกแถว + มีหมายเหตุอธิบาย', () => {
+  it('เอกสารแนบนับจากชุดจริง · หมายเหตุตรงกับข้อมูล (staging E-059)', () => {
     const report = buildExportHistoryReport({ entries: [entry()] })
-    expect(report.rows.every((row) => row['attachmentCount'] === null)).toBe(true)
-    expect(report.note).toContain('เอกสารแนบ')
+    expect(report.rows[0]?.['attachmentCount']).toBe(12)
+    expect(report.rows[0]?.['fileCount']).toBe(19)
+    expect(report.note).toContain('00–18')
+    expect(report.note).not.toContain('ยังไม่รวม')
   })
 })

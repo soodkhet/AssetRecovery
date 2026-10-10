@@ -5,6 +5,7 @@ import {
   advanceExcessClaimNote,
   APPROVE_ADVANCE,
   advanceReturnState,
+  effectiveAdvanceReturnSatang,
   assertAdvanceRejectionReason,
   assertCanChangeReturnMethod,
   assertNoUnclearedAdvance,
@@ -43,6 +44,8 @@ import { advanceReturnOutstandingSatang } from '@/lib/finance/advance-offset-cal
 import { Prisma } from '@/lib/generated/prisma/client'
 import type { AdvanceStatus } from '@/lib/generated/prisma/enums'
 import { notifyAdvanceAwaitingApproval, notifyExpensesAwaitingApproval } from '@/lib/notifications/approval-queue'
+import { dispatchToResolvedUsers, payeeUserIds } from '@/lib/notifications/dispatch'
+import { advanceDecidedMessage } from '@/lib/notifications/messages'
 import { captureLetterheadSnapshot } from '@/lib/organization/letterhead'
 import { prisma } from '@/lib/prisma'
 import { getFinancePolicy } from '@/lib/settings/queries/finance-policy'
@@ -137,14 +140,16 @@ function paidOutOf(row: Pick<AdvanceRow, 'payoutItems'>): boolean {
   return isAdvancePaidOut(row.payoutItems.map((item) => item.payoutBatch))
 }
 
-/** ยอดคืนค้าง (`22` §6.14) — นับเฉพาะแถวที่ยังไม่กลับรายการ */
-function returnOutstandingOf(row: Pick<AdvanceRow, 'returnSatang' | 'returns'>): {
+/** ยอดคืนค้าง (`22` §6.14) — นับเฉพาะแถวที่ยังไม่กลับรายการ · ก่อนเคลียร์ยอดยังไม่มียอดคืน (staging E-048) */
+function returnOutstandingOf(row: Pick<AdvanceRow, 'status' | 'returnSatang' | 'returns'>): {
+  returnSatang: number
   collected: number
   outstanding: number
 } {
+  const returnSatang = effectiveAdvanceReturnSatang(row.status, row.returnSatang)
   const active = row.returns.filter((entry) => entry.reversedAt === null).map((entry) => entry.amountSatang)
-  const outstanding = advanceReturnOutstandingSatang({ returnSatang: row.returnSatang, collectedSatang: active })
-  return { collected: row.returnSatang - outstanding, outstanding }
+  const outstanding = advanceReturnOutstandingSatang({ returnSatang, collectedSatang: active })
+  return { returnSatang, collected: returnSatang - outstanding, outstanding }
 }
 
 function toReturnDto(row: AdvanceReturnRow): AdvanceReturnDto {
@@ -180,7 +185,7 @@ function toDto(row: AdvanceRow, now: Date): AdvanceDto {
     requestedSatang: row.requestedSatang,
     approvedSatang: row.approvedSatang,
     usedSatang: row.usedSatang,
-    returnSatang: row.returnSatang,
+    returnSatang: returned.returnSatang,
     excessSatang: settlement.excessSatang,
     status: row.status,
     purpose: row.purpose,
@@ -198,7 +203,7 @@ function toDto(row: AdvanceRow, now: Date): AdvanceDto {
     returnCollectedSatang: returned.collected,
     returnOutstandingSatang: returned.outstanding,
     returnState: advanceReturnState({
-      returnSatang: row.returnSatang,
+      returnSatang: returned.returnSatang,
       outstandingSatang: returned.outstanding,
       method: row.returnMethod,
     }),
@@ -470,6 +475,22 @@ export async function approveAdvance(
     // ตอนสร้าง ไม่ใช่ Prisma error ดิบ 500 (`15` §6.2 · `24` §6.4)
   }).catch(rethrowDuplicateAdvance)
 
+  // แจ้งผู้ขอว่าอนุมัติแล้วเท่าไร + กำหนดเคลียร์ (staging E-011) — หลัง commit · ยิงแล้วลืม
+  dispatchToResolvedUsers(
+    user.organizationId,
+    () => payeeUserIds(user.organizationId, [updated.payeeId]),
+    advanceDecidedMessage(
+      {
+        advanceId,
+        approvedSatang: updated.approvedSatang,
+        requestedSatang: updated.requestedSatang,
+        dueClearDate: updated.dueClearDate,
+        reason: input.note ?? null,
+      },
+      'approved',
+    ),
+  )
+
   return toDto(updated, now)
 }
 
@@ -521,6 +542,22 @@ export async function rejectAdvance(
 
     return row
   })
+
+  // แจ้งผู้ขอพร้อมเหตุผล (staging E-011) — หลัง commit · ยิงแล้วลืม
+  dispatchToResolvedUsers(
+    user.organizationId,
+    () => payeeUserIds(user.organizationId, [updated.payeeId]),
+    advanceDecidedMessage(
+      {
+        advanceId,
+        approvedSatang: null,
+        requestedSatang: updated.requestedSatang,
+        dueClearDate: updated.dueClearDate,
+        reason,
+      },
+      'rejected',
+    ),
+  )
 
   return toDto(updated, now)
 }

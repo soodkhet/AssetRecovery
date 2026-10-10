@@ -123,6 +123,7 @@ import { CREDIT_NOTE_DOCUMENT_CODE } from '@/lib/credit-notes/credit-note'
 import { Prisma, type ExportRecordStatus } from '@/lib/generated/prisma/client'
 import { parseBillingPeriodLabel } from '@/lib/revenue/revenue'
 import { parseOrganizationLetterheadSnapshot } from '@/lib/organization/profile'
+import { loadExportAttachmentCounts } from '@/lib/exports/attachment-counts'
 import { prisma } from '@/lib/prisma'
 import { companyDocumentWarningsFor } from '@/lib/finance-companies/document-queries'
 import { COMPANY_DOCUMENT_LABEL, currentCompanyDocuments } from '@/lib/finance-companies/documents'
@@ -231,32 +232,11 @@ export async function listExportHistory(
     orderBy: [{ generatedAt: 'desc' }],
     select: EXPORT_SELECT,
   })
-  const counts = await loadAttachmentCounts(
+  const counts = await loadExportAttachmentCounts(
     user.organizationId,
     rows.map((row) => row.id),
   )
   return { items: rows.map((row) => toExportDto(row, counts.get(row.id) ?? 0)) }
-}
-
-/**
- * จำนวน PDF ที่แนบใน zip ต่อชุด — อ่านจาก `after_data.attachments` ของ audit `export` ที่บันทึกตอนสร้าง
- * (immutable — ไม่ต้องเพิ่มคอลัมน์ และชุดเก่าที่สร้างไปแล้วได้ค่าถูกย้อนหลัง · UAT BUG-167)
- */
-async function loadAttachmentCounts(organizationId: string, exportIds: readonly string[]): Promise<Map<string, number>> {
-  const counts = new Map<string, number>()
-  if (exportIds.length === 0) return counts
-  const audits = await prisma.auditLog.findMany({
-    where: { organizationId, targetType: EXPORT_TARGET, targetId: { in: [...exportIds] }, action: 'export' },
-    orderBy: { createdAt: 'asc' },
-    select: { targetId: true, afterData: true },
-  })
-  for (const audit of audits) {
-    if (audit.targetId === null || counts.has(audit.targetId)) continue
-    const after = audit.afterData
-    if (after === null || typeof after !== 'object' || Array.isArray(after) || !('attachments' in after)) continue
-    counts.set(audit.targetId, packAttachmentCount(after.attachments))
-  }
-  return counts
 }
 
 export async function findExportRecord(user: SessionUser, id: string): Promise<ExportRow> {
@@ -2055,7 +2035,7 @@ async function transitionExport(
     return next
   })
 
-  const counts = await loadAttachmentCounts(ctx.actor.organizationId, [updated.id])
+  const counts = await loadExportAttachmentCounts(ctx.actor.organizationId, [updated.id])
   return toExportDto(updated, counts.get(updated.id) ?? 0)
 }
 

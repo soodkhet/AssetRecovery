@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { isTeamError } from '@/lib/teams/errors'
+import { THAI_PROVINCES } from '@/lib/address/thai-address'
 import { isKnownProvince, PROVINCE_DATA, PROVINCE_LIST, provinceRegion, unknownProvinces } from '@/lib/teams/provinces'
 import {
   ACTIVE_CASE_STATUSES,
@@ -51,11 +52,15 @@ describe('normalizeTeamValues', () => {
 })
 
 describe('จังหวัด (PROVINCE_DATA — `09` §8)', () => {
-  it('จังหวัดที่อยู่ 2 ภาคถูกนับครั้งเดียวใน PROVINCE_LIST', () => {
+  it('ครบ 77 จังหวัด ไม่ซ้ำ และเป็นชุดเดียวกับทะเบียนที่อยู่ (staging E-018)', () => {
     const flat = PROVINCE_DATA.flatMap((region) => region.provinces)
-    expect(flat.length).toBeGreaterThan(PROVINCE_LIST.length)
-    expect(new Set(PROVINCE_LIST).size).toBe(PROVINCE_LIST.length)
-    expect(provinceRegion('ราชบุรี')).toBe('ภาคกลาง')
+    expect(PROVINCE_LIST).toHaveLength(77)
+    expect(flat).toHaveLength(77)
+    expect([...PROVINCE_LIST].sort()).toEqual([...THAI_PROVINCES].sort())
+    // จังหวัดที่เดิมไม่มีในรายการของทีม (อยุธยา/สระบุรี) ต้องเลือกได้แล้ว
+    expect(isKnownProvince('พระนครศรีอยุธยา')).toBe(true)
+    expect(isKnownProvince('สระบุรี')).toBe(true)
+    expect(provinceRegion('ราชบุรี')).not.toBeNull()
   })
 
   it('จังหวัดนอกรายการถูกปฏิเสธด้วย INVALID_PROVINCE', () => {

@@ -163,8 +163,11 @@ export function whtAmountHint(item: {
   whtRateSource: WhtRateOrigin
   whtPayerBorne: boolean
   whtFromPayout: boolean
+  whtBelowThreshold?: boolean
 }, fmtPct: (pct: number) => string): string {
   const parts = [fmtPct(item.whtPctUsed), WHT_RATE_SOURCE_HINT[item.whtRateSource]]
+  // staging E-039 — อัตรา 3% คู่ภาษี ฿0 ต้องบอกเหตุ: เกณฑ์เทียบกับฐานรวมทั้งรอบจ่าย ไม่ใช่รายการเดียว
+  if (item.whtBelowThreshold === true) parts.push('ไม่หัก — ยอดรายการนี้ต่ำกว่าเกณฑ์ขั้นต่ำ (เกณฑ์จริงเทียบกับยอดรวมของผู้รับในรอบจ่าย)')
   if (item.whtPayerBorne) parts.push('บริษัทออกให้ ไม่หักจากผู้รับ')
   parts.push(item.whtFromPayout ? 'ยอดตามรอบจ่ายที่บันทึกแล้ว' : 'ยอดคาดการณ์ — ยอดจริงคิดตอนสร้างรอบจ่าย')
   return parts.join(' · ')

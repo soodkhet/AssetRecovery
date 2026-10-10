@@ -433,6 +433,7 @@ function toDto(
     whtWarning: wht.whtWarning,
     whtPayerBorne: wht.whtPayerBorne,
     whtFromPayout: wht.whtFromPayout,
+    whtBelowThreshold: wht.whtBelowThreshold,
     status: row.status,
     approvalStepCurrent: row.approvalStepCurrent,
     approvalStepTotal: flow.totalSteps,

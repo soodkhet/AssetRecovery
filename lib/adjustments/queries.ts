@@ -33,7 +33,7 @@ import {
   requiresSeparateAuditEntry,
 } from '@/lib/finance/adjustment-approval-policy'
 import type { Prisma } from '@/lib/generated/prisma/client'
-import type { AccountingPeriodStatus, AdjustmentStatus } from '@/lib/generated/prisma/enums'
+import type { AccountingPeriodStatus, AdjustmentStatus, ExpenseStatus } from '@/lib/generated/prisma/enums'
 import { notifyAdjustmentAwaitingApproval } from '@/lib/notifications/approval-queue'
 import { prisma } from '@/lib/prisma'
 import { invalidateOrganizationReportCache } from '@/lib/reports/cache'
@@ -126,6 +126,9 @@ async function revenueTarget(user: SessionUser, targetId: string): Promise<RawTa
   }
 }
 
+/** สถานะรายการเบิกที่เป็นต้นทางของ Adjustment ได้ (staging E-060) */
+const ADJUSTABLE_EXPENSE_STATUSES: readonly ExpenseStatus[] = ['approved']
+
 async function expenseTarget(user: SessionUser, targetId: string): Promise<RawTarget> {
   const row = await prisma.expense.findFirst({
     where: { id: targetId, organizationId: user.organizationId, deletedAt: null },
@@ -139,6 +142,11 @@ async function expenseTarget(user: SessionUser, targetId: string): Promise<RawTa
     },
   })
   if (row === null) throw new AdjustmentError('ADJUSTMENT_TARGET_NOT_FOUND', { detail: `expense=${targetId}` })
+  // ปรับปรุงได้เฉพาะรายการที่อนุมัติแล้ว — รายการถูกแทนที่/ไม่อนุมัติ/ยังรออนุมัติไม่ใช่ยอดที่ต้องชดเชย
+  // (ยังแก้ได้ตามสายอนุมัติปกติ) · staging E-060: เดิมเลือก "(ถูกแทนที่แล้ว)" ได้
+  if (!ADJUSTABLE_EXPENSE_STATUSES.includes(row.status)) {
+    throw new AdjustmentError('ADJUSTMENT_TARGET_NOT_FOUND', { detail: `expense=${targetId} status=${row.status}` })
+  }
 
   return {
     targetRef: row.case?.caseRef ?? targetId.slice(0, 8),
@@ -246,9 +254,7 @@ export async function listAdjustmentTargets(
 ): Promise<AdjustmentTargetDto[]> {
   const q = query.q.trim()
   const ids = await searchTargetIds(user, query.targetType, q)
-  const targets: AdjustmentTargetDto[] = []
-  for (const id of ids) targets.push(await describeTarget(user, query.targetType, id))
-  return targets
+  return Promise.all(ids.map((id) => describeTarget(user, query.targetType, id)))
 }
 
 async function searchTargetIds(user: SessionUser, targetType: AdjustmentTargetType, q: string): Promise<string[]> {
@@ -274,6 +280,7 @@ async function searchTargetIds(user: SessionUser, targetType: AdjustmentTargetTy
       where: {
         organizationId,
         deletedAt: null,
+        status: { in: [...ADJUSTABLE_EXPENSE_STATUSES] },
         ...(q === '' ? {} : { case: { caseRef: { contains: q, mode: 'insensitive' } } }),
       },
       select: { id: true },

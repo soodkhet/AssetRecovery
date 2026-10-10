@@ -105,3 +105,20 @@ describe('approvalWhtPreview (BUG-176)', () => {
     expect(result).toMatchObject({ whtSatang: 37_037, whtRateSource: 'type_default', whtWarning: null })
   })
 })
+
+describe('whtBelowThreshold (staging E-039)', () => {
+  it('อยู่ในฐาน มีอัตรา แต่ต่ำกว่าเกณฑ์ ⇒ ภาษี 0 และติดธง', () => {
+    const result = approvalWhtPreview(input({ grossSatang: 20_000 }))
+    expect(result).toMatchObject({ whtSatang: 0, whtPctUsed: 3, whtBelowThreshold: true })
+  })
+  it('ถึงเกณฑ์ ⇒ ไม่ติดธง · ยอดจากรอบจ่ายที่บันทึกแล้ว ⇒ ไม่ติดธง', () => {
+    expect(approvalWhtPreview(input()).whtBelowThreshold).toBe(false)
+    const fromPayout = approvalWhtPreview(
+      input({
+        grossSatang: 20_000,
+        payoutItem: { whtSatang: 0, netSatang: 20_000, whtPctSnapshot: 3, whtCondition: 'withhold' },
+      }),
+    )
+    expect(fromPayout.whtBelowThreshold).toBe(false)
+  })
+})

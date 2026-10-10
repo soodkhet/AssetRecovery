@@ -29,6 +29,7 @@ import { caseDetailMode, caseModalActions, showsReasonBox, type CaseActionButton
 import { isImageMime } from '@/lib/cases/document-upload'
 import {
   assetTypeLabel,
+  caseReviewNoteNotice,
   caseSourceBadgeClass,
   caseSourceLabel,
   caseStatusBadgeGroup,
@@ -327,6 +328,7 @@ export function CaseDetailModal({
 
             {headerSlot}
 
+            <ReviewNoteAlert detail={detail} />
             <CaseSummary detail={detail} />
 
             {/* กล่องประมาณการรายได้ + กล่องทีม อยู่ติดกันตาม §7.5 */}
@@ -459,6 +461,17 @@ export function CaseDetailModal({
 
       <FileViewerModal open={viewing !== null} document={viewing} onClose={() => setViewing(null)} />
     </>
+  )
+}
+
+/** เหตุผลขอข้อมูลเพิ่ม/ไม่รับเคสของผู้ตรวจ (staging E-003) — เดิมเห็นเฉพาะในแจ้งเตือน */
+function ReviewNoteAlert({ detail }: { detail: CaseDetailDto }) {
+  const notice = caseReviewNoteNotice(detail.status, detail.reviewNote)
+  if (notice === null) return null
+  return (
+    <InlineAlert tone={notice.tone} title={notice.title}>
+      <p className="whitespace-pre-line">{notice.message}</p>
+    </InlineAlert>
   )
 }
 

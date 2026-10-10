@@ -272,3 +272,18 @@ describe('แบบข้อมูลใบ 50 ทวิ (`28` §6.3)', () => {
     expect(doc.replacesNote).toContain('WHT-2569-000')
   })
 })
+
+describe('whtFilingDeadlineNote (staging E-055)', () => {
+  it('ทุกรอบยื่นแบบกระดาษ ⇒ วันที่ 7 · ไม่พูดถึงวันที่ 15', async () => {
+    const { whtFilingDeadlineNote } = await import('@/lib/wht/wht')
+    const note = whtFilingDeadlineNote(['paper', 'paper'])
+    expect(note).toContain('วันที่ 7')
+    expect(note).not.toContain('วันที่ 15')
+  })
+  it('ออนไลน์ ⇒ วันที่ 15 · ปนกัน/ยังไม่มีรอบ ⇒ บอกทั้งสองแบบ', async () => {
+    const { whtFilingDeadlineNote } = await import('@/lib/wht/wht')
+    expect(whtFilingDeadlineNote(['online'])).toContain('วันที่ 15')
+    expect(whtFilingDeadlineNote(['online', 'paper'])).toContain('ตามวิธียื่นของแต่ละรอบ')
+    expect(whtFilingDeadlineNote([])).toContain('ตามวิธียื่นของแต่ละรอบ')
+  })
+})

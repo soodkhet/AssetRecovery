@@ -236,6 +236,15 @@ export function assertSeparateReturnAllowed(input: {
   }
 }
 
+/**
+ * ยอดคืนที่ "เกิดขึ้นแล้ว" — `return_satang` เป็น generated column = max(0, อนุมัติ − ใช้จริง) โดยใช้จริงเริ่มที่ 0
+ * ⇒ ก่อนเคลียร์ยอดจะเท่ายอดอนุมัติทั้งก้อน ซึ่งไม่ใช่ยอดค้างคืนจริง · ยอดคืนเกิดเมื่อเคลียร์แล้วเท่านั้น
+ * (`15` §9.3 "เคลียร์แล้วแต่ยังไม่ได้รับคืน" · staging E-048)
+ */
+export function effectiveAdvanceReturnSatang(status: AdvanceStatus, returnSatang: number): number {
+  return status === 'cleared' ? returnSatang : 0
+}
+
 /** สถานะการคืนยอด (ค่าที่อนุมานได้ — **ไม่ใช่ state ใหม่ของ `advance_status`**) */
 export type AdvanceReturnState = 'none' | 'pending_offset' | 'pending_separate' | 'closed'
 

@@ -130,10 +130,10 @@ async function seedRevenue(revenueDate = '2026-08-20'): Promise<string> {
   return rows[0]?.id ?? ''
 }
 
-async function seedExpense(): Promise<string> {
+async function seedExpense(status: 'approved' | 'superseded' = 'approved'): Promise<string> {
   const rows = await db().$queryRawUnsafe<{ id: string }[]>(`
     INSERT INTO expenses (organization_id, payee_id, expense_type, gross_satang, expense_date, status, created_by)
-    VALUES ('${ORG_ID}', '${PAYEE_ID}', 'commission', 150000, '2026-08-20', 'approved', '${FINANCE_ID}')
+    VALUES ('${ORG_ID}', '${PAYEE_ID}', 'commission', 150000, '2026-08-20', '${status}', '${FINANCE_ID}')
     RETURNING id
   `)
   return rows[0]?.id ?? ''
@@ -279,6 +279,26 @@ suite('Phase 3.7 — Adjustment: สร้าง + snapshot งวด (`20` §7.
     expect(row.expenseId).toBe(expenseId)
     expect([row.revenueId, row.billingBatchId, row.payoutBatchId]).toEqual([null, null, null])
     expect(created.signedSatang).toBe(-20_000)
+  })
+
+  it('staging E-060 — รายการเบิกที่ถูกแทนที่แล้วไม่อยู่ในผลค้น และสร้าง Adjustment ไม่ได้', async () => {
+    const approvedId = await seedExpense()
+    const supersededId = await seedExpense('superseded')
+
+    const found = await adjustments.listAdjustmentTargets(ctx().actor, { targetType: 'expense', q: '' })
+    expect(found.map((target) => target.targetId)).toContain(approvedId)
+    expect(found.map((target) => target.targetId)).not.toContain(supersededId)
+    await expectCode(
+      () =>
+        adjustments.createAdjustment(ctx(), {
+          targetType: 'expense',
+          targetId: supersededId,
+          adjustmentType: 'decrease',
+          amountSatang: 1_000,
+          reason: 'ทดสอบรายการที่ถูกแทนที่',
+        }),
+      'ADJUSTMENT_TARGET_NOT_FOUND',
+    )
   })
 
   it('§16 — ไม่กรอกเหตุผล ⇒ `REASON_REQUIRED` (ไม่มีแถวเกิดขึ้น)', async () => {

@@ -38,7 +38,7 @@ import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
 import { THAI_PROVINCES } from '@/lib/address/thai-address'
 import { isCaseEditable, readinessGapText } from '@/lib/cases/case'
-import { caseRowActions, type CaseActionButton } from '@/lib/cases/case-actions'
+import { caseRowActions, caseRowOpensReview, type CaseActionButton } from '@/lib/cases/case-actions'
 import { CASE_EDIT_CAPABILITIES, CASE_WRITE_CAPABILITY } from '@/lib/cases/permissions'
 import { CASE_STATUSES } from '@/lib/cases/state-machine'
 import {
@@ -210,9 +210,12 @@ export function CasesManager({
   }, [fetchList, fetchCounts])
 
   function updateFilter(next: Partial<Filters>): void {
+    const nextFilters = { ...filters, ...next }
+    // ค่าตัวกรองเดิม ⇒ `listPath` เดิม effect ไม่รันซ้ำ — ถ้า setLoading แล้วตารางค้าง "กำลังโหลด" (staging E-006)
+    if (buildListPath(nextFilters, 1) === listPath) return
     setLoading(true)
     setPage(1)
-    setFilters((current) => ({ ...current, ...next }))
+    setFilters(nextFilters)
   }
 
   function openCreate(): void {
@@ -643,6 +646,7 @@ function CaseRowActions({
   const canEdit =
     isCaseEditable(item.status) && CASE_EDIT_CAPABILITIES.some((capability) => can('manage', capability))
   const workflow = caseRowActions(item.status, (capability) => can('manage', capability))
+  const opensReview = caseRowOpensReview(item.status, (capability) => can('manage', capability))
 
   return (
     // ปุ่มคำไทยห้ามหักกลางคำ (preship R4-009/R3-040) — แถวยัง flex-wrap ⇒ จอแคบปุ่มลงบรรทัดใหม่แทนล้น
@@ -665,13 +669,8 @@ function CaseRowActions({
           แก้ไข
         </Button>
       )}
-      <Button
-        variant={item.status === 'pending_review' ? 'success' : 'secondary'}
-        size="sm"
-        className="whitespace-nowrap"
-        onClick={onOpenDetail}
-      >
-        {item.status === 'pending_review' ? 'พิจารณา' : 'ดูรายละเอียด'}
+      <Button variant={opensReview ? 'success' : 'secondary'} size="sm" className="whitespace-nowrap" onClick={onOpenDetail}>
+        {opensReview ? 'พิจารณา' : 'ดูรายละเอียด'}
       </Button>
     </div>
   )

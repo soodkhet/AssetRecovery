@@ -1,7 +1,8 @@
 import type { AccountingMutationContext } from '@/lib/accounting/queries'
 import { syncExpenseRecordsFromPayout, type PayoutSyncOptions } from '@/lib/expenses/queries'
 import { usersWithCapability } from '@/lib/notifications/dispatch'
-import { payoutBatchCompletedMessage } from '@/lib/notifications/messages'
+import { payoutBatchCompletedMessage, payoutPaidToPayeeMessage } from '@/lib/notifications/messages'
+import { payoutTransferSatang } from '@/lib/finance/advance-offset-calc'
 import { enqueueNotificationOutbox, type OutboxWriter } from '@/lib/notifications/outbox'
 import { outboxMessageEntries } from '@/lib/notifications/outbox-core'
 import { prisma } from '@/lib/prisma'
@@ -32,6 +33,38 @@ export async function payoutCompletedNoticeRecipients(organizationId: string): P
   return usersWithCapability(organizationId, 'manage_payout_batch')
 }
 
+export interface PayoutPayeeNotice {
+  userId: string
+  /** ยอดโอนจริงของผู้รับคนนี้ในรอบ (หลังหักภาษีและหักคืนเงินทดรอง) */
+  transferSatang: number
+}
+
+/**
+ * ผู้รับเงินในรอบ + ยอดโอนของแต่ละคน (staging E-011) — อ่านก่อนเปิด tx แบบเดียวกับ `payoutCompletedNoticeRecipients()`
+ * · ผู้รับที่ยอดโอนเป็น 0 (หักคืนเงินทดรองหมด) ไม่ได้รับ "โอนแล้ว"
+ */
+export async function payoutPayeeNotices(organizationId: string, batchId: string): Promise<PayoutPayeeNotice[]> {
+  const items = await prisma.payoutBatchItem.findMany({
+    where: { organizationId, payoutBatchId: batchId },
+    select: { netSatang: true, advanceOffsetSatang: true, payee: { select: { userId: true } } },
+  })
+  return groupPayeeTransfers(
+    items.map((item) => ({
+      userId: item.payee.userId,
+      transferSatang: payoutTransferSatang(item.netSatang, item.advanceOffsetSatang),
+    })),
+  )
+}
+
+/** รวมยอดโอนต่อผู้ใช้ (ผู้รับหนึ่งคนมีหลายรายการในรอบ) · ตัดคนที่ยอดรวมไม่เกิน 0 — pure */
+export function groupPayeeTransfers(rows: readonly PayoutPayeeNotice[]): PayoutPayeeNotice[] {
+  const totals = new Map<string, number>()
+  for (const row of rows) totals.set(row.userId, (totals.get(row.userId) ?? 0) + row.transferSatang)
+  return [...totals]
+    .filter(([, transferSatang]) => transferSatang > 0)
+    .map(([userId, transferSatang]) => ({ userId, transferSatang }))
+}
+
 export async function enqueuePayoutCompletedNotice(
   tx: OutboxWriter,
   input: {
@@ -39,6 +72,8 @@ export async function enqueuePayoutCompletedNotice(
     userIds: readonly string[]
     batch: { id: string; name: string; netSatang: number }
     source: 'manual' | 'bank_reconciliation'
+    /** ผู้รับเงินแต่ละคน — แจ้ง "โอนแล้ว" พร้อมยอดของตัวเอง (staging E-011) */
+    payees?: readonly PayoutPayeeNotice[]
   },
 ): Promise<number> {
   const message = payoutBatchCompletedMessage({
@@ -47,10 +82,18 @@ export async function enqueuePayoutCompletedNotice(
     netSatang: input.batch.netSatang,
     source: input.source,
   })
-  return enqueueNotificationOutbox(tx, outboxMessageEntries(input.organizationId, input.userIds, message), {
-    jobType: 'payout_batch_completed',
-    jobRef: input.batch.id,
-  })
+  const payeeEntries = (input.payees ?? []).flatMap((payee) =>
+    outboxMessageEntries(
+      input.organizationId,
+      [payee.userId],
+      payoutPaidToPayeeMessage({ batchId: input.batch.id, userId: payee.userId, transferSatang: payee.transferSatang }),
+    ),
+  )
+  return enqueueNotificationOutbox(
+    tx,
+    [...outboxMessageEntries(input.organizationId, input.userIds, message), ...payeeEntries],
+    { jobType: 'payout_batch_completed', jobRef: input.batch.id },
+  )
 }
 
 export interface PayoutPostCompletionResult {

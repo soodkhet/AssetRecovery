@@ -60,6 +60,11 @@ export interface ApprovalWhtPreview {
   whtPayerBorne: boolean
   /** true = ยอดมาจากรายการรอบจ่ายที่บันทึกแล้ว */
   whtFromPayout: boolean
+  /**
+   * true = อยู่ในฐานและมีอัตรา แต่ยอดคาดการณ์ต่ำกว่าเกณฑ์ขั้นต่ำ ⇒ ภาษี 0 (staging E-039 — เดิมแสดง "3.00%" คู่ ฿0.00
+   * โดยไม่บอกเหตุ) · เฉพาะยอดคาดการณ์ (ยังไม่เข้ารอบจ่าย)
+   */
+  whtBelowThreshold: boolean
 }
 
 export const WHT_402_RATE_MISSING_WARNING =
@@ -77,7 +82,7 @@ export function approvalWhtPreview(input: ApprovalWhtInput): ApprovalWhtPreview 
   const includedInBase = isInWhtBase(input.policy, input.expenseType)
   const missing402 = usesPerPayeeWhtRate(incomeCategory) && includedInBase && input.payee.wht402Pct === null
 
-  const [line] = calculatePayeeBatchWht(
+  const calc = calculatePayeeBatchWht(
     [
       {
         grossSatang: input.grossSatang,
@@ -95,7 +100,8 @@ export function approvalWhtPreview(input: ApprovalWhtInput): ApprovalWhtPreview 
       section402Pct: input.payee.wht402Pct,
       condition: input.payee.whtCondition,
     },
-  ).lines
+  )
+  const [line] = calc.lines
   if (line === undefined) throw new Error('approvalWhtPreview: คำนวณ WHT ไม่ได้')
 
   const whtRateSource = line.rate.source
@@ -116,6 +122,7 @@ export function approvalWhtPreview(input: ApprovalWhtInput): ApprovalWhtPreview 
       whtWarning: null,
       whtPayerBorne: isPayerBorneWhtCondition(input.payoutItem.whtCondition),
       whtFromPayout: true,
+      whtBelowThreshold: false,
     }
   }
 
@@ -128,5 +135,6 @@ export function approvalWhtPreview(input: ApprovalWhtInput): ApprovalWhtPreview 
     whtWarning,
     whtPayerBorne: isPayerBorneWhtCondition(line.whtCondition),
     whtFromPayout: false,
+    whtBelowThreshold: line.includedInBase && line.whtPctUsed > 0 && calc.belowThreshold,
   }
 }

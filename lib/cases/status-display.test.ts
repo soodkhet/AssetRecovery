@@ -5,6 +5,7 @@ import {
   assetTypeLabel,
   caseSourceBadgeClass,
   caseReviewActionLabel,
+  caseReviewNoteNotice,
   caseSourceLabel,
   caseStatusBadgeGroup,
   caseStatusLabel,
@@ -63,5 +64,24 @@ describe('caseReviewActionLabel — ชื่อ action ของ reviewed_at �
     expect(caseReviewActionLabel('pending_review')).toBe('ขอข้อมูลเพิ่ม')
     expect(caseReviewActionLabel('approved')).toBe('รับเคส')
     expect(caseReviewActionLabel('closed_success')).toBe('รับเคส')
+  })
+})
+
+describe('caseReviewNoteNotice (staging E-003)', () => {
+  it('ขอข้อมูลเพิ่ม / ร่างหลังขอข้อมูล / ส่งตรวจใหม่ — ธุรการเห็นเหตุผล', () => {
+    expect(caseReviewNoteNotice('need_info', 'ขอสำเนาบัตรที่ชัดกว่านี้')).toEqual({
+      tone: 'warning',
+      title: 'ผู้ตรวจขอข้อมูลเพิ่ม',
+      message: 'ขอสำเนาบัตรที่ชัดกว่านี้',
+    })
+    expect(caseReviewNoteNotice('draft', 'ขอสำเนาบัตร')?.title).toBe('ผู้ตรวจขอข้อมูลเพิ่ม (รอบก่อน)')
+    expect(caseReviewNoteNotice('pending_review', 'ขอสำเนาบัตร')?.tone).toBe('warning')
+  })
+
+  it('ไม่รับเคส = กล่องแดง · รับเคสแล้ว/ไม่มีหมายเหตุ = ไม่แสดง', () => {
+    expect(caseReviewNoteNotice('rejected', 'ซ้ำกับเคสเดิม')?.tone).toBe('error')
+    expect(caseReviewNoteNotice('approved', 'รับเคส')).toBeNull()
+    expect(caseReviewNoteNotice('need_info', '  ')).toBeNull()
+    expect(caseReviewNoteNotice('draft', null)).toBeNull()
   })
 })

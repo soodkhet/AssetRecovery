@@ -16,7 +16,7 @@ import {
 import { cn } from '@/components/ui/cn'
 import { MODAL_BUSY_IGNORE } from '@/components/ui/modal-close-guard'
 import { ADJUSTMENT_TARGET_LABEL, ADJUSTMENT_TARGET_TYPES, type AdjustmentTargetType } from '@/lib/adjustments/adjustment'
-import { periodStatusBadgeGroup, periodStatusLabel } from '@/lib/adjustments/adjustment-ui'
+import { periodStatusBadgeGroup, periodStatusLabel, targetSearchState } from '@/lib/adjustments/adjustment-ui'
 import type { AdjustmentDto, AdjustmentTargetDto } from '@/lib/adjustments/types'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { fmtDate } from '@/lib/format/datetime'
@@ -45,8 +45,6 @@ export function AdjustmentFormModal({
   const [targetType, setTargetType] = useState<AdjustmentTargetType>('revenue')
   const [search, setSearch] = useState('')
   const [query, setQuery] = useState('')
-  const [targets, setTargets] = useState<readonly AdjustmentTargetDto[]>([])
-  const [searching, setSearching] = useState(false)
   const [selected, setSelected] = useState<AdjustmentTargetDto | null>(null)
   const [adjustmentType, setAdjustmentType] = useState<'increase' | 'decrease'>('increase')
   const [amount, setAmount] = useState('')
@@ -56,7 +54,16 @@ export function AdjustmentFormModal({
   // กดค้นหาซ้ำคำเดิม/ช่องว่างต้องโหลดใหม่และปลดสถานะค้นหาเสมอ — เดิม query ไม่เปลี่ยน effect ไม่รัน
   // ปุ่มค้างหมุนจน modal ล็อกทั้งบาน (preship R3-002) ⇒ ใช้ nonce ให้ effect รันทุกครั้งที่กด
   const [searchNonce, setSearchNonce] = useState(0)
-  const [searchError, setSearchError] = useState<string | null>(null)
+  // ผลค้นหาผูกกับคำขอที่ได้มา — คำขอปัจจุบันยังไม่กลับ = กำลังโหลด (ไม่ต้อง setState ตอนเริ่ม) · error กับ
+  // "ไม่พบรายการ" แสดงทีละอย่าง (staging E-070: เดิมขึ้นพร้อมกัน และเปิดครั้งแรกขึ้น "ไม่พบ" ระหว่างโหลด)
+  const requestKey = `${targetType}|${query}|${searchNonce}`
+  const [searchResult, setSearchResult] = useState<{
+    key: string
+    targets: readonly AdjustmentTargetDto[]
+    error: string | null
+  } | null>(null)
+  const searchState = targetSearchState(searchResult, requestKey)
+  const targets = searchState === 'ready' ? (searchResult?.targets ?? []) : []
 
   useEffect(() => {
     if (!open) return
@@ -65,14 +72,16 @@ export function AdjustmentFormModal({
       const params = new URLSearchParams({ targetType, q: query })
       const result = await callApi<AdjustmentTargetDto[]>(`/api/adjustments/targets?${params.toString()}`)
       if (cancelled) return
-      setTargets(result.data ?? [])
-      setSearchError(result.error === undefined ? null : `${result.error.title} — ${result.error.message}`)
-      setSearching(false)
+      setSearchResult({
+        key: requestKey,
+        targets: result.data ?? [],
+        error: result.error === undefined ? null : `${result.error.title} — ${result.error.message}`,
+      })
     })()
     return () => {
       cancelled = true
     }
-  }, [open, targetType, query, searchNonce])
+  }, [open, targetType, query, searchNonce, requestKey])
 
   if (!open) return null
 
@@ -84,7 +93,6 @@ export function AdjustmentFormModal({
     const next = ADJUSTMENT_TARGET_TYPES.find((item) => item === value) ?? 'revenue'
     setTargetType(next)
     setSelected(null)
-    setTargets([])
     setSearch('')
     setQuery('')
   }
@@ -170,9 +178,8 @@ export function AdjustmentFormModal({
               variant="secondary"
               // ปุ่มค้นหาย่อย — หมุนได้โดยไม่ล็อกทั้ง modal (R3-002)
               {...MODAL_BUSY_IGNORE}
-              loading={searching}
+              loading={searchState === 'loading'}
               onClick={() => {
-                setSearching(true)
                 setSelected(null)
                 setQuery(search.trim())
                 setSearchNonce((value) => value + 1)
@@ -183,10 +190,17 @@ export function AdjustmentFormModal({
           </div>
         </Field>
 
-        {searchError !== null && <InlineAlert tone="error">{searchError}</InlineAlert>}
-
         <div className="max-h-56 overflow-y-auto rounded-lg border border-slate-200">
-          {targets.length === 0 ? (
+          {searchState === 'loading' ? (
+            <p className="px-3 py-6 text-center text-xs text-slate-400">กำลังค้นหารายการต้นทาง...</p>
+          ) : searchState === 'error' ? (
+            <div className="space-y-2 px-3 py-4 text-center">
+              <p className="text-xs text-red-700">{searchResult?.error}</p>
+              <Button variant="secondary" size="sm" {...MODAL_BUSY_IGNORE} onClick={() => setSearchNonce((value) => value + 1)}>
+                ลองใหม่
+              </Button>
+            </div>
+          ) : targets.length === 0 ? (
             <p className="px-3 py-6 text-center text-xs text-slate-400">ไม่พบรายการต้นทางตามคำค้นนี้</p>
           ) : (
             <ul className="divide-y divide-slate-100">
@@ -194,10 +208,12 @@ export function AdjustmentFormModal({
                 <li key={target.targetId}>
                   <button
                     type="button"
+                    aria-pressed={selected?.targetId === target.targetId}
                     onClick={() => setSelected(target)}
                     className={cn(
                       'focus-ring flex w-full items-center justify-between gap-3 px-3 py-2 text-left hover:bg-slate-50',
-                      selected?.targetId === target.targetId && 'bg-slate-50',
+                      // แถวที่เลือกต้องต่างจาก hover ชัดเจน (staging E-060)
+                      selected?.targetId === target.targetId && 'bg-emerald-50 ring-2 ring-inset ring-emerald-500 hover:bg-emerald-50',
                     )}
                   >
                     <span>

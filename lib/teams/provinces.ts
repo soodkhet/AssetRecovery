@@ -1,95 +1,17 @@
+import { THAI_PROVINCE_REGIONS, type ProvinceRegionGroup } from '@/lib/address/thai-address'
+
 /**
  * PROVINCE_DATA — จังหวัดที่ทีมรับผิดชอบได้ (`09` §8 "จังหวัดตาม PROVINCE_DATA")
  *
- * ที่มาของข้อมูล: mockup `reference/settings.html` (`const PROVINCE_DATA`) ซึ่งเป็น source of truth
- * ด้าน UI ของ province picker — ยังไม่มีตาราง master ใน `02` จึงเก็บเป็น **pure constant**
- * (ไม่แตะ Prisma) ให้ทั้ง FE (checkbox picker) และ BE (validate ค่าที่ส่งมา) ใช้ชุดเดียวกัน
- *
- * ⚠️ ไม่ใช่รายชื่อ 77 จังหวัดของประเทศไทย — เป็นพื้นที่ให้บริการเท่าที่ mockup กำหนดไว้
- * เพิ่มจังหวัดใหม่ = แก้ที่นี่ที่เดียว (mockup ก็ต้องแก้คู่กันตาม Rule 05)
- * บางจังหวัดอยู่ 2 ภาคใน mockup (เช่น ราชบุรี = กลาง+ตะวันตก) — คงไว้ตามต้นฉบับ ตัวตรวจใช้ชุด unique
+ * = ทะเบียน **77 จังหวัด** 6 ภาค ของ `lib/address/thai-address.ts` (ชุดเดียวกับที่อยู่ลูกหนี้ — ห้ามประกาศรายชื่อซ้ำ)
+ * staging E-018: เดิมคัดจาก mockup 58 แถว (ซ้ำ 4 · ขาด 23 จังหวัด) ⇒ เคสที่อยู่จังหวัดนอกรายการจับคู่ทีมไม่ได้เลย
+ * (`CASE_NO_TEAM_MATCH`) · ชื่อจังหวัดเดิมทุกชื่ออยู่ในชุด 77 จังหวัด ⇒ ข้อมูลทีมเดิมไม่ต้องย้าย
+ * pure constant ใช้ทั้ง FE (checkbox picker) และ BE (validate ค่าที่ส่งมา)
  */
 
-export interface ProvinceRegion {
-  region: string
-  provinces: readonly string[]
-}
+export type ProvinceRegion = ProvinceRegionGroup
 
-export const PROVINCE_DATA: readonly ProvinceRegion[] = [
-  {
-    region: 'ภาคกลาง',
-    provinces: [
-      'กรุงเทพมหานคร',
-      'นนทบุรี',
-      'ปทุมธานี',
-      'นครปฐม',
-      'สมุทรปราการ',
-      'สมุทรสาคร',
-      'สมุทรสงคราม',
-      'ราชบุรี',
-      'เพชรบุรี',
-      'ประจวบคีรีขันธ์',
-      'สุพรรณบุรี',
-      'ชลบุรี',
-      'ระยอง',
-      'จันทบุรี',
-      'ตราด',
-    ],
-  },
-  {
-    region: 'ภาคเหนือ',
-    provinces: ['เชียงใหม่', 'เชียงราย', 'น่าน', 'พะเยา', 'แพร่', 'แม่ฮ่องสอน', 'ลำปาง', 'ลำพูน', 'อุตรดิตถ์'],
-  },
-  {
-    region: 'ภาคตะวันออกเฉียงเหนือ',
-    provinces: [
-      'มุกดาหาร',
-      'นครราชสีมา',
-      'ขอนแก่น',
-      'อุบลราชธานี',
-      'เลย',
-      'ยโสธร',
-      'ร้อยเอ็ด',
-      'กาฬสินธุ์',
-      'มหาสารคาม',
-      'ชัยภูมิ',
-      'นครพนม',
-      'สกลนคร',
-      'บึงกาฬ',
-    ],
-  },
-  {
-    region: 'ภาคใต้',
-    provinces: [
-      'ภูเก็ต',
-      'กระบี่',
-      'พังงา',
-      'สุราษฎร์ธานี',
-      'นครศรีธรรมราช',
-      'พัทลุง',
-      'สตูล',
-      'สงขลา',
-      'ตรัง',
-      'ยะลา',
-      'ปัตตานี',
-    ],
-  },
-  {
-    region: 'ภาคตะวันตก',
-    provinces: [
-      'ราชบุรี',
-      'เพชรบุรี',
-      'ประจวบคีรีขันธ์',
-      'กาญจนบุรี',
-      'สุพรรณบุรี',
-      'เพชรบูรณ์',
-      'ลพบุรี',
-      'สิงห์บุรี',
-      'ปราจีนบุรี',
-      'สระแก้ว',
-    ],
-  },
-] as const
+export const PROVINCE_DATA: readonly ProvinceRegion[] = THAI_PROVINCE_REGIONS
 
 /** ชุดจังหวัดที่ใช้ได้ทั้งหมด (unique) — ใช้ตรวจค่าที่ client ส่งมา */
 const PROVINCE_SET: ReadonlySet<string> = new Set(PROVINCE_DATA.flatMap((region) => region.provinces))
@@ -106,7 +28,7 @@ export function unknownProvinces(values: readonly string[]): string[] {
   return values.filter((value) => !PROVINCE_SET.has(value))
 }
 
-/** ภาคของจังหวัด (ตัวแรกที่เจอ — จังหวัดที่อยู่ 2 ภาคคืนภาคแรกตามลำดับใน `PROVINCE_DATA`) */
+/** ภาคของจังหวัด (ตามการแบ่งของกรมการปกครองใน `THAI_PROVINCE_REGIONS`) */
 export function provinceRegion(province: string): string | null {
   return PROVINCE_DATA.find((region) => region.provinces.includes(province))?.region ?? null
 }

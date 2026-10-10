@@ -245,7 +245,8 @@ export function ExpensesTab({ initialView = 'caseBound' }: { initialView?: Expen
 
   /** สลับขอบแท็บ = ล้างตัวกรองของแท็บเดิมเสมอ (ชุดตัวเลือกคนละชุดกัน) */
   function switchView(next: ExpenseViewType): void {
-    setLoading(true)
+    // แตะแท็บที่เลือกอยู่ ⇒ effect ไม่รันซ้ำ — ถ้า setLoading แล้วค้าง "กำลังโหลด" (staging E-001/E-006)
+    if (next !== view) setLoading(true)
     setView(next)
     setStatusFilter('all')
     setMonth(ALL_MONTHS)

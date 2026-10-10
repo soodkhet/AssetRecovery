@@ -33,7 +33,7 @@ import { PERIOD_CLOSED_CANCEL_HINT } from '@/lib/accounting/period'
 import { fmtDate } from '@/lib/format/datetime'
 import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
 import type { WhtCertificateDto, WhtFilingSummaryDto } from '@/lib/wht/types'
-import { MANAGE_WHT } from '@/lib/wht/wht'
+import { MANAGE_WHT, whtFilingDeadlineNote } from '@/lib/wht/wht'
 
 /**
  * แท็บ "เอกสาร & WHT" (`33` §8 · mockup `accounting.html` แท็บ `wht`)
@@ -119,7 +119,7 @@ export function WhtTab() {
         <div>
           <h2 className="text-base font-semibold text-slate-900">สรุปรอบนำส่ง WHT รายเดือน</h2>
           <p className="mt-0.5 text-xs text-slate-500">
-            ยอดคิดจากใบ 50 ทวิ ที่ยังใช้งานอยู่ของรอบนั้น — กำหนดนำส่ง = วันที่ 15 ของเดือนถัดไป (ยื่นอินเทอร์เน็ต)
+            {whtFilingDeadlineNote(filings.items.map((row) => row.filingMethod))}
           </p>
         </div>
 

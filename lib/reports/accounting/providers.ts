@@ -1,4 +1,5 @@
 import type { Prisma } from '@/lib/generated/prisma/client'
+import { loadExportAttachmentCounts } from '@/lib/exports/attachment-counts'
 import { prisma } from '@/lib/prisma'
 import {
   buildExceptionSummaryReport,
@@ -149,7 +150,7 @@ function monthGroupOf(date: Date): Pick<TaxInvoiceEntry, 'groupKey' | 'groupLabe
 
 // ── A3 — สถานะส่งออกชุดข้อมูลบัญชี (`96` §6-A3) ─────────────────────────────
 
-/** ไฟล์หลักของชุดคือคีย์ `01`–`08` (`37` §6.1) — หน้าปก/ไฟล์ .zip ไม่ใช่ไฟล์ข้อมูล */
+/** ไฟล์ข้อมูลของชุดคือคีย์ตัวเลขสองหลัก `00`–`18` (`37` §6.1) — หน้าปก/ไฟล์ .zip ไม่ใช่ไฟล์ข้อมูล */
 function mainFileCountOf(fileUrls: Prisma.JsonValue): number {
   if (fileUrls === null || typeof fileUrls !== 'object' || Array.isArray(fileUrls)) return 0
   return Object.entries(fileUrls).filter(([key, value]) => typeof value === 'string' && /^\d{2}$/.test(key)).length
@@ -178,11 +179,27 @@ const exportHistoryProvider: ReportProvider = async (ctx: ReportContext): Promis
     },
   })
 
+  const attachments = await loadExportAttachmentCounts(
+    ctx.user.organizationId,
+    periods.flatMap((period) => period.exportRecords.map((record) => record.id)),
+  )
+
   const entries: ExportHistoryEntry[] = periods.flatMap((period): ExportHistoryEntry[] => {
     const base = { periodId: period.id, periodLabel: period.periodLabel, yearBe: period.yearBe, month: period.month }
     // งวดที่ยังไม่เคย export ต้องมีแถวของตัวเอง (`37` — "ยังไม่ส่งออก" ไม่ใช่ "ไม่มีข้อมูล")
     if (period.exportRecords.length === 0) {
-      return [{ ...base, recordId: null, version: null, status: null, sentAt: null, sentByName: null, fileCount: null }]
+      return [
+        {
+          ...base,
+          recordId: null,
+          version: null,
+          status: null,
+          sentAt: null,
+          sentByName: null,
+          fileCount: null,
+          attachmentCount: null,
+        },
+      ]
     }
     return period.exportRecords.map((record) => ({
       ...base,
@@ -192,6 +209,7 @@ const exportHistoryProvider: ReportProvider = async (ctx: ReportContext): Promis
       sentAt: record.sentAt,
       sentByName: record.sentByUser?.fullName ?? null,
       fileCount: mainFileCountOf(record.fileUrls),
+      attachmentCount: attachments.get(record.id) ?? 0,
     }))
   })
 

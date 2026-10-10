@@ -530,7 +530,57 @@ export function payoutBatchCompletedMessage(input: {
   }
 }
 
+/**
+ * แจ้งผู้รับเงินแต่ละคนว่าโอนเงินแล้ว (staging E-011 · `90` §6.3 v4.9) — ยอด = ยอดโอนจริงของคนนั้นในรอบ
+ * (หลังหักภาษีและหักคืนเงินทดรอง) · กันซ้ำต่อรอบ+ผู้รับ (ทางเข้าจาก Bank Reconciliation รันซ้ำได้)
+ */
+export function payoutPaidToPayeeMessage(input: {
+  batchId: string
+  userId: string
+  transferSatang: number
+}): NotificationMessage {
+  return {
+    eventCode: 'payout.paid_to_payee',
+    title: 'โอนค่าตอบแทนเข้าบัญชีแล้ว',
+    body: `ยอดโอนสุทธิ ${fmtSatangSymbol(input.transferSatang)} — ตรวจรายการได้ที่หน้าสรุปรายได้`,
+    linkPath: '/field/income',
+    dedupeKey: `payout-paid-${input.batchId}-${input.userId}`,
+  }
+}
+
 // ── Advance (15 §9.1 — job) ─────────────────────────────────────────────────
+
+/** การเงินพิจารณาคำขอเงินทดรองแล้ว — แจ้งผู้ขอ (staging E-011 · `90` §6.3 v4.9) */
+export function advanceDecidedMessage(
+  input: {
+    advanceId: string
+    approvedSatang: number | null
+    requestedSatang: number
+    dueClearDate: Date
+    reason: string | null
+  },
+  decision: 'approved' | 'rejected',
+): NotificationMessage {
+  if (decision === 'rejected') {
+    return {
+      eventCode: 'advance.rejected',
+      title: 'คำขอเงินทดรองไม่ได้รับอนุมัติ',
+      body: withReason(`ยอดที่ขอ ${fmtSatangSymbol(input.requestedSatang)}`, input.reason),
+      linkPath: '/field/advances',
+    }
+  }
+  const approved = input.approvedSatang ?? input.requestedSatang
+  const reduced = approved < input.requestedSatang ? ` (ขอ ${fmtSatangSymbol(input.requestedSatang)})` : ''
+  return {
+    eventCode: 'advance.approved',
+    title: 'อนุมัติเงินทดรองแล้ว',
+    body: withReason(
+      `อนุมัติ ${fmtSatangSymbol(approved)}${reduced} · โอนในรอบจ่ายถัดไป · เคลียร์ยอดภายใน ${fmtDate(input.dueClearDate)}`,
+      input.reason,
+    ),
+    linkPath: '/field/advances',
+  }
+}
 
 /**
  * ผู้รับมีสองฝั่ง (`15` §9.1): **ผู้ยืม** เห็นจากหน้าจอ Field · **การเงิน** เห็นจากแท็บเงินทดรองจ่าย

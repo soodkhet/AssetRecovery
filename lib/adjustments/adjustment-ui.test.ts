@@ -3,6 +3,7 @@ import {
   ADJUSTMENT_STATUS_FILTERS,
   ADJUSTMENT_STATUS_LABEL,
   ADJUSTMENT_TARGET_FILTERS,
+  targetSearchState,
   ADJUSTMENT_TYPE_TONE,
   adjustmentSignPrefix,
   adjustmentStatusBadgeGroup,
@@ -57,5 +58,16 @@ describe('ปุ่มบนแถวตรงกับ state machine (`23` §6.
     expect(canActOnAdjustment('pending_approval')).toBe(true)
     expect(canActOnAdjustment('approved')).toBe(false)
     expect(canActOnAdjustment('rejected')).toBe(false)
+  })
+})
+
+describe('targetSearchState (staging E-070)', () => {
+  it('ยังไม่มีผล หรือผลเป็นของคำขอเก่า ⇒ กำลังโหลด (ไม่ขึ้น "ไม่พบ" ระหว่างโหลด)', () => {
+    expect(targetSearchState(null, 'expense||0')).toBe('loading')
+    expect(targetSearchState({ key: 'expense||0', error: null }, 'expense||1')).toBe('loading')
+  })
+  it('ผลของคำขอปัจจุบัน — error หรือพร้อมแสดง อย่างใดอย่างหนึ่ง', () => {
+    expect(targetSearchState({ key: 'k', error: 'เชื่อมต่อระบบไม่สำเร็จ' }, 'k')).toBe('error')
+    expect(targetSearchState({ key: 'k', error: null }, 'k')).toBe('ready')
   })
 })
