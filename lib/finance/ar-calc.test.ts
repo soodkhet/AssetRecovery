@@ -4,6 +4,7 @@ import {
   arOutstandingSatang,
   daysOverdue,
   resolveBankFeeWriteOff,
+  remainingAfterCustomerWhtSatang,
   resolveCustomerWhtForReceipt,
   settledSatang,
   summarizeArAging,
@@ -256,5 +257,32 @@ describe('§6.11.1 ภาษีลูกค้าหัก + ค่าธรร�
   it('ค่าไม่ใช่สตางค์จำนวนเต็ม/ติดลบ = ล้ม', () => {
     expect(() => resolveCustomerWhtForReceipt({ ...bill, receiptSatang: 1.5 })).toThrow(RangeError)
     expect(() => resolveCustomerWhtForReceipt({ ...bill, toleranceSatang: -1, receiptSatang: 1 })).toThrow(RangeError)
+  })
+})
+
+describe('remainingAfterCustomerWhtSatang — ยอดค้างหลังลูกค้าหัก ณ ที่จ่าย (staging E-064)', () => {
+  it('รับแล้วบางส่วน ยังไม่บันทึกภาษี ⇒ ค้าง − ภาษีที่คาด · โอนเท่ายอดนี้ ⇒ ภาษีเต็มจำนวน', () => {
+    const remaining = remainingAfterCustomerWhtSatang({ remainingSatang: 95_458, expectedWhtSatang: 6_882, priorWhtSatang: 0 })
+    expect(remaining).toBe(88_576)
+    expect(
+      resolveCustomerWhtForReceipt({
+        totalSatang: 245_458,
+        expectedWhtSatang: 6_882,
+        priorReceivedSatang: 150_000,
+        priorWhtSatang: 0,
+        receiptSatang: remaining ?? 0,
+        toleranceSatang: 0,
+      }),
+    ).toBe(6_882)
+  })
+
+  it('ภาษีบันทึกครบแล้ว / ไม่ได้ตั้งให้หัก / ผลไม่เป็นบวก ⇒ null', () => {
+    expect(remainingAfterCustomerWhtSatang({ remainingSatang: 10_000, expectedWhtSatang: 300, priorWhtSatang: 300 })).toBeNull()
+    expect(remainingAfterCustomerWhtSatang({ remainingSatang: 10_000, expectedWhtSatang: 0, priorWhtSatang: 0 })).toBeNull()
+    expect(remainingAfterCustomerWhtSatang({ remainingSatang: 300, expectedWhtSatang: 300, priorWhtSatang: 0 })).toBeNull()
+  })
+
+  it('บันทึกภาษีไปบางส่วน ⇒ หักเฉพาะส่วนที่ยังไม่บันทึก', () => {
+    expect(remainingAfterCustomerWhtSatang({ remainingSatang: 10_000, expectedWhtSatang: 300, priorWhtSatang: 100 })).toBe(9_800)
   })
 })

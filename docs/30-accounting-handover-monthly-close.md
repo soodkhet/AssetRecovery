@@ -21,6 +21,7 @@
 | v2.6 | 06/10/2569 | **มติ PO 06/10/2569 U95 #6**: §6.2 Readiness เพิ่ม**คำเตือน (ไม่บล็อก)** "รับเงินแล้วแต่ยังไม่ออกใบเสร็จรับเงิน/ใบกำกับภาษี N รายการ ฿x" — เงินรับ (รับก่อนสิ้นงวด รวมยกมา) ที่ยังไม่มีใบ active และรอบไม่ได้ออกใบกำกับแบบเดิมไว้ · ภาษีขายเกิดในเดือนที่รับเงิน (`31` §6.2.1) |
 | v2.7 | 06/10/2569 | มติ PO 06/10/2569 **U112** — Readiness เพิ่มข้อ "รอบจ่ายของงวดจ่ายสำเร็จหรือยกเลิกครบ" (blocker) · `send` และ `lock` (รวมทางลัด dev วันจำลอง) ตรวจรอบจ่ายของงวด (ผูกด้วย `payout_batches.created_at` เวลาไทย) ที่ยังไม่ `completed`/`cancelled` ⇒ `PERIOD_HAS_OPEN_PAYOUTS` + หน้าตรวจความพร้อมแสดงรายชื่อรอบที่ต้องจ่าย/ยกเลิกก่อน |
 | v2.8 | 11/10/2569 | **staging E-058 (มติ PO 10/10/2569)** — §6.2 Readiness เพิ่ม**คำเตือน (ไม่บล็อก)** บัญชีค่าใช้จ่ายของงวดที่ยังไม่ map ศูนย์ต้นทุน (จำนวน + ยอด) · หน้าต่างสร้างชุดเอกสารบัญชีแสดงคำเตือนเดียวกัน (`AccountingPeriodDto.unmappedCostCenterCount`) |
+| v2.9 | 11/10/2569 | **staging E-069 (มติ PO 10/10/2569)** — §14 เพิ่ม `POST /api/accounting/periods/:id/readiness` บันทึกทุกครั้งที่ตรวจ (`last_readiness_checked_at` + `last_readiness_passed_count`/`last_readiness_total_count` · audit) · แถวรอบบัญชีแสดง "ตรวจล่าสุด … · ผ่าน N/M" |
 
 ขอบเขตเอกสารนี้: จัดการ "รอบบัญชี" (Accounting Period) แต่ละเดือน — ติดตามสถานะตั้งแต่เก็บข้อมูล จนถึงส่งมอบและล็อกรอบ ครอบคลุม flow ของทั้งกลุ่ม Accounting (31-37) — เป็น**จุดควบคุมกลาง**ที่ Period Lock Policy บังคับใช้
 
@@ -147,6 +148,7 @@
 |---|---|---|
 | GET | /api/accounting/periods | list |
 | GET | /api/accounting/periods/:id/readiness | เช็คความพร้อม (real-time) |
+| POST | /api/accounting/periods/:id/readiness | เช็คความพร้อม (real-time) **และบันทึก** เวลา + ผล (ผ่าน N/M) + audit ลงรอบบัญชี — หน้าต่างตรวจความพร้อมใช้ตัวนี้ · รอบ `locked` คืนผลโดยไม่บันทึก (staging E-069) |
 | PATCH | /api/accounting/periods/:id/send | เปลี่ยนเป็น sent_to_accountant (เช็ค readiness ก่อน) |
 | PATCH | /api/accounting/periods/:id/lock | ล็อกรอบ |
 | PATCH | /api/accounting/periods/:id/unlock | ปลดล็อก (Executive only) |

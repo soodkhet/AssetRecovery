@@ -23,6 +23,7 @@ import {
   MANAGE_ACCOUNTING_PERIOD,
   UNLOCK_PERIOD,
   periodActionsFor,
+  readinessRowText,
 } from '@/lib/accounting/period'
 import type { AccountingPeriodDto } from '@/lib/accounting/types'
 import { callApi, jsonRequest } from '@/lib/api/types'
@@ -189,9 +190,7 @@ export function ClosingTab() {
                         )}
                       </div>
                       <p className="mt-0.5 text-[10px] text-slate-400">
-                        {period.lastReadinessCheckedAt === null
-                          ? 'ยังไม่เคยตรวจความพร้อม'
-                          : `ตรวจล่าสุด ${fmtDateTime(period.lastReadinessCheckedAt)}`}
+                        {readinessRowText(period)}
                       </p>
                     </Td>
                     <Td className="text-xs text-slate-500">{fmtDate(period.exportedAt)}</Td>
@@ -262,6 +261,7 @@ export function ClosingTab() {
         key={`readiness-${checking?.id ?? 'none'}`}
         period={checking}
         onClose={() => setChecking(null)}
+        onChecked={() => void reload()}
       />
 
       <ExportPackModal

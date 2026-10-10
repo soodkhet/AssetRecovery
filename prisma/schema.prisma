@@ -3486,6 +3486,9 @@ model AccountingPeriod {
 
   exportReady            Boolean   @default(false) @map("export_ready")
   lastReadinessCheckedAt DateTime? @map("last_readiness_checked_at") @db.Timestamptz(6)
+  /// staging E-069 — ผลตรวจความพร้อมล่าสุด (ผ่าน N จาก M ข้อ) · CHECK `chk_accounting_periods_readiness_result` (raw SQL)
+  lastReadinessPassedCount Int? @map("last_readiness_passed_count") @db.SmallInt
+  lastReadinessTotalCount  Int? @map("last_readiness_total_count") @db.SmallInt
 
   sentAt   DateTime? @map("sent_at") @db.Timestamptz(6)
   sentBy   String?   @map("sent_by") @db.Uuid

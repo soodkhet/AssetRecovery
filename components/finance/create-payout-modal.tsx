@@ -11,6 +11,7 @@ import {
 } from '@/components/finance/closed-period-cutoff-alert'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import type { PayoutBatchDto } from '@/lib/payout/types'
+import { PayoutPreview } from '@/components/finance/payout-preview'
 import { fmtDate, toInputDate } from '@/lib/format/datetime'
 import { cycleCoversSide, pickMatchingCycle, suggestCutoffDate, suggestOpenCutoffDate } from '@/lib/settings/cycles'
 import type { CycleDto } from '@/lib/settings/types'
@@ -191,6 +192,9 @@ export function CreatePayoutModal({
 
         {showClosedAlert && <ClosedPeriodCutoffAlert onUseToday={setCutoffOverride} />}
 
+        {/* staging E-049 — สรุปจำนวน/ยอด + กำหนดจ่ายก่อนกดสร้าง */}
+        <PayoutPreview side={side} cutoffDate={cutoffDate} cycle={cycleForCutoff} />
+
         <Field
           label="รอบจ่าย (AP) ที่ใช้กำหนดวันจ่าย"
           hint={
@@ -209,7 +213,7 @@ export function CreatePayoutModal({
             <option value={NO_CYCLE}>— ไม่ใช้รอบ (ไม่มีกำหนดจ่าย) —</option>
             {matchingCycles.map((cycle) => (
               <option key={cycle.id} value={cycle.id}>
-                {cycle.name} · {cycle.dueRule}
+                {cycle.name} — กำหนดจ่าย {cycle.dueRule}
               </option>
             ))}
           </Select>

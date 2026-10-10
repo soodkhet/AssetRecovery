@@ -16,6 +16,7 @@ import {
   pendingQueueItems,
   queueCountText,
   queueKpiItems,
+  reportAsOfText,
   showFieldTrackerShortcut,
   visibleDashboardQueues,
   type DashboardQueueItemDto,
@@ -257,5 +258,20 @@ describe('ลิงก์คิวเคสเปิดรายการที�
     ['case_recycle_review', '/cases/submit?status=pending_recycle_review'],
   ])('%s → %s', (id, href) => {
     expect(DASHBOARD_QUEUES.find((queue) => queue.id === id)?.href).toBe(href)
+  })
+})
+
+describe('reportAsOfText — staging E-062', () => {
+  it('บอกเวลาที่คำนวณเป็น พ.ศ. · รีเฟรชถี่เกินบอกเวลาที่กดได้อีกครั้ง', () => {
+    expect(
+      reportAsOfText({ computedAt: '2026-10-10T21:42:00Z', refreshThrottled: false, refreshAvailableAt: null }),
+    ).toBe('ข้อมูล ณ 11/10/2569 04:42')
+    expect(
+      reportAsOfText({
+        computedAt: '2026-10-10T21:42:00Z',
+        refreshThrottled: true,
+        refreshAvailableAt: '2026-10-10T21:47:00Z',
+      }),
+    ).toBe('ข้อมูล ณ 11/10/2569 04:42 · รีเฟรชได้อีกครั้งหลัง 11/10/2569 04:47')
   })
 })

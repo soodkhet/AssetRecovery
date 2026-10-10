@@ -5,9 +5,10 @@ import { CASE_STATUS_LABEL, caseStatusBadgeGroup } from '@/lib/cases/status-disp
 import type { CaseStatusValue } from '@/lib/cases/state-machine'
 import { APPROVAL_STEP_CAPABILITIES } from '@/lib/compensation/approval'
 import { canViewMenu } from '@/lib/nav/menu-registry'
+import { fmtDateTime } from '@/lib/format/datetime'
 import { fmtSatangSymbol } from '@/lib/format/money'
 import { canViewReportCategory, isExecutiveViewer } from '@/lib/reports/access'
-import type { ReportKpi } from '@/lib/reports/payload'
+import type { ReportCacheInfo, ReportKpi } from '@/lib/reports/payload'
 import type { StatusBadgeGroup } from '@/lib/ui/status-badge'
 
 /**
@@ -499,4 +500,16 @@ export interface DashboardOverviewDto {
   caseBoard: CaseBoardDto | null
   fieldTracker: boolean
   computedAt: string
+}
+
+/**
+ * staging E-062 — การ์ด KPI ภาพรวมบนแดชบอร์ดอ่านจากแคชรายงาน ⇒ บอกเวลาที่คำนวณ ("ข้อมูล ณ …") คู่ปุ่มรีเฟรช
+ * (Preview ไม่มี cron ล้างแคช — ตัวเลขอาจค้างจากรอบก่อน) · กดรีเฟรชถี่เกิน ⇒ บอกเวลาที่กดได้อีกครั้ง
+ */
+export function reportAsOfText(cache: Pick<ReportCacheInfo, 'computedAt' | 'refreshThrottled' | 'refreshAvailableAt'>): string {
+  const base = `ข้อมูล ณ ${fmtDateTime(cache.computedAt)}`
+  if (cache.refreshThrottled && cache.refreshAvailableAt !== null) {
+    return `${base} · รีเฟรชได้อีกครั้งหลัง ${fmtDateTime(cache.refreshAvailableAt)}`
+  }
+  return base
 }

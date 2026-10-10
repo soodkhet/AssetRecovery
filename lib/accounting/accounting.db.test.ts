@@ -432,6 +432,32 @@ suite('Phase 4.1 — Readiness Check + ปิด/ปลดล็อกงวด 
     await expectCode(() => accounting.sendPeriod(ctx(), periodId, reason), 'NOT_READY_RECONCILE_INCOMPLETE')
   })
 
+  it('staging E-069: POST ตรวจความพร้อม บันทึกเวลา + ผ่าน N/M + audit · GET ไม่เขียน', async () => {
+    const periodId = await seedPeriod()
+    await seedUnmatchedBankTransaction(periodId)
+
+    await accounting.getPeriodReadiness(accountant, periodId)
+    const untouched = await db().accountingPeriod.findUniqueOrThrow({ where: { id: periodId } })
+    expect(untouched.lastReadinessCheckedAt).toBeNull()
+
+    const checkedAt = new Date('2026-09-02T03:00:00Z')
+    const result = await accounting.recordPeriodReadiness(ctx(), periodId, checkedAt)
+    const passed = result.checks.filter((check) => check.passed).length
+    expect(passed).toBeLessThan(result.checks.length)
+
+    const row = await db().accountingPeriod.findUniqueOrThrow({ where: { id: periodId } })
+    expect(row.lastReadinessCheckedAt?.toISOString()).toBe(checkedAt.toISOString())
+    expect(row.lastReadinessPassedCount).toBe(passed)
+    expect(row.lastReadinessTotalCount).toBe(result.checks.length)
+    expect(row.exportReady).toBe(false)
+
+    const audits = await db().auditLog.findMany({ where: { targetId: periodId, action: 'update' } })
+    expect(audits.some((audit) => (audit.reason ?? '').includes(`ผ่าน ${passed}/${result.checks.length}`))).toBe(true)
+
+    const listed = (await accounting.listPeriods(ctx(), { limit: 36 }, IN_PERIOD)).find((period) => period.id === periodId)
+    expect(listed).toMatchObject({ lastReadinessPassedCount: passed, lastReadinessTotalCount: result.checks.length })
+  })
+
   it('มติ PO U87: มีรายได้ที่ยังไม่วางบิลในงวด ⇒ เตือนรายได้ค้างรับ แต่ส่งงวดได้', async () => {
     const periodId = await seedPeriod()
     await seedUnbilledRevenue()

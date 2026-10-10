@@ -918,6 +918,57 @@ export interface PayoutBatchCreateOutcome {
   warning?: ApiWarning
 }
 
+/**
+ * `GET /api/payout-batches/preview` (staging E-049 · มติ PO 10/10/2569) — สรุปว่าวันตัดรอบนี้จะดึงรายการอะไรบ้าง
+ * **ก่อน**กดสร้าง (จำนวน/ผู้รับ/ยอด) ด้วยตัวคัดรายการเดียวกับ `createPayoutBatch()` · อ่านอย่างเดียว ไม่เขียนอะไร
+ * ข้อที่จะทำให้สร้างไม่ได้ (เช่น ผู้รับยังไม่ยืนยัน/ไม่มีอัตรา WHT) ⇒ คืนเป็นข้อความ `blocked` แทนการ throw
+ */
+export interface PayoutBatchPreviewDto {
+  itemCount: number
+  payeeCount: number
+  grossSatang: number
+  netSatang: number
+  /** ข้อความเหตุที่สร้างรอบไม่ได้ (ตรงกับ error ตอนกดสร้าง) · `null` = สร้างได้ */
+  blocked: string | null
+}
+
+export async function previewPayoutBatch(
+  user: SessionUser,
+  input: { side: PayoutBatchSide; cutoffDate: Date },
+  now: Date = new Date(),
+): Promise<PayoutBatchPreviewDto> {
+  const whtPolicy = await resolveWhtPolicyForPayout(user.organizationId, now)
+  const typeDefaults = await loadTaxProfileDefaults(user.organizationId)
+  try {
+    const [expenses, advances] = await Promise.all([
+      collectExpenseCandidates(user.organizationId, input.cutoffDate, input.side, whtPolicy.values, typeDefaults, now),
+      collectAdvanceCandidates(user.organizationId, input.cutoffDate),
+    ])
+    const candidates = [...expenses, ...advances].filter((candidate) => candidate.side === input.side)
+    const totals = summarizePayoutBatch(candidates)
+    let blocked: string | null = null
+    try {
+      assertHasItemsToPay(candidates.length)
+      assertPayeesVerified(candidates)
+    } catch (error) {
+      blocked = error instanceof PayoutError || error instanceof PayeeError ? error.userMessage : null
+      if (blocked === null) throw error
+    }
+    return {
+      itemCount: candidates.length,
+      payeeCount: new Set(candidates.map((candidate) => candidate.payeeId)).size,
+      grossSatang: totals.grossSatang,
+      netSatang: totals.netSatang,
+      blocked,
+    }
+  } catch (error) {
+    if (error instanceof PayoutError || error instanceof PayeeError) {
+      return { itemCount: 0, payeeCount: 0, grossSatang: 0, netSatang: 0, blocked: error.userMessage }
+    }
+    throw error
+  }
+}
+
 export async function createPayoutBatch(
   context: PayoutMutationContext,
   input: Omit<PayoutBatchCreateInput, 'cycleId'> & { cycleId?: string | null },

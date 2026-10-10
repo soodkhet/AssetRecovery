@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button, InlineAlert, LoadingState, Modal } from '@/components/ui'
 import { readinessDescription } from '@/lib/accounting/period'
 import type { AccountingPeriodDto, PeriodReadinessDto } from '@/lib/accounting/types'
@@ -13,28 +13,38 @@ import { exceptionModuleLabel } from '@/lib/reports/dashboard'
 /**
  * Modal "ตรวจความพร้อม" (`30` §8 · mockup `accounting.html` `accounting-checklist`)
  *
- * ⚠️ ผลตรวจ**อ่านสดจาก API ทุกครั้งที่เปิด** (`GET /api/accounting/periods/:id/readiness`) —
+ * ⚠️ ผลตรวจ**อ่านสดจาก API ทุกครั้งที่เปิด** (`POST /api/accounting/periods/:id/readiness` — ตรวจสด + บันทึกผล · staging E-069) —
  *    ห้ามใช้ `exportReady` ที่ค้างอยู่ในแถวมาแสดงแทน เพราะเป็นผลของการตรวจครั้งก่อน
  * ⚠️ **ไม่มีปุ่ม force ข้าม** โดยเจตนา (`30` §10) — ไม่ผ่านต้องกลับไปแก้ที่โมดูลต้นทาง
  */
 export function ReadinessModal({
   period,
   onClose,
+  onChecked,
 }: {
   period: AccountingPeriodDto | null
   onClose: () => void
+  /** staging E-069 — บันทึกผลตรวจแล้ว ⇒ ให้หน้ารายการโหลดแถวใหม่ ("ตรวจล่าสุด … · ผ่าน N/M") */
+  onChecked?: () => void
 }) {
   const [data, setData] = useState<PeriodReadinessDto | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<{ title: string; message: string } | null>(null)
 
   const periodId = period?.id ?? ''
+  const onCheckedRef = useRef(onChecked)
+  useEffect(() => {
+    onCheckedRef.current = onChecked
+  }, [onChecked])
 
   useEffect(() => {
     if (periodId === '') return
     let cancelled = false
     void (async () => {
-      const result = await callApi<PeriodReadinessDto>(`/api/accounting/periods/${periodId}/readiness`)
+      // staging E-069 — POST = ตรวจสด + บันทึกเวลา/ผลลงรอบบัญชี
+      const result = await callApi<PeriodReadinessDto>(`/api/accounting/periods/${periodId}/readiness`, {
+        method: 'POST',
+      })
       if (cancelled) return
       if (result.error !== undefined) {
         setError({ title: result.error.title, message: result.error.message })
@@ -44,6 +54,7 @@ export function ReadinessModal({
       setData(result.data ?? null)
       setError(null)
       setLoading(false)
+      onCheckedRef.current?.()
     })()
     return () => {
       cancelled = true

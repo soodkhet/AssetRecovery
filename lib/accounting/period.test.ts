@@ -24,6 +24,8 @@ import {
   PERIOD_TRANSITIONS,
   type ReadinessInput,
   readinessDescription,
+  readinessRowText,
+  readinessScore,
   buildPeriodClosedLookup,
   PERIOD_CLOSED_CANCEL_HINT,
 } from '@/lib/accounting/period'
@@ -383,7 +385,7 @@ describe('งวดสิ้นเดือนแล้วจึงส่ง/ล
 
 describe('BUG-163 — หัว Modal ตรวจความพร้อมนับจำนวนข้อจากรายการจริง', () => {
   it('ใช้จำนวนรายการที่ได้จาก API', () => {
-    expect(readinessDescription(4)).toBe('เงื่อนไข 4 ข้อ — ตรวจสดทุกครั้งที่เปิดหน้าต่างนี้ ไม่มีทางลัดข้าม')
+    expect(readinessDescription(4)).toBe('เงื่อนไข 4 ข้อ — ตรวจสดและบันทึกผลทุกครั้งที่เปิดหน้าต่างนี้ ไม่มีทางลัดข้าม')
     expect(readinessDescription(3)).toContain('เงื่อนไข 3 ข้อ')
   })
   it('ยังไม่มีผลตรวจ ⇒ ไม่ระบุจำนวน', () => {
@@ -468,5 +470,20 @@ describe('staging E-058 — บัญชีค่าใช้จ่ายที�
   it('map ครบ ⇒ ไม่มีคำเตือน', () => {
     expect(unmappedCostCenterWarning({ count: 0, amountSatang: 0 })).toBeNull()
     expect(unmappedCostCenterWarning(undefined)).toBeNull()
+  })
+})
+
+describe('readinessScore / readinessRowText — staging E-069', () => {
+  it('นับข้อที่ผ่านจากทั้งหมด', () => {
+    expect(readinessScore([{ passed: true }, { passed: false }, { passed: true }])).toEqual({ passed: 2, total: 3 })
+  })
+
+  it('แถวรอบบัญชี: ไม่เคยตรวจ / มีแค่เวลา (ส่งก่อนมีคอลัมน์ผล) / มีผล', () => {
+    const none = { lastReadinessCheckedAt: null, lastReadinessPassedCount: null, lastReadinessTotalCount: null }
+    expect(readinessRowText(none)).toBe('ยังไม่เคยตรวจความพร้อม')
+    expect(readinessRowText({ ...none, lastReadinessCheckedAt: '2026-10-10T03:15:00Z' })).toBe('ตรวจล่าสุด 10/10/2569 10:15')
+    expect(
+      readinessRowText({ lastReadinessCheckedAt: '2026-10-10T03:15:00Z', lastReadinessPassedCount: 4, lastReadinessTotalCount: 5 }),
+    ).toBe('ตรวจล่าสุด 10/10/2569 10:15 · ผ่าน 4/5')
   })
 })

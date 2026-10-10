@@ -1,3 +1,4 @@
+import { fmtDate } from '@/lib/format/datetime'
 import { fmtSatangSymbol } from '@/lib/format/money'
 import { resolveCustomerWhtForReceipt } from '@/lib/finance/ar-calc'
 import type { BankMatchStatus } from '@/lib/generated/prisma/enums'
@@ -16,6 +17,13 @@ import type { StatusBadgeGroup } from '@/lib/ui/status-badge'
  * - ยอดจับคู่ manual ที่ **ไม่ตรงเป๊ะ** ต้องมี `match_note` เสมอ (`MATCH_NOTE_REQUIRED`)
  *   และ `unmatched_resolved` ต้องมี note เสมอไม่ว่ากรณีใด (`35` §10)
  */
+
+/** รายการเดินบัญชีที่จับคู่กับเอกสารไปแล้ว (staging E-057) */
+export interface MatchedTransactionRef {
+  id: string
+  transactionDate: Date
+  amountSatang: number
+}
 
 /** ฝั่งของรายการ — คิดจากเครื่องหมายของ `amount_satang` (บวก = รับเงิน) */
 export type BankTransactionSide = 'in' | 'out'
@@ -45,6 +53,15 @@ export interface MatchCandidate {
    * แยกจาก `altAmountSatang` เพราะไม่ใช่ยอดหลังลูกค้าหัก ณ ที่จ่าย (ห้ามอนุมาน WHT จากยอดนี้) · ไม่มี = `null`/ไม่ส่ง
    */
   remainingAmountSatang?: number | null
+  /**
+   * staging E-064 — ยอดค้างที่เหลือ**หลังลูกค้าหัก ณ ที่จ่าย** ส่วนที่ยังไม่บันทึก (`remainingAfterCustomerWhtSatang()`)
+   * ถือว่า "ตรง" ด้วย · ใช้วันอ้างอิงเดียวกับยอดค้าง · ไม่มี = `null`/ไม่ส่ง
+   */
+  remainingAltAmountSatang?: number | null
+  /**
+   * staging E-057 — รายการเดินบัญชีที่จับคู่กับรอบจ่ายนี้ไปแล้ว (1 รอบจ่ายจับคู่ได้หลายบรรทัด แต่ต้องยืนยัน) · ไม่มี = ไม่ส่ง
+   */
+  matchedTransactions?: readonly MatchedTransactionRef[]
   /** วันอ้างอิงของเอกสาร (วันวางบิล / วันสร้างไฟล์โอน) — `null` = ไม่รู้วัน ⇒ ไม่เข้าเกณฑ์ auto */
   referenceDate: Date | null
   /**
@@ -81,6 +98,10 @@ export function candidateMatches(
     { amount: candidate.altAmountSatang, referenceDate: candidate.referenceDate },
     {
       amount: candidate.remainingAmountSatang ?? null,
+      referenceDate: candidate.remainingReferenceDate ?? candidate.referenceDate,
+    },
+    {
+      amount: candidate.remainingAltAmountSatang ?? null,
       referenceDate: candidate.remainingReferenceDate ?? candidate.referenceDate,
     },
   ]
@@ -207,15 +228,74 @@ export function allowedTargetKind(amountSatang: number): MatchTargetKind {
  */
 export function isExactMatchAmount(
   transactionAmountSatang: number,
-  candidate: Pick<MatchCandidate, 'amountSatang' | 'altAmountSatang' | 'remainingAmountSatang'>,
+  candidate: Pick<MatchCandidate, 'amountSatang' | 'altAmountSatang' | 'remainingAmountSatang' | 'remainingAltAmountSatang'>,
 ): boolean {
   const absolute = Math.abs(transactionAmountSatang)
   const remaining = candidate.remainingAmountSatang ?? null
+  const remainingAlt = candidate.remainingAltAmountSatang ?? null
   return (
     absolute === candidate.amountSatang ||
     (candidate.altAmountSatang !== null && absolute === candidate.altAmountSatang) ||
-    (remaining !== null && absolute === remaining)
+    (remaining !== null && absolute === remaining) ||
+    (remainingAlt !== null && absolute === remainingAlt)
   )
+}
+
+/**
+ * staging E-064 — ยอดที่ใช้เทียบในกล่องเตือน "ยอดไม่ตรงกันเป๊ะ": รอบที่รับเงินบางส่วนแล้วเทียบกับ**ยอดค้าง** ไม่ใช่ยอดเต็มบิล
+ */
+export function mismatchCompareAmounts(
+  candidate: Pick<MatchCandidate, 'amountSatang' | 'altAmountSatang' | 'remainingAmountSatang' | 'remainingAltAmountSatang'>,
+): { label: string; amountSatang: number; afterWhtSatang: number | null } {
+  const remaining = candidate.remainingAmountSatang ?? null
+  if (remaining !== null) {
+    return { label: 'ยอดค้าง', amountSatang: remaining, afterWhtSatang: candidate.remainingAltAmountSatang ?? null }
+  }
+  return { label: 'ยอดเอกสาร', amountSatang: candidate.amountSatang, afterWhtSatang: candidate.altAmountSatang }
+}
+
+/**
+ * staging E-057 — ข้อความ "จับคู่แล้วกับ…" ของรอบจ่าย (ไม่นับรายการที่กำลังจับคู่อยู่เอง) · ไม่มี = `null`
+ */
+export function alreadyMatchedWithText(
+  matched: readonly MatchedTransactionRef[] | undefined,
+  currentTransactionId: string,
+): string | null {
+  const others = (matched ?? []).filter((entry) => entry.id !== currentTransactionId)
+  if (others.length === 0) return null
+  return others
+    .map((entry) => `รายการเดินบัญชี ${fmtDate(entry.transactionDate)} ${fmtSatangSymbol(Math.abs(entry.amountSatang))}`)
+    .join(', ')
+}
+
+/** staging E-056 — หมายเหตุอัตโนมัติเมื่อยืนยันคู่ที่ระบบเสนอโดยไม่ได้กรอกเอง (เดิมเว้นว่าง ⇒ แสดง "—") */
+export const PROPOSAL_MATCH_NOTE = 'ยืนยันคู่ที่ระบบเสนอ (ยอดตรง)'
+
+/**
+ * staging E-056 — ข้อความ toast หลังจับคู่สำเร็จ ใช้ร่วมกัน (จับคู่ Manual + ยืนยันคู่ที่ระบบเสนอ) ให้บอก**ผลที่เกิดจริง**
+ */
+export function matchSuccessToast(
+  effect:
+    | { kind: 'billing'; outstandingSatang: number; bankFeeWrittenOffSatang: number }
+    | { kind: 'payout' }
+    | null
+    | undefined,
+  ref: string,
+): { title: string; description: string } {
+  const title = `จับคู่รายการกับ ${ref} สำเร็จ`
+  if (effect?.kind === 'billing') {
+    return {
+      title,
+      description:
+        effect.bankFeeWrittenOffSatang > 0
+          ? `สร้างเงินรับให้แล้ว · ส่วนต่าง ${fmtSatangSymbol(effect.bankFeeWrittenOffSatang)} ไม่เกินเพดาน บันทึกเป็นค่าธรรมเนียมธนาคาร · รอบชำระครบ`
+          : effect.outstandingSatang > 0
+            ? `สร้างเงินรับให้แล้ว · ยอดคงค้างของรอบ ${fmtSatangSymbol(effect.outstandingSatang)}`
+            : 'สร้างเงินรับให้แล้ว · รอบชำระครบ',
+    }
+  }
+  if (effect?.kind === 'payout') return { title, description: 'ยืนยันรอบจ่ายเป็น "จ่ายแล้ว" ให้อัตโนมัติ' }
+  return { title, description: 'ผูกกับรายการเดินบัญชีแล้ว' }
 }
 
 /**
@@ -227,15 +307,39 @@ export function isExactMatchAmount(
  */
 export function matchCandidateOptionText(
   transactionAmountSatang: number,
-  candidate: Pick<MatchCandidate, 'amountSatang' | 'altAmountSatang' | 'remainingAmountSatang'> & { label: string },
+  candidate: Pick<MatchCandidate, 'amountSatang' | 'altAmountSatang' | 'remainingAmountSatang' | 'remainingAltAmountSatang'> & {
+    label: string
+    /** staging E-057 — รอบจ่ายที่จับคู่ไปแล้ว ⇒ ต่อท้ายป้าย "จับคู่แล้วกับ…" */
+    alreadyMatchedWith?: string | null
+  },
+): string {
+  const text = optionAmountText(transactionAmountSatang, candidate)
+  const matched = candidate.alreadyMatchedWith ?? null
+  return matched === null ? text : `${text} · จับคู่แล้วกับ${matched}`
+}
+
+function optionAmountText(
+  transactionAmountSatang: number,
+  candidate: Pick<MatchCandidate, 'amountSatang' | 'altAmountSatang' | 'remainingAmountSatang' | 'remainingAltAmountSatang'> & {
+    label: string
+  },
 ): string {
   const absolute = Math.abs(transactionAmountSatang)
   const full = fmtSatangSymbol(candidate.amountSatang)
   const alt = candidate.altAmountSatang
   const remaining = candidate.remainingAmountSatang ?? null
+  const remainingAlt = candidate.remainingAltAmountSatang ?? null
   if (absolute === candidate.amountSatang) return `${candidate.label} · ${full} (ยอดตรง)`
   if (remaining !== null && absolute === remaining) {
     return `${candidate.label} · ${fmtSatangSymbol(remaining)} (ยอดตรงกับยอดค้างที่เหลือ · ยอดเต็ม ${full})`
+  }
+  if (remaining !== null && remainingAlt !== null && absolute === remainingAlt) {
+    return `${candidate.label} · ${fmtSatangSymbol(remainingAlt)} (ยอดตรงกับยอดค้างหลังลูกค้าหัก ณ ที่จ่าย · ค้าง ${fmtSatangSymbol(remaining)} · ยอดเต็ม ${full})`
+  }
+  // staging E-064 — รอบที่รับเงินบางส่วนแล้ว ⇒ นำด้วยยอดค้าง (ไม่ให้ผู้ใช้คำนวณเองจากยอดเต็มบิล)
+  if (remaining !== null) {
+    const afterWht = remainingAlt === null ? '' : ` (คาดรับหลังลูกค้าหัก ณ ที่จ่าย ${fmtSatangSymbol(remainingAlt)})`
+    return `${candidate.label} · ค้าง ${fmtSatangSymbol(remaining)}${afterWht} · ยอดเต็ม ${full}`
   }
   if (alt !== null && absolute === alt) {
     return `${candidate.label} · ${fmtSatangSymbol(alt)} (ยอดตรงหลังลูกค้าหัก ณ ที่จ่าย · ยอดเต็ม ${full})`
@@ -277,8 +381,10 @@ export function manualMatchRequiresNote(input: {
   exactAmount: boolean
   /** จับคู่ทับของเดิม (re-match) — `35` §10 บังคับให้มีเหตุผลเสมอ */
   isRematch: boolean
+  /** staging E-057 — รอบจ่ายจับคู่กับรายการเดินบัญชีอื่นไปแล้ว (1:N ได้ แต่ต้องอธิบาย) */
+  targetAlreadyMatched?: boolean
 }): boolean {
-  return !input.exactAmount || input.isRematch
+  return !input.exactAmount || input.isRematch || input.targetAlreadyMatched === true
 }
 
 export function hasNote(note: string | null | undefined): boolean {
@@ -386,3 +492,31 @@ export const MATCH_TARGET_LABEL: Readonly<Record<MatchTargetKind, string>> = {
 
 /** capability ของโมดูลนี้ (`25` §7.5 — บัญชีจัดการ · การเงินดูอย่างเดียว) */
 export const MANAGE_BANK_RECONCILIATION = 'manage_bank_reconciliation'
+
+/**
+ * staging E-067 (มติ PO 10/10/2569) — รายการเงินออก "โอนคืนผู้โอน" ใน statement ผูกกับเงินรับรอตรวจสอบที่คืนแล้ว
+ * ผ่านหน้าต่างปิดรายการ (ไม่แก้ schema): ตัวเลือก = เงินรับรอตรวจสอบสถานะ "คืนเงินผู้โอนแล้ว" ยอดเท่ากัน · เงินเข้าไม่มีตัวเลือก
+ */
+export function suspenseRefundOptions<
+  T extends { id: string; amountSatang: number; matchStatus: BankMatchStatus },
+>(transaction: { amountSatang: number }, refunded: readonly T[]): T[] {
+  if (transactionSide(transaction.amountSatang) !== 'out') return []
+  const absolute = Math.abs(transaction.amountSatang)
+  return refunded.filter((entry) => entry.matchStatus === 'suspense_refunded' && entry.amountSatang === absolute)
+}
+
+/** เหตุผลปิดรายการที่ระบบเติมให้เมื่อเลือกเงินรับรอตรวจสอบที่คืนแล้ว (staging E-067) */
+export function suspenseRefundCloseNote(refunded: {
+  transactionDate: string
+  amountSatang: number
+  description: string
+  refundDate: string | null
+  refundNote: string | null
+}): string {
+  const parts = [
+    `โอนคืนของเงินรับรอตรวจสอบ ${fmtDate(refunded.transactionDate)} ${fmtSatangSymbol(refunded.amountSatang)} (${refunded.description})`,
+  ]
+  if (refunded.refundDate !== null) parts.push(`คืนเมื่อ ${fmtDate(refunded.refundDate)}`)
+  if (refunded.refundNote !== null && refunded.refundNote.trim() !== '') parts.push(`อ้างอิง ${refunded.refundNote.trim()}`)
+  return parts.join(' · ')
+}

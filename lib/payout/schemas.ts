@@ -79,3 +79,9 @@ export type PayoutCompleteInput = z.infer<typeof payoutCompleteSchema>
 export type PayoutCancelInput = z.infer<typeof payoutCancelSchema>
 export type PayoutBatchListQuery = z.infer<typeof payoutBatchListQuerySchema>
 export type PayoutDocQuery = z.infer<typeof payoutDocQuerySchema>
+
+/** staging E-049 — สรุปก่อนสร้างรอบจ่าย (ฝั่ง + วันตัดรอบ) */
+export const payoutBatchPreviewQuerySchema = z.object({
+  side: z.enum(['inhouse', 'outsource']),
+  cutoffDate: dateOnlySchema('วันตัดรอบ'),
+})

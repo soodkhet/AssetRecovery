@@ -23,6 +23,7 @@ import {
 import { PERIOD_CLOSED_CANCEL_HINT } from '@/lib/accounting/period'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import {
+  adjustmentAmountMismatch,
   creditableInvoiceBalance,
   CREDIT_NOTE_TYPE_LABEL,
   maxCreditNoteTotalSatang,
@@ -410,7 +411,7 @@ export function CreditNoteModal({
                 <Field
                   id="cn-adjustment"
                   label="รายการปรับปรุงที่เป็นต้นเหตุ (ถ้ามี)"
-                  hint="ยอดก่อนภาษีไม่เท่ายอดรายการปรับปรุง — ระบบบันทึกให้แต่จะเตือนให้ตรวจอีกครั้ง"
+                  hint="เลือกรายการปรับปรุงที่ทำให้ต้องออกเอกสารนี้ — ระบบจะปิดป้ายรอเอกสารของรายการนั้นให้"
                 >
                   <Select id="cn-adjustment" value={adjustmentId} onChange={(event) => setAdjustmentId(event.target.value)}>
                     <option value="">— ไม่ระบุ —</option>
@@ -422,6 +423,19 @@ export function CreditNoteModal({
                   </Select>
                 </Field>
               )}
+              {(() => {
+                // staging E-063 — เตือนเฉพาะเมื่อยอดต่างจริง
+                const mismatch = adjustmentAmountMismatch(
+                  amountSatang,
+                  awaitingOfType.find((row) => row.adjustmentId === adjustmentId)?.amountSatang ?? null,
+                )
+                return mismatch === null ? null : (
+                  <InlineAlert tone="warning" title="ยอดไม่เท่ารายการปรับปรุง">
+                    มูลค่าก่อนภาษี {fmtSatangSymbol(mismatch.amountSatang)} · ยอดรายการปรับปรุง{' '}
+                    {fmtSatangSymbol(mismatch.adjustmentSatang)} — บันทึกได้ แต่ระบบจะเตือนให้ตรวจอีกครั้ง
+                  </InlineAlert>
+                )
+              })()}
               <Field id="cn-reason" label="เหตุผล">
                 <Textarea
                   id="cn-reason"

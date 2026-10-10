@@ -67,6 +67,9 @@ export interface AccountingPeriodDto {
   /** ผลตรวจความพร้อมครั้งล่าสุดที่บันทึกไว้ (ไม่ใช่ผลสด — ผลสดเรียก `/readiness`) */
   exportReady: boolean
   lastReadinessCheckedAt: string | null
+  /** staging E-069 — ผลตรวจล่าสุด ผ่าน N จาก M ข้อ · ยังไม่เคยบันทึกผล = `null` */
+  lastReadinessPassedCount: number | null
+  lastReadinessTotalCount: number | null
   /** วัน Export ล่าสุด (`30` §7.1 `exported_at`) — มาจาก `export_records` ไฟล์ 37 */
   exportedAt: string | null
   /** เวอร์ชัน Export ล่าสุดของรอบ (เลขลำดับ · `null` = ยังไม่เคย Export) — BUG-160 modal บอกเวอร์ชันจริง */

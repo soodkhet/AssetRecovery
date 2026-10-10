@@ -1,5 +1,6 @@
 'use client'
 
+import { EXPORT_HANDOFF_TEXT } from '@/lib/exports/handoff-ui'
 import { useState } from 'react'
 import { ExportPackModal } from '@/components/accounting/export-pack-modal'
 import { useExportHistory } from '@/components/accounting/use-exports'
@@ -148,12 +149,12 @@ export function ExportTab() {
                       </Button>
                       {canManage && row.status === 'generated' && (
                         <Button size="sm" variant="ghost" onClick={() => setPending({ record: row, action: 'mark-sent' })}>
-                          Mark ว่าส่งแล้ว
+                          {EXPORT_HANDOFF_TEXT['mark-sent'].rowLabel}
                         </Button>
                       )}
                       {canManage && row.status === 'sent' && (
                         <Button size="sm" variant="ghost" onClick={() => setPending({ record: row, action: 'accept' })}>
-                          Mark ว่าตอบรับ
+                          {EXPORT_HANDOFF_TEXT.accept.rowLabel}
                         </Button>
                       )}
                     </div>
@@ -193,19 +194,15 @@ export function ExportTab() {
         }}
         onConfirm={() => void runTransition()}
         loading={saving}
-        title={
-          pending?.action === 'accept'
-            ? `Mark ว่าสำนักงานบัญชีตอบรับแล้ว — ${pending.record.periodLabel}`
-            : `Mark ว่าส่งให้สำนักงานบัญชีแล้ว — ${pending?.record.periodLabel ?? ''}`
-        }
-        confirmLabel={pending?.action === 'accept' ? 'ยืนยัน Accepted' : 'ยืนยันว่าส่งแล้ว'}
+        title={`${EXPORT_HANDOFF_TEXT[pending?.action ?? 'mark-sent'].title} — ${pending?.record.periodLabel ?? ''}`}
+        confirmLabel={EXPORT_HANDOFF_TEXT[pending?.action ?? 'mark-sent'].confirmLabel}
         description={
           pending === null
             ? ''
             : `${pending.record.periodLabel} · ${pending.record.versionLabel} · สร้างเมื่อ ${fmtDateTime(pending.record.generatedAt)} — การส่งจริงเกิดนอกระบบ ที่นี่บันทึกไว้เพื่อให้ตามสถานะได้`
         }
       >
-        <Field label="หมายเหตุ (ถ้ามี)" hint="เช่น ส่งทางอีเมลถึงผู้ทำบัญชี — บันทึกไว้ในประวัติการใช้งาน">
+        <Field label="หมายเหตุ (ถ้ามี)" hint={EXPORT_HANDOFF_TEXT[pending?.action ?? 'mark-sent'].noteHint}>
           <Textarea rows={2} maxLength={1000} value={note} onChange={(event) => setNote(event.target.value)} />
         </Field>
       </ConfirmModal>

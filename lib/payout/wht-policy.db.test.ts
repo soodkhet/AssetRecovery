@@ -460,6 +460,20 @@ suite('เกณฑ์ ฿1,000 สะสมต่อผู้รับต่อ
   })
 })
 
+suite('สรุปก่อนสร้างรอบจ่าย (staging E-049)', () => {
+  it('นับรายการ/ผู้รับ/ยอดเท่ากับที่สร้างจริง · ไม่เขียนอะไร · ไม่มีรายการ ⇒ blocked', async () => {
+    const empty = await payout.previewPayoutBatch(finance, { side: 'inhouse', cutoffDate: CUTOFF }, NOW)
+    expect(empty.itemCount).toBe(0)
+    expect(empty.blocked).not.toBeNull()
+
+    await seedIn1()
+    const preview = await payout.previewPayoutBatch(finance, { side: 'inhouse', cutoffDate: CUTOFF }, NOW)
+    expect(await db().payoutBatch.count({ where: { organizationId: ORG_ID } })).toBe(0)
+    const { batch } = await payout.createPayoutBatch(ctx, { side: 'inhouse', cutoffDate: CUTOFF, name: null })
+    expect(preview).toMatchObject({ itemCount: batch.itemCount, payeeCount: 1, netSatang: batch.netSatang, blocked: null })
+  })
+})
+
 suite('ยอดเรียกคืนจากผู้รับ (staging E-014)', () => {
   /** Adjustment ลดยอดรายการเบิก (อนุมัติแล้ว) — ยิง hook ของการอนุมัติครบโดยตรง */
   async function approvedDecrease(expenseId: string, amountSatang: number): Promise<string | null> {

@@ -28,6 +28,7 @@ import {
   withArOver60Hint,
   queueCountText,
   queueKpiItems,
+  reportAsOfText,
   type DashboardOverviewDto,
   type DashboardQueueItemDto,
 } from '@/lib/dashboard/widgets'
@@ -131,10 +132,19 @@ function ExecutiveKpiRow({ arAgingKpis }: { arAgingKpis: readonly ReportKpi[] | 
   return (
     <section className="space-y-2" aria-label="ตัวชี้วัดภาพรวม">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="text-sm font-semibold text-slate-700">
-          ภาพรวมธุรกิจ{report.payload !== null ? ` · ${report.payload.range.label}` : ''}
-        </h2>
-        <SectionLink href="/reports/kpi-summary">ดูรายงาน KPI ภาพรวม</SectionLink>
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold text-slate-700">
+            ภาพรวมธุรกิจ{report.payload !== null ? ` · ${report.payload.range.label}` : ''}
+          </h2>
+          {/* staging E-062 — ตัวเลขมาจากแคชรายงาน ⇒ บอกเวลาที่คำนวณ + ปุ่มรีเฟรช */}
+          {report.payload !== null && <p className="text-xs text-slate-500">{reportAsOfText(report.payload.cache)}</p>}
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" loading={report.loading} onClick={() => void report.reload(true)}>
+            รีเฟรช
+          </Button>
+          <SectionLink href="/reports/kpi-summary">ดูรายงาน KPI ภาพรวม</SectionLink>
+        </div>
       </div>
       {report.loading && report.payload === null ? (
         <KpiSkeletonRow />

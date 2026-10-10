@@ -1,8 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { Button, Field, InlineAlert, Input, Modal, useToast } from '@/components/ui'
+import { useBankTransactions } from '@/components/accounting/use-bank-transactions'
+import { Button, Field, InlineAlert, Input, Modal, Select, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
+import { suspenseRefundCloseNote, suspenseRefundOptions, transactionSide } from '@/lib/bank-recon/matching'
 import type { BankTransactionDto } from '@/lib/bank-recon/types'
 import { fmtDate } from '@/lib/format/datetime'
 import { fmtSatangSymbol } from '@/lib/format/money'
@@ -90,6 +92,10 @@ export function ResolveUnmatchedModal({
           </div>
         </div>
 
+        {transactionSide(transaction.amountSatang) === 'out' && (
+          <SuspenseRefundPicker transaction={transaction} onPick={setNote} />
+        )}
+
         <Field label="เหตุผลที่ปิดรายการ" required hint="บังคับกรอกเสมอ — บันทึกลง audit log">
           <Input
             value={note}
@@ -104,5 +110,41 @@ export function ResolveUnmatchedModal({
         </InlineAlert>
       </div>
     </Modal>
+  )
+}
+
+/**
+ * staging E-067 — เงินออกที่เป็น "โอนคืนผู้โอน": เลือกเงินรับรอตรวจสอบที่คืนแล้ว (ยอดเท่ากัน) ⇒ ระบบเติมเหตุผล + อ้างอิงให้
+ * ไม่ผูก FK (ปิดรายการตามเดิม) — แยกเป็น component เพื่อโหลดรายการเฉพาะตอนเปิดกับเงินออก
+ */
+function SuspenseRefundPicker({
+  transaction,
+  onPick,
+}: {
+  transaction: BankTransactionDto
+  onPick: (note: string) => void
+}) {
+  const { data, loading } = useBankTransactions('suspense_refunded')
+  const [pickedId, setPickedId] = useState('')
+  const options = suspenseRefundOptions(transaction, data.items)
+  if (loading || options.length === 0) return null
+  return (
+    <Field label="โอนคืนของเงินรับรอตรวจสอบ" hint="เลือกรายการที่บันทึกคืนเงินผู้โอนไว้แล้ว — ระบบเติมเหตุผลและอ้างอิงให้">
+      <Select
+        value={pickedId}
+        onChange={(event) => {
+          setPickedId(event.target.value)
+          const picked = options.find((entry) => entry.id === event.target.value)
+          if (picked !== undefined) onPick(suspenseRefundCloseNote(picked))
+        }}
+      >
+        <option value="">— ไม่ใช่การโอนคืน —</option>
+        {options.map((entry) => (
+          <option key={entry.id} value={entry.id}>
+            {fmtDate(entry.transactionDate)} · {fmtSatangSymbol(entry.amountSatang)} · {entry.description}
+          </option>
+        ))}
+      </Select>
+    </Field>
   )
 }

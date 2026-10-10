@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
+  PROPOSAL_MATCH_NOTE,
   allowedTargetKind,
+  alreadyMatchedWithText,
+  matchSuccessToast,
+  mismatchCompareAmounts,
+  suspenseRefundCloseNote,
+  suspenseRefundOptions,
   canTransition,
   daysAfter,
   debitNoteReferenceDate,
@@ -356,5 +362,96 @@ describe('มติ O77 — คู่ที่ระบบเสนอ: ยอ�
     expect(debitNoteReferenceDate(sentAt, new Date('2026-09-20T00:00:00Z'))).toBeNull()
     expect(debitNoteReferenceDate(null, debitDate)).toEqual(debitDate)
     expect(debitNoteReferenceDate(sentAt, debitDate)).toEqual(debitDate)
+  })
+})
+
+describe('staging E-056/E-057/E-064 — จับคู่: toast · จับคู่แล้วกับ · ยอดค้าง', () => {
+  const partial = {
+    label: 'BL-2569-010',
+    amountSatang: 245_458,
+    altAmountSatang: 238_576,
+    remainingAmountSatang: 95_458,
+    remainingAltAmountSatang: 88_576,
+  }
+
+  it('E-064 รอบรับบางส่วน: เงินเข้าเท่ายอดค้างหลังหัก ⇒ ยอดตรง + ข้อความนำด้วยยอดนั้น', () => {
+    expect(isExactMatchAmount(88_576, partial)).toBe(true)
+    expect(matchCandidateOptionText(88_576, partial)).toBe(
+      'BL-2569-010 · ฿885.76 (ยอดตรงกับยอดค้างหลังลูกค้าหัก ณ ที่จ่าย · ค้าง ฿954.58 · ยอดเต็ม ฿2,454.58)',
+    )
+  })
+
+  it('E-064 ไม่ตรง ⇒ นำด้วยยอดค้าง ไม่ใช่ยอดเต็มบิล · กล่องเตือนเทียบยอดค้าง', () => {
+    expect(matchCandidateOptionText(50_000, partial)).toBe(
+      'BL-2569-010 · ค้าง ฿954.58 (คาดรับหลังลูกค้าหัก ณ ที่จ่าย ฿885.76) · ยอดเต็ม ฿2,454.58',
+    )
+    expect(mismatchCompareAmounts(partial)).toEqual({ label: 'ยอดค้าง', amountSatang: 95_458, afterWhtSatang: 88_576 })
+    expect(mismatchCompareAmounts({ amountSatang: 1_000, altAmountSatang: null })).toEqual({
+      label: 'ยอดเอกสาร',
+      amountSatang: 1_000,
+      afterWhtSatang: null,
+    })
+  })
+
+  it('E-064 auto/คู่ที่เสนอ เทียบยอดค้างหลังหักด้วย', () => {
+    const sent = new Date('2026-08-01T00:00:00Z')
+    const candidate: MatchCandidate = { kind: 'billing', id: 'b1', ref: 'BL', referenceDate: sent, ...partial }
+    expect(
+      findAutoMatch({ amountSatang: 88_576, transactionDate: new Date('2026-08-03T00:00:00Z'), toleranceDays: 7 }, [candidate]),
+    ).toMatchObject({ matched: true, matchedAmountSatang: 88_576 })
+  })
+
+  it('E-057 จับคู่แล้วกับ… ไม่นับรายการที่กำลังจับคู่เอง · บังคับหมายเหตุ', () => {
+    const matched = [{ id: 'tx-1', transactionDate: new Date('2026-08-05T00:00:00Z'), amountSatang: -60_000 }]
+    expect(alreadyMatchedWithText(matched, 'tx-2')).toBe('รายการเดินบัญชี 05/08/2569 ฿600.00')
+    expect(alreadyMatchedWithText(matched, 'tx-1')).toBeNull()
+    expect(alreadyMatchedWithText(undefined, 'tx-1')).toBeNull()
+    expect(
+      matchCandidateOptionText(-60_000, {
+        label: 'PB-1',
+        amountSatang: 60_000,
+        altAmountSatang: null,
+        alreadyMatchedWith: 'รายการเดินบัญชี 05/08/2569 ฿600.00',
+      }),
+    ).toBe('PB-1 · ฿600.00 (ยอดตรง) · จับคู่แล้วกับรายการเดินบัญชี 05/08/2569 ฿600.00')
+    expect(manualMatchRequiresNote({ exactAmount: true, isRematch: false, targetAlreadyMatched: true })).toBe(true)
+    expect(manualMatchRequiresNote({ exactAmount: true, isRematch: false })).toBe(false)
+  })
+
+  it('E-056 toast บอกผลที่เกิดจริง — ใช้ร่วมจับคู่ Manual และคู่ที่เสนอ', () => {
+    expect(matchSuccessToast({ kind: 'billing', outstandingSatang: 0, bankFeeWrittenOffSatang: 0 }, 'BL-1')).toEqual({
+      title: 'จับคู่รายการกับ BL-1 สำเร็จ',
+      description: 'สร้างเงินรับให้แล้ว · รอบชำระครบ',
+    })
+    expect(matchSuccessToast({ kind: 'billing', outstandingSatang: 1_000, bankFeeWrittenOffSatang: 0 }, 'BL-1').description).toBe(
+      'สร้างเงินรับให้แล้ว · ยอดคงค้างของรอบ ฿10.00',
+    )
+    expect(matchSuccessToast({ kind: 'payout' }, 'PB-1').description).toBe('ยืนยันรอบจ่ายเป็น "จ่ายแล้ว" ให้อัตโนมัติ')
+    expect(PROPOSAL_MATCH_NOTE).not.toBe('')
+  })
+})
+
+describe('staging E-067 — ปิดรายการโอนคืนของเงินรับรอตรวจสอบ', () => {
+  const refunded = {
+    id: 's1',
+    amountSatang: 123_400,
+    matchStatus: 'suspense_refunded' as const,
+    transactionDate: '2026-08-01T00:00:00Z',
+    description: 'โอนเข้าไม่ทราบที่มา',
+    refundDate: '2026-08-10',
+    refundNote: 'TRF-889',
+  }
+
+  it('เงินออกยอดเท่ากัน ⇒ มีตัวเลือก · เงินเข้า/ยอดต่าง/ยังไม่คืน ⇒ ไม่มี', () => {
+    expect(suspenseRefundOptions({ amountSatang: -123_400 }, [refunded])).toHaveLength(1)
+    expect(suspenseRefundOptions({ amountSatang: 123_400 }, [refunded])).toHaveLength(0)
+    expect(suspenseRefundOptions({ amountSatang: -100 }, [refunded])).toHaveLength(0)
+    expect(suspenseRefundOptions({ amountSatang: -123_400 }, [{ ...refunded, matchStatus: 'suspense' as const }])).toHaveLength(0)
+  })
+
+  it('เติมเหตุผลพร้อมอ้างอิง', () => {
+    expect(suspenseRefundCloseNote(refunded)).toBe(
+      'โอนคืนของเงินรับรอตรวจสอบ 01/08/2569 ฿1,234.00 (โอนเข้าไม่ทราบที่มา) · คืนเมื่อ 10/08/2569 · อ้างอิง TRF-889',
+    )
   })
 })

@@ -29,6 +29,7 @@ import {
   periodOrdinal,
   periodRangeOf,
   periodStatusLabel,
+  readinessScore,
   CLOSED_PAYOUT_BATCH_STATUSES,
   MANAGE_ACCOUNTING_PERIOD,
   UNLOCK_PERIOD,
@@ -108,6 +109,8 @@ const PERIOD_SELECT = {
   status: true,
   exportReady: true,
   lastReadinessCheckedAt: true,
+  lastReadinessPassedCount: true,
+  lastReadinessTotalCount: true,
   sentAt: true,
   lockedAt: true,
   sentByUser: { select: { fullName: true } },
@@ -268,6 +271,8 @@ function toPeriodDto(
     openWarningCount: summary.open.warning,
     exportReady: row.exportReady,
     lastReadinessCheckedAt: row.lastReadinessCheckedAt?.toISOString() ?? null,
+    lastReadinessPassedCount: row.lastReadinessPassedCount,
+    lastReadinessTotalCount: row.lastReadinessTotalCount,
     exportedAt: lastExport?.at.toISOString() ?? null,
     latestExportVersion: lastExport?.version ?? null,
     sentAt: row.sentAt?.toISOString() ?? null,
@@ -577,6 +582,66 @@ export async function getPeriodReadiness(
   return { ...result, periodId: row.id, periodLabel: row.periodLabel, status: row.status }
 }
 
+/**
+ * `POST /api/accounting/periods/:id/readiness` — staging E-069 (มติ PO 10/10/2569 "บันทึกทุกครั้งที่ตรวจ")
+ * ตรวจสดแบบเดียวกับ GET แล้ว**บันทึกเวลา + ผล (ผ่าน N/M) + audit** ลงรอบบัญชี ⇒ แถวแสดง "ตรวจล่าสุด … · ผ่าน N/M"
+ * · รอบที่ `locked` แก้แถวไม่ได้ (trigger งวดปิด) ⇒ คืนผลสดโดยไม่บันทึก
+ */
+export async function recordPeriodReadiness(
+  ctx: AccountingMutationContext,
+  periodId: string,
+  now: Date = new Date(),
+): Promise<PeriodReadinessDto> {
+  assertOrgWideReadable(ctx.actor, 'accounting-periods')
+  const row = await findPeriodById(ctx.actor, periodId)
+  const result = await readinessOf(ctx.actor.organizationId, row, now)
+  const dto: PeriodReadinessDto = { ...result, periodId: row.id, periodLabel: row.periodLabel, status: row.status }
+  if (row.status === 'locked') return dto
+
+  const score = readinessScore(result.checks)
+  await prisma.$transaction(async (tx) => {
+    // ยึดสถานะเดิม — รอบถูกล็อกระหว่างตรวจ ⇒ ไม่บันทึก (ไม่ชน trigger งวดปิด)
+    const updated = await tx.accountingPeriod.updateMany({
+      where: { id: row.id, organizationId: ctx.actor.organizationId, status: row.status },
+      data: {
+        lastReadinessCheckedAt: now,
+        lastReadinessPassedCount: score.passed,
+        lastReadinessTotalCount: score.total,
+        exportReady: result.ready,
+      },
+    })
+    if (updated.count === 0) return
+    await emitAudit(
+      {
+        organizationId: ctx.actor.organizationId,
+        actorId: ctx.actor.id,
+        actorRole: ctx.actor.roleName,
+        action: 'update',
+        targetType: PERIOD_TARGET,
+        targetId: row.id,
+        before: {
+          last_readiness_checked_at: row.lastReadinessCheckedAt?.toISOString() ?? null,
+          last_readiness_passed_count: row.lastReadinessPassedCount,
+          last_readiness_total_count: row.lastReadinessTotalCount,
+        },
+        after: {
+          last_readiness_checked_at: now.toISOString(),
+          last_readiness_passed_count: score.passed,
+          last_readiness_total_count: score.total,
+          ready: result.ready,
+          failed_checks: result.checks.filter((check) => !check.passed).map((check) => check.key),
+        },
+        reason: `ตรวจความพร้อมก่อนส่งบัญชี ${row.periodLabel} — ผ่าน ${score.passed}/${score.total}`,
+        ipAddress: ctx.meta.ipAddress,
+        userAgent: ctx.meta.userAgent,
+        diffOnly: false,
+      },
+      tx,
+    )
+  })
+  return dto
+}
+
 // ── รอบบัญชี: เปลี่ยนสถานะ (`23` §6.13) ──────────────────────────────────────
 
 /**
@@ -616,6 +681,11 @@ async function transitionPeriod(
     data.sentBy = ctx.actor.id
     data.exportReady = true
     data.lastReadinessCheckedAt = now
+    if (extra.readiness !== undefined) {
+      const score = readinessScore(extra.readiness.checks)
+      data.lastReadinessPassedCount = score.passed
+      data.lastReadinessTotalCount = score.total
+    }
   }
   if (to === 'locked') {
     data.lockedAt = now

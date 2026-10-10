@@ -40,6 +40,8 @@
 | v3.23 | 10/10/2569 | **staging E-008 (มติ PO 10/10/2569)** — §6.9 เพิ่ม `GET /api/finance/revenue-pending` (อ่านอย่างเดียว · สิทธิ์ view ของ `manage_billing` · scope ภายในองค์กรเท่านั้น ฝั่งบริษัทได้ว่าง · ไม่ลง audit) คืนเคสที่ปิดงานแล้วแต่รายได้รอบปัจจุบันยังไม่เกิด + `reason` (`field_days_not_settled`/`expense_not_approved`/`warehouse_gate`/`no_snapshot`/`missing_basis`/`gates_passed`) + `reasonText` — ตัดสินด้วยเกตเดียวกับ `tryCreateRevenue` (`19` §6.1) |
 | v3.24 | 11/10/2569 | **staging E-065** — §6.11 เพิ่ม `POST /api/accounting/expenses/cost-center/bulk` (`{ expenseRecordIds[], costCenterId, reason }` · manage `map_cost_center` · all-or-nothing · `32` §14) |
 | v3.25 | 11/10/2569 | **staging E-016** — §6.10 เพิ่ม `POST /api/accounting/credit-notes/awaiting/:adjustmentId/waive` (`31` §14) · `AwaitingCreditNoteDto` + `billOutstandingSatang`/`canWaive` · `AdjustmentDto` + `targetBillFullyPaid`/`creditNoteWaivedAt`/`creditNoteWaiveReason` |
+| v3.26 | 11/10/2569 | **staging E-057/E-064/E-069** — §6.16 เพิ่ม `POST /api/accounting/periods/:id/readiness` (บันทึกผลตรวจ) · `AccountingPeriodDto` + `lastReadinessPassedCount`/`lastReadinessTotalCount` · `MatchCandidateDto` + `remainingAltAmountSatang`/`alreadyMatchedWith` |
+| v3.27 | 11/10/2569 | **staging E-049** — §6.6 เพิ่ม `GET /api/payout-batches/preview` (สรุปจำนวน/ยอดรายการที่วันตัดรอบนี้จะดึงเข้ารอบ ก่อนกดสร้าง · สิทธิ์เดียวกับสร้างรอบ) |
 
 ขอบเขตเอกสารนี้: รวม API Endpoint ทั้งหมดของโมดูล Finance/Accounting เป็นรายการเดียว จัดกลุ่มตาม resource เพื่อให้ backend implement ตาม REST convention เดียวกันทั้งระบบ
 
@@ -145,6 +147,7 @@ PATCH  /api/compensation/:id/reject
 
 ```
 GET    /api/payout-batches
+GET    /api/payout-batches/preview?side=&cutoffDate=   (staging E-049 — สรุปรายการ/ยอดที่จะดึงเข้ารอบ · manage_payout_batch · อ่านอย่างเดียว)
 GET    /api/payout-batches/:id                          (v3.2 — รายละเอียด + รายการในรอบ)
 POST   /api/payout-batches
 POST   /api/payout-batches/:id/generate-payment-file
@@ -255,6 +258,7 @@ PATCH  /api/accounting/questions/:id/answer
 ```
 GET    /api/accounting/periods
 GET    /api/accounting/periods/:id/readiness
+POST   /api/accounting/periods/:id/readiness          (staging E-069 — ตรวจ + บันทึกผล)
 PATCH  /api/accounting/periods/:id/send
 PATCH  /api/accounting/periods/:id/lock
 PATCH  /api/accounting/periods/:id/unlock

@@ -5,6 +5,8 @@ import type { ApiWarning } from '@/lib/api/envelope'
 import { alreadyMatchedWarning, BankReconError } from '@/lib/bank-recon/errors'
 import {
   allowedTargetKind,
+  PROPOSAL_MATCH_NOTE,
+  alreadyMatchedWithText,
   canMoveToSuspense,
   debitNoteReferenceDate,
   findAutoMatch,
@@ -58,7 +60,7 @@ import type {
   BankFileType,
   BankMatchStatus,
 } from '@/lib/generated/prisma/enums'
-import { arOutstandingSatang } from '@/lib/finance/ar-calc'
+import { arOutstandingSatang, remainingAfterCustomerWhtSatang } from '@/lib/finance/ar-calc'
 import { withDocumentedArTotals } from '@/lib/portal/documented-amounts'
 import { prisma } from '@/lib/prisma'
 import { PayoutError } from '@/lib/payout/errors'
@@ -347,14 +349,25 @@ async function loadCandidates(
       const remaining = arOutstandingSatang(row)
       const hasReceipts = remaining !== row.totalSatang
       const remainingAmountSatang = hasReceipts && remaining > 0 ? remaining : null
+      const altAmountSatang = altAmountForBilling(row)
+      // staging E-064 — ยอดค้างหลังลูกค้าหัก ณ ที่จ่ายส่วนที่ยังไม่บันทึก (`22` §6.11.1)
+      const remainingAltAmountSatang =
+        remainingAmountSatang === null || altAmountSatang === null
+          ? null
+          : remainingAfterCustomerWhtSatang({
+              remainingSatang: remainingAmountSatang,
+              expectedWhtSatang: Math.max(0, row.totalSatang - altAmountSatang),
+              priorWhtSatang: row.whtWithheldByCustomerSatang,
+            })
       return {
         kind: 'billing' as const,
         id: row.id,
         ref: billingRef(row),
         amountSatang: row.totalSatang,
         // A1 — ลูกค้าหัก WHT ก่อนโอน ⇒ ยอดเข้าจริง = total − wht (`35` §6.2 · มติ PO A1)
-        altAmountSatang: altAmountForBilling(row),
+        altAmountSatang,
         remainingAmountSatang,
+        remainingAltAmountSatang,
         referenceDate: row.sentAt,
         // มติ O77 — ยอดค้างจากใบเพิ่มหนี้ ⇒ ช่วงวันนับจากวันออกใบเพิ่มหนี้ล่าสุด
         remainingReferenceDate:
@@ -378,6 +391,12 @@ async function loadCandidates(
       recoveryOffsetSatang: true,
       paymentFileGeneratedAt: true,
       status: true,
+      // staging E-057 — รายการเดินบัญชีที่จับคู่รอบนี้ไปแล้ว (แสดง "จับคู่แล้วกับ…" + ต้องยืนยันก่อนจับซ้ำ)
+      bankTransactions: {
+        where: { matchStatus: { in: ['auto_matched', 'manual_matched'] } },
+        select: { id: true, transactionDate: true, amountSatang: true },
+        orderBy: { transactionDate: 'asc' },
+      },
     },
     orderBy: { paymentFileGeneratedAt: 'desc' },
     take: 100,
@@ -392,6 +411,7 @@ async function loadCandidates(
     altAmountSatang: null,
     // รอบที่ `completed` แล้วไม่เข้าเกณฑ์อัตโนมัติ (จับคู่ไปแล้วครั้งหนึ่ง) — เลือก manual ได้เท่านั้น
     referenceDate: row.status === 'file_generated' ? row.paymentFileGeneratedAt : null,
+    matchedTransactions: row.bankTransactions,
   }))
 }
 
@@ -418,8 +438,10 @@ export async function listMatchCandidates(
     amountSatang: candidate.amountSatang,
     altAmountSatang: candidate.altAmountSatang,
     remainingAmountSatang: candidate.remainingAmountSatang ?? null,
+    remainingAltAmountSatang: candidate.remainingAltAmountSatang ?? null,
     referenceDate: candidate.referenceDate?.toISOString() ?? null,
     exactAmount: isExactMatchAmount(transaction.amountSatang, candidate),
+    alreadyMatchedWith: alreadyMatchedWithText(candidate.matchedTransactions, query.transactionId),
   }))
 }
 
@@ -864,7 +886,9 @@ async function applyMatch(ctx: AccountingMutationContext, input: ApplyMatchInput
   })
 
   const previousBillingId = before.matchedBillingId
-  const note = input.matchNote?.trim() ?? null
+  const typedNote = input.matchNote?.trim() ?? ''
+  // staging E-056 — ยืนยันคู่ที่ระบบเสนอโดยไม่กรอกหมายเหตุ ⇒ เติมหมายเหตุอัตโนมัติ (เดิมแสดง "—")
+  const note = typedNote !== '' ? typedNote : input.fromProposal === true ? PROPOSAL_MATCH_NOTE : null
   const reason =
     note ??
     (input.fromProposal === true
@@ -1144,9 +1168,21 @@ export async function matchBankTransaction(
       message: 'จับคู่เงินรับรอตรวจสอบต้องระบุว่าทราบที่มาของเงินจากอะไร',
     })
   }
-  if (manualMatchRequiresNote({ exactAmount, isRematch: rematch }) && !hasNote(input.matchNote)) {
+  const alreadyMatchedWith = alreadyMatchedWithText(candidate.matchedTransactions, transactionId)
+  if (
+    manualMatchRequiresNote({ exactAmount, isRematch: rematch, targetAlreadyMatched: alreadyMatchedWith !== null }) &&
+    !hasNote(input.matchNote)
+  ) {
     throw new BankReconError('MATCH_NOTE_REQUIRED', {
-      detail: exactAmount ? 'เปลี่ยนการจับคู่เดิมต้องมีเหตุผล' : 'ยอดไม่ตรงเป๊ะ',
+      detail:
+        alreadyMatchedWith !== null
+          ? `รอบจ่ายจับคู่แล้วกับ${alreadyMatchedWith}`
+          : exactAmount
+            ? 'เปลี่ยนการจับคู่เดิมต้องมีเหตุผล'
+            : 'ยอดไม่ตรงเป๊ะ',
+      ...(alreadyMatchedWith !== null
+        ? { message: `รอบจ่ายนี้จับคู่แล้วกับ${alreadyMatchedWith} — ต้องระบุเหตุผลที่จับคู่เพิ่ม` }
+        : {}),
       context: { transactionAmountSatang: transaction.amountSatang, targetAmountSatang: candidate.amountSatang },
     })
   }

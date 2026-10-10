@@ -95,6 +95,7 @@
 | v4.68 | 11/10/2569 | **staging E-054 (มติ PO 10/10/2569)** — migration `20261011100000_wht_threshold_monthly`: enum ใหม่ `wht_threshold_scope` (`per_batch`/`monthly_cumulative`) · `wht_policy_history` + `threshold_scope` NOT NULL DEFAULT `monthly_cumulative` · `payout_batches` + snapshot `wht_threshold_scope` (NULL = รอบเก่า = ต่อรอบ) · `payout_batch_items` + `wht_carried_base_satang INTEGER NOT NULL DEFAULT 0` (CHECK ≥ 0 — ฐานรอบก่อนในเดือนที่ยกมาหักพร้อมรายการ · `22` §6.9) |
 | v4.69 | 11/10/2569 | **staging E-016 (มติ PO 10/10/2569)** — migration `20261011110000_adjustment_credit_note_waive`: `adjustments` + `credit_note_waived_at` / `credit_note_waived_by` (FK users) / `credit_note_waive_reason` (CHECK `chk_adjustments_credit_note_waive_shape` — ว่างทั้งสามหรือมีครบพร้อมเหตุผล) — ปิดป้าย "รอใบลดหนี้" ของบิลที่ชำระครบเป็น "จัดการนอกระบบ" |
 | v4.70 | 11/10/2569 | **staging E-014 (มติ PO 10/10/2569)** — migration `20261011120000_payee_recoveries`: ตารางใหม่ `payee_recoveries` (adjustment_id UNIQUE · amount > 0) + `payee_recovery_collections` (insert-only · กลับรายการด้วย reversed_* · partial unique ต่อ (recovery, item) ที่ยังไม่กลับรายการ · trigger กันยอดสะสมเกินยอดเรียกคืน + ห้ามลบ) · `payout_batch_items`/`payout_batches` + `recovery_offset_satang` (CHECK advance + recovery ≤ net) — `22` §6.14.1 |
+| v4.71 | 11/10/2569 | **staging E-069 (มติ PO 10/10/2569)** — migration `20261011130000_period_readiness_result`: `accounting_periods` + `last_readiness_passed_count` / `last_readiness_total_count` (SMALLINT · CHECK `chk_accounting_periods_readiness_result`) — บันทึกผลทุกครั้งที่ตรวจความพร้อม (`POST /api/accounting/periods/:id/readiness`) |
 
 ขอบเขตเอกสารนี้: Full Production Database Schema — ทุก table, column, type, FK, index, unique constraint, enum, migration order และ seed data สรุปจาก spec ไฟล์ทั้งหมดไว้ในที่เดียว ใช้เป็น source of truth เดียวก่อนเขียน Prisma schema
 
@@ -2162,6 +2163,8 @@ CREATE TABLE accounting_periods (
   -- Export
   export_ready      BOOLEAN                  NOT NULL DEFAULT false,
   last_readiness_checked_at TIMESTAMPTZ,
+  last_readiness_passed_count SMALLINT,               -- staging E-069: ผลตรวจล่าสุด ผ่าน N ข้อ
+  last_readiness_total_count  SMALLINT,               -- จากทั้งหมด M ข้อ (CHECK ว่างทั้งคู่ หรือ 0 ≤ N ≤ M, M > 0)
   -- Sent to accountant
   sent_at           TIMESTAMPTZ,
   sent_by           UUID                     REFERENCES users(id),

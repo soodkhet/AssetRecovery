@@ -1,8 +1,9 @@
 import type { NextRequest } from 'next/server'
 import { PERIOD_READ_CAPABILITIES } from '@/lib/accounting/period'
-import { getPeriodReadiness } from '@/lib/accounting/queries'
+import { getPeriodReadiness, recordPeriodReadiness } from '@/lib/accounting/queries'
 import { apiSuccess } from '@/lib/api/envelope'
 import { toModuleErrorResponse, withApiPermission } from '@/lib/api/http'
+import { getRequestMeta } from '@/lib/auth/request-meta'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -17,5 +18,19 @@ export const GET = withApiPermission<RouteContext>(
   async (_request: NextRequest, context, user) => {
     const { id } = await context.params
     return apiSuccess(await getPeriodReadiness(user, id))
+  },
+)
+
+/**
+ * `POST /api/accounting/periods/:id/readiness` — staging E-069 (มติ PO 10/10/2569) ตรวจสดแบบเดียวกับ GET
+ * แล้ว**บันทึกเวลา + ผล (ผ่าน N/M) + audit** ลงรอบบัญชี · สิทธิ์เท่าผู้เปิดดูได้ (การตรวจไม่เปลี่ยนสถานะ/ยอดใด ๆ)
+ */
+export const POST = withApiPermission<RouteContext>(
+  'view',
+  PERIOD_READ_CAPABILITIES,
+  toModuleErrorResponse,
+  async (request: NextRequest, context, user) => {
+    const { id } = await context.params
+    return apiSuccess(await recordPeriodReadiness({ actor: user, meta: getRequestMeta(request) }, id))
   },
 )

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Button, InlineAlert, TBody, THead, Table, Td, Th, Tr, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import type { MatchProposalDto, MatchResultDto } from '@/lib/bank-recon/types'
+import { matchSuccessToast } from '@/lib/bank-recon/matching'
 import { fmtDate } from '@/lib/format/datetime'
 import { fmtSatangSymbol } from '@/lib/format/money'
 
@@ -80,14 +81,8 @@ export function MatchProposalsPanel({
       onMatched()
       return
     }
-    showToast({
-      tone: 'success',
-      title: 'ยืนยันคู่ที่เสนอแล้ว',
-      description:
-        proposal.target.kind === 'billing'
-          ? `${proposal.target.ref} — สร้างเงินรับให้แล้ว`
-          : `${proposal.target.ref} — ผูกกับรายการเดินบัญชีแล้ว`,
-    })
+    // staging E-056 — ข้อความเดียวกับจับคู่ Manual (บอกผลที่เกิดจริง)
+    showToast({ tone: 'success', ...matchSuccessToast(result.data?.effect, proposal.target.ref) })
     setReloadTick((tick) => tick + 1)
     onMatched()
   }

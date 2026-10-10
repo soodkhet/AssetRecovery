@@ -3,7 +3,7 @@ import { organizationProfileWarning } from '@/lib/organization/profile'
 import { periodKeyOf, type PeriodKey } from '@/lib/adjustments/adjustment'
 import { BUDDHIST_YEAR_OFFSET } from '@/lib/constants'
 import { MONTH_NAMES_TH } from '@/lib/field/calendar'
-import { fmtDate, startOfBangkokDay } from '@/lib/format/datetime'
+import { fmtDate, fmtDateTime, startOfBangkokDay } from '@/lib/format/datetime'
 import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
 import type { AccountingPeriodStatus, PayoutBatchStatus } from '@/lib/generated/prisma/enums'
 import { PAYOUT_STATUS_LABEL_SHORT } from '@/lib/payout/payout-ui'
@@ -261,8 +261,25 @@ export const PERIOD_ASSUMED_OPEN: PeriodClosedLookup = () => false
  * "3 ข้อ" ขณะที่ checklist มี 4 รายการ) · ยังไม่มีผลตรวจ (`null`) ⇒ ไม่ระบุจำนวน
  */
 export function readinessDescription(checkCount: number | null): string {
-  const tail = 'ตรวจสดทุกครั้งที่เปิดหน้าต่างนี้ ไม่มีทางลัดข้าม'
+  const tail = 'ตรวจสดและบันทึกผลทุกครั้งที่เปิดหน้าต่างนี้ ไม่มีทางลัดข้าม'
   return checkCount === null ? tail : `เงื่อนไข ${checkCount} ข้อ — ${tail}`
+}
+
+/** staging E-069 — ผลตรวจความพร้อม: ผ่านกี่ข้อจากทั้งหมด (บันทึกลงรอบบัญชีทุกครั้งที่ตรวจ) */
+export function readinessScore(checks: readonly Pick<ReadinessCheck, 'passed'>[]): { passed: number; total: number } {
+  return { passed: checks.filter((check) => check.passed).length, total: checks.length }
+}
+
+/** staging E-069 — ข้อความใต้แถวรอบบัญชี: "ตรวจล่าสุด DD/MM/YYYY HH:mm · ผ่าน N/M" · ไม่เคยตรวจ ⇒ "ยังไม่เคยตรวจความพร้อม" */
+export function readinessRowText(period: {
+  lastReadinessCheckedAt: string | null
+  lastReadinessPassedCount: number | null
+  lastReadinessTotalCount: number | null
+}): string {
+  if (period.lastReadinessCheckedAt === null) return 'ยังไม่เคยตรวจความพร้อม'
+  const at = `ตรวจล่าสุด ${fmtDateTime(period.lastReadinessCheckedAt)}`
+  if (period.lastReadinessPassedCount === null || period.lastReadinessTotalCount === null) return at
+  return `${at} · ผ่าน ${fmtCount(period.lastReadinessPassedCount)}/${fmtCount(period.lastReadinessTotalCount)}`
 }
 
 /**

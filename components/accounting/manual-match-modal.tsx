@@ -7,6 +7,8 @@ import {
   MATCH_TARGET_LABEL,
   allowedTargetKind,
   matchCandidateOptionText,
+  matchSuccessToast,
+  mismatchCompareAmounts,
   suspenseMatchRequiresNote,
 } from '@/lib/bank-recon/matching'
 import type { BankTransactionDto, MatchCandidateDto, MatchResultDto } from '@/lib/bank-recon/types'
@@ -58,7 +60,10 @@ export function ManualMatchModal({
   const isRematch = transaction.matchStatus === 'auto_matched' || transaction.matchStatus === 'manual_matched'
   // เงินรับรอตรวจสอบ (มติ PO U41) ⇒ ต้องบอกเสมอว่าทราบที่มาจากอะไร
   const fromSuspense = suspenseMatchRequiresNote(transaction.matchStatus)
-  const noteRequired = isRematch || fromSuspense || (selected !== undefined && !selected.exactAmount)
+  // staging E-057 — รอบจ่ายที่จับคู่กับรายการอื่นแล้ว: จับเพิ่มได้ (1:N) แต่ต้องยืนยันพร้อมเหตุผล
+  const targetAlreadyMatched = selected?.alreadyMatchedWith != null
+  const noteRequired =
+    isRematch || fromSuspense || targetAlreadyMatched || (selected !== undefined && !selected.exactAmount)
   const ready = targetId !== '' && (!noteRequired || note.trim() !== '')
 
   async function submit(): Promise<void> {
@@ -85,19 +90,7 @@ export function ManualMatchModal({
       return
     }
 
-    const effect = result.data?.effect
-    showToast({
-      tone: 'success',
-      title: 'จับคู่รายการสำเร็จ',
-      description:
-        effect?.kind === 'billing'
-          ? effect.bankFeeWrittenOffSatang > 0
-            ? `สร้างเงินรับให้แล้ว · ส่วนต่าง ${fmtSatangSymbol(effect.bankFeeWrittenOffSatang)} ไม่เกินเพดาน บันทึกเป็นค่าธรรมเนียมธนาคาร · รอบชำระครบ`
-            : `สร้างเงินรับให้แล้ว · ยอดคงค้างของรอบ ${fmtSatangSymbol(effect.outstandingSatang)}`
-          : effect?.kind === 'payout'
-            ? 'ยืนยันรอบจ่ายเป็น "จ่ายแล้ว" ให้อัตโนมัติ'
-            : undefined,
-    })
+    showToast({ tone: 'success', ...matchSuccessToast(result.data?.effect, selected?.ref ?? 'รายการที่เลือก') })
     onMatched()
     onClose()
   }
@@ -165,11 +158,27 @@ export function ManualMatchModal({
           </Select>
         </Field>
 
+        {selected?.alreadyMatchedWith != null && (
+          <InlineAlert tone="warning" title="รอบจ่ายนี้จับคู่ไปแล้ว">
+            จับคู่แล้วกับ{selected.alreadyMatchedWith} — จับคู่เพิ่มได้เมื่อโอนรอบเดียวแยกหลายรายการ{' '}
+            <b>ต้องกรอกหมายเหตุยืนยัน</b>
+          </InlineAlert>
+        )}
+
         {selected !== undefined && !selected.exactAmount && (
           <InlineAlert tone="warning" title="ยอดไม่ตรงกันเป๊ะ">
-            ยอดเอกสาร {fmtSatangSymbol(selected.amountSatang)} · ยอดที่ธนาคารบันทึก{' '}
-            {fmtSatangSymbol(Math.abs(transaction.amountSatang))} — <b>ต้องกรอกหมายเหตุชี้แจง</b> เช่น ลูกค้าหัก
-            ค่าธรรมเนียม/ภาษี ณ ที่จ่ายก่อนโอน
+            {(() => {
+              const compare = mismatchCompareAmounts(selected)
+              return (
+                <>
+                  {compare.label} {fmtSatangSymbol(compare.amountSatang)}
+                  {compare.afterWhtSatang !== null &&
+                    ` (คาดรับหลังลูกค้าหัก ณ ที่จ่าย ${fmtSatangSymbol(compare.afterWhtSatang)})`}{' '}
+                  · ยอดที่ธนาคารบันทึก {fmtSatangSymbol(Math.abs(transaction.amountSatang))} —{' '}
+                  <b>ต้องกรอกหมายเหตุชี้แจง</b> เช่น ลูกค้าหักค่าธรรมเนียม/ภาษี ณ ที่จ่ายก่อนโอน
+                </>
+              )
+            })()}
           </InlineAlert>
         )}
 

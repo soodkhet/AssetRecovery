@@ -381,3 +381,16 @@ export function requireCreditNoteCancelReason(reason: string | null | undefined)
   if (trimmed === '') throw new SalesError('CANCEL_REQUIRES_REASON', { detail: 'ยกเลิกใบลดหนี้ต้องมีเหตุผล' })
   return trimmed
 }
+
+/**
+ * staging E-063 — ใบลด/เพิ่มหนี้ที่อ้างรายการปรับปรุง: เตือนเฉพาะเมื่อมูลค่าก่อนภาษี**ไม่เท่า**ยอดรายการปรับปรุงจริง
+ * (เดิมแสดงข้อความเตือนถาวรใต้ช่อง ⇒ ดูเหมือนยอดผิดทั้งที่ตรง) · ยังไม่เลือก/ยังไม่กรอกยอด ⇒ `null`
+ */
+export function adjustmentAmountMismatch(
+  amountBeforeVatSatang: number | null,
+  adjustmentAmountSatang: number | null,
+): { amountSatang: number; adjustmentSatang: number } | null {
+  if (amountBeforeVatSatang === null || adjustmentAmountSatang === null || amountBeforeVatSatang <= 0) return null
+  if (amountBeforeVatSatang === adjustmentAmountSatang) return null
+  return { amountSatang: amountBeforeVatSatang, adjustmentSatang: adjustmentAmountSatang }
+}

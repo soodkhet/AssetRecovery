@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  adjustmentAmountMismatch,
   canWaiveAwaitingCreditNote,
   assertAdjustmentLinkable,
   assertCreditNoteCancellable,
@@ -198,5 +199,14 @@ describe('canWaiveAwaitingCreditNote (staging E-016)', () => {
     expect(canWaiveAwaitingCreditNote({ noteType: 'credit', billOutstandingSatang: 1 })).toBe(false)
     expect(canWaiveAwaitingCreditNote({ noteType: 'debit', billOutstandingSatang: 0 })).toBe(false)
     expect(canWaiveAwaitingCreditNote({ noteType: null, billOutstandingSatang: 0 })).toBe(false)
+  })
+})
+
+describe('adjustmentAmountMismatch — staging E-063', () => {
+  it('ยอดเท่ากัน/ยังไม่เลือก/ยังไม่กรอก ⇒ ไม่เตือน · ยอดต่างจริง ⇒ เตือน', () => {
+    expect(adjustmentAmountMismatch(10_000, 10_000)).toBeNull()
+    expect(adjustmentAmountMismatch(10_000, null)).toBeNull()
+    expect(adjustmentAmountMismatch(null, 10_000)).toBeNull()
+    expect(adjustmentAmountMismatch(9_000, 10_000)).toEqual({ amountSatang: 9_000, adjustmentSatang: 10_000 })
   })
 })

@@ -103,6 +103,25 @@ export function resolveCustomerWhtForReceipt(input: {
 }
 
 /**
+ * staging E-064 (`22` §6.11.1) — **ยอดค้างหลังลูกค้าหัก ณ ที่จ่าย** ของรอบที่รับเงินบางส่วนแล้ว
+ * = ยอดค้าง − ภาษีที่คาดว่าลูกค้าจะหักส่วนที่ยังไม่บันทึก · เงินเข้าเท่ายอดนี้พอดี ⇒ ยอดรับสะสม = `total − expectedWht`
+ * (ตรงกับเงื่อนไขของ `resolveCustomerWhtForReceipt()`) · ไม่มีภาษีค้าง/ผลไม่เป็นบวก ⇒ `null`
+ */
+export function remainingAfterCustomerWhtSatang(input: {
+  remainingSatang: number
+  expectedWhtSatang: number
+  priorWhtSatang: number
+}): number | null {
+  assertSatang(input.remainingSatang, 'ยอดค้าง')
+  assertNonNegativeSatang(input.expectedWhtSatang, 'ภาษีที่คาดว่าลูกค้าจะหัก')
+  assertNonNegativeSatang(input.priorWhtSatang, 'ภาษีลูกค้าหักที่บันทึกแล้ว')
+  const pendingWht = Math.max(0, input.expectedWhtSatang - input.priorWhtSatang)
+  if (pendingWht === 0) return null
+  const result = input.remainingSatang - pendingWht
+  return result > 0 ? result : null
+}
+
+/**
  * `22` §6.11 — `ar_outstanding = total_amount - received_amount` (`received` = `settledSatang()`)
  * ค่าติดลบ = รับเงินเกินยอดบิล (เกิดได้จริงตอนลูกค้าโอนเกิน) — คืนตามจริง ไม่ clamp เพื่อไม่ให้ยอดหาย
  */

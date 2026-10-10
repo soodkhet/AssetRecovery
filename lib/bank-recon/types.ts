@@ -91,9 +91,13 @@ export interface MatchCandidateDto {
   altAmountSatang: number | null
   /** มติ O75 — ยอดค้างที่เหลือของรอบที่รับเงินบางส่วนแล้ว (ถ้ามี) */
   remainingAmountSatang: number | null
+  /** staging E-064 — ยอดค้างหลังลูกค้าหัก ณ ที่จ่ายส่วนที่ยังไม่บันทึก (ถ้ามี) */
+  remainingAltAmountSatang: number | null
   referenceDate: string | null
   /** ยอดตรงกับรายการเดินบัญชีที่กำลังจับคู่ไหม — FE ใช้เตือนว่าต้องกรอกหมายเหตุ */
   exactAmount: boolean
+  /** staging E-057 — รอบจ่ายที่จับคู่กับรายการเดินบัญชีอื่นไปแล้ว ("จับคู่แล้วกับ…") · ไม่มี = `null` */
+  alreadyMatchedWith: string | null
 }
 
 /**
