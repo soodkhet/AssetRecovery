@@ -101,6 +101,7 @@ export function settingAssumptionCurrentValues(
     bank_fee_write_off: tolerance,
     customer_wht_bank_fee: tolerance,
     bank_fee_full_tax_invoice: FIXED_SYSTEM_TEXT,
+    credit_note_paid_bill: 'จัดการนอกระบบ (ปิดป้ายพร้อมเหตุผล)',
   }
 }
 
@@ -131,6 +132,7 @@ export const SETTING_ASSUMPTION_LOCATION: Readonly<Record<SettingAssumptionKey, 
   bank_fee_write_off: { financeTab: 'approval' },
   customer_wht_bank_fee: { financeTab: 'approval' },
   bank_fee_full_tax_invoice: { financeTab: 'approval' },
+  credit_note_paid_bill: { financeTab: 'lock' },
 }
 
 export type AssumptionLinkViewer = MenuViewer & FinanceTabViewer

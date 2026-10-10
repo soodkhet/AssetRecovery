@@ -36,6 +36,11 @@ export interface AdjustmentDto {
   approvedAt: string | null
   createdAt: string
   createdByName: string
+  /** staging E-016 — ลดยอดของรอบวางบิลที่ชำระครบแล้ว ⇒ ออกใบลดหนี้ในระบบไม่ได้ (U171) ต้องจัดการคืนเงินนอกระบบ */
+  targetBillFullyPaid?: boolean
+  /** staging E-016 — ปิดป้าย "รอใบลดหนี้" เป็น "จัดการนอกระบบ" เมื่อไร + เหตุผล · ยังไม่ปิด = `null` */
+  creditNoteWaivedAt?: string | null
+  creditNoteWaiveReason?: string | null
 }
 
 /** ตัวเลือกรายการต้นทางในฟอร์มสร้าง Adjustment (`20` §8 — ค้นหาจากเลขที่อ้างอิง) */

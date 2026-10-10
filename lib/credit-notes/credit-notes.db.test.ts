@@ -893,6 +893,38 @@ describe('มติ PO U171 (BUG-185) — ใบลดหนี้ต้อง�
     return credit.createCreditNote(ctx, input(seeded, { noteType: 'debit', amountBeforeVatSatang: 10_000, adjustmentId: increase }))
   }
 
+  it('staging E-016 — บิลชำระครบ: รายการลดยอดปิดป้ายเป็น "จัดการนอกระบบ" ได้ (เหตุผลบังคับ · audit) แล้วไม่รอใบลดหนี้อีก', async () => {
+    const seeded = await seedPaid()
+    const adjustmentId = await seedAdjustment(seeded.revenueId)
+    const before = (await credit.listAdjustmentsAwaitingCreditNote(accountant)).find((row) => row.adjustmentId === adjustmentId)
+    expect(before).toMatchObject({ noteType: 'credit', billOutstandingSatang: 0, canWaive: true })
+
+    await expectCode(() => credit.waiveAwaitingCreditNote(ctx, adjustmentId, { reason: '  ' }), 'CANCEL_REQUIRES_REASON')
+    await credit.waiveAwaitingCreditNote(ctx, adjustmentId, { reason: 'สำนักงานบัญชีคืนเงินลูกค้านอกระบบแล้ว' })
+
+    const after = await credit.listAdjustmentsAwaitingCreditNote(accountant)
+    expect(after.some((row) => row.adjustmentId === adjustmentId)).toBe(false)
+    const row = await db().adjustment.findUniqueOrThrow({ where: { id: adjustmentId } })
+    expect(row.creditNoteWaiveReason).toBe('สำนักงานบัญชีคืนเงินลูกค้านอกระบบแล้ว')
+    const audit = await db().auditLog.findFirst({ where: { targetType: 'adjustments', targetId: adjustmentId, action: 'update' } })
+    expect(audit?.reason).toBe('สำนักงานบัญชีคืนเงินลูกค้านอกระบบแล้ว')
+
+    // ปิดซ้ำ ⇒ ไม่ได้ (ไม่อยู่ในรายการรอแล้ว)
+    await expectCode(
+      () => credit.waiveAwaitingCreditNote(ctx, adjustmentId, { reason: 'ซ้ำ' }),
+      'CREDIT_NOTE_WAIVE_NOT_ALLOWED',
+    )
+  })
+
+  it('staging E-016 — บิลยังมียอดค้าง ⇒ ปิดป้ายไม่ได้ ต้องบันทึกใบลดหนี้ตามปกติ', async () => {
+    const seeded = await seedInvoice()
+    const adjustmentId = await seedAdjustment(seeded.revenueId)
+    await expectCode(
+      () => credit.waiveAwaitingCreditNote(ctx, adjustmentId, { reason: 'ลองปิด' }),
+      'CREDIT_NOTE_WAIVE_NOT_ALLOWED',
+    )
+  })
+
   it('บิลรับชำระครบ (ไม่มียอดค้าง) ⇒ CREDIT_NOTE_EXCEEDS_OUTSTANDING + แนะนำคืนเงินนอกระบบ · ไม่มีใบถูกบันทึก', async () => {
     const seeded = await seedPaid()
     const error = await credit.createCreditNote(ctx, input(seeded)).catch((caught: unknown) => caught)

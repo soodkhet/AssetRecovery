@@ -49,6 +49,7 @@ import {
   type AdjustmentTargetFilter,
 } from '@/lib/adjustments/adjustment-ui'
 import type { AdjustmentDto } from '@/lib/adjustments/types'
+import { CreditNoteWaiveNotice } from '@/components/finance/credit-note-waive'
 import { canViewFinanceTabSection } from '@/lib/finance/operation-tabs'
 import { fmtDate, fmtDateTime } from '@/lib/format/datetime'
 import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
@@ -221,6 +222,17 @@ export function AdjustmentTab() {
                           </p>
                         </div>
                       )}
+                      {/* staging E-016 — บิลชำระครบแล้ว ⇒ ใบลดหนี้ในระบบไม่ได้ · ปิดป้ายเป็น "จัดการนอกระบบ" */}
+                      <CreditNoteWaiveNotice
+                        awaiting={awaitingInvoiceOf.get(row.id)}
+                        targetBillFullyPaid={row.targetBillFullyPaid === true}
+                        waivedAt={row.creditNoteWaivedAt ?? null}
+                        waiveReason={row.creditNoteWaiveReason ?? null}
+                        onWaived={() => {
+                          void reload()
+                          void awaitingCreditNotes.reload()
+                        }}
+                      />
                       {/* Rule 05 — วันเวลาที่อนุมัติต้องอยู่บน list คู่กับชื่อผู้อนุมัติ */}
                       {row.approvedByName !== null && (
                         <p className="mt-1 text-[10px] text-slate-400">

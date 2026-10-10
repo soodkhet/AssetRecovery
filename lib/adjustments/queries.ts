@@ -37,6 +37,7 @@ import { FinanceError } from '@/lib/finance/errors'
 import type { Prisma } from '@/lib/generated/prisma/client'
 import type { AccountingPeriodStatus, AdjustmentStatus, ExpenseStatus } from '@/lib/generated/prisma/enums'
 import { notifyAdjustmentAwaitingApproval } from '@/lib/notifications/approval-queue'
+import { documentedOutstandingByBatch } from '@/lib/portal/documented-amounts'
 import { prisma } from '@/lib/prisma'
 import { invalidateOrganizationReportCache } from '@/lib/reports/cache'
 import { isRevenueError } from '@/lib/revenue/errors'
@@ -332,7 +333,7 @@ const adjustmentSelect = {
   rejectionReason: true,
   approvedAt: true,
   createdAt: true,
-  revenue: { select: { case: { select: { caseRef: true } }, company: { select: { name: true } } } },
+  revenue: { select: { billingBatchId: true, case: { select: { caseRef: true } }, company: { select: { name: true } } } },
   expense: {
     select: {
       expenseType: true,
@@ -344,6 +345,8 @@ const adjustmentSelect = {
   payoutBatch: { select: { name: true, side: true } },
   approvedByUser: { select: { fullName: true } },
   createdByUser: { select: { fullName: true } },
+  creditNoteWaivedAt: true,
+  creditNoteWaiveReason: true,
 } as const
 
 type AdjustmentRow = Prisma.AdjustmentGetPayload<{ select: typeof adjustmentSelect }>
@@ -370,7 +373,7 @@ function targetTextOf(row: AdjustmentRow, targetType: AdjustmentTargetType): { r
   return { ref: '—', label: '—' }
 }
 
-function toDto(row: AdjustmentRow, approvedRoles: readonly string[]): AdjustmentDto {
+function toDto(row: AdjustmentRow, approvedRoles: readonly string[], paidBills: ReadonlySet<string> = new Set()): AdjustmentDto {
   const { targetType, targetId } = adjustmentTargetOf(row)
   const periodStatus = parsePeriodStatusSnapshot(row.periodStatusAtTarget)
   const policy = adjustmentApprovalPolicyFor(periodStatus)
@@ -397,7 +400,31 @@ function toDto(row: AdjustmentRow, approvedRoles: readonly string[]): Adjustment
     approvedAt: row.approvedAt === null ? null : toIso(row.approvedAt),
     createdAt: toIso(row.createdAt),
     createdByName: row.createdByUser.fullName,
+    targetBillFullyPaid: decreaseBillingBatchIdOf(row) !== null && paidBills.has(decreaseBillingBatchIdOf(row)!),
+    creditNoteWaivedAt: row.creditNoteWaivedAt === null ? null : toIso(row.creditNoteWaivedAt),
+    creditNoteWaiveReason: row.creditNoteWaiveReason,
   }
+}
+
+/** รอบวางบิลของรายการลดยอดที่อาจต้องออกใบลดหนี้ (รอบวางบิลตรง หรือรอบของรายได้) — อื่น ๆ = `null` */
+function decreaseBillingBatchIdOf(row: AdjustmentRow): string | null {
+  if (row.adjustmentType !== 'decrease' || row.status === 'rejected') return null
+  return row.billingBatchId ?? row.revenue?.billingBatchId ?? null
+}
+
+/**
+ * staging E-016 (มติ PO 10/10/2569) — รอบวางบิลที่ยอดค้างตามเอกสาร = 0 (ชำระครบ) ของรายการลดยอด ⇒ หน้าจอเตือนตอน
+ * สร้าง/อนุมัติว่าออกใบลดหนี้ในระบบไม่ได้ (U171) ต้องจัดการคืนเงินนอกระบบ · สูตรยอดค้างตัวเดียวกับ U171
+ */
+async function fullyPaidBills(organizationId: string, rows: readonly AdjustmentRow[]): Promise<Set<string>> {
+  const ids = [...new Set(rows.map(decreaseBillingBatchIdOf).filter((id): id is string => id !== null))]
+  if (ids.length === 0) return new Set()
+  const batches = await prisma.billingBatch.findMany({
+    where: { organizationId, id: { in: ids } },
+    select: { id: true, totalSatang: true, receivedSatang: true, whtWithheldByCustomerSatang: true, bankFeeWrittenOffSatang: true },
+  })
+  const outstanding = await documentedOutstandingByBatch(organizationId, batches)
+  return new Set(batches.filter((batch) => (outstanding.get(batch.id) ?? 0) <= 0).map((batch) => batch.id))
 }
 
 // ── ทะเบียนผู้อนุมัติ (อ่านจาก audit log — immutable + append-only) ──────────
@@ -446,7 +473,8 @@ export async function listAdjustments(user: SessionUser, query: AdjustmentListQu
     user.organizationId,
     rows.map((row) => row.id),
   )
-  return rows.map((row) => toDto(row, approvals.get(row.id) ?? []))
+  const paidBills = await fullyPaidBills(user.organizationId, rows)
+  return rows.map((row) => toDto(row, approvals.get(row.id) ?? [], paidBills))
 }
 
 function targetTypeFilter(targetType: AdjustmentTargetType) {
@@ -473,8 +501,11 @@ async function findAdjustment(user: SessionUser, adjustmentId: string): Promise<
 
 async function getAdjustment(user: SessionUser, adjustmentId: string): Promise<AdjustmentDto> {
   const row = await findAdjustment(user, adjustmentId)
-  const approvals = await approverRolesByAdjustment(prisma, user.organizationId, [row.id])
-  return toDto(row, approvals.get(row.id) ?? [])
+  const [approvals, paidBills] = await Promise.all([
+    approverRolesByAdjustment(prisma, user.organizationId, [row.id]),
+    fullyPaidBills(user.organizationId, [row]),
+  ])
+  return toDto(row, approvals.get(row.id) ?? [], paidBills)
 }
 
 // ── POST /api/adjustments (`20` §9) ─────────────────────────────────────────

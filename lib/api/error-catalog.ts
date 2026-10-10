@@ -189,6 +189,7 @@ export const ERROR_CATALOG = {
   CREDIT_NOTE_NUMBER_DUPLICATE: { status: 409, severity: 'reject', source: '24 §6.8' },
   CREDIT_NOTE_EXCEEDS_INVOICE: { status: 400, severity: 'reject', source: '24 §6.8' },
   CREDIT_NOTE_EXCEEDS_OUTSTANDING: { status: 400, severity: 'reject', source: '24 §6.8' },
+  CREDIT_NOTE_WAIVE_NOT_ALLOWED: { status: 400, severity: 'reject', source: '24 §6.8' },
   CREDIT_NOTE_VAT_MISMATCH: { status: 400, severity: 'reject', source: '24 §6.8' },
   CREDIT_NOTE_DATE_BEFORE_INVOICE: { status: 400, severity: 'reject', source: '24 §6.8' },
   CREDIT_NOTE_ADJUSTMENT_MISMATCH: { status: 400, severity: 'reject', source: '24 §6.8' },

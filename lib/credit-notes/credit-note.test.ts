@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  canWaiveAwaitingCreditNote,
   assertAdjustmentLinkable,
   assertCreditNoteCancellable,
   assertInvoiceCreditable,
@@ -188,5 +189,14 @@ describe('มติ PO U171 — เพดานยอดค้างตามเ
   it('ลดได้สูงสุด = ค่าน้อยกว่าระหว่างคงเหลือของใบกำกับกับยอดค้างของรอบ', () => {
     expect(maxCreditNoteTotalSatang(1_284_000, 10_700)).toBe(10_700)
     expect(maxCreditNoteTotalSatang(50_000, 1_284_000)).toBe(50_000)
+  })
+})
+
+describe('canWaiveAwaitingCreditNote (staging E-016)', () => {
+  it('ปิดป้ายได้เฉพาะรอใบลดหนี้ของบิลที่ไม่มียอดค้าง', () => {
+    expect(canWaiveAwaitingCreditNote({ noteType: 'credit', billOutstandingSatang: 0 })).toBe(true)
+    expect(canWaiveAwaitingCreditNote({ noteType: 'credit', billOutstandingSatang: 1 })).toBe(false)
+    expect(canWaiveAwaitingCreditNote({ noteType: 'debit', billOutstandingSatang: 0 })).toBe(false)
+    expect(canWaiveAwaitingCreditNote({ noteType: null, billOutstandingSatang: 0 })).toBe(false)
   })
 })

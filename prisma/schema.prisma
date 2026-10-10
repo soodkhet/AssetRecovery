@@ -1120,6 +1120,7 @@ model User {
   adjustmentsCreated            Adjustment[]                    @relation("adjustments_created_by")
   adjustmentsUpdated            Adjustment[]                    @relation("adjustments_updated_by")
   adjustmentsApproved           Adjustment[]                    @relation("adjustments_approved_by")
+  adjustmentsCreditNoteWaived   Adjustment[]                    @relation("adjustments_credit_note_waived_by")
   periodsCreated                AccountingPeriod[]              @relation("periods_created_by")
   periodsSent                   AccountingPeriod[]              @relation("periods_sent_by")
   periodsLocked                 AccountingPeriod[]              @relation("periods_locked_by")
@@ -3427,6 +3428,11 @@ model Adjustment {
   approvedBy      String?   @map("approved_by") @db.Uuid
   approvedAt      DateTime? @map("approved_at") @db.Timestamptz(6)
   rejectionReason String?   @map("rejection_reason")
+  /// staging E-016 (มติ PO 10/10/2569) — ปิดป้าย "รอใบลดหนี้" เพราะจัดการนอกระบบ (บิลชำระครบแล้ว ออกใบลดหนี้ในระบบไม่ได้ — U171)
+  /// สามช่องมีค่าพร้อมกันหรือว่างพร้อมกัน (CHECK raw SQL) · เหตุผลบังคับ (ภาษี)
+  creditNoteWaivedAt     DateTime? @map("credit_note_waived_at") @db.Timestamptz(6)
+  creditNoteWaivedBy     String?   @map("credit_note_waived_by") @db.Uuid
+  creditNoteWaiveReason  String?   @map("credit_note_waive_reason")
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   createdBy String   @map("created_by") @db.Uuid
@@ -3439,6 +3445,7 @@ model Adjustment {
   billingBatch   BillingBatch? @relation(fields: [billingBatchId], references: [id])
   payoutBatch    PayoutBatch?  @relation(fields: [payoutBatchId], references: [id])
   approvedByUser User?         @relation("adjustments_approved_by", fields: [approvedBy], references: [id])
+  creditNoteWaivedByUser User? @relation("adjustments_credit_note_waived_by", fields: [creditNoteWaivedBy], references: [id])
   createdByUser  User          @relation("adjustments_created_by", fields: [createdBy], references: [id])
   updatedByUser  User?         @relation("adjustments_updated_by", fields: [updatedBy], references: [id])
 

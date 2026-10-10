@@ -400,6 +400,8 @@ export async function adjustmentsAwaitingNotesByBatch(
       status: 'approved',
       adjustmentType: { in: ['decrease', 'increase'] },
       creditNotes: { none: { status: 'active' } },
+      // staging E-016 — ปิดป้ายแล้ว (จัดการนอกระบบ) ไม่นับเป็นรายการรอเอกสาร
+      creditNoteWaivedAt: null,
       OR: [{ billingBatchId: { in: ids } }, { revenue: { billingBatchId: { in: ids } } }],
     },
     select: { billingBatchId: true, revenue: { select: { billingBatchId: true } } },

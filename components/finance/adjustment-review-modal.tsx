@@ -103,6 +103,13 @@ export function AdjustmentReviewModal({
       }
     >
       <div className="space-y-4">
+        {/* staging E-016 — ลดยอดของบิลที่ชำระครบแล้ว */}
+        {mode === 'approve' && adjustment.targetBillFullyPaid === true && (
+          <InlineAlert tone="warning" title="บิลนี้ชำระครบแล้ว — ออกใบลดหนี้ในระบบไม่ได้">
+            อนุมัติได้ แต่ใบลดหนี้/การคืนเงินลูกค้าต้องให้สำนักงานบัญชีจัดการนอกระบบ แล้วกด &quot;จัดการนอกระบบ&quot;
+            ที่รายการเพื่อปิดป้ายรอใบลดหนี้
+          </InlineAlert>
+        )}
         {locked && (
           <InlineAlert tone="error" title="รอบบัญชีปิดแล้ว">
             รายการนี้อ้างอิงรอบบัญชีที่ปิดแล้ว — ผู้บริหารเท่านั้นที่อนุมัติได้

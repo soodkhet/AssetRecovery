@@ -31,6 +31,8 @@ export const SALES_ERROR_CODES = [
   'CREDIT_NOTE_ADJUSTMENT_MISMATCH',
   // ใบลดหนี้เกินยอดค้างของรอบวางบิล (มติ PO 07/10/2569 U171 — `24` §6.8 v4.46)
   'CREDIT_NOTE_EXCEEDS_OUTSTANDING',
+  // ปิดป้าย "รอใบลดหนี้" ไม่ได้ — ยังออกใบลดหนี้ในระบบได้/ไม่ได้รอใบลดหนี้ (staging E-016 — `24` §6.8 v4.52)
+  'CREDIT_NOTE_WAIVE_NOT_ALLOWED',
   // ยกเลิกใบกำกับที่ยังมีใบลดหนี้/ใบเพิ่มหนี้ active (มติ PO 05/10/2569 U18 — `24` §6.8 v4.24)
   'TAX_INVOICE_HAS_ACTIVE_NOTES',
   // ใบเสร็จรับเงิน/ใบกำกับภาษีตอนรับเงิน (มติ PO 06/10/2569 U95 + U96 #3/#7 — `24` §6.8 v4.31)
@@ -64,6 +66,7 @@ const HTTP_STATUS: Record<SalesErrorCode, number> = {
   CREDIT_NOTE_DATE_BEFORE_INVOICE: 400,
   CREDIT_NOTE_ADJUSTMENT_MISMATCH: 400,
   CREDIT_NOTE_EXCEEDS_OUTSTANDING: 400,
+  CREDIT_NOTE_WAIVE_NOT_ALLOWED: 400,
   TAX_INVOICE_HAS_ACTIVE_NOTES: 400,
   TAX_INVOICE_NO_VAT_COMPANY: 400,
   TAX_INVOICE_DATE_IN_FUTURE: 400,
@@ -139,6 +142,11 @@ const MESSAGES: Record<SalesErrorCode, ErrorMessage> = {
     title: 'ยอดใบลดหนี้เกินยอดค้างชำระ',
     message:
       'ใบลดหนี้ต้องไม่เกินยอดค้างชำระของรอบวางบิล ณ ตอนบันทึก — ถ้าลูกค้าชำระเกินและต้องคืนเงิน ขอให้สำนักงานบัญชีจัดการคืนเงินนอกระบบ',
+  },
+  CREDIT_NOTE_WAIVE_NOT_ALLOWED: {
+    title: 'ปิดป้ายรอใบลดหนี้ไม่ได้',
+    message:
+      'ปิดป้าย "จัดการนอกระบบ" ได้เฉพาะรายการลดยอดที่รอใบลดหนี้ของบิลที่ชำระครบแล้ว — ถ้ายังมียอดค้าง ให้บันทึกใบลดหนี้ตามปกติ',
   },
   TAX_INVOICE_HAS_ACTIVE_NOTES: {
     title: 'ยกเลิกใบกำกับภาษีไม่ได้',

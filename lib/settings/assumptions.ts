@@ -36,6 +36,7 @@ export const SETTING_ASSUMPTION_KEYS = [
   'bank_fee_write_off',
   'customer_wht_bank_fee',
   'bank_fee_full_tax_invoice',
+  'credit_note_paid_bill',
 ] as const
 
 export type SettingAssumptionKey = (typeof SETTING_ASSUMPTION_KEYS)[number]
@@ -186,6 +187,13 @@ export const SETTING_ASSUMPTIONS: Readonly<Record<SettingAssumptionKey, SettingA
     question:
       'บิลที่ปิดด้วยการตัดส่วนต่างเป็นค่าธรรมเนียมธนาคาร ออกใบเสร็จรับเงิน/ใบกำกับภาษีเต็มยอดบิลและภาษีมูลค่าเพิ่มจากมูลค่าบริการเต็ม โดยบันทึกค่าธรรมเนียมเป็นค่าใช้จ่ายของเรา (ไม่ออกใบลดหนี้) — ถูกต้องหรือไม่',
     source: 'U169 · BUG-179 (ต่อยอด U144 · U163) · ม.79 · ไม่เข้าเหตุ ม.86/10',
+  },
+  credit_note_paid_bill: {
+    key: 'credit_note_paid_bill',
+    label: 'ใบลดหนี้ของบิลที่ชำระครบแล้ว',
+    question:
+      'ลดยอดบิลที่ลูกค้าชำระครบแล้ว ระบบไม่ให้บันทึกใบลดหนี้เกินยอดค้าง (ให้สำนักงานบัญชีออกใบลดหนี้/คืนเงินนอกระบบ แล้วปิดป้าย "จัดการนอกระบบ" พร้อมเหตุผล) — ต้องการให้ออกใบลดหนี้ในระบบคู่กับการบันทึกยอดคืนเงินตาม ม.86/10 หรือไม่',
+    source: 'staging E-016 · U171 · ม.86/10',
   },
 }
 

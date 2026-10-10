@@ -78,4 +78,8 @@ export interface AwaitingCreditNoteDto {
   invoiceNumber: string
   billingBatchId: string
   amountSatang: number
+  /** staging E-016 — ยอดค้างตามเอกสารของรอบวางบิล (0 = ชำระครบ ออกใบลดหนี้ในระบบไม่ได้) */
+  billOutstandingSatang: number
+  /** staging E-016 — ปิดป้ายเป็น "จัดการนอกระบบ" ได้ (ลดยอด + บิลชำระครบ) */
+  canWaive: boolean
 }

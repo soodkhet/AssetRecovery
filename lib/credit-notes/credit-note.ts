@@ -367,6 +367,14 @@ export function isAwaitingCreditNote(input: {
   )
 }
 
+/**
+ * staging E-016 (มติ PO 10/10/2569) — ปิดป้าย "รอใบลดหนี้" เป็น "จัดการนอกระบบ" ได้ไหม: รอใบลดหนี้อยู่จริง (ลดยอด)
+ * และบิลไม่มียอดค้างตามเอกสารแล้ว (ชำระครบ ⇒ บันทึกใบลดหนี้ในระบบไม่ได้ตาม U171) · ยังมียอดค้าง = ต้องออกใบลดหนี้ตามปกติ
+ */
+export function canWaiveAwaitingCreditNote(input: { noteType: CreditNoteType | null; billOutstandingSatang: number }): boolean {
+  return input.noteType === 'credit' && input.billOutstandingSatang <= 0
+}
+
 /** เหตุผลบังคับ (บันทึก/ยกเลิก) — คืนค่าที่ trim แล้ว · ว่าง = `CANCEL_REQUIRES_REASON` สำหรับการยกเลิก */
 export function requireCreditNoteCancelReason(reason: string | null | undefined): string {
   const trimmed = (reason ?? '').trim()

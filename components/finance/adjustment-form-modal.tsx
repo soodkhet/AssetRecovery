@@ -129,6 +129,14 @@ export function AdjustmentFormModal({
       title: 'สร้างรายการปรับปรุงแล้ว',
       description: `${selected.targetRef} — รออนุมัติตามระดับ: ${(result.data?.requiredApproverRoles ?? []).join(' + ')}`,
     })
+    // staging E-016 — ลดยอดของบิลที่ชำระครบแล้ว ⇒ ใบลดหนี้ต้องจัดการนอกระบบ
+    if (result.data?.targetBillFullyPaid === true) {
+      showToast({
+        tone: 'warning',
+        title: 'บิลนี้ชำระครบแล้ว — ออกใบลดหนี้ในระบบไม่ได้',
+        description: 'หลังอนุมัติ ให้สำนักงานบัญชีจัดการใบลดหนี้/คืนเงินนอกระบบ แล้วกด "จัดการนอกระบบ" ที่รายการ',
+      })
+    }
     onCreated()
     close()
   }

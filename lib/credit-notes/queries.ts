@@ -14,6 +14,7 @@ import {
   assertWithinInvoiceBalance,
   AWAITING_NOTE_LABEL,
   awaitingNoteType,
+  canWaiveAwaitingCreditNote,
   CREDIT_NOTE_STATUS_LABEL,
   CREDIT_NOTE_TYPE_LABEL,
   requireCreditNoteCancelReason,
@@ -289,6 +290,8 @@ export async function listAdjustmentsAwaitingCreditNote(user: SessionUser): Prom
       organizationId: user.organizationId,
       status: 'approved',
       adjustmentType: { in: ['decrease', 'increase'] },
+      // staging E-016 — ปิดป้ายแล้ว (จัดการนอกระบบ) ไม่รออีก
+      creditNoteWaivedAt: null,
       OR: [{ billingBatchId: { not: null } }, { revenue: { billingBatchId: { not: null } } }],
     },
     select: {
@@ -315,6 +318,7 @@ export async function listAdjustmentsAwaitingCreditNote(user: SessionUser): Prom
     select: { id: true, invoiceNumber: true, salesRecord: { select: { billingBatchId: true } } },
   })
   const invoiceByBatch = new Map(invoices.map((invoice) => [invoice.salesRecord.billingBatchId, invoice]))
+  const outstandingByBatch = await billOutstandingByBatch(user.organizationId, batchIds)
 
   const awaiting: AwaitingCreditNoteDto[] = []
   for (const row of adjustments) {
@@ -336,9 +340,75 @@ export async function listAdjustmentsAwaitingCreditNote(user: SessionUser): Prom
       invoiceNumber: invoice.invoiceNumber,
       billingBatchId: batchId,
       amountSatang: row.amountSatang,
+      billOutstandingSatang: outstandingByBatch.get(batchId) ?? 0,
+      canWaive: canWaiveAwaitingCreditNote({ noteType, billOutstandingSatang: outstandingByBatch.get(batchId) ?? 0 }),
     })
   }
   return awaiting
+}
+
+/** ยอดค้างตามเอกสารต่อรอบวางบิล — สูตรเดียวกับ U171 (`documentedOutstandingByBatch()`) */
+async function billOutstandingByBatch(organizationId: string, batchIds: readonly string[]): Promise<Map<string, number>> {
+  if (batchIds.length === 0) return new Map()
+  const batches = await prisma.billingBatch.findMany({
+    where: { organizationId, id: { in: [...batchIds] } },
+    select: { id: true, totalSatang: true, receivedSatang: true, whtWithheldByCustomerSatang: true, bankFeeWrittenOffSatang: true },
+  })
+  return documentedOutstandingByBatch(organizationId, batches)
+}
+
+/**
+ * `POST /api/accounting/credit-notes/awaiting/:adjustmentId/waive` (staging E-016 · มติ PO 10/10/2569)
+ * ปิดป้าย "รอใบลดหนี้" ของบิลที่ชำระครบแล้ว (ออกใบลดหนี้ในระบบไม่ได้ — U171) เป็น "จัดการนอกระบบ" พร้อมเหตุผล
+ * · ไม่แก้ยอด/สถานะของ Adjustment · audit พร้อมเหตุผล (ภาษี) · คิวรอใบลดหนี้/ป้ายลูกหนี้ไม่นับรายการนี้อีก
+ */
+export async function waiveAwaitingCreditNote(
+  ctx: CreditNoteMutationContext,
+  adjustmentId: string,
+  input: { reason: string },
+): Promise<AwaitingCreditNoteDto> {
+  const reason = input.reason.trim()
+  if (reason === '') throw new SalesError('CANCEL_REQUIRES_REASON', { detail: 'ปิดป้ายรอใบลดหนี้ต้องมีเหตุผล' })
+  const awaiting = (await listAdjustmentsAwaitingCreditNote(ctx.actor)).find((item) => item.adjustmentId === adjustmentId)
+  if (awaiting === undefined || !awaiting.canWaive) {
+    throw new SalesError('CREDIT_NOTE_WAIVE_NOT_ALLOWED', {
+      detail: `adjustment=${adjustmentId} outstanding=${awaiting?.billOutstandingSatang ?? 'n/a'}`,
+    })
+  }
+  const now = new Date()
+  await prisma.$transaction(async (tx) => {
+    const claimed = await tx.adjustment.updateMany({
+      where: { id: adjustmentId, organizationId: ctx.actor.organizationId, creditNoteWaivedAt: null },
+      data: { creditNoteWaivedAt: now, creditNoteWaivedBy: ctx.actor.id, creditNoteWaiveReason: reason, updatedBy: ctx.actor.id },
+    })
+    if (claimed.count === 0) {
+      throw new SalesError('CREDIT_NOTE_WAIVE_NOT_ALLOWED', { detail: `adjustment=${adjustmentId} already waived` })
+    }
+    await emitAudit(
+      {
+        organizationId: ctx.actor.organizationId,
+        actorId: ctx.actor.id,
+        actorRole: ctx.actor.roleName,
+        action: 'update',
+        targetType: 'adjustments',
+        targetId: adjustmentId,
+        before: { credit_note_waived_at: null },
+        after: {
+          credit_note_waived_at: now.toISOString(),
+          invoice_number: awaiting.invoiceNumber,
+          billing_batch_id: awaiting.billingBatchId,
+          amount_satang: awaiting.amountSatang,
+          bill_outstanding_satang: awaiting.billOutstandingSatang,
+        },
+        reason,
+        ipAddress: ctx.meta.ipAddress,
+        userAgent: ctx.meta.userAgent,
+        diffOnly: false,
+      },
+      tx,
+    )
+  })
+  return { ...awaiting, canWaive: false }
 }
 
 // ── บันทึก ──────────────────────────────────────────────────────────────────
