@@ -102,12 +102,21 @@ export function allocatePayeeAdvanceOffset(
   }
 }
 
-/** ยอดโอนจริงของบรรทัด/รอบ = net − ยอดหักคืนเงินทดรอง (`22` §6.14) — ยามยอดหักเกิน net */
-export function payoutTransferSatang(netSatang: number, advanceOffsetSatang: number): number {
+/**
+ * ยอดโอนจริงของบรรทัด/รอบ = net − ยอดหักคืนเงินทดรอง − ยอดหักคืนยอดเรียกคืน (`22` §6.14 · staging E-014)
+ * — ยามยอดหักรวมเกิน net (ยอดโอนติดลบไม่ได้)
+ */
+export function payoutTransferSatang(netSatang: number, advanceOffsetSatang: number, recoveryOffsetSatang = 0): number {
   assertNonNegativeSatang(netSatang, 'ยอดสุทธิ')
   assertNonNegativeSatang(advanceOffsetSatang, 'ยอดหักคืนเงินทดรอง')
-  if (advanceOffsetSatang > netSatang) {
-    throw new RangeError(`ยอดหักคืนเงินทดรอง ${advanceOffsetSatang} เกินยอดสุทธิ ${netSatang}`)
+  assertNonNegativeSatang(recoveryOffsetSatang, 'ยอดหักคืนยอดเรียกคืน')
+  if (advanceOffsetSatang + recoveryOffsetSatang > netSatang) {
+    throw new RangeError(`ยอดหักคืน ${advanceOffsetSatang + recoveryOffsetSatang} เกินยอดสุทธิ ${netSatang}`)
   }
-  return netSatang - advanceOffsetSatang
+  return netSatang - advanceOffsetSatang - recoveryOffsetSatang
+}
+
+/** staging E-014 — ยอดเรียกคืนค้าง = ยอดเรียกคืน − ยอดที่หักแล้ว (แถวที่ยังไม่กลับรายการ) · กติกาเดียวกับเงินทดรอง */
+export function payeeRecoveryOutstandingSatang(input: { amountSatang: number; collectedSatang: readonly number[] }): number {
+  return advanceReturnOutstandingSatang({ returnSatang: input.amountSatang, collectedSatang: input.collectedSatang })
 }

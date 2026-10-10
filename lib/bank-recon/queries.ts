@@ -375,6 +375,7 @@ async function loadCandidates(
       name: true,
       netSatang: true,
       advanceOffsetSatang: true,
+      recoveryOffsetSatang: true,
       paymentFileGeneratedAt: true,
       status: true,
     },
@@ -387,7 +388,7 @@ async function loadCandidates(
     id: row.id,
     ref: row.name,
     // มติ PO U30 — เงินออกจากบัญชีจริง = ยอดโอน (net − หักคืนเงินทดรอง · `22` §6.14) ไม่ใช่ net
-    amountSatang: payoutTransferSatang(row.netSatang, row.advanceOffsetSatang),
+    amountSatang: payoutTransferSatang(row.netSatang, row.advanceOffsetSatang, row.recoveryOffsetSatang),
     altAmountSatang: null,
     // รอบที่ `completed` แล้วไม่เข้าเกณฑ์อัตโนมัติ (จับคู่ไปแล้วครั้งหนึ่ง) — เลือก manual ได้เท่านั้น
     referenceDate: row.status === 'file_generated' ? row.paymentFileGeneratedAt : null,
@@ -466,7 +467,7 @@ export async function listMatchProposals(user: SessionUser): Promise<MatchPropos
       paymentFileGeneratedAt: { not: null },
       bankTransactions: { none: { matchStatus: { in: ['auto_matched', 'manual_matched'] } } },
     },
-    select: { id: true, name: true, status: true, netSatang: true, advanceOffsetSatang: true, paymentFileGeneratedAt: true },
+    select: { id: true, name: true, status: true, netSatang: true, advanceOffsetSatang: true, recoveryOffsetSatang: true, paymentFileGeneratedAt: true },
     orderBy: { paymentFileGeneratedAt: 'desc' },
     take: 100,
   })
@@ -475,7 +476,7 @@ export async function listMatchProposals(user: SessionUser): Promise<MatchPropos
     kind: 'payout',
     id: row.id,
     ref: row.name,
-    amountSatang: payoutTransferSatang(row.netSatang, row.advanceOffsetSatang),
+    amountSatang: payoutTransferSatang(row.netSatang, row.advanceOffsetSatang, row.recoveryOffsetSatang),
     altAmountSatang: null,
     referenceDate: row.paymentFileGeneratedAt,
   }))

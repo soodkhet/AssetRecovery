@@ -222,6 +222,15 @@ export function AdjustmentTab() {
                           </p>
                         </div>
                       )}
+                      {/* staging E-014 — ลดยอดรายการเบิกที่จ่ายแล้ว ⇒ เรียกคืนจากผู้รับในรอบจ่ายถัดไป */}
+                      {row.recovery != null && (
+                        <p className="mt-1 text-[10px] text-amber-700">
+                          เรียกคืนจากผู้รับ {fmtSatangSymbol(row.recovery.amountSatang)}
+                          {row.recovery.outstandingSatang > 0
+                            ? ` · ค้าง ${fmtSatangSymbol(row.recovery.outstandingSatang)} (หักในรอบจ่ายถัดไป)`
+                            : ' · หักคืนครบแล้ว'}
+                        </p>
+                      )}
                       {/* staging E-016 — บิลชำระครบแล้ว ⇒ ใบลดหนี้ในระบบไม่ได้ · ปิดป้ายเป็น "จัดการนอกระบบ" */}
                       <CreditNoteWaiveNotice
                         awaiting={awaitingInvoiceOf.get(row.id)}

@@ -453,6 +453,7 @@ async function payoutVouchersOf(organizationId: string, rows: readonly ExpenseRe
           netSatang: true,
           whtCondition: true,
           advanceOffsetSatang: true,
+          recoveryOffsetSatang: true,
           voucherNumber: true,
           payee: { select: { user: { select: { fullName: true } } } },
         },
@@ -474,6 +475,7 @@ async function payoutVouchersOf(organizationId: string, rows: readonly ExpenseRe
         payeeName: string
         netSatang: number
         advanceOffsetSatang: number
+        recoveryOffsetSatang: number
         whtPaidByPayerSatang: number
         inPeriod: boolean
         voucherNumber: string | null
@@ -489,6 +491,7 @@ async function payoutVouchersOf(organizationId: string, rows: readonly ExpenseRe
           payeeName: item.payee.user.fullName,
           netSatang: item.netSatang,
           advanceOffsetSatang: item.advanceOffsetSatang,
+          recoveryOffsetSatang: item.recoveryOffsetSatang,
           whtPaidByPayerSatang: paidByPayer,
           inPeriod: paidItemIds.has(item.id),
           voucherNumber: item.voucherNumber,
@@ -496,6 +499,7 @@ async function payoutVouchersOf(organizationId: string, rows: readonly ExpenseRe
       } else {
         existing.netSatang += item.netSatang
         existing.advanceOffsetSatang += item.advanceOffsetSatang
+        existing.recoveryOffsetSatang += item.recoveryOffsetSatang
         existing.whtPaidByPayerSatang += paidByPayer
         existing.inPeriod = existing.inPeriod || paidItemIds.has(item.id)
         existing.voucherNumber = existing.voucherNumber ?? item.voucherNumber
@@ -515,6 +519,7 @@ async function payoutVouchersOf(organizationId: string, rows: readonly ExpenseRe
         payeeName: group.payeeName,
         netSatang: group.netSatang,
         advanceOffsetSatang: group.advanceOffsetSatang,
+        recoveryOffsetSatang: group.recoveryOffsetSatang,
         whtPaidByPayerSatang: group.whtPaidByPayerSatang,
         voucherRef,
       })

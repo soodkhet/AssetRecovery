@@ -89,6 +89,8 @@ export const TRANSACTIONAL_SENSITIVE_TARGETS: Readonly<Record<string, AuditSensi
   advances: 'money',
   // มติ PO 05/10/2569 (UAT U30) — สมุดย่อยการคืนยอดเงินทดรอง (หักกลบในรอบจ่าย/รับคืนแยก)
   advance_returns: 'money',
+  payee_recoveries: 'money',
+  payee_recovery_collections: 'money',
   // มติ PO 06/10/2569 (U103) — ใบรับรองแทนใบเสร็จรับเงิน + บรรทัดรายจ่าย (ออกตาม flow เบิก/เคลียร์ยอด)
   substitute_receipts: 'money',
   substitute_receipt_lines: 'money',

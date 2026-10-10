@@ -60,6 +60,8 @@ export interface PayeeDto {
   missingForVerification: readonly string[]
   /** ยอดคืนเงินทดรองค้างของผู้รับ (มติ PO U30 — เคลียร์แล้วแต่ยังไม่หัก/รับคืน · `22` §6.14) */
   advanceReturnOutstandingSatang: number
+  /** staging E-014 — ยอดเรียกคืน (ค่าตอบแทนที่จ่ายเกิน) ที่ยังหักไม่หมด — หักในรอบจ่ายถัดไป · ไม่ระบุ = 0 */
+  recoveryOutstandingSatang?: number
   updatedAt: string
 }
 

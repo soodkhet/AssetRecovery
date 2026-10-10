@@ -41,6 +41,8 @@ export interface AdjustmentDto {
   /** staging E-016 — ปิดป้าย "รอใบลดหนี้" เป็น "จัดการนอกระบบ" เมื่อไร + เหตุผล · ยังไม่ปิด = `null` */
   creditNoteWaivedAt?: string | null
   creditNoteWaiveReason?: string | null
+  /** staging E-014 — ยอดเรียกคืนจากผู้รับที่เกิดจากรายการนี้ (ลดยอดรายการเบิกที่จ่ายแล้ว) + ยอดค้าง · ไม่มี = `null` */
+  recovery?: { amountSatang: number; outstandingSatang: number } | null
 }
 
 /** ตัวเลือกรายการต้นทางในฟอร์มสร้าง Adjustment (`20` §8 — ค้นหาจากเลขที่อ้างอิง) */

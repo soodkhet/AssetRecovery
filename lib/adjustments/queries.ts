@@ -38,6 +38,7 @@ import type { Prisma } from '@/lib/generated/prisma/client'
 import type { AccountingPeriodStatus, AdjustmentStatus, ExpenseStatus } from '@/lib/generated/prisma/enums'
 import { notifyAdjustmentAwaitingApproval } from '@/lib/notifications/approval-queue'
 import { documentedOutstandingByBatch } from '@/lib/portal/documented-amounts'
+import { createRecoveryForApprovedAdjustment, recoveriesByAdjustment } from '@/lib/payout/recoveries'
 import { prisma } from '@/lib/prisma'
 import { invalidateOrganizationReportCache } from '@/lib/reports/cache'
 import { isRevenueError } from '@/lib/revenue/errors'
@@ -373,7 +374,12 @@ function targetTextOf(row: AdjustmentRow, targetType: AdjustmentTargetType): { r
   return { ref: '—', label: '—' }
 }
 
-function toDto(row: AdjustmentRow, approvedRoles: readonly string[], paidBills: ReadonlySet<string> = new Set()): AdjustmentDto {
+function toDto(
+  row: AdjustmentRow,
+  approvedRoles: readonly string[],
+  paidBills: ReadonlySet<string> = new Set(),
+  recoveries: ReadonlyMap<string, { amountSatang: number; outstandingSatang: number }> = new Map(),
+): AdjustmentDto {
   const { targetType, targetId } = adjustmentTargetOf(row)
   const periodStatus = parsePeriodStatusSnapshot(row.periodStatusAtTarget)
   const policy = adjustmentApprovalPolicyFor(periodStatus)
@@ -403,6 +409,7 @@ function toDto(row: AdjustmentRow, approvedRoles: readonly string[], paidBills: 
     targetBillFullyPaid: decreaseBillingBatchIdOf(row) !== null && paidBills.has(decreaseBillingBatchIdOf(row)!),
     creditNoteWaivedAt: row.creditNoteWaivedAt === null ? null : toIso(row.creditNoteWaivedAt),
     creditNoteWaiveReason: row.creditNoteWaiveReason,
+    recovery: recoveries.get(row.id) ?? null,
   }
 }
 
@@ -473,8 +480,11 @@ export async function listAdjustments(user: SessionUser, query: AdjustmentListQu
     user.organizationId,
     rows.map((row) => row.id),
   )
-  const paidBills = await fullyPaidBills(user.organizationId, rows)
-  return rows.map((row) => toDto(row, approvals.get(row.id) ?? [], paidBills))
+  const [paidBills, recoveries] = await Promise.all([
+    fullyPaidBills(user.organizationId, rows),
+    recoveriesByAdjustment(user.organizationId, rows.map((row) => row.id)),
+  ])
+  return rows.map((row) => toDto(row, approvals.get(row.id) ?? [], paidBills, recoveries))
 }
 
 function targetTypeFilter(targetType: AdjustmentTargetType) {
@@ -501,11 +511,12 @@ async function findAdjustment(user: SessionUser, adjustmentId: string): Promise<
 
 async function getAdjustment(user: SessionUser, adjustmentId: string): Promise<AdjustmentDto> {
   const row = await findAdjustment(user, adjustmentId)
-  const [approvals, paidBills] = await Promise.all([
+  const [approvals, paidBills, recoveries] = await Promise.all([
     approverRolesByAdjustment(prisma, user.organizationId, [row.id]),
     fullyPaidBills(user.organizationId, [row]),
+    recoveriesByAdjustment(user.organizationId, [row.id]),
   ])
-  return toDto(row, approvals.get(row.id) ?? [], paidBills)
+  return toDto(row, approvals.get(row.id) ?? [], paidBills, recoveries)
 }
 
 // ── POST /api/adjustments (`20` §9) ─────────────────────────────────────────
@@ -679,6 +690,21 @@ export async function approveAdjustment(
       },
       tx,
     )
+
+    // staging E-014 — ลดยอดรายการเบิกที่จ่ายไปแล้ว ⇒ เกิด "ยอดเรียกคืนจากผู้รับ" หักในรอบจ่ายถัดไป
+    if (complete) {
+      await createRecoveryForApprovedAdjustment(tx, {
+        organizationId: user.organizationId,
+        adjustmentId,
+        adjustmentType: row.adjustmentType,
+        expenseId: row.expenseId,
+        amountSatang: row.amountSatang,
+        actorId: user.id,
+        actorRole: user.roleName,
+        reason: note ?? row.reason,
+        meta: context.meta,
+      })
+    }
 
     // `20` §6.2 แถว `locked` — "Executive + บันทึก audit log แยกชัดเจน"
     if (complete && requiresSeparateAuditEntry(periodStatus)) {

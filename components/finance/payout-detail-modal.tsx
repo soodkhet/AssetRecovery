@@ -148,6 +148,16 @@ export function PayoutDetailModal({
               {batch.advanceOffsetSatang > 0 && (
                 <>
                   {' '}· หักคืนเงินทดรอง <span className="text-amber-700">{fmtSatangSymbol(batch.advanceOffsetSatang)}</span>
+                </>
+              )}
+              {/* staging E-014 — หักคืนค่าตอบแทนที่จ่ายเกิน (รายการปรับปรุงลดยอดหลังจ่าย) */}
+              {(batch.recoveryOffsetSatang ?? 0) > 0 && (
+                <>
+                  {' '}· หักคืนที่จ่ายเกิน <span className="text-amber-700">{fmtSatangSymbol(batch.recoveryOffsetSatang ?? 0)}</span>
+                </>
+              )}
+              {batch.advanceOffsetSatang + (batch.recoveryOffsetSatang ?? 0) > 0 && (
+                <>
                   {' '}· ยอดโอน <span className="font-bold text-emerald-700">{fmtSatangSymbol(batch.transferSatang)}</span>
                 </>
               )}

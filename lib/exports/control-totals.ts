@@ -136,7 +136,7 @@ export function buildControlTotals(input: ControlTotalsInput): ControlTotalLine[
     ['wht_baht', sum(r.expenses.map((row) => row.whtSatang))],
     ['net_baht', sum(r.expenses.map((row) => row.netSatang))],
   ])
-  const transfers = r.payments.map((row) => payoutTransferSatang(row.netSatang, row.advanceOffsetSatang))
+  const transfers = r.payments.map((row) => payoutTransferSatang(row.netSatang, row.advanceOffsetSatang, row.recoveryOffsetSatang ?? 0))
   file('04', r.payments.length, [
     ['amount_baht', sum(r.payments.map((row) => row.netSatang))],
     ['advance_offset_baht', sum(r.payments.map((row) => row.advanceOffsetSatang))],

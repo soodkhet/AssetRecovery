@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { assertPeriodOpenAt } from '@/lib/accounting/period-guard'
 import { periodKeyOf, periodRangeOf } from '@/lib/accounting/period'
 import { monthToDateByPayee, type MonthToDate } from '@/lib/finance/wht-month-to-date'
+import { lockOutstandingRecoveries, releasePayoutRecoveryOffsets } from '@/lib/payout/recoveries'
 import type { ApiWarning } from '@/lib/api/envelope'
 import { emitAudit } from '@/lib/audit/audit'
 import type { RequestMeta } from '@/lib/auth/request-meta'
@@ -135,6 +136,7 @@ const batchSelect = {
   whtSatang: true,
   netSatang: true,
   advanceOffsetSatang: true,
+  recoveryOffsetSatang: true,
   bankAccountId: true,
   idempotencyKey: true,
   paymentFileUrl: true,
@@ -179,6 +181,7 @@ const itemSelect = {
   whtCondition: true,
   whtCarriedBaseSatang: true,
   advanceOffsetSatang: true,
+  recoveryOffsetSatang: true,
   advanceReturns: {
     where: { reversedAt: null },
     select: { advanceId: true, amountSatang: true, advance: { select: { advanceNumber: true } } },
@@ -213,7 +216,8 @@ function toBatchDto(row: BatchRow): PayoutBatchDto {
     whtSatang: row.whtSatang,
     netSatang: row.netSatang,
     advanceOffsetSatang: row.advanceOffsetSatang,
-    transferSatang: payoutTransferSatang(row.netSatang, row.advanceOffsetSatang),
+    recoveryOffsetSatang: row.recoveryOffsetSatang,
+    transferSatang: payoutTransferSatang(row.netSatang, row.advanceOffsetSatang, row.recoveryOffsetSatang),
     ...sumPayoutTaxSplit(row.items),
     itemCount: row._count.items,
     bankAccountId: row.bankAccountId,
@@ -280,8 +284,9 @@ function toItemDto(row: ItemRow): PayoutBatchItemDto {
     whtIncomeCategory: row.whtIncomeCategory,
     whtCondition: row.whtCondition,
     whtCarriedBaseSatang: row.whtCarriedBaseSatang,
+    recoveryOffsetSatang: row.recoveryOffsetSatang,
     advanceOffsetSatang: row.advanceOffsetSatang,
-    transferSatang: payoutTransferSatang(row.netSatang, row.advanceOffsetSatang),
+    transferSatang: payoutTransferSatang(row.netSatang, row.advanceOffsetSatang, row.recoveryOffsetSatang),
     advanceOffsets: row.advanceReturns.map((entry) => ({
       advanceId: entry.advanceId,
       advanceRef: entry.advance.advanceNumber,
@@ -975,6 +980,18 @@ export async function createPayoutBatch(
     )
     const { lineOffsets, planned } = planAdvanceOffsets(candidates, outstanding)
     const totalOffsetSatang = lineOffsets.reduce((sum, value) => sum + value, 0)
+    // staging E-014 — หักคืน "ยอดเรียกคืนจากผู้รับ" จากยอดที่เหลือหลังหักคืนเงินทดรอง (ตัวจัดสรรเดียวกัน)
+    const outstandingRecoveries = await lockOutstandingRecoveries(
+      tx,
+      user.organizationId,
+      [...new Set(candidates.map((candidate) => candidate.payeeId))],
+    )
+    const recoveryPlan = planAdvanceOffsets(
+      candidates.map((candidate, index) => ({ ...candidate, netSatang: candidate.netSatang - (lineOffsets[index] ?? 0) })),
+      outstandingRecoveries,
+    )
+    const recoveryLineOffsets = recoveryPlan.lineOffsets
+    const totalRecoverySatang = recoveryLineOffsets.reduce((sum, value) => sum + value, 0)
     const itemIds: string[] = []
 
     const batch = await tx.payoutBatch.create({
@@ -1019,6 +1036,7 @@ export async function createPayoutBatch(
           whtCondition: candidate.whtCondition,
           whtCarriedBaseSatang: candidate.whtCarriedBaseSatang ?? 0,
           advanceOffsetSatang: lineOffsets[itemIds.length] ?? 0,
+          recoveryOffsetSatang: recoveryLineOffsets[itemIds.length] ?? 0,
           createdBy: user.id,
         },
         select: { id: true },
@@ -1064,6 +1082,21 @@ export async function createPayoutBatch(
       })
     }
 
+    // staging E-014 — สมุดย่อยการหักคืนยอดเรียกคืน (trigger กันยอดสะสมเกินยอดเรียกคืน)
+    for (const offset of recoveryPlan.planned) {
+      await tx.payeeRecoveryCollection.create({
+        data: {
+          organizationId: user.organizationId,
+          recoveryId: offset.advanceId,
+          payeeId: candidates[offset.candidateIndex]!.payeeId,
+          payoutBatchId: batch.id,
+          payoutBatchItemId: itemIds[offset.candidateIndex]!,
+          amountSatang: offset.amountSatang,
+          createdBy: user.id,
+        },
+      })
+    }
+
     await tx.payoutBatch.update({
       where: { id: batch.id },
       data: {
@@ -1072,6 +1105,7 @@ export async function createPayoutBatch(
         whtSatang: totals.whtSatang,
         netSatang: totals.netSatang,
         advanceOffsetSatang: totalOffsetSatang,
+        recoveryOffsetSatang: totalRecoverySatang,
         updatedBy: user.id,
       },
     })
@@ -1291,7 +1325,7 @@ export async function generatePaymentFile(
   const transfers = groupTransfersByPayee(
     items.map((item) => ({
       payeeId: item.payeeId,
-      transferSatang: payoutTransferSatang(item.netSatang, item.advanceOffsetSatang),
+      transferSatang: payoutTransferSatang(item.netSatang, item.advanceOffsetSatang, item.recoveryOffsetSatang),
       remarkParts: item.advanceReturns.map((entry) => advanceOffsetLineLabel(entry.advance.advanceNumber)),
       payee: item.payee,
     })),
@@ -1697,6 +1731,16 @@ export async function cancelPayoutBatch(
     }
 
     const reversedAdvanceOffsetCount = await releasePayoutAdvanceOffsets(tx, {
+      organizationId,
+      payoutBatchItemIds: itemIds,
+      actorId: user.id,
+      actorRole: user.roleName,
+      reason: `ยกเลิกรอบจ่าย "${batch.name}": ${reason}`,
+      meta: context.meta,
+      now,
+    })
+    // staging E-014 — ยอดเรียกคืนที่หักไว้กลับเป็นค้าง
+    await releasePayoutRecoveryOffsets(tx, {
       organizationId,
       payoutBatchItemIds: itemIds,
       actorId: user.id,

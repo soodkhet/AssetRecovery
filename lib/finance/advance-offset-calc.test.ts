@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  payeeRecoveryOutstandingSatang,
   advanceReturnOutstandingSatang,
   allocatePayeeAdvanceOffset,
   payoutTransferSatang,
@@ -107,5 +108,26 @@ describe('payoutTransferSatang', () => {
     expect(payoutTransferSatang(485_000, 55_000)).toBe(430_000)
     expect(payoutTransferSatang(30_000, 30_000)).toBe(0)
     expect(() => payoutTransferSatang(30_000, 30_001)).toThrow(RangeError)
+  })
+})
+
+describe('ยอดเรียกคืนจากผู้รับ (staging E-014)', () => {
+  it('ยอดโอน = net − หักคืนเงินทดรอง − หักคืนยอดเรียกคืน · รวมเกิน net ⇒ ล้ม', () => {
+    expect(payoutTransferSatang(100_000, 20_000, 30_000)).toBe(50_000)
+    expect(payoutTransferSatang(100_000, 20_000)).toBe(80_000)
+    expect(() => payoutTransferSatang(100_000, 60_000, 50_000)).toThrow(RangeError)
+  })
+
+  it('หักยอดเรียกคืนจากยอดที่เหลือหลังหักเงินทดรอง (FIFO) · ส่วนที่หักไม่หมดยกไปรอบถัดไป', () => {
+    const result = allocatePayeeAdvanceOffset([30_000, 10_000], [
+      { advanceId: 'rec-1', outstandingSatang: 25_000 },
+      { advanceId: 'rec-2', outstandingSatang: 20_000 },
+    ])
+    expect(result.totalOffsetSatang).toBe(40_000)
+    expect(result.carriedForward).toEqual([
+      { advanceId: 'rec-1', outstandingSatang: 0 },
+      { advanceId: 'rec-2', outstandingSatang: 5_000 },
+    ])
+    expect(payeeRecoveryOutstandingSatang({ amountSatang: 50_000, collectedSatang: [20_000, 5_000] })).toBe(25_000)
   })
 })

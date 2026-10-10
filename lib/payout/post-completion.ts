@@ -46,12 +46,12 @@ export interface PayoutPayeeNotice {
 export async function payoutPayeeNotices(organizationId: string, batchId: string): Promise<PayoutPayeeNotice[]> {
   const items = await prisma.payoutBatchItem.findMany({
     where: { organizationId, payoutBatchId: batchId },
-    select: { netSatang: true, advanceOffsetSatang: true, payee: { select: { userId: true } } },
+    select: { netSatang: true, advanceOffsetSatang: true, recoveryOffsetSatang: true, payee: { select: { userId: true } } },
   })
   return groupPayeeTransfers(
     items.map((item) => ({
       userId: item.payee.userId,
-      transferSatang: payoutTransferSatang(item.netSatang, item.advanceOffsetSatang),
+      transferSatang: payoutTransferSatang(item.netSatang, item.advanceOffsetSatang, item.recoveryOffsetSatang),
     })),
   )
 }

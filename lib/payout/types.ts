@@ -17,6 +17,8 @@ export interface PayoutBatchDto {
   netSatang: number
   /** snapshot ยอดหักคืนเงินทดรองรวมของรอบ (มติ PO U30) — หักหลัง WHT */
   advanceOffsetSatang: number
+  /** staging E-014 — ยอดหักคืนยอดเรียกคืนรวมของรอบ · ไม่ระบุ = 0 */
+  recoveryOffsetSatang?: number
   /** ยอดโอนจริงของรอบ = net − ยอดหักคืนเงินทดรอง (`22` §6.14) */
   transferSatang: number
   /**
@@ -67,6 +69,8 @@ export interface PayoutBatchItemDto {
   whtSatang: number
   /** staging E-054 — ฐานของรอบก่อนในเดือนที่ยกมาหักพร้อมรายการนี้ (เกณฑ์สะสมต่อเดือน) · 0 = ไม่มี */
   whtCarriedBaseSatang?: number
+  /** staging E-014 — ยอดหักคืนยอดเรียกคืนจากผู้รับจากบรรทัดนี้ (หลังหักคืนเงินทดรอง) · ไม่ระบุ = 0 */
+  recoveryOffsetSatang?: number
   netSatang: number
   /** snapshot ณ เวลาสร้างรายการ (`92` §7.1) */
   taxProfileId: string | null

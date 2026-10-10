@@ -314,6 +314,11 @@ export function PayeeTab() {
                   {/* staging E-002 — ชื่อที่พิมพ์บนเอกสารภาษีของนิติบุคคล */}
                   {item.legalName !== null && <div className="text-[10px] text-slate-700">{item.legalName}</div>}
                   <div className="text-[10px] text-slate-500">{item.teamName ?? item.roleName}</div>
+                  {(item.recoveryOutstandingSatang ?? 0) > 0 && (
+                    <div className="text-[10px] font-semibold text-amber-700">
+                      ยอดเรียกคืนค้าง {fmtSatangSymbol(item.recoveryOutstandingSatang ?? 0)} (หักในรอบจ่ายถัดไป)
+                    </div>
+                  )}
                   {item.advanceReturnOutstandingSatang > 0 && (
                     <div className="text-[10px] font-semibold text-amber-700">
                       ยอดคืนเงินทดรองค้าง {fmtSatangSymbol(item.advanceReturnOutstandingSatang)}

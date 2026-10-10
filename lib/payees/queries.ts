@@ -1,5 +1,5 @@
 import { onUniqueViolation } from '@/lib/api/unique-violation'
-import { advanceReturnOutstandingSatang } from '@/lib/finance/advance-offset-calc'
+import { advanceReturnOutstandingSatang, payeeRecoveryOutstandingSatang } from '@/lib/finance/advance-offset-calc'
 import type { ApiWarning } from '@/lib/api/envelope'
 import { emitAudit } from '@/lib/audit/audit'
 import { AuthError } from '@/lib/auth/errors'
@@ -101,6 +101,11 @@ const payeeSelect = {
   advances: {
     where: { status: 'cleared', returnMethod: { not: null }, deletedAt: null },
     select: { returnSatang: true, returns: { where: { reversedAt: null }, select: { amountSatang: true } } },
+  },
+  // staging E-014 — ยอดเรียกคืนจากผู้รับ (ค่าตอบแทนที่จ่ายเกิน) ที่ยังหักไม่หมด
+  recoveries: {
+    where: { deletedAt: null },
+    select: { amountSatang: true, collections: { where: { reversedAt: null }, select: { amountSatang: true } } },
   },
 } as const
 
@@ -256,6 +261,15 @@ function toDto(row: PayeeRow, canSeeFullAccount: boolean, typeDefaults: TaxProfi
         advanceReturnOutstandingSatang({
           returnSatang: advance.returnSatang,
           collectedSatang: advance.returns.map((entry) => entry.amountSatang),
+        }),
+      0,
+    ),
+    recoveryOutstandingSatang: row.recoveries.reduce(
+      (total, recovery) =>
+        total +
+        payeeRecoveryOutstandingSatang({
+          amountSatang: recovery.amountSatang,
+          collectedSatang: recovery.collections.map((entry) => entry.amountSatang),
         }),
       0,
     ),

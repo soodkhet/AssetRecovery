@@ -346,6 +346,8 @@ export const PAYMENT_HEADERS = [
   'transfer_baht',
   // มติ PO 06/10/2569 (U105) — ต่อท้ายสุด: ภาษีที่บริษัทออกให้ผู้รับ (เงื่อนไข (2)/(3) — ค่าใช้จ่ายบริษัท ไม่ได้หักจากผู้รับ)
   'wht_paid_by_payer_baht',
+  // staging E-014 — ต่อท้ายสุด: ยอดหักคืน "ยอดเรียกคืนจากผู้รับ" (หลังหักเงินทดรอง · transfer_baht หักแล้ว)
+  'recovery_offset_baht',
 ] as const
 
 /** ช่องทางจ่ายของระบบมีทางเดียว — โอนผ่านไฟล์ธนาคาร (`17` §6.3) */
@@ -361,6 +363,8 @@ export interface PaymentExportRow {
   advanceOffsetSatang: number
   /** มติ U105 — ภาษีที่บริษัทออกให้ผู้รับในรอบ (`payoutItemTaxSplit()` · 0 = หัก ณ ที่จ่ายตามปกติ) */
   whtPaidByPayerSatang: number
+  /** staging E-014 — ยอดหักคืนยอดเรียกคืนจากผู้รับในรอบ · ไม่ระบุ = 0 */
+  recoveryOffsetSatang?: number
 }
 
 export function paymentCsv(rows: readonly PaymentExportRow[]): string {
@@ -374,8 +378,9 @@ export function paymentCsv(rows: readonly PaymentExportRow[]): string {
       PAYMENT_METHOD_LABEL,
       row.voucherRef,
       csvBaht(row.advanceOffsetSatang),
-      csvBaht(payoutTransferSatang(row.netSatang, row.advanceOffsetSatang)),
+      csvBaht(payoutTransferSatang(row.netSatang, row.advanceOffsetSatang, row.recoveryOffsetSatang ?? 0)),
       csvBaht(row.whtPaidByPayerSatang),
+      csvBaht(row.recoveryOffsetSatang ?? 0),
     ]),
   )
 }

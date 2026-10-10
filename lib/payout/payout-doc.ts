@@ -173,6 +173,8 @@ export interface PayoutPayeeGroup {
   totals: PayoutBatchTotals
   /** มติ PO U30 — ยอดหักคืนเงินทดรองรวมของคนนี้ (snapshot) และยอดโอนจริง = net − ยอดหัก */
   advanceOffsetSatang: number
+  /** staging E-014 — ยอดหักคืนยอดเรียกคืนจากผู้รับในรอบ (0 = ไม่มี) */
+  recoveryOffsetSatang: number
   transferSatang: number
   /** บรรทัด "หักคืนเงินทดรอง ADV-xxx" ต่อเงินทดรอง (รวมยอดข้ามหลายบรรทัดในรอบ) */
   offsetLines: ReadonlyArray<{ label: string; amountSatang: number }>
@@ -202,11 +204,18 @@ function collectOffsetLines(items: readonly PayoutBatchItemDto[]): Array<{ label
       })
     }
   }
-  return [...byAdvance.values()].map((entry) => ({
+  const lines = [...byAdvance.values()].map((entry) => ({
     label: advanceOffsetLineLabel(entry.advanceRef),
     amountSatang: entry.amountSatang,
   }))
+  // staging E-014 — หักคืนยอดเรียกคืนจากผู้รับ (ปรับลดค่าตอบแทนที่จ่ายไปแล้ว) เป็นบรรทัดเดียวต่อกลุ่ม
+  const recovery = items.reduce((sum, item) => sum + (item.recoveryOffsetSatang ?? 0), 0)
+  if (recovery > 0) lines.push({ label: RECOVERY_OFFSET_LINE_LABEL, amountSatang: recovery })
+  return lines
 }
+
+/** ป้ายบรรทัดหักคืนยอดเรียกคืนบนสลิป/ใบสำคัญจ่าย (staging E-014) */
+export const RECOVERY_OFFSET_LINE_LABEL = 'หักคืนค่าตอบแทนที่จ่ายเกิน (ปรับปรุงยอด)'
 
 /**
  * 1 คน = 1 ใบสำคัญจ่าย / 1 สลิป ต่อรอบ (`28` §6.1 "สรุปค่าตอบแทนต่อพนักงาน/รอบ")
@@ -227,6 +236,7 @@ export function groupPayoutItemsByPayee(items: readonly PayoutBatchItemDto[]): P
     const rates = new Set(bucket.map((item) => item.whtPctSnapshot))
     const totals = summarizePayoutBatch(bucket)
     const advanceOffsetSatang = bucket.reduce((sum, item) => sum + item.advanceOffsetSatang, 0)
+    const recoveryOffsetSatang = bucket.reduce((sum, item) => sum + (item.recoveryOffsetSatang ?? 0), 0)
     return {
       payeeId: first.payeeId,
       payeeName: first.payeeName,
@@ -237,7 +247,8 @@ export function groupPayoutItemsByPayee(items: readonly PayoutBatchItemDto[]): P
       items: bucket,
       totals,
       advanceOffsetSatang,
-      transferSatang: payoutTransferSatang(totals.netSatang, advanceOffsetSatang),
+      recoveryOffsetSatang,
+      transferSatang: payoutTransferSatang(totals.netSatang, advanceOffsetSatang, recoveryOffsetSatang),
       offsetLines: collectOffsetLines(bucket),
       ...taxSplitTotals(bucket),
     }
@@ -312,7 +323,8 @@ export function buildPayoutSummaryDoc(
   // ยอดรวมของทั้งรอบคิดจาก "รายการทั้งหมด" ไม่ใช่ผลบวกของยอดกลุ่ม — ยามของ `22` §6.10
   // จะจับได้ทันทีถ้ามีรายการใดที่ net ≠ gross − wht
   const totals = summarizePayoutBatch(batch.items)
-  const totalOffset = groups.reduce((sum, group) => sum + group.advanceOffsetSatang, 0)
+  // ยอดหักคืนรวม = เงินทดรอง + ยอดเรียกคืน (staging E-014) ⇒ ยอดโอนในสรุปรอบตรงกับไฟล์โอน
+  const totalOffset = groups.reduce((sum, group) => sum + group.advanceOffsetSatang + group.recoveryOffsetSatang, 0)
   const split = taxSplitTotals(batch.items)
 
   return {
@@ -343,8 +355,11 @@ export function buildPayoutSummaryDoc(
       whtPaidByPayerText: fmtSatang(group.whtPaidByPayerSatang),
       whtWithheldText: fmtSatang(group.whtWithheldSatang),
       transferText: fmtSatang(group.transferSatang),
-      offsetText: group.advanceOffsetSatang === 0 ? null : fmtSatang(group.advanceOffsetSatang),
-      offsetCellText: fmtSatang(group.advanceOffsetSatang),
+      offsetText:
+        group.advanceOffsetSatang + group.recoveryOffsetSatang === 0
+          ? null
+          : fmtSatang(group.advanceOffsetSatang + group.recoveryOffsetSatang),
+      offsetCellText: fmtSatang(group.advanceOffsetSatang + group.recoveryOffsetSatang),
     })),
     itemCountText: `${fmtCount(totals.itemCount)} รายการ`,
     totalGrossText: fmtSatang(totals.grossSatang),

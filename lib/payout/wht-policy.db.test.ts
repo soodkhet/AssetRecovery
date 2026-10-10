@@ -135,7 +135,16 @@ async function reset(): Promise<void> {
   } finally {
     await tx.$executeRawUnsafe(`ALTER TABLE wht_certificates ENABLE TRIGGER trg_wht_certificates_no_delete`)
   }
+  // staging E-014 — สมุดย่อยยอดเรียกคืนห้ามลบ (trigger) ⇒ ปิดชั่วคราวเฉพาะตอนล้างข้อมูลทดสอบ
+  await tx.$executeRawUnsafe(`ALTER TABLE payee_recovery_collections DISABLE TRIGGER trg_payee_recovery_collections_no_delete`)
+  try {
+    await tx.$executeRawUnsafe(`DELETE FROM payee_recovery_collections WHERE organization_id = '${ORG_ID}'`)
+  } finally {
+    await tx.$executeRawUnsafe(`ALTER TABLE payee_recovery_collections ENABLE TRIGGER trg_payee_recovery_collections_no_delete`)
+  }
   for (const statement of [
+    `DELETE FROM payee_recoveries WHERE organization_id = '${ORG_ID}'`,
+    `DELETE FROM adjustments WHERE organization_id = '${ORG_ID}'`,
     `DELETE FROM wht_filing_summaries WHERE organization_id = '${ORG_ID}'`,
     `DELETE FROM expense_records WHERE organization_id = '${ORG_ID}'`,
     `DELETE FROM exceptions WHERE organization_id = '${ORG_ID}'`,
@@ -448,6 +457,72 @@ suite('เกณฑ์ ฿1,000 สะสมต่อผู้รับต่อ
     await seedExpense(PAYEE_IN_ID, 'commission', 50_000)
     const second = await payout.createPayoutBatch(ctx, { side: 'inhouse', cutoffDate: CUTOFF, name: null })
     expect(second.batch.whtSatang).toBe(0)
+  })
+})
+
+suite('ยอดเรียกคืนจากผู้รับ (staging E-014)', () => {
+  /** Adjustment ลดยอดรายการเบิก (อนุมัติแล้ว) — ยิง hook ของการอนุมัติครบโดยตรง */
+  async function approvedDecrease(expenseId: string, amountSatang: number): Promise<string | null> {
+    const rows = await db().$queryRawUnsafe<{ id: string }[]>(`
+      INSERT INTO adjustments (organization_id, expense_id, adjustment_type, amount_satang, reason, status, created_by)
+      VALUES ('${ORG_ID}', '${expenseId}', 'decrease', ${amountSatang}, 'ค่าคอมคิดเกิน (เทสต์ E-014)', 'approved', '${FINANCE_ID}')
+      RETURNING id::text AS id
+    `)
+    const { createRecoveryForApprovedAdjustment } = await import('@/lib/payout/recoveries')
+    return createRecoveryForApprovedAdjustment(db() as unknown as Parameters<typeof createRecoveryForApprovedAdjustment>[0], {
+      organizationId: ORG_ID,
+      adjustmentId: rows[0]!.id,
+      adjustmentType: 'decrease',
+      expenseId,
+      amountSatang,
+      actorId: FINANCE_ID,
+      actorRole: 'การเงิน',
+      reason: 'ค่าคอมคิดเกิน (เทสต์ E-014)',
+      meta,
+    })
+  }
+
+  it('ลดยอดรายการที่จ่ายแล้ว ⇒ เกิดยอดเรียกคืน · รอบถัดไปหักจากยอดโอน (หลัง WHT) · ยกเลิกรอบ ⇒ กลับเป็นค้าง', async () => {
+    await seedExpense(PAYEE_IN_ID, 'commission', 150_000)
+    const first = await payout.createPayoutBatch(ctx, { side: 'inhouse', cutoffDate: CUTOFF, name: null })
+    const paidExpenseId = (await db().expense.findFirstOrThrow({ where: { organizationId: ORG_ID } })).id
+
+    // ยังไม่จ่ายจริง ⇒ ไม่เกิดยอดเรียกคืน
+    expect(await approvedDecrease(paidExpenseId, 20_000)).toBeNull()
+    await completeAndSync(first.batch.id)
+    const recoveryId = await approvedDecrease(paidExpenseId, 20_000)
+    expect(recoveryId).not.toBeNull()
+
+    await seedExpense(PAYEE_IN_ID, 'commission', 150_000)
+    const second = await payout.createPayoutBatch(ctx, { side: 'inhouse', cutoffDate: CUTOFF, name: null })
+    // WHT/net ไม่เปลี่ยน · ยอดโอนลดลงเท่ายอดเรียกคืน
+    expect(second.batch.recoveryOffsetSatang).toBe(20_000)
+    expect(second.batch.transferSatang).toBe(second.batch.netSatang - 20_000)
+    expect(second.batch.items[0]?.recoveryOffsetSatang).toBe(20_000)
+
+    await payout.cancelPayoutBatch(ctx, second.batch.id, { reason: 'ทดสอบยกเลิกรอบ', confirmFileNotSent: true })
+    const collections = await db().payeeRecoveryCollection.findMany({ where: { recoveryId: recoveryId! } })
+    expect(collections).toHaveLength(1)
+    expect(collections[0]?.reversedAt).not.toBeNull()
+
+    // รอบใหม่หักได้อีกครั้ง (ยอดกลับเป็นค้าง) — ไม่ซ้ำ ไม่หาย
+    const third = await payout.createPayoutBatch(ctx, { side: 'inhouse', cutoffDate: CUTOFF, name: null })
+    expect(third.batch.recoveryOffsetSatang).toBe(20_000)
+  })
+
+  it('ยอดรอบถัดไปน้อยกว่ายอดเรียกคืน ⇒ หักเท่าที่มี ยกส่วนที่เหลือไปรอบถัดไป · ยอดโอนไม่ติดลบ', async () => {
+    await seedExpense(PAYEE_IN_ID, 'commission', 50_000)
+    const first = await payout.createPayoutBatch(ctx, { side: 'inhouse', cutoffDate: CUTOFF, name: null })
+    await completeAndSync(first.batch.id)
+    const paidExpenseId = (await db().expense.findFirstOrThrow({ where: { organizationId: ORG_ID } })).id
+    await approvedDecrease(paidExpenseId, 40_000)
+
+    await seedExpense(PAYEE_IN_ID, 'fuel', 30_000)
+    const second = await payout.createPayoutBatch(ctx, { side: 'inhouse', cutoffDate: CUTOFF, name: null })
+    expect(second.batch.transferSatang).toBe(0)
+    expect(second.batch.recoveryOffsetSatang).toBe(second.batch.netSatang)
+    const { recoveryOutstandingByPayee } = await import('@/lib/payout/recoveries')
+    expect((await recoveryOutstandingByPayee(ORG_ID, [PAYEE_IN_ID])).get(PAYEE_IN_ID)).toBe(40_000 - second.batch.netSatang)
   })
 })
 

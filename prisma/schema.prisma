@@ -864,6 +864,8 @@ model Organization {
   expenses                       Expense[]
   advances                       Advance[]
   advanceReturns                 AdvanceReturn[]
+  payeeRecoveries                PayeeRecovery[]
+  payeeRecoveryCollections       PayeeRecoveryCollection[]
   substituteReceipts             SubstituteReceipt[]
   substituteReceiptLines         SubstituteReceiptLine[]
   payoutBatches                  PayoutBatch[]
@@ -2787,6 +2789,8 @@ model PayeeProfile {
   expenses           Expense[]
   advances           Advance[]
   advanceReturns     AdvanceReturn[]
+  recoveries         PayeeRecovery[]
+  recoveryCollections PayeeRecoveryCollection[]
   substituteReceipts SubstituteReceipt[]
   payoutItems        PayoutBatchItem[]
   whtCertificates    WhtCertificate[]
@@ -3024,6 +3028,8 @@ model PayoutBatch {
   /// snapshot ยอดหักคืนเงินทดรองรวมของรอบ (มติ PO U30) — หักหลัง WHT ⇒ ยอดโอนจริง = net − ค่านี้
   /// CHECK 0..net_satang อยู่ใน raw SQL `20261005181000_advance_returns`
   advanceOffsetSatang Int @default(0) @map("advance_offset_satang")
+  /// staging E-014 — snapshot ยอดหักคืนยอดเรียกคืนจากผู้รับรวมของรอบ · ยอดโอนจริง = net − advance − ค่านี้
+  recoveryOffsetSatang Int @default(0) @map("recovery_offset_satang")
 
   bankAccountId          String?   @map("bank_account_id") @db.Uuid
   paymentFileUrl         String?   @map("payment_file_url")
@@ -3085,6 +3091,7 @@ model PayoutBatch {
 
   items            PayoutBatchItem[]
   advanceReturns   AdvanceReturn[]
+  recoveryCollections PayeeRecoveryCollection[]
   adjustments      Adjustment[]
   bankTransactions BankTransaction[] @relation("bank_tx_matched_payout")
   whtCertificates  WhtCertificate[]  @relation("wht_cert_payout_batch")
@@ -3116,6 +3123,9 @@ model PayoutBatchItem {
   netSatang           Int @map("net_satang")
   /// snapshot ยอดหักคืนเงินทดรองจากบรรทัดนี้ (มติ PO U30) — หลัง WHT · ยอดโอน = net − ค่านี้ (CHECK 0..net)
   advanceOffsetSatang Int @default(0) @map("advance_offset_satang")
+  /// staging E-014 — ยอดหักคืน "ยอดเรียกคืนจากผู้รับ" จากบรรทัดนี้ (หลังหักคืนเงินทดรอง) · ยอดโอน = net − advance − ค่านี้
+  /// CHECK ≥ 0 และ advance + ค่านี้ ≤ net (raw SQL `20261011120000_payee_recoveries`)
+  recoveryOffsetSatang Int @default(0) @map("recovery_offset_satang")
 
   /// snapshot ณ เวลาสร้าง — Payee level ชนะ Plan level (`18` §6.3)
   taxProfileId      String?            @map("tax_profile_id") @db.Uuid
@@ -3144,6 +3154,7 @@ model PayoutBatchItem {
 
   expenseRecord  ExpenseRecord?
   advanceReturns AdvanceReturn[]
+  recoveryCollections PayeeRecoveryCollection[]
 
   @@unique([payoutBatchId, expenseId])
   @@unique([payoutBatchId, advanceId])
@@ -3446,6 +3457,7 @@ model Adjustment {
   payoutBatch    PayoutBatch?  @relation(fields: [payoutBatchId], references: [id])
   approvedByUser User?         @relation("adjustments_approved_by", fields: [approvedBy], references: [id])
   creditNoteWaivedByUser User? @relation("adjustments_credit_note_waived_by", fields: [creditNoteWaivedBy], references: [id])
+  payeeRecovery  PayeeRecovery?
   createdByUser  User          @relation("adjustments_created_by", fields: [createdBy], references: [id])
   updatedByUser  User?         @relation("adjustments_updated_by", fields: [updatedBy], references: [id])
 
@@ -4298,4 +4310,59 @@ model SettingAssumptionConfirmation {
 
   @@unique([organizationId, assumptionKey], map: "uniq_setting_assumption_confirmation")
   @@map("setting_assumption_confirmations")
+}
+
+
+/// staging E-014 (มติ PO 10/10/2569) — "ยอดเรียกคืนจากผู้รับ": Adjustment ลดยอดรายการเบิกที่**จ่ายไปแล้ว** ⇒ ผู้รับได้เงินเกิน
+/// หักคืนจากยอดโอนสุทธิในรอบจ่ายถัดไป (ต่อจากหักคืนเงินทดรอง — `22` §6.14) · 50 ทวิ เดิมไม่แก้ย้อนหลัง
+/// 1 Adjustment = 1 แถว (UNIQUE) · ยอดค้าง = amount − ผลรวม collections ที่ยังไม่กลับรายการ
+model PayeeRecovery {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String   @map("organization_id") @db.Uuid
+  payeeId        String   @map("payee_id") @db.Uuid
+  adjustmentId   String   @unique @map("adjustment_id") @db.Uuid
+  expenseId      String?  @map("expense_id") @db.Uuid
+  /// ยอดที่ต้องเรียกคืน (= ยอดลดของ Adjustment) — CHECK > 0
+  amountSatang   Int      @map("amount_satang")
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy String    @map("created_by") @db.Uuid
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedBy String?   @map("updated_by") @db.Uuid
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  organization Organization              @relation(fields: [organizationId], references: [id])
+  payee        PayeeProfile              @relation(fields: [payeeId], references: [id])
+  adjustment   Adjustment                @relation(fields: [adjustmentId], references: [id])
+  collections  PayeeRecoveryCollection[]
+
+  @@index([organizationId, payeeId], map: "idx_payee_recoveries_org_payee")
+  @@map("payee_recoveries")
+}
+
+/// staging E-014 — สมุดย่อยการหักคืนยอดเรียกคืนในรอบจ่าย (1 แถวต่อ ยอดเรียกคืน × บรรทัดที่หัก) · insert-only
+/// รอบจ่ายถูกยกเลิก/ตัดรายการ ⇒ **กลับรายการ** (reversed_*) ไม่ลบ ⇒ ยอดค้างกลับมา
+model PayeeRecoveryCollection {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId    String    @map("organization_id") @db.Uuid
+  recoveryId        String    @map("recovery_id") @db.Uuid
+  payeeId           String    @map("payee_id") @db.Uuid
+  payoutBatchId     String    @map("payout_batch_id") @db.Uuid
+  payoutBatchItemId String    @map("payout_batch_item_id") @db.Uuid
+  amountSatang      Int       @map("amount_satang")
+  reversedAt        DateTime? @map("reversed_at") @db.Timestamptz(6)
+  reversedBy        String?   @map("reversed_by") @db.Uuid
+  reversalReason    String?   @map("reversal_reason")
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy         String    @map("created_by") @db.Uuid
+
+  organization    Organization    @relation(fields: [organizationId], references: [id])
+  recovery        PayeeRecovery   @relation(fields: [recoveryId], references: [id])
+  payee           PayeeProfile    @relation(fields: [payeeId], references: [id])
+  payoutBatch     PayoutBatch     @relation(fields: [payoutBatchId], references: [id])
+  payoutBatchItem PayoutBatchItem @relation(fields: [payoutBatchItemId], references: [id])
+
+  @@index([organizationId, recoveryId], map: "idx_payee_recovery_collections_org_recovery")
+  @@index([payoutBatchItemId], map: "idx_payee_recovery_collections_item")
+  @@map("payee_recovery_collections")
 }

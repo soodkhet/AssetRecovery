@@ -390,7 +390,7 @@ describe('02/03/04 — เงินรับ ค่าใช้จ่าย จ�
       },
     ])
     expect(csv.slice(CSV_BOM.length).split('\r\n')[1]).toBe(
-      'PB-2569-06-002,05/07/2569,ประยุทธ์ บุญมี,8245.00,Bank Transfer,PV-2569-PB-2569-06-002-001,0.00,8245.00,0.00',
+      'PB-2569-06-002,05/07/2569,ประยุทธ์ บุญมี,8245.00,Bank Transfer,PV-2569-PB-2569-06-002-001,0.00,8245.00,0.00,0.00',
     )
   })
 
@@ -408,9 +408,9 @@ describe('02/03/04 — เงินรับ ค่าใช้จ่าย จ�
     ])
     const [header, row] = csv.slice(CSV_BOM.length).split('\r\n')
     expect(header).toBe(
-      'payout_batch_ref,payment_date,payee,amount_baht,method,voucher_ref,advance_offset_baht,transfer_baht,wht_paid_by_payer_baht',
+      'payout_batch_ref,payment_date,payee,amount_baht,method,voucher_ref,advance_offset_baht,transfer_baht,wht_paid_by_payer_baht,recovery_offset_baht',
     )
-    expect(row).toBe('PB-2569-06-002,05/07/2569,ประยุทธ์ บุญมี,8245.00,Bank Transfer,PV-2569-PB-2569-06-002-001,550.00,7695.00,0.00')
+    expect(row).toBe('PB-2569-06-002,05/07/2569,ประยุทธ์ บุญมี,8245.00,Bank Transfer,PV-2569-PB-2569-06-002-001,550.00,7695.00,0.00,0.00')
   })
 
   it('มติ PO U105: ภาษีที่บริษัทออกให้ต่อท้ายไฟล์ — ผู้รับได้เงินเต็ม (amount = เงินได้ ไม่หักภาษี)', () => {
@@ -427,7 +427,25 @@ describe('02/03/04 — เงินรับ ค่าใช้จ่าย จ�
     ])
       .slice(CSV_BOM.length)
       .split('\r\n')
-    expect(row).toBe('PB-2569-10-001,06/10/2569,ประยุทธ์ บุญมี,10000.00,Bank Transfer,PV-2569-0100,0.00,10000.00,309.28')
+    expect(row).toBe('PB-2569-10-001,06/10/2569,ประยุทธ์ บุญมี,10000.00,Bank Transfer,PV-2569-0100,0.00,10000.00,309.28,0.00')
+  })
+
+  it('staging E-014: หักคืนยอดเรียกคืนต่อท้ายสุด — transfer_baht หักทั้งเงินทดรองและยอดเรียกคืน', () => {
+    const [, row] = paymentCsv([
+      {
+        batchRef: 'PB-2569-10-002',
+        paymentDate: new Date('2026-10-06T00:00:00Z'),
+        payeeName: 'ประยุทธ์ บุญมี',
+        netSatang: 824_500,
+        voucherRef: 'PV-2569-0101',
+        advanceOffsetSatang: 55_000,
+        whtPaidByPayerSatang: 0,
+        recoveryOffsetSatang: 20_000,
+      },
+    ])
+      .slice(CSV_BOM.length)
+      .split('\r\n')
+    expect(row).toBe('PB-2569-10-002,06/10/2569,ประยุทธ์ บุญมี,8245.00,Bank Transfer,PV-2569-0101,550.00,7495.00,0.00,200.00')
   })
 })
 
