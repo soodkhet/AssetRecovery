@@ -1,5 +1,5 @@
 import { fmtSatangSymbol } from '@/lib/format/money'
-import type { PayoutBatchSide, PayoutBatchStatus } from '@/lib/generated/prisma/enums'
+import type { PayoutBatchSide, PayoutBatchStatus, WhtThresholdScope } from '@/lib/generated/prisma/enums'
 import { canPayoutAction } from '@/lib/payout/payout'
 import type { PayoutBatchDto } from '@/lib/payout/types'
 import type { StatusBadgeGroup } from '@/lib/ui/status-badge'
@@ -159,4 +159,14 @@ export function payoutWhtCertificateLinks(
       certificateNumber: certificate.certificateNumber,
       href: `/api/accounting/wht-certificates/${certificate.id}/pdf`,
     }))
+}
+
+/**
+ * staging E-054 — คำอธิบายเกณฑ์ขั้นต่ำ WHT ในหน้าต่างสร้างรอบจ่าย ตามวิธีนับที่ตั้งไว้จริง
+ * (เดิมข้อความตายตัวว่า "ยอดรวมในรอบจ่ายนี้" ซึ่งผิดเมื่อค่าเริ่มต้นเป็นสะสมต่อเดือน)
+ */
+export function payoutWhtThresholdNote(scope: WhtThresholdScope): string {
+  return scope === 'monthly_cumulative'
+    ? 'เกณฑ์ขั้นต่ำ WHT นับยอดสะสมของผู้รับแต่ละคนทั้งเดือน (รวมรอบจ่ายก่อนหน้าในเดือนเดียวกัน) — ถึงเกณฑ์เมื่อไรหักจากยอดที่ยังไม่เคยหัก'
+    : 'เกณฑ์ขั้นต่ำ WHT นับยอดรวมของผู้รับแต่ละคนในรอบจ่ายนี้เท่านั้น'
 }

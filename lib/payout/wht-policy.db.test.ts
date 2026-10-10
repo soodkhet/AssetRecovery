@@ -465,6 +465,8 @@ suite('สรุปก่อนสร้างรอบจ่าย (staging E-0
     const empty = await payout.previewPayoutBatch(finance, { side: 'inhouse', cutoffDate: CUTOFF }, NOW)
     expect(empty.itemCount).toBe(0)
     expect(empty.blocked).not.toBeNull()
+    // วิธีนับเกณฑ์ WHT มากับผลสรุป — หน้าต่างอธิบายตามค่าตั้งจริง (ค่าเริ่มต้น สะสมต่อเดือน)
+    expect(['monthly_cumulative', 'per_batch']).toContain(empty.whtThresholdScope)
 
     await seedIn1()
     const preview = await payout.previewPayoutBatch(finance, { side: 'inhouse', cutoffDate: CUTOFF }, NOW)

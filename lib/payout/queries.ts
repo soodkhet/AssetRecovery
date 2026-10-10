@@ -20,7 +20,7 @@ import { advanceOffsetLineLabel } from '@/lib/advances/advance'
 import { nextDocumentNumber } from '@/lib/document-numbering/queries'
 import { summarizePayoutBatch } from '@/lib/finance/payout-calc'
 import { Prisma } from '@/lib/generated/prisma/client'
-import type { PayoutBatchSide, PayoutBatchStatus, WhtCondition } from '@/lib/generated/prisma/enums'
+import type { PayoutBatchSide, PayoutBatchStatus, WhtCondition, WhtThresholdScope } from '@/lib/generated/prisma/enums'
 import { maskAccountNumber, payeeAddressLine, payeeDisplayName, payeeLegalName } from '@/lib/payees/payee'
 import { formatBranch } from '@/lib/format/branch'
 import { PayeeError } from '@/lib/payees/errors'
@@ -930,6 +930,8 @@ export interface PayoutBatchPreviewDto {
   netSatang: number
   /** ข้อความเหตุที่สร้างรอบไม่ได้ (ตรงกับ error ตอนกดสร้าง) · `null` = สร้างได้ */
   blocked: string | null
+  /** วิธีนับเกณฑ์ขั้นต่ำ WHT ที่รอบนี้จะใช้ (staging E-054) — หน้าต่างอธิบายให้ตรงค่าตั้งจริง */
+  whtThresholdScope: WhtThresholdScope
 }
 
 export async function previewPayoutBatch(
@@ -960,10 +962,18 @@ export async function previewPayoutBatch(
       grossSatang: totals.grossSatang,
       netSatang: totals.netSatang,
       blocked,
+      whtThresholdScope: whtPolicy.values.thresholdScope,
     }
   } catch (error) {
     if (error instanceof PayoutError || error instanceof PayeeError) {
-      return { itemCount: 0, payeeCount: 0, grossSatang: 0, netSatang: 0, blocked: error.userMessage }
+      return {
+        itemCount: 0,
+        payeeCount: 0,
+        grossSatang: 0,
+        netSatang: 0,
+        blocked: error.userMessage,
+        whtThresholdScope: whtPolicy.values.thresholdScope,
+      }
     }
     throw error
   }

@@ -195,7 +195,11 @@ function PortalMobileHeader({
   navItems: readonly PortalNavItem[]
   activeKey: PortalNavKey | null
 }) {
-  const [open, setOpen] = useState(false)
+  // จำว่าเปิดเมนูไว้ที่หน้าไหน — หน้าเปลี่ยน (เช่น Back ก่อน sentinel ของเมนูถูกวาง) ⇒ เมนูปิดเอง ไม่ค้างทับหน้าใหม่
+  const pathname = usePathname()
+  const [openedAt, setOpenedAt] = useState<string | null>(null)
+  const open = openedAt === pathname
+  const setOpen = (value: boolean) => setOpenedAt(value ? pathname : null)
 
   return (
     <>

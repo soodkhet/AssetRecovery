@@ -5,6 +5,7 @@ import { callApi } from '@/lib/api/types'
 import { fmtDate } from '@/lib/format/datetime'
 import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
 import type { PayoutBatchPreviewDto } from '@/lib/payout/queries'
+import { payoutWhtThresholdNote } from '@/lib/payout/payout-ui'
 import { resolveDueDate } from '@/lib/settings/cycles'
 import type { CycleDto } from '@/lib/settings/types'
 
@@ -67,6 +68,7 @@ export function PayoutPreview({
       ) : (
         <p className="text-amber-700">ไม่มีรายการที่อนุมัติแล้วถึงวันตัดรอบนี้</p>
       )}
+      {current?.data != null && <p className="mt-1 text-slate-500">{payoutWhtThresholdNote(current.data.whtThresholdScope)}</p>}
       {current?.data?.blocked != null && current.data.itemCount > 0 && (
         <p className="mt-1 text-red-600">สร้างรอบนี้ยังไม่ได้: {current.data.blocked}</p>
       )}

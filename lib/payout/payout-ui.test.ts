@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { PayoutBatchDto } from '@/lib/payout/types'
 import {
+  payoutWhtThresholdNote,
   payoutWhtCertificateLinks,
   canCancelPayout,
   canCompletePayout,
@@ -150,5 +151,12 @@ describe('payoutWhtCertificateLinks (staging E-052)', () => {
 
   it('รอบที่ยังไม่จ่ายสำเร็จ — ไม่มีปุ่ม', () => {
     expect(payoutWhtCertificateLinks('file_generated', certs)).toEqual([])
+  })
+})
+
+describe('payoutWhtThresholdNote — staging E-054', () => {
+  it('ข้อความตามวิธีนับที่ตั้งไว้', () => {
+    expect(payoutWhtThresholdNote('monthly_cumulative')).toContain('ทั้งเดือน')
+    expect(payoutWhtThresholdNote('per_batch')).toContain('ในรอบจ่ายนี้เท่านั้น')
   })
 })
