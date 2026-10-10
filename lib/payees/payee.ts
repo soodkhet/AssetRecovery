@@ -419,3 +419,11 @@ export function toPayeeAuditPayload(values: PayeeValues): Record<string, unknown
     income_category_override: normalized.incomeCategoryOverride,
   }
 }
+
+/** staging E-035 — เลขประจำตัวผู้เสียภาษีแบบปิดบัง (เห็น 4 ตัวท้าย) สำหรับหน้าข้อมูลรับเงินของพนักงานเอง */
+export function maskNationalId(value: string | null): string | null {
+  const digits = (value ?? '').replace(/\D/g, '')
+  if (digits === '') return null
+  if (digits.length <= 4) return digits
+  return `${'•'.repeat(digits.length - 4)}${digits.slice(-4)}`
+}

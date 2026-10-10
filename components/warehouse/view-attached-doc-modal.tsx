@@ -69,7 +69,11 @@ export function ViewAttachedDocModal({
                   {slot.ordinal} {slot.label}
                 </div>
                 <div className="mt-0.5 truncate font-mono text-[11px] text-slate-500">
-                  {slot.fileUrl === null ? 'ไม่พบไฟล์ที่แนบไว้' : lotDocumentFileName(slot.document, slot.fileUrl)}
+                  {slot.fileUrl !== null
+                    ? lotDocumentFileName(slot.document, slot.fileUrl)
+                    : lot.documentsRestricted === true
+                      ? 'เอกสารทั้งล็อตดูได้เฉพาะคลังและการเงิน'
+                      : 'ไม่พบไฟล์ที่แนบไว้'}
                 </div>
               </div>
               <Button

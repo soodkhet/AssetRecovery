@@ -76,6 +76,8 @@ export interface LotSummaryDto {
 }
 
 export interface LotDetailDto extends LotSummaryDto {
+  /** staging E-046 — เอกสารทั้งล็อตถูกซ่อนตามสิทธิ์ (scope ทีม — มติ PO U22) · ไม่ระบุ = ไม่ซ่อน */
+  documentsRestricted?: boolean
   contactPerson: string | null
   deliveryAddr: string | null
   trackingNo: string | null

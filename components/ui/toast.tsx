@@ -34,7 +34,8 @@ interface ToastContextValue {
 
 const ToastContext = createContext<ToastContextValue | null>(null)
 
-const DEFAULT_DURATION_MS = 4000
+/** staging E-031 — 4 วินาทีสั้นไปบนมือถือ (ผู้ใช้มองการ์ดที่หายไป ไม่ทันเห็นข้อความ) */
+const DEFAULT_DURATION_MS = 6000
 
 /**
  * session หมด ⇒ กล่อง "เซสชันหมดอายุ" บอกผู้ใช้อยู่แล้ว — toast error ของคำขอเดียวกันที่ผู้เรียกแสดงต่อ (เช่น
@@ -42,7 +43,14 @@ const DEFAULT_DURATION_MS = 4000
  */
 const SESSION_LOST_TOAST_QUIET_MS = 5000
 
-export function ToastProvider({ children }: { children: ReactNode }) {
+export function ToastProvider({
+  children,
+  aboveBottomNav = false,
+}: {
+  children: ReactNode
+  /** staging E-031 — หน้าที่มีแถบเมนูล่างบนมือถือ (ภาคสนาม) ⇒ ยก toast ขึ้นเหนือแถบ ไม่ให้ถูกบังจนดูเหมือนไม่มีข้อความ */
+  aboveBottomNav?: boolean
+}) {
   const [toasts, setToasts] = useState<readonly Toast[]>([])
   const nextId = useRef(1)
   const sessionLostAt = useRef<number | null>(null)
@@ -80,7 +88,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <ToastViewport toasts={toasts} onDismiss={dismissToast} />
+      <ToastViewport toasts={toasts} onDismiss={dismissToast} aboveBottomNav={aboveBottomNav} />
     </ToastContext.Provider>
   )
 }
@@ -100,12 +108,25 @@ const TONE_CLASS: Readonly<Record<ToastTone, string>> = {
   info: 'border-blue-200 bg-blue-50 text-blue-700',
 }
 
-function ToastViewport({ toasts, onDismiss }: { toasts: readonly Toast[]; onDismiss: (id: number) => void }) {
+function ToastViewport({
+  toasts,
+  onDismiss,
+  aboveBottomNav,
+}: {
+  toasts: readonly Toast[]
+  onDismiss: (id: number) => void
+  aboveBottomNav: boolean
+}) {
   if (toasts.length === 0) return null
 
   return (
     // มือถือ: ยึดขอบซ้าย-ขวา 16px — เดิม `w-full` + `right-4` กว้างเท่าจอแล้วเลื่อนเข้ามา 16px ⇒ ขอบซ้ายถูกตัด (preship R9-008)
-    <div className="pointer-events-none fixed right-4 bottom-4 left-4 z-[60] flex flex-col gap-2 sm:left-auto sm:w-full sm:max-w-sm">
+    <div
+      className={cn(
+        'pointer-events-none fixed right-4 left-4 z-[60] flex flex-col gap-2 sm:left-auto sm:w-full sm:max-w-sm',
+        aboveBottomNav ? 'bottom-[calc(5rem+env(safe-area-inset-bottom))] lg:bottom-4' : 'bottom-4',
+      )}
+    >
       {toasts.map((toast) => (
         <div
           key={toast.id}

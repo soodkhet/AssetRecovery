@@ -62,6 +62,7 @@ const NAV_ICON: Readonly<Record<FieldNavId, (props: { className?: string }) => R
   expenses: IconWallet,
   advances: IconBanknote,
   income: IconChart,
+  profile: IconUser,
 }
 
 function NavBadge({ count, tone }: { count: number; tone: 'red' | 'purple' }) {
@@ -396,7 +397,7 @@ function ShellFrame({ session, children }: { session: ClientSession; children: R
 export function FieldShell({ session, children }: { session: ClientSession; children: ReactNode }) {
   return (
     <PermissionProvider session={session}>
-      <ToastProvider>
+      <ToastProvider aboveBottomNav>
         <FieldCasesProvider>
           {/* auto-popup คำขอเปลี่ยนผู้รับผิดชอบอยู่ระดับ shell — เด้งได้ทุกหน้าใต้ `/field` (`41` §7.8) */}
           <FieldReassignmentProvider>

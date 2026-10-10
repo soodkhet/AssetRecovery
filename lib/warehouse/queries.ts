@@ -14,7 +14,11 @@ import { isCompanySideViewer } from '@/lib/auth/scope'
 import type { SessionUser } from '@/lib/auth/types'
 import { notifyExpensesAwaitingApproval } from '@/lib/notifications/approval-queue'
 import { dispatchNotification, dispatchToCapability } from '@/lib/notifications/dispatch'
-import { assetIntakeRejectedMessage, lotConfirmedMessage } from '@/lib/notifications/messages'
+import {
+  assetIntakeRejectedManagerMessage,
+  assetIntakeRejectedMessage,
+  lotConfirmedMessage,
+} from '@/lib/notifications/messages'
 import { nextAssetStatus, isIntakeRetry } from '@/lib/warehouse/asset-status'
 import type { WarehouseTxClient } from '@/lib/warehouse/asset-hook'
 import { WarehouseError } from '@/lib/warehouse/errors'
@@ -588,6 +592,25 @@ export async function rejectAssetIntake(
     { organizationId: user.organizationId, userIds: agentId === undefined ? [] : [agentId] },
     assetIntakeRejectedMessage({ caseRef: current.caseRef, reason }),
   )
+  // staging E-042 — ผู้จัดการ/หัวหน้าทีมของเคสได้รับแจ้งด้วย (ประสานพนักงานส่งเครื่องใหม่นอกระบบ)
+  const teamId = current.case.assignedTeamId
+  if (teamId !== null) {
+    const managers = await prisma.teamManager.findMany({
+      where: { teamId, user: { status: 'active', deletedAt: null } },
+      select: { userId: true },
+    })
+    const managerIds = managers.map((row) => row.userId).filter((id) => id !== agentId && id !== user.id)
+    if (managerIds.length > 0) {
+      dispatchNotification(
+        { organizationId: user.organizationId, userIds: managerIds },
+        assetIntakeRejectedManagerMessage({
+          caseRef: current.caseRef,
+          agentName: current.case.assignments[0]?.agent.fullName ?? null,
+          reason,
+        }),
+      )
+    }
+  }
 
   return detail
 }
@@ -745,7 +768,10 @@ export async function getLot(user: SessionUser, lotId: string): Promise<LotDetai
   })
   const detail = toLotDetail(row, assets.map((asset) => assetItemFor(user, asset)))
   // ใบเซ็นรับ/หลักฐานจัดส่งเป็นเอกสารทั้งล็อต (มีเครื่องทีมอื่นปน) ⇒ scope ทีมไม่เห็นไฟล์ (ตรงกับ `authorizeDownload()`)
-  return isTeamScopedViewer(user) ? { ...detail, signedDocUrl: null, deliveryProofUrl: null } : detail
+  // staging E-046 — บอกหน้าจอว่า "ซ่อนตามสิทธิ์" ไม่ใช่ไฟล์หาย
+  return isTeamScopedViewer(user)
+    ? { ...detail, signedDocUrl: null, deliveryProofUrl: null, documentsRestricted: true }
+    : { ...detail, documentsRestricted: false }
 }
 
 // ── POST /api/handover-lots (`44` §6.2 · §9.2) ──────────────────────────────

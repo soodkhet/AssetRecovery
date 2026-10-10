@@ -5,6 +5,7 @@ import { StoredFileButton } from '@/components/uploads/stored-file-button'
 import { Button, InlineAlert, Modal, RefText } from '@/components/ui'
 import type { CompensationApprovalDto } from '@/lib/compensation/approval-types'
 import { EXPENSE_STATUS_LABEL, EXPENSE_TYPE_LABEL } from '@/lib/field/expense-ui'
+import { googleMapsRouteUrl } from '@/lib/field/field-ui'
 import { fmtDate, fmtDateTime } from '@/lib/format/datetime'
 import { fmtSatangSymbol } from '@/lib/format/money'
 
@@ -36,6 +37,26 @@ export function ExpenseDetailModal({ item, onClose }: { item: CompensationApprov
           <span className="font-semibold">{fmtSatangSymbol(item.grossSatang)}</span>
           <span className="block text-[11px] text-slate-500">{item.basisText}</span>
         </Row>
+        {/* staging E-044 — ค่าน้ำมันตามกิโลเมตร: เปิดเส้นทางจุดเริ่ม → จุดเช็คอินบนแผนที่ก่อนอนุมัติ */}
+        {item.fuelRoute !== undefined && item.fuelRoute.length > 0 && (
+          <Row label="เส้นทางวันนั้น">
+            <span className="block text-[11px] text-slate-600">
+              {item.fuelRoute.map((point) => point.label).join(' → ')}
+            </span>
+            {googleMapsRouteUrl(item.fuelRoute) !== null ? (
+              <a
+                href={googleMapsRouteUrl(item.fuelRoute) ?? undefined}
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs font-semibold text-emerald-700 underline"
+              >
+                เปิดเส้นทางใน Google Maps
+              </a>
+            ) : (
+              <span className="text-[11px] text-slate-400">มีจุดเดียว — ดูเส้นทางไม่ได้</span>
+            )}
+          </Row>
+        )}
         <Row label="สถานะ">{EXPENSE_STATUS_LABEL[item.status]}</Row>
         {item.recordedByName !== null && <Row label="บันทึกแทนโดย">{item.recordedByName}</Row>}
         {item.sharedWithName !== null && <Row label="ผู้พักร่วม">{item.sharedWithName}</Row>}

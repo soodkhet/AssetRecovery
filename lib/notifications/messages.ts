@@ -315,6 +315,20 @@ export function assetIntakeRejectedMessage(input: {
   }
 }
 
+/** staging E-042 — ผู้จัดการ/หัวหน้าทีมของเคส (ผู้ตรวจกรณี IMEI ไม่ตรง — `44` §5) ได้รับแจ้งด้วย · ลิงก์หน้าคลัง (เห็นเครื่องของทีม — U22) */
+export function assetIntakeRejectedManagerMessage(input: {
+  caseRef: string
+  agentName: string | null
+  reason: string
+}): NotificationMessage {
+  return {
+    eventCode: 'asset.intake_rejected',
+    title: 'คลังตีกลับการรับเข้า (เคสในทีม)',
+    body: withReason(`เคส ${input.caseRef}${input.agentName === null ? '' : ` · ผู้รับผิดชอบ ${input.agentName}`}`, input.reason),
+    linkPath: '/warehouse',
+  }
+}
+
 export function lotConfirmedMessage(input: {
   lotId: string
   lotNumber: string

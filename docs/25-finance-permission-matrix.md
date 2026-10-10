@@ -35,6 +35,7 @@
 | v2.18 | 07/10/2569 | **มติ PO U155 → U159 (DEC-016)**: §7.1 เพิ่ม `manage_device_catalog` (หน้า Model Phone `13` §6.18) — ธุรการ manage · บริหาร view · Superadmin โดยนิยาม · ไม่ล็อก · เหตุผลไม่บังคับ · ตัวเลือกในฟอร์มรับเคส (`GET /api/device-catalog/options`) เปิดให้ผู้ถือ capability สร้าง/แก้เคส (`record_admin_data`/`approve_case`/`assign_case`) หรือ `manage_device_catalog` |
 | v2.19 | 07/10/2569 | **มติ PO U160**: §7.2 แถว "ขอเงินทดรองแทนผู้อื่น" = `manage:approve_advance` อย่างเดียว (การเงิน ✅ · ไม่ต้องถือ `manage:request_advance`) · ขอให้ตัวเองยังต้อง `manage:request_advance` · `POST /api/advances` ประตู = any-of 2 capability แล้วแยกตรวจตามกรณี — capability เดิม ไม่เพิ่มตัวใหม่ |
 | v2.20 | 07/10/2569 | **มติ PO U166 → U167 (DEC-017)**: §7.1 แถว `manage_device_catalog` อัปเดตคำอธิบาย — ปุ่มดึงข้อมูลเดิม (RapidAPI) ถูกแทนด้วย อัปเดต/นำเข้าฐาน TAC + ผูก TAC เอง + ตัวเลือกความจุ/สี · ไม่มี capability ใหม่ · `GET /api/device-catalog/tac-lookup` + `/attributes` เปิดให้ผู้สร้าง/แก้เคสด้วย |
+| v2.21 | 11/10/2569 | **staging E-035** — พนักงานภาคสนามอ่านข้อมูลรับเงินของ**ตัวเอง**ได้ (`GET /api/field/me/payee` · capability ภาคสนามเดิม · scope self ไม่มีพารามิเตอร์ id · เลขบัญชี/เลขผู้เสียภาษีปิดบัง) — ไม่ได้เพิ่มสิทธิ์ `manage_payee_profile` |
 
 ขอบเขตเอกสารนี้: รวม Permission Requirement ของทุกไฟล์ในโมดูล Finance/Accounting เป็น matrix เดียวตาม Role — ให้เห็นภาพรวมว่าแต่ละ role ทำอะไรได้บ้างทั้งระบบ
 

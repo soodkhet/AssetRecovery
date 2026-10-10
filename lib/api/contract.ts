@@ -316,6 +316,13 @@ export const API_CONTRACT = {
     source: '41 §6.6 · 45 §6.3',
     summary: 'รายชื่อเพื่อนร่วมทีมของผู้เรียก (ตัวเลือก "พักร่วมกับ" ของฟอร์มเบิกที่พัก)',
   },
+  'field.mePayee': {
+    method: 'GET',
+    path: '/api/field/me/payee',
+    module: 'field',
+    source: '41 §7.12 · 45 §6.3 (staging E-035)',
+    summary: 'ข้อมูลรับเงินของผู้เรียกเอง (อ่านอย่างเดียว · ปิดบังเลขบัญชี/เลขผู้เสียภาษี)',
+  },
   'field.incomeSummary': {
     method: 'GET',
     path: '/api/field/income-summary',

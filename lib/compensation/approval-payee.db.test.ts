@@ -873,6 +873,25 @@ suite('Phase 3.2 — Compensation Approval หลายขั้น (`16`)', () 
 
 // ── มติ PO U131: ข้อมูลรับเงินในฟอร์มผู้ใช้ + ป้าย "ข้อมูลรับเงินไม่ครบ" ─────────────────────────
 
+suite('staging E-035 — ข้อมูลรับเงินของพนักงานเอง (อ่านอย่างเดียว · ปิดบัง)', () => {
+  it('เห็นเฉพาะของตัวเอง · เลขบัญชี/เลขผู้เสียภาษีปิดบัง · ยังไม่มีข้อมูล ⇒ exists = false', async () => {
+    const { getOwnPayeeSummary } = await import('@/lib/payees/self')
+    expect((await getOwnPayeeSummary(agent)).exists).toBe(false)
+
+    await seedPayee(AGENT_ID)
+    const own = await getOwnPayeeSummary(agent)
+    expect(own).toMatchObject({
+      exists: true,
+      bankName: 'กสิกรไทย',
+      accountNumberMasked: '••••••7890',
+      nationalIdMasked: '•••••••••0123',
+      recoveryOutstandingSatang: 0,
+    })
+    // ผู้ใช้คนอื่น (การเงิน) ไม่มีข้อมูลรับเงิน ⇒ ไม่เห็นของพนักงาน
+    expect((await getOwnPayeeSummary(finance)).exists).toBe(false)
+  })
+})
+
 suite('U131 — ข้อมูลรับเงินในฟอร์มผู้ใช้เจ้าหน้าที่ติดตามทรัพย์', () => {
   /** ผู้ดูแลที่เพิ่ม/แก้ผู้ใช้ได้ + ถือสิทธิ์ผู้รับเงินระดับ manage (เหมือนการเงิน) */
   const admin = sessionUser({

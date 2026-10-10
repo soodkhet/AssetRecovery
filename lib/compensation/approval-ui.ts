@@ -174,3 +174,34 @@ export function whtAmountHint(item: {
   parts.push(item.whtFromPayout ? 'ยอดตามรอบจ่ายที่บันทึกแล้ว' : 'ยอดคาดการณ์ — ยอดจริงคิดตอนสร้างรอบจ่าย')
   return parts.join(' · ')
 }
+
+/**
+ * staging E-045 — แถวที่เลือกอนุมัติพร้อมกันได้ = แถวที่ผู้ใช้กด "อนุมัติ" ได้อยู่แล้ว (state machine + ขั้นที่รออยู่)
+ * server ยังอนุมัติทีละรายการ (ยามขั้น/แยกหน้าที่/audit แยกต่อรายการเหมือนกดทีละแถว)
+ */
+export function bulkApprovableIds(
+  items: readonly CompensationApprovalDto[],
+  canApprove: boolean,
+): string[] {
+  return items
+    .filter((item) => expenseRowActions({ status: item.status, canApprove: canApprove && item.viewerCanAct }).includes('approve'))
+    .map((item) => item.id)
+}
+
+/** สรุปยอดในกล่องยืนยัน "อนุมัติที่เลือก" (staging E-045) */
+export function bulkApproveSummary(items: readonly CompensationApprovalDto[]): { count: number; grossSatang: number; netSatang: number } {
+  return {
+    count: items.length,
+    grossSatang: items.reduce((sum, item) => sum + item.grossSatang, 0),
+    netSatang: items.reduce((sum, item) => sum + item.netSatang, 0),
+  }
+}
+
+/** staging E-045 — รายการที่ส่งใหม่หลังถูกตีกลับ (มีคำชี้แจงตอนส่งใหม่) และยังรออนุมัติ ⇒ ป้าย "ส่งใหม่" */
+export function isResubmittedClaim(item: Pick<CompensationApprovalDto, 'status' | 'resubmitNote'>): boolean {
+  return (
+    (item.status === 'pending_approval' || item.status === 'pending_finance_approval') &&
+    item.resubmitNote !== null &&
+    item.resubmitNote.trim() !== ''
+  )
+}

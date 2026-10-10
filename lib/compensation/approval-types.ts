@@ -29,6 +29,8 @@ export interface CompensationApprovalDto {
   /** `YYYY-MM-DD` (คอลัมน์ `DATE`) — display แปลงเป็น พ.ศ. ที่ layer บนสุด (Rule 01) */
   expenseDate: string
   distanceKm: string | null
+  /** staging E-044 — ค่าน้ำมันตามกิโลเมตร: จุดเริ่มเดินทาง + จุดเช็คอินของวันนั้น (ตามลำดับ) · ไม่มี = ว่าง/ไม่ระบุ */
+  fuelRoute?: readonly { label: string; latitude: number; longitude: number }[]
   calculationSource: string | null
   /**
    * ข้อความ "สูตร / ฐานคิด" ที่ตารางแสดง (`16` §8 — เช่น "128.50 กม. × 3.50 บาท/กม.")

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { FIELD_STATUSES } from '@/lib/field/field-status'
 import {
+  googleMapsRouteUrl,
   FIELD_STATUS_LABEL,
   assetSummary,
   casesScheduledOn,
@@ -251,5 +252,17 @@ describe('ที่อยู่ + ช่องทางติดต่อ (`41` 
       assetSummary({ assetDescription: 'iPhone 15', assetCapacity: '128GB', assetColor: 'ดำ', imei: '123456789012345' }),
     ).toBe('iPhone 15 · 128GB · ดำ (IMEI: 123456789012345)')
     expect(assetSummary({ assetDescription: 'iPhone 15', assetCapacity: null, assetColor: 'ขาว' })).toBe('iPhone 15 · ขาว')
+  })
+})
+
+describe('googleMapsRouteUrl (staging E-044)', () => {
+  it('จุดเริ่ม → เช็คอิน เป็นลิงก์เส้นทาง · น้อยกว่า 2 จุด = null', () => {
+    expect(
+      googleMapsRouteUrl([
+        { label: 'จุดเริ่มเดินทาง', latitude: 13.7563, longitude: 100.5018 },
+        { label: 'เช็คอิน 1', latitude: 13.8, longitude: 100.55 },
+      ]),
+    ).toBe('https://www.google.com/maps/dir/13.756300,100.501800/13.800000,100.550000')
+    expect(googleMapsRouteUrl([{ label: 'x', latitude: 1, longitude: 2 }])).toBeNull()
   })
 })

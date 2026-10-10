@@ -21,6 +21,7 @@ import {
   Badge,
   Button,
   Card,
+  ConfirmModal,
   FilterGroup,
   InlineAlert,
   RefText,
@@ -49,6 +50,9 @@ import type { CompensationApprovalDto } from '@/lib/compensation/approval-types'
 import {
   CLAIM_STATUS_FILTERS,
   approvalStepText,
+  bulkApprovableIds,
+  bulkApproveSummary,
+  isResubmittedClaim,
   claimSourceLabel,
   expenseRowActions,
   expenseRowHighlight,
@@ -104,6 +108,21 @@ export function ApprovalTab() {
 
   const visibleClaims =
     claimFilter === 'all' ? claims.items : claims.items.filter((item) => item.status === claimFilter)
+  // staging E-045 — เลือกหลายแถวแล้วอนุมัติครั้งเดียว (เฉพาะแถวที่กดอนุมัติได้อยู่แล้ว)
+  const [selectedClaims, setSelectedClaims] = useState<ReadonlySet<string>>(new Set())
+  const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false)
+  const approvableIds = bulkApprovableIds(visibleClaims, claims.canApprove)
+  const selectedForApproval = visibleClaims.filter((item) => approvableIds.includes(item.id) && selectedClaims.has(item.id))
+  const bulkSummary = bulkApproveSummary(selectedForApproval)
+  const allApprovableSelected = approvableIds.length > 0 && selectedForApproval.length === approvableIds.length
+  const toggleClaim = (id: string, checked: boolean): void => {
+    setSelectedClaims((current) => {
+      const next = new Set(current)
+      if (checked) next.add(id)
+      else next.delete(id)
+      return next
+    })
+  }
   const overdueCount = countOverdue(advances)
   // ระหว่างโหลด/โหลดไม่สำเร็จ KPI ต้องเป็น "—" ไม่ใช่ ฿0.00/0 ที่อ่านเหมือนไม่มียอดค้าง (preship R2-007)
   const claimsReady = !claims.loading && claims.error === null
@@ -149,6 +168,11 @@ export function ApprovalTab() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            {selectedForApproval.length > 0 && (
+              <Button size="sm" onClick={() => setBulkConfirmOpen(true)}>
+                อนุมัติที่เลือก ({selectedForApproval.length})
+              </Button>
+            )}
             <FilterGroup options={CLAIM_STATUS_FILTERS} value={claimFilter} onChange={setClaimFilter} />
             {canCreateClaim && (
               <Button size="sm" onClick={() => setClaimFormOpen(true)}>
@@ -162,6 +186,17 @@ export function ApprovalTab() {
           <Table>
             <THead>
               <Tr>
+                {approvableIds.length > 0 && (
+                  <Th className="w-8">
+                    <input
+                      type="checkbox"
+                      aria-label="เลือกทุกรายการที่อนุมัติได้"
+                      checked={allApprovableSelected}
+                      onChange={() => setSelectedClaims(allApprovableSelected ? new Set() : new Set(approvableIds))}
+                      className="focus-ring h-4 w-4 rounded border-slate-300"
+                    />
+                  </Th>
+                )}
                 <Th>วันที่ / อ้างอิง</Th>
                 <Th>ประเภท</Th>
                 <Th>ผู้เบิก / ทีม</Th>
@@ -176,7 +211,7 @@ export function ApprovalTab() {
               error={claims.error}
               isEmpty={visibleClaims.length === 0}
               emptyTitle="ไม่มีรายการตามตัวกรองนี้"
-              colSpan={6}
+              colSpan={approvableIds.length > 0 ? 7 : 6}
             />
             <TBody>
               {!claims.loading &&
@@ -195,6 +230,20 @@ export function ApprovalTab() {
                       className={expenseRowHighlight(item.status) ?? undefined}
                       onClick={() => setDetailTarget(item)}
                     >
+                      {approvableIds.length > 0 && (
+                        <Td>
+                          {approvableIds.includes(item.id) && (
+                            <input
+                              type="checkbox"
+                              aria-label={`เลือกรายการของ ${item.payeeName}`}
+                              checked={selectedClaims.has(item.id)}
+                              onClick={(event) => event.stopPropagation()}
+                              onChange={(event) => toggleClaim(item.id, event.target.checked)}
+                              className="focus-ring h-4 w-4 rounded border-slate-300"
+                            />
+                          )}
+                        </Td>
+                      )}
                       <Td>
                         <p className="text-[11px] text-slate-400">{fmtDate(item.expenseDate)}</p>
                         <RefText>{item.caseRef ?? '— ไม่ผูกเคส'}</RefText>
@@ -238,6 +287,12 @@ export function ApprovalTab() {
                         <div className="mt-1">
                           <Badge>{approvalStepText(item)}</Badge>
                         </div>
+                        {/* staging E-045 — ส่งใหม่หลังถูกตีกลับ */}
+                        {isResubmittedClaim(item) && (
+                          <div className="mt-1">
+                            <StatusBadge status="resubmitted" group="info" label="ส่งใหม่" />
+                          </div>
+                        )}
                         {item.rejectReason !== null && (
                           <p className="mt-1 max-w-[180px] text-[10px] text-orange-700">
                             เหตุผล: {item.rejectReason}
@@ -439,6 +494,26 @@ export function ApprovalTab() {
       )}
 
       <CalcDetailModal item={formulaTarget} onClose={() => setFormulaTarget(null)} />
+
+      <ConfirmModal
+        open={bulkConfirmOpen}
+        onClose={() => setBulkConfirmOpen(false)}
+        onConfirm={() => {
+          setBulkConfirmOpen(false)
+          void claims.approveMany(selectedForApproval).then(() => setSelectedClaims(new Set()))
+        }}
+        title={`อนุมัติ ${bulkSummary.count} รายการ`}
+        description="ระบบอนุมัติทีละรายการตามขั้นที่รออยู่ — รายการที่อนุมัติไม่ได้จะแจ้งชื่อไว้ ส่วนที่เหลือยังอนุมัติตามปกติ"
+        confirmLabel={`ยืนยันอนุมัติ ${bulkSummary.count} รายการ`}
+        confirmVariant="primary"
+      >
+        <dl className="grid grid-cols-2 gap-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs">
+          <dt className="text-slate-500">ยอดก่อนหักภาษีรวม</dt>
+          <dd className="text-right font-semibold text-slate-800">{fmtSatangSymbol(bulkSummary.grossSatang)}</dd>
+          <dt className="text-slate-500">ยอดสุทธิรวม</dt>
+          <dd className="text-right font-semibold text-emerald-700">{fmtSatangSymbol(bulkSummary.netSatang)}</dd>
+        </dl>
+      </ConfirmModal>
 
       <ReasonConfirmModal
         maxLength={REASON_MAX}

@@ -29,6 +29,8 @@ export interface ApprovalActions {
   canApprove: boolean
   reload: () => Promise<void>
   approve: (item: CompensationApprovalDto) => Promise<void>
+  /** staging E-045 — อนุมัติหลายรายการ (ยิงทีละรายการ · สรุปผลครั้งเดียว · โหลดคิวใหม่ครั้งเดียว) */
+  approveMany: (items: readonly CompensationApprovalDto[]) => Promise<{ approved: number; failed: number }>
   reject: (item: CompensationApprovalDto, reason: string) => Promise<boolean>
   /** ปฏิเสธถาวร (ใบเบิกค่าที่พัก — มติ PO U117) · เฉพาะ `/api/claims` */
   rejectPermanent: (item: CompensationApprovalDto, reason: string) => Promise<boolean>
@@ -119,6 +121,36 @@ export function useApprovalActions(endpoint: '/api/compensation' | '/api/claims'
     [endpoint, markBusy, reload, showToast],
   )
 
+  const approveMany = useCallback(
+    async (targets: readonly CompensationApprovalDto[]) => {
+      for (const item of targets) markBusy(item.id, true)
+      let approved = 0
+      const failures: string[] = []
+      try {
+        // ทีละรายการตามลำดับ — server ตรวจขั้น/แยกหน้าที่ และลง audit แยกต่อรายการ เหมือนกดทีละแถว
+        for (const item of targets) {
+          const result = await callApi(`${endpoint}/${item.id}/approve`, jsonRequest('PATCH', { step: item.approvalStepCurrent }))
+          if (result.error === undefined) approved += 1
+          else failures.push(`${item.payeeName} (${approvalErrorToast(result.error).message})`)
+        }
+        if (failures.length === 0) {
+          showToast({ tone: 'success', title: `อนุมัติแล้ว ${approved} รายการ` })
+        } else {
+          showToast({
+            tone: approved > 0 ? 'warning' : 'error',
+            title: `อนุมัติแล้ว ${approved} รายการ · ไม่สำเร็จ ${failures.length} รายการ`,
+            description: failures.slice(0, 3).join(' · ') + (failures.length > 3 ? ' …' : ''),
+          })
+        }
+        await reload()
+      } finally {
+        for (const item of targets) markBusy(item.id, false)
+      }
+      return { approved, failed: failures.length }
+    },
+    [endpoint, markBusy, reload, showToast],
+  )
+
   const reject = useCallback(
     async (item: CompensationApprovalDto, reason: string) => {
       markBusy(item.id, true)
@@ -172,5 +204,5 @@ export function useApprovalActions(endpoint: '/api/compensation' | '/api/claims'
     [markBusy, reload, showToast],
   )
 
-  return { items, loading, error, isBusy, canApprove, reload, approve, reject, rejectPermanent }
+  return { items, loading, error, isBusy, canApprove, reload, approve, approveMany, reject, rejectPermanent }
 }

@@ -19,6 +19,7 @@ export const FIELD_NAV_IDS = [
   'expenses',
   'advances',
   'income',
+  'profile',
 ] as const
 export type FieldNavId = (typeof FIELD_NAV_IDS)[number]
 
@@ -138,6 +139,18 @@ export const FIELD_NAV_ITEMS: readonly FieldNavItem[] = [
     label: 'สรุปรายได้',
     menuLabel: 'สรุปรายได้',
     href: '/field/income',
+    section: 'finance',
+    bottomNavOrder: null,
+    badge: null,
+    badgeTone: null,
+    group: null,
+  },
+  // staging E-035 (มติ PO 10/10/2569) — ข้อมูลรับเงินของตัวเอง อ่านอย่างเดียว
+  {
+    id: 'profile',
+    label: 'ข้อมูลรับเงิน',
+    menuLabel: 'ข้อมูลรับเงิน',
+    href: '/field/profile',
     section: 'finance',
     bottomNavOrder: null,
     badge: null,

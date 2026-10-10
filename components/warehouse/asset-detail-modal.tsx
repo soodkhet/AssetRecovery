@@ -1,5 +1,6 @@
 'use client'
 
+import { StoredPhotoThumb } from '@/components/ui/stored-photo-thumb'
 import { useState } from 'react'
 import { FileViewerModal, type ViewableFile } from '@/components/cases/file-viewer-modal'
 import { AssetSummaryHeader } from '@/components/warehouse/asset-summary-header'
@@ -113,7 +114,9 @@ export function AssetDetailModal({
                       }
                       className="focus-ring rounded-lg border border-slate-200 bg-slate-50 px-2 py-3 text-center text-[11px] font-semibold text-slate-600 hover:bg-slate-100"
                     >
-                      {angle === null ? 'รูปเพิ่มเติม' : INTAKE_PHOTO_ANGLE_LABELS[angle]}
+                      {/* staging E-041 — ภาพย่อแทนปุ่มชื่อมุมอย่างเดียว */}
+                      <StoredPhotoThumb path={path} alt={angle === null ? 'รูปเพิ่มเติม' : INTAKE_PHOTO_ANGLE_LABELS[angle]} />
+                      <span className="mt-1 block">{angle === null ? 'รูปเพิ่มเติม' : INTAKE_PHOTO_ANGLE_LABELS[angle]}</span>
                     </button>
                   )
                 })}

@@ -586,6 +586,29 @@ suite('Phase 2.13 — รับเข้าคลัง / ตีกลับ (`4
     expect((await db().asset.findUniqueOrThrow({ where: { id: assetId } })).assetStatus).toBe('pending_intake')
   })
 
+  it('staging E-042 — ตีกลับการรับเข้า ⇒ แจ้งพนักงาน + ผู้จัดการ/หัวหน้าทีมของเคส (ลิงก์หน้าคลัง)', async () => {
+    await db().$executeRawUnsafe(
+      `INSERT INTO team_managers (team_id, user_id) VALUES ('${TEAM_ID}', '${MANAGER_ID}') ON CONFLICT DO NOTHING`,
+    )
+    try {
+      const { assetId } = await seedClosedSuccessCase()
+      await warehouse.rejectAssetIntake(admin, assetId, { rejectReason: 'IMEI บนเครื่องไม่ตรงกับสัญญา (E-042)' }, ctx(admin))
+      let notices: { userId: string; linkPath: string | null }[] = []
+      for (let attempt = 0; attempt < 40 && notices.length < 2; attempt += 1) {
+        notices = await db().notification.findMany({
+          where: { organizationId: ORG_ID, eventCode: 'asset.intake_rejected', body: { contains: 'E-042' } },
+          select: { userId: true, linkPath: true },
+        })
+        if (notices.length < 2) await new Promise((resolve) => setTimeout(resolve, 50))
+      }
+      const toManager = notices.find((row) => row.userId === MANAGER_ID)
+      expect(toManager?.linkPath).toBe('/warehouse')
+      expect(notices.some((row) => row.userId !== MANAGER_ID)).toBe(true)
+    } finally {
+      await db().$executeRawUnsafe(`DELETE FROM team_managers WHERE team_id = '${TEAM_ID}' AND user_id = '${MANAGER_ID}'`)
+    }
+  })
+
   it('T04 — ตีกลับต้องมีเหตุผล แล้วรับใหม่ได้ (retry ลง event เพิ่ม)', async () => {
     const { assetId, imei } = await seedClosedSuccessCase()
 
@@ -1456,12 +1479,15 @@ suite('Phase 2.13 — scope ระดับแถว (`44` §13 · §17 T15)', (
     expect(lotDetail.assets.map((item) => item.id)).toEqual([mine.assetId])
     expect(lotDetail.assetCount).toBe(1)
     expect(lotDetail.signedDocUrl).toBeNull()
+    // staging E-046 — หน้าจอรู้ว่าซ่อนตามสิทธิ์ (ไม่ใช่ไฟล์หาย)
+    expect(lotDetail.documentsRestricted).toBe(true)
 
     // ธุรการ (global) ยังเห็นครบเหมือนเดิม
     const adminLot = await warehouse.getLot(admin, lot.id)
     expect(adminLot.assets).toHaveLength(2)
     expect(adminLot.assetCount).toBe(2)
     expect(adminLot.signedDocUrl).not.toBeNull()
+    expect(adminLot.documentsRestricted).toBe(false)
 
     // ผู้จัดการที่ไม่มีทีมเลย = ไม่เห็นอะไร
     const noTeam = { ...manager, scope: { ...manager.scope, teamIds: [] } }

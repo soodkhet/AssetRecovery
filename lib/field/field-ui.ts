@@ -302,3 +302,20 @@ export function assetSummary(input: {
   if (serialNo !== '') return `${base} (S/N: ${serialNo})`
   return base
 }
+
+/** จุดบนเส้นทางเดินทางของวันลงพื้นที่ (staging E-044) */
+export interface RoutePoint {
+  label: string
+  latitude: number
+  longitude: number
+}
+
+/**
+ * staging E-044 — ลิงก์ Google Maps แบบเส้นทาง (จุดเริ่มเดินทาง → จุดเช็คอินตามลำดับเวลา) ให้ผู้อนุมัติตรวจระยะทาง
+ * ค่าน้ำมันตามกิโลเมตร · น้อยกว่า 2 จุด = `null` (ไม่มีเส้นทางให้ดู)
+ */
+export function googleMapsRouteUrl(points: readonly RoutePoint[]): string | null {
+  if (points.length < 2) return null
+  const path = points.map((point) => `${point.latitude.toFixed(6)},${point.longitude.toFixed(6)}`).join('/')
+  return `https://www.google.com/maps/dir/${path}`
+}

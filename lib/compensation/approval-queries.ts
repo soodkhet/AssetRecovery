@@ -56,6 +56,8 @@ import { dispatchNotification } from '@/lib/notifications/dispatch'
 import { expenseApprovedMessage, expenseRejectedMessage } from '@/lib/notifications/messages'
 import { loadPayeeInfoGaps } from '@/lib/payees/queries'
 import { prisma } from '@/lib/prisma'
+import type { RoutePoint } from '@/lib/field/field-ui'
+import { toInputDate } from '@/lib/format/datetime'
 import {
   assertExpenseSubstituteReceiptSigned,
   substituteReceiptRefOf,
@@ -561,13 +563,14 @@ export async function listCompensationApprovals(
   })
   if (rows.length === 0) return []
 
-  const [candidates, policy, payeeGaps] = await Promise.all([
+  const [candidates, policy, payeeGaps, fuelRoutes] = await Promise.all([
     loadMatrixCandidates(user.organizationId),
     currentWhtPolicy(user.organizationId),
     loadPayeeInfoGaps(
       user.organizationId,
       rows.map((row) => row.payee.id),
     ),
+    loadFuelRoutes(user.organizationId, rows),
   ])
   // `16` §10 — ผู้อนุมัติขั้น N เห็นเฉพาะรายการที่ถึงขั้นของตน (UAT R6-7) · กรองหลังรู้สายของแต่ละรายการ
   // (สาย snapshot/คาดการณ์ต่างกันรายแถว จึงกรองใน SQL ตรง ๆ ไม่ได้)
@@ -578,8 +581,45 @@ export async function listCompensationApprovals(
       approvalStepCurrent: row.approvalStepCurrent,
       steps: flow.steps,
     })
-    return visible ? [toDto(row, flow, user, policy, payeeGaps)] : []
+    return visible ? [{ ...toDto(row, flow, user, policy, payeeGaps), fuelRoute: fuelRoutes.get(row.id) ?? [] }] : []
   })
+}
+
+/**
+ * staging E-044 — เส้นทางของวันลงพื้นที่สำหรับค่าน้ำมันตามกิโลเมตร: จุดเริ่มเดินทางของงาน + จุดเช็คอินของงานนั้นในวันเดียวกัน
+ * (ตามลำดับเวลา) ให้ผู้อนุมัติเปิดดูบนแผนที่ก่อนอนุมัติ · scope เดียวกับคิว (แถวที่ผ่าน `approvalScopeFilter` แล้วเท่านั้น)
+ */
+async function loadFuelRoutes(organizationId: string, rows: readonly ExpenseRow[]): Promise<Map<string, RoutePoint[]>> {
+  const fuelRows = rows.filter((row) => row.expenseType === 'fuel' && row.distanceKm !== null && row.assignmentId !== null)
+  const result = new Map<string, RoutePoint[]>()
+  if (fuelRows.length === 0) return result
+  const assignmentIds = [...new Set(fuelRows.map((row) => row.assignmentId!))]
+  const [origins, checkIns] = await Promise.all([
+    prisma.travelOrigin.findMany({
+      where: { organizationId, assignmentId: { in: assignmentIds } },
+      select: { assignmentId: true, latitude: true, longitude: true },
+    }),
+    prisma.checkIn.findMany({
+      where: { organizationId, assignmentId: { in: assignmentIds } },
+      orderBy: { checkedInAt: 'asc' },
+      select: { assignmentId: true, latitude: true, longitude: true, checkedInAt: true },
+    }),
+  ])
+  for (const row of fuelRows) {
+    const day = row.expenseDate.toISOString().slice(0, 10)
+    const origin = origins.find((entry) => entry.assignmentId === row.assignmentId)
+    const points: RoutePoint[] = []
+    if (origin !== undefined) {
+      points.push({ label: 'จุดเริ่มเดินทาง', latitude: origin.latitude.toNumber(), longitude: origin.longitude.toNumber() })
+    }
+    checkIns
+      .filter((entry) => entry.assignmentId === row.assignmentId && toInputDate(entry.checkedInAt) === day)
+      .forEach((entry, index) => {
+        points.push({ label: `เช็คอิน ${index + 1}`, latitude: entry.latitude.toNumber(), longitude: entry.longitude.toNumber() })
+      })
+    result.set(row.id, points)
+  }
+  return result
 }
 
 // ── PATCH /api/compensation/:id/approve · /reject ────────────────────────────

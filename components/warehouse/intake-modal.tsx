@@ -1,5 +1,6 @@
 'use client'
 
+import { StoredPhotoThumb } from '@/components/ui/stored-photo-thumb'
 import { useState } from 'react'
 import { AssetSummaryHeader } from '@/components/warehouse/asset-summary-header'
 import { Button, Field, InlineAlert, Modal, Textarea, useToast } from '@/components/ui'
@@ -409,6 +410,8 @@ export function IntakeModal({
                   )}
                 >
                   <span className="text-[11px] font-semibold">{INTAKE_PHOTO_ANGLE_LABELS[angle]}</span>
+                  {/* staging E-041 — ภาพย่อให้ตรวจว่าถ่ายถูกมุมก่อนยืนยัน */}
+                  {path !== null && <StoredPhotoThumb path={path} alt={INTAKE_PHOTO_ANGLE_LABELS[angle]} />}
                   <span className="text-[10px] text-slate-500">
                     {uploading === angle ? 'กำลังอัปโหลด...' : path === null ? 'ยังไม่ถ่าย' : 'ถ่ายแล้ว'}
                   </span>

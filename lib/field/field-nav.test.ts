@@ -29,7 +29,8 @@ describe('ทะเบียนเมนู Field Tracker (`41` §5)', () => {
       'tracking',
       'closed',
     ])
-    expect(sections[1]?.items.map((item) => item.id)).toEqual(['expenses', 'advances', 'income'])
+    // staging E-035 — + ข้อมูลรับเงิน (อ่านอย่างเดียว)
+    expect(sections[1]?.items.map((item) => item.id)).toEqual(['expenses', 'advances', 'income', 'profile'])
   })
 
   it('badge ของ "กำลังติดตาม" เป็นสีม่วงและผูกกับคำขอเปลี่ยนผู้รับผิดชอบ ไม่ใช่จำนวนเคส', () => {

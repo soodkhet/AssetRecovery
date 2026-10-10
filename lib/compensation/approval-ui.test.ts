@@ -9,6 +9,9 @@ import {
   whtAmountHint,
   claimSourceLabel,
   CLAIM_STATUS_FILTERS,
+  bulkApprovableIds,
+  bulkApproveSummary,
+  isResubmittedClaim,
   expenseRowActions,
   expenseRowHighlight,
   pendingClaimTotalSatang,
@@ -266,5 +269,25 @@ describe('whtAmountHint — ต่ำกว่าเกณฑ์ (staging E-039)
       pct,
     )
     expect(hint).not.toContain('ต่ำกว่าเกณฑ์')
+  })
+})
+
+describe('อนุมัติหลายรายการ + ป้ายส่งใหม่ (staging E-045)', () => {
+  it('เลือกได้เฉพาะแถวที่ผู้ใช้อนุมัติได้อยู่แล้ว · สรุปยอดรวม', () => {
+    const items = [
+      dto({ id: 'a', status: 'pending_approval', viewerCanAct: true, grossSatang: 10_000, netSatang: 9_700 }),
+      dto({ id: 'b', status: 'pending_approval', viewerCanAct: false, grossSatang: 20_000 }),
+      dto({ id: 'c', status: 'approved', viewerCanAct: true, grossSatang: 30_000 }),
+      dto({ id: 'd', status: 'pending_finance_approval', viewerCanAct: true, grossSatang: 5_000, netSatang: 5_000 }),
+    ]
+    expect(bulkApprovableIds(items, true)).toEqual(['a', 'd'])
+    expect(bulkApprovableIds(items, false)).toEqual([])
+    expect(bulkApproveSummary([items[0]!, items[3]!])).toEqual({ count: 2, grossSatang: 15_000, netSatang: 14_700 })
+  })
+
+  it('ป้าย "ส่งใหม่" เฉพาะรายการที่รออนุมัติและมีคำชี้แจงตอนส่งใหม่', () => {
+    expect(isResubmittedClaim({ status: 'pending_approval', resubmitNote: 'แนบใบเสร็จใหม่แล้ว' })).toBe(true)
+    expect(isResubmittedClaim({ status: 'pending_approval', resubmitNote: null })).toBe(false)
+    expect(isResubmittedClaim({ status: 'approved', resubmitNote: 'x' })).toBe(false)
   })
 })
