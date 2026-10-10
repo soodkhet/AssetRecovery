@@ -421,7 +421,8 @@ export function canViewCaseBoard(user: SessionUser): boolean {
 /** ปลายทางเมื่อกดแถวของกระดาน — หน้ารายการเคสที่ผู้ใช้เข้าได้ (ไม่มี = แสดงเฉย ๆ ไม่มีลิงก์) */
 export function caseBoardHref(user: SessionUser): string | null {
   if (canViewMenu(user, 'cases.submit')) return '/cases/submit'
-  if (canViewMenu(user, 'cases.assign')) return '/cases/assign'
+  // staging E-005 — ผู้จัดการไปแท็บ "เคสทั้งหมดของทีม" (มีเคสที่ปิดแล้ว) ไม่ใช่รายการมอบหมายที่มีแค่ 3 สถานะ
+  if (canViewMenu(user, 'cases.assign')) return '/cases/assign?view=team'
   return null
 }
 

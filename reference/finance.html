@@ -485,7 +485,7 @@ function renderFinanceOperations() {
       </div>
       <div class="flex gap-2">
         <div class="flex gap-1 bg-slate-100 rounded-lg p-1">
-          ${[['all','ทั้งหมด'],['pending_approval','รอขั้น 1 (ผู้จัดการ)'],['pending_finance_approval','รอขั้น 2 (การเงิน)'],['needs_revision','ถูกตีกลับ'],['approved','อนุมัติแล้ว']].map(([id,label]) =>
+          ${[['all','ทั้งหมด'],['pending_approval','รอขั้น 1 (ผู้จัดการ)'],['pending_finance_approval','รอขั้น 2 (การเงิน)'],['needs_revision','ถูกตีกลับ'],['approved','อนุมัติแล้ว'],['pending_warehouse_confirm','รอคลัง']].map(([id,label]) =>
             `<button onclick="setState({claimFilter:'${id}'})" class="px-3 py-1 rounded-md text-xs font-semibold transition-colors ${state.claimFilter===id?'bg-white shadow-sm text-slate-900':'text-slate-500 hover:text-slate-700'}">${label}</button>`
           ).join('')}
         </div>
@@ -760,7 +760,7 @@ function renderFinanceOperations() {
         }).join('')}
       </tbody></table>
     </div>
-    <h3 class="font-bold text-slate-800 mb-3">รายการรายได้ (Revenue) — เกิดหลัง Expense ผ่าน approved เท่านั้น</h3>
+    <h3 class="font-bold text-slate-800 mb-3">รายการรายได้ (Revenue) — เกิดเมื่อครบ 3 เงื่อนไข: วันลงพื้นที่ถูกสรุปรายการรายวัน · รายการเบิกอนุมัติครบ · คลังยืนยันส่งมอบ</h3>
     <div class="border border-slate-200 rounded-lg overflow-hidden bg-white">
       <table class="w-full text-left text-sm"><thead class="bg-slate-50 text-xs text-slate-600 border-b border-slate-200"><tr>
         <th class="px-4 py-3">อ้างอิงเคส</th><th class="px-4 py-3">บริษัท</th>
@@ -782,6 +782,20 @@ function renderFinanceOperations() {
           <td class="px-4 py-3">${statusBadge(r.status)}</td>
           <td class="px-4 py-3 text-right">${btnAction(Icon.eye+' ดูคำนวณ','open-modal','revenue-calc-detail',r.id)}</td>
         </tr>`).join('')}
+      </tbody></table>
+    </div>
+    <h3 class="font-bold text-slate-800 mt-6 mb-1">เคสรอเกิดรายได้</h3>
+    <p class="text-xs text-slate-500 mb-3">เคสที่ปิดงานแล้วแต่รายได้ยังไม่เกิด — ดูว่าติดเงื่อนไขข้อไหน แล้วตามแก้ที่ต้นทาง</p>
+    <div class="border border-slate-200 rounded-lg overflow-hidden bg-white">
+      <table class="w-full text-left text-sm"><thead class="bg-slate-50 text-xs text-slate-600 border-b border-slate-200"><tr>
+        <th class="px-4 py-3">เลขที่สัญญา / รอบ</th><th class="px-4 py-3">บริษัทไฟแนนซ์ / ลูกหนี้</th>
+        <th class="px-4 py-3">ผลการติดตาม</th><th class="px-4 py-3">ปิดงานเมื่อ</th><th class="px-4 py-3">ยังไม่เกิดเพราะ</th>
+      </tr></thead>
+      <tbody class="divide-y divide-slate-100">
+        <tr><td class="px-4 py-3 font-mono text-xs font-semibold">SF-2026-0142<div class="text-[11px] text-slate-500 font-sans">รอบที่ 1</div></td>
+          <td class="px-4 py-3 text-xs">ศรีสวัสดิ์ไฟแนนซ์<div class="text-[11px] text-slate-500">สมชาย ใจดี</div></td>
+          <td class="px-4 py-3">${statusBadge('closed_success')}</td><td class="px-4 py-3 text-xs">08/10/2569</td>
+          <td class="px-4 py-3 text-xs text-amber-700">วันลงพื้นที่ยังไม่ถูกสรุปเป็นรายการรายวัน (งานรายวันรันหลังเที่ยงคืน)</td></tr>
       </tbody></table>
     </div>`;
   }

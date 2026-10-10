@@ -102,7 +102,7 @@ describe('role → widget (matrix ค่าเริ่มต้น)', () => {
     const user = ROLE_USERS.manager()
     expect(dashboardKpiSource(user)).toBe('queues')
     expect(idsOf(user)).toEqual(['case_awaiting_assignment', 'reassign_waiting', 'compensation_my_step'])
-    expect(caseBoardHref(user)).toBe('/cases/assign')
+    expect(caseBoardHref(user)).toBe('/cases/assign?view=team')
     expect(canViewCaseBoard(user)).toBe(true)
   })
 

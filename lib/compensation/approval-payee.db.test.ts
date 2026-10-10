@@ -859,6 +859,16 @@ suite('Phase 3.2 — Compensation Approval หลายขั้น (`16`)', () 
       'EXPENSE_INVALID_STATUS',
     )
   })
+
+  it('staging E-037 — รายการรอคลังโผล่ในตัวกรอง "ทั้งหมด" และ "รอคลัง" (ไม่อยู่ในตัวกรองรออนุมัติ)', async () => {
+    const expenseId = await seedPendingExpense(await seedPayee(AGENT_ID))
+    await db().expense.update({ where: { id: expenseId }, data: { status: 'pending_warehouse_confirm' } })
+    const all = await approvals.listCompensationApprovals(manager, { status: 'all' })
+    expect(all.map((row) => [row.id, row.status])).toEqual([[expenseId, 'pending_warehouse_confirm']])
+    const waiting = await approvals.listCompensationApprovals(manager, { status: 'pending_warehouse_confirm' })
+    expect(waiting.map((row) => row.id)).toEqual([expenseId])
+    expect(await approvals.listCompensationApprovals(manager, { status: 'pending_approval' })).toEqual([])
+  })
 })
 
 // ── มติ PO U131: ข้อมูลรับเงินในฟอร์มผู้ใช้ + ป้าย "ข้อมูลรับเงินไม่ครบ" ─────────────────────────

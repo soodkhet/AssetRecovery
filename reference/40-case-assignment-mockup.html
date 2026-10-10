@@ -493,6 +493,11 @@ function renderToolbar() {
       class="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold border border-slate-300 rounded-lg bg-white hover:bg-slate-50 focus-ring ${state.view==='kanban'?'bg-slate-900 text-white border-slate-900 hover:bg-slate-800':''}">
       ${I.kanban} ภาพรวมทีม (Kanban)
     </button>
+    <!-- เคสทุกสถานะของทีม รวมที่ปิดแล้ว (อ่านอย่างเดียว) -->
+    <button onclick="setState({view:'list'})"
+      class="flex items-center gap-1.5 px-3 py-2 text-sm font-semibold border border-slate-300 rounded-lg bg-white hover:bg-slate-50 focus-ring">
+      เคสทั้งหมดของทีม
+    </button>
   </div>`;
 }
 

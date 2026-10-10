@@ -27,6 +27,11 @@ import { parseProjectedRevenueSource, projectedRevenueSourceText } from '@/lib/c
 import { allowedActionsFrom } from '@/lib/cases/state-machine'
 import { loadCaseCloseFailReason, loadCaseFieldEvidence } from '@/lib/field/evidence-review'
 import { loadCaseResubmittedAt } from '@/lib/field/resubmission'
+import {
+  buildCaseStatusTimeline,
+  redactCaseStatusTimelineForCompany,
+  type CaseStatusTimelineEntry,
+} from '@/lib/cases/status-timeline'
 import { caseDocumentRule } from '@/lib/uploads/rules'
 import { verifyUploadedFile } from '@/lib/uploads/verify'
 import { assetIdentifierWarning } from '@/lib/warehouse/imei'
@@ -46,7 +51,7 @@ import type {
   CaseListResultDto,
 } from '@/lib/cases/types'
 import { Prisma } from '@/lib/generated/prisma/client'
-import type { CaseStatus } from '@/lib/generated/prisma/enums'
+import { TEAM_VISIBLE_CASE_STATUSES } from '@/lib/cases/team-visibility'
 import { resolveDeviceSelection } from '@/lib/device-catalog/queries'
 import { learnDeviceTacFromCase } from '@/lib/device-catalog/tac-queries'
 import { prisma } from '@/lib/prisma'
@@ -80,14 +85,8 @@ export type CaseTxClient = Omit<typeof prisma, '$connect' | '$disconnect' | '$on
  * มุมมองทีม · มติ PO 03/10/2569 UAT Q11 · BUG-023 · `38` §13) ·
  * company user เห็นเฉพาะบริษัทตัวเอง · Field Agent เห็นเฉพาะเคสที่ตัวเองถือ
  */
-/** สถานะเคสที่มุมมองทีมเห็นได้ = หลังผ่านการอนุมัติแล้วเท่านั้น (UAT Q11 · BUG-023) */
-export const TEAM_VISIBLE_CASE_STATUSES = [
-  'approved',
-  'active',
-  'closed_success',
-  'closed_fail',
-  'pending_recycle_review',
-] as const satisfies readonly CaseStatus[]
+// ชุดสถานะอยู่ใน module pure (ใช้ร่วมหน้าจอ "เคสทั้งหมดของทีม" — staging E-005)
+export { TEAM_VISIBLE_CASE_STATUSES }
 
 export function caseScopeWhere(user: SessionUser): Prisma.CaseWhereInput {
   const scope = user.scope
@@ -254,6 +253,7 @@ function redactCaseDetailForCompany(detail: CaseDetailDto): CaseDetailDto {
     projectedRevenueSourceLabel: null,
     reviewNote: null,
     editHistory: [],
+    statusHistory: redactCaseStatusTimelineForCompany(detail.statusHistory),
     recycleHistory: detail.recycleHistory.map((entry) => ({ ...entry, decisionNote: null, decidedByName: null })),
     documents: detail.documents.map((document) => ({ ...document, uploadedByName: '' })),
   }
@@ -280,6 +280,43 @@ function toListDto(row: CaseListRow, submittedAt: Date | null = null): CaseListI
     submittedAt: submittedAt?.toISOString() ?? null,
     reviewedAt: row.reviewedAt?.toISOString() ?? null,
   }
+}
+
+/**
+ * ประวัติสถานะของเคสเดียว (staging E-004) — audit ของเคส (`targetType: 'cases'`) ที่มีสถานะก่อน/หลัง
+ * + แถวสร้างเคส · ใช้ `idx_audit_target` · แปลงเป็น timeline ด้วย `buildCaseStatusTimeline()` (pure)
+ */
+async function loadCaseStatusHistory(organizationId: string, caseId: string): Promise<CaseStatusTimelineEntry[]> {
+  const rows = await prisma.auditLog.findMany({
+    where: { organizationId, targetType: 'cases', targetId: caseId, action: { not: 'view' } },
+    orderBy: { createdAt: 'asc' },
+    take: 200,
+    select: {
+      action: true,
+      beforeData: true,
+      afterData: true,
+      reason: true,
+      createdAt: true,
+      actor: { select: { fullName: true } },
+    },
+  })
+  return buildCaseStatusTimeline(
+    rows.map((row) => ({
+      action: row.action,
+      beforeStatus: jsonString(row.beforeData, 'status'),
+      afterStatus: jsonString(row.afterData, 'status'),
+      transition: jsonString(row.afterData, 'action'),
+      reason: row.reason,
+      actorName: row.actor?.fullName ?? null,
+      createdAt: row.createdAt,
+    })),
+  )
+}
+
+function jsonString(value: Prisma.JsonValue | null, key: string): string | null {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return null
+  const field = value[key]
+  return typeof field === 'string' ? field : null
 }
 
 /**
@@ -401,6 +438,8 @@ export function toDetailDto(row: CaseDetailRow): CaseDetailDto {
     documentMode: effectiveDocumentMode(documentCounts(row.documents), row.documentMode),
     productPhotoInContract: row.productPhotoInContract,
     debtorDocumentsPurgedAt: row.debtorDocumentsPurgedAt?.toISOString() ?? null,
+    // เติมเฉพาะ `getCase()` (อ่าน audit) — ผลของ mutation ส่งว่าง หน้าจอโหลดรายละเอียดใหม่เอง
+    statusHistory: [],
     editHistory: row.editHistory.map((entry) => ({
       id: entry.id,
       note: entry.note,
@@ -548,12 +587,17 @@ export async function getCase(user: SessionUser, caseId: string): Promise<CaseDe
     select: detailSelect,
   })
   if (row === null) throw new CaseError('CASE_NOT_FOUND')
-  const submittedAt = (await latestSubmittedAt(user.organizationId, [row.id])).get(row.id) ?? null
-  const closeFailReason = await loadCaseCloseFailReason(user.organizationId, row.id)
+  const [submittedMap, closeFailReason, statusHistory] = await Promise.all([
+    latestSubmittedAt(user.organizationId, [row.id]),
+    loadCaseCloseFailReason(user.organizationId, row.id),
+    loadCaseStatusHistory(user.organizationId, row.id),
+  ])
+  const submittedAt = submittedMap.get(row.id) ?? null
   const detail: CaseDetailDto = {
     ...toDetailDto(row),
     submittedAt: submittedAt?.toISOString() ?? null,
     closeFailReason,
+    statusHistory,
   }
   // บริษัทไฟแนนซ์เห็นเหตุผลปิดงานไม่สำเร็จของเคสตัวเองได้ (มติ PO 03/10/2569 — UAT Q16)
   if (isCompanySideViewer(user)) return redactCaseDetailForCompany(detail)

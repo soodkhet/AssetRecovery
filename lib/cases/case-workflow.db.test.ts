@@ -515,6 +515,13 @@ suite('Phase 2.3 — state machine + snapshot + recycle (DB จริง)', () =
     )
     expect(rejected.case.status).toBe('rejected')
     expect(rejected.case.reviewNote).toBe('ข้อมูลลูกหนี้ไม่ตรงกับสัญญา')
+
+    // staging E-004 — รายละเอียดเคสมีประวัติสถานะจาก audit พร้อมเหตุผลไม่รับเคส
+    const { getCase } = await import('@/lib/cases/queries')
+    const detail = await getCase(actor, caseId)
+    const last = detail.statusHistory.at(-1)
+    expect(detail.statusHistory.map((entry) => entry.toStatus).slice(-2)).toEqual(['pending_review', 'rejected'])
+    expect(last).toMatchObject({ label: 'ไม่รับเคส', note: 'ข้อมูลลูกหนี้ไม่ตรงกับสัญญา', fromStatus: 'pending_review' })
   })
 
   it('รีไซเกิลได้เฉพาะ closed_fail — closed_success ถูกปฏิเสธ (`38` §20)', async () => {
@@ -662,6 +669,8 @@ suite('Phase 2.3 — state machine + snapshot + recycle (DB จริง)', () =
       expect(detail.reviewedAt).toBeNull()
       expect(detail.reviewNote).toBeNull()
       expect(detail.editHistory).toEqual([])
+      // staging E-004 — ประวัติสถานะเห็นได้ แต่ไม่มีชื่อพนักงาน/บันทึกภายใน
+      expect(detail.statusHistory.every((entry) => entry.actorName === null && entry.note === null)).toBe(true)
       expect(detail.assignedTeamId).toBeNull()
       expect(detail.assignedTeamName).toBeNull()
       expect(detail.createdByName).toBe('')

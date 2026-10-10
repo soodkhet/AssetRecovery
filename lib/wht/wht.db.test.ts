@@ -682,6 +682,16 @@ suite('Phase 4.5 — เลขที่ (D11) · mark-filed · Period Lock', () 
     expect(cancelledOnly.summary.pnd53Satang).toBe(0)
     expect(pnd53.items.every((item) => item.filingForm === 'PND53')).toBe(true)
     expect(all.summary.pnd3Satang + all.summary.pnd53Satang).toBeGreaterThan(0)
+
+    // staging E-052 — กรองตามรอบจ่าย: ได้เฉพาะใบของรอบนั้น · รอบที่ไม่มีอยู่ = ว่าง
+    const batchId = all.items[0]?.payoutBatchId
+    expect(batchId).toBeDefined()
+    const ofBatch = await wht.listWhtCertificates(accountant, { payoutBatchId: batchId })
+    expect(ofBatch.items.length).toBeGreaterThan(0)
+    expect(ofBatch.items.every((item) => item.payoutBatchId === batchId)).toBe(true)
+    expect(
+      (await wht.listWhtCertificates(accountant, { payoutBatchId: '00000000-0000-4000-8000-0000000e0529' })).items,
+    ).toEqual([])
   })
 
   it('ข้อมูลใบสำหรับ PDF: ผู้จ่าย = องค์กร · ผู้ถูกหัก = payee (เลขผู้เสียภาษีจากโปรไฟล์)', async () => {

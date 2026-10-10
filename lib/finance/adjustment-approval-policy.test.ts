@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  actorFillsMissingRole,
   adjustmentApprovalPolicyFor,
   assertApprovalLevelSufficient,
   EXECUTIVE_ROLE,
@@ -88,5 +89,21 @@ describe('missingApproverRoles / assertApprovalLevelSufficient (`20` §11 · §1
 
   it('ยังไม่มีใครอนุมัติเลย → ขาดครบทุก role ที่ต้องใช้', () => {
     expect(missingApproverRoles('sent_to_accountant', [])).toEqual([FINANCE_ROLE, EXECUTIVE_ROLE])
+  })
+})
+
+describe('actorFillsMissingRole (E-061)', () => {
+  it('งวด collecting: ผู้บริหารไม่ได้เติมบทบาทที่ขาด → false · การเงิน → true', () => {
+    expect(actorFillsMissingRole('collecting', [], [EXECUTIVE_ROLE])).toBe(false)
+    expect(actorFillsMissingRole(null, [], [FINANCE_ROLE])).toBe(true)
+  })
+
+  it('งวด sent_to_accountant: การเงินอนุมัติแล้ว → เหลือเฉพาะผู้บริหาร', () => {
+    expect(actorFillsMissingRole('sent_to_accountant', [FINANCE_ROLE], [FINANCE_ROLE])).toBe(false)
+    expect(actorFillsMissingRole('sent_to_accountant', [FINANCE_ROLE], [EXECUTIVE_ROLE])).toBe(true)
+  })
+
+  it('งวด locked: การเงินไม่นับ', () => {
+    expect(actorFillsMissingRole('locked', [], [FINANCE_ROLE])).toBe(false)
   })
 })

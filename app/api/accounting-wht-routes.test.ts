@@ -144,6 +144,25 @@ describe('สิทธิ์ของโมดูล WHT (DEC-002 · `33` §12 �
     expect(whtQueriesMock.cancelWhtCertificate).not.toHaveBeenCalled()
     expect(whtQueriesMock.markWhtFilingFiled).not.toHaveBeenCalled()
   })
+
+  it('staging E-052 — การเงินกรองทะเบียนตามรอบจ่ายได้ (`payoutBatchId`) · ค่าไม่ใช่ uuid = 400', async () => {
+    requireSessionMock.mockResolvedValue(FINANCE)
+    whtQueriesMock.listWhtCertificates.mockResolvedValue(EMPTY_CERTS)
+    const batchId = '00000000-0000-4000-8000-0000000e0520'
+
+    const ok = await certificatesRoute.GET(
+      request(`http://localhost/api/accounting/wht-certificates?payoutBatchId=${batchId}`),
+      undefined,
+    )
+    expect(ok.status).toBe(200)
+    expect(whtQueriesMock.listWhtCertificates).toHaveBeenLastCalledWith(FINANCE, { payoutBatchId: batchId })
+
+    const bad = await certificatesRoute.GET(
+      request('http://localhost/api/accounting/wht-certificates?payoutBatchId=nope'),
+      undefined,
+    )
+    expect(bad.status).toBe(400)
+  })
 })
 
 describe('ยกเลิกหนังสือรับรอง (`33` §14)', () => {

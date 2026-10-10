@@ -171,8 +171,12 @@ const expenseSelect = {
 
 type ExpenseRow = Prisma.ExpenseGetPayload<{ select: typeof expenseSelect }>
 
-/** สถานะที่อยู่ในคิวอนุมัติจริง (`23` §6.3) — คลังยังไม่ปล่อยก็ยังไม่ถึงตาการเงิน */
+/**
+ * สถานะที่ตัวกรอง "ทั้งหมด" แสดง (`23` §6.3) — คลังยังไม่ปล่อยก็ยังไม่ถึงตาการเงิน แต่ staging E-037
+ * แสดง `pending_warehouse_confirm` เป็นแถวอ่านอย่างเดียว (ไม่มีปุ่ม — `expenseRowActions`) ให้ผู้จัดการรู้ว่ารายการไม่ได้หาย
+ */
 const PIPELINE_STATUSES: readonly ExpenseStatus[] = [
+  'pending_warehouse_confirm',
   'pending_approval',
   'pending_finance_approval',
   'needs_revision',
@@ -524,6 +528,7 @@ export async function isReceiptVisibleViaExpense(
 }
 
 const STATUS_FILTER: Readonly<Record<CompensationApprovalListQuery['status'], readonly ExpenseStatus[]>> = {
+  pending_warehouse_confirm: ['pending_warehouse_confirm'],
   pending_approval: ['pending_approval'],
   pending_finance_approval: ['pending_finance_approval'],
   needs_revision: ['needs_revision'],

@@ -357,6 +357,28 @@ suite('Phase 3.6 — Revenue trigger (`19` §16 ครบ 8 เคส)', () => {
     expect(await db().revenue.count({ where: { caseId } })).toBe(0)
   })
 
+  it('staging E-008 — รายการ "เคสรอเกิดรายได้" บอกเหตุผลตามเกตเดียวกัน · เกิดแล้วหายจากรายการ · ฝั่งบริษัทได้ว่าง', async () => {
+    const { listRevenuePendingCases } = await import('@/lib/revenue/pending-queries')
+    const waitingLot = await seedCase()
+    await seedExpense(waitingLot, 'approved')
+    await seedAssetInLot(waitingLot, 'pending_attach')
+    const waitingExpense = await seedCase()
+    await seedExpense(waitingExpense, 'pending_finance_approval')
+    await seedAssetInLot(waitingExpense, 'confirmed')
+    const done = await seedCase()
+    await seedExpense(done, 'approved')
+    await seedAssetInLot(done, 'confirmed')
+    await runRevenue([done])
+
+    const pending = await listRevenuePendingCases(finance)
+    const reasonOf = new Map(pending.map((item) => [item.caseId, item.reason]))
+    expect(reasonOf.get(waitingLot)).toBe('warehouse_gate')
+    expect(reasonOf.get(waitingExpense)).toBe('expense_not_approved')
+    expect(reasonOf.has(done)).toBe(false)
+    expect(pending.find((item) => item.caseId === waitingLot)?.reasonText).toContain('คลัง')
+    expect(await listRevenuePendingCases(companyUser)).toEqual([])
+  })
+
   it('DEC-006/D6 — เคสไม่มี expense เลย ก็ยังติด Warehouse gate แล้วผ่านเมื่อ lot confirmed', async () => {
     const caseId = await seedCase()
     await seedAssetInLot(caseId, 'pending_attach')

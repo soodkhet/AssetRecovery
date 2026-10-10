@@ -28,10 +28,12 @@ import type { RequestMeta } from '@/lib/auth/request-meta'
 import type { SessionUser } from '@/lib/auth/types'
 import {
   adjustmentApprovalPolicyFor,
+  actorFillsMissingRole,
   assertApprovalLevelSufficient,
   missingApproverRoles,
   requiresSeparateAuditEntry,
 } from '@/lib/finance/adjustment-approval-policy'
+import { FinanceError } from '@/lib/finance/errors'
 import type { Prisma } from '@/lib/generated/prisma/client'
 import type { AccountingPeriodStatus, AdjustmentStatus, ExpenseStatus } from '@/lib/generated/prisma/enums'
 import { notifyAdjustmentAwaitingApproval } from '@/lib/notifications/approval-queue'
@@ -580,6 +582,18 @@ export async function approveAdjustment(
     const previous = (await approverRolesByAdjustment(tx, user.organizationId, [adjustmentId])).get(adjustmentId) ?? []
     const stampedRoles = approverRolesOf(user, periodStatus)
     const roles = [...previous, ...stampedRoles.filter((role) => !previous.includes(role))]
+
+    // E-061 — บทบาทของผู้กดไม่อยู่ในรายการที่ยังขาด (เช่น ผู้บริหารกดงวด collecting ที่ต้องการการเงิน)
+    // ⇒ ปฏิเสธ ไม่บันทึกเป็นการอนุมัติบางส่วน (`20` §6.2)
+    // (ถ้าบทบาทนี้อนุมัติไปแล้ว ให้ตกไปข้อความ "อนุมัติไปแล้ว" ด้านล่าง)
+    const alreadyStamped = stampedRoles.every((role) => previous.includes(role))
+    if (!alreadyStamped && !actorFillsMissingRole(periodStatus, previous, stampedRoles)) {
+      const missing = missingApproverRoles(periodStatus, previous)
+      throw new FinanceError('INSUFFICIENT_APPROVAL_LEVEL', {
+        detail: `period_status=${periodStatus ?? 'collecting'} role=${user.roleName} missing=${missing.join(',')}`,
+        context: { missingRoles: missing },
+      })
+    }
 
     // บทบาทนี้อนุมัติไปแล้ว และยังขาดบทบาทอื่นอยู่ ⇒ ไม่ใช่คิวของคนนี้ (`20` §6.2)
     if (roles.length === previous.length) {

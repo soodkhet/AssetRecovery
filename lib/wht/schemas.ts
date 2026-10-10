@@ -14,6 +14,7 @@ export const whtFilingFormSchema = z.enum(['PND3', 'PND53', 'PND1'])
 
 export const whtCertificateListQuerySchema = z.object({
   periodId: uuidSchema.optional(),
+  payoutBatchId: uuidSchema.optional(),
   status: whtCertificateStatusSchema.optional(),
   filingForm: whtFilingFormSchema.optional(),
 })

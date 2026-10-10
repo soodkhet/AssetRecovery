@@ -647,7 +647,15 @@ export async function listWhtCertificates(
       organizationId: user.organizationId,
       ...(query.status === undefined ? {} : { status: query.status }),
       ...(query.filingForm === undefined ? {} : { filingForm: query.filingForm }),
-      ...(query.periodId === undefined ? {} : { expenseRecord: { periodId: query.periodId } }),
+      // E-052 — `payoutBatchId` = ใบของรอบจ่ายเดียว (ปุ่ม "50 ทวิ" ในหน้ารอบจ่าย)
+      ...(query.periodId === undefined && query.payoutBatchId === undefined
+        ? {}
+        : {
+            expenseRecord: {
+              ...(query.periodId === undefined ? {} : { periodId: query.periodId }),
+              ...(query.payoutBatchId === undefined ? {} : { payoutBatchItem: { payoutBatchId: query.payoutBatchId } }),
+            },
+          }),
     },
     orderBy: [{ paymentDate: 'desc' }, { certificateNumber: 'desc' }],
     select: CERT_SELECT,

@@ -36,6 +36,8 @@
 | v3.19 | 07/10/2569 | **มติ PO 07/10/2569 (U127 · U140)**: เพิ่ม `PATCH /api/accounting/wht-filing-summary/:id/mark-supplementary-filed` (ล้างธงต้องยื่นเพิ่มเติม · `manage_wht` · reason บังคับ) · `GET /api/settings/assumptions` + `POST /api/settings/assumptions/:key/confirm` (ป้าย "รอนักบัญชียืนยัน" บนหน้าตั้งค่า · confirm = `manage_accountant_questions` · reason บังคับ) |
 | v3.20 | 08/10/2569 | **preship R7-009 · มติชั่วคราว P11 (รอ PO ยืนยัน)** — §6.9 เติม `GET /api/finance/closed-periods` (อ่านอย่างเดียว · สิทธิ์ view ของ `manage_billing` หรือ `manage_payout_batch` · คืน `{ closedPeriods: { yearBe, month }[] }` = งวด `locked`/`sent_to_accountant` · ไม่เปิดงวดใหม่ ไม่ลง audit) ให้หน้าสร้างรอบวางบิล/รอบจ่ายไม่เสนอวันตัดรอบในงวดที่ปิด · `POST /api/billing-batches` · `POST /api/payout-batches` วันตัดรอบในงวดปิด ⇒ `PERIOD_LOCKED_DIRECT_EDIT` เดิม + `reason: "cutoff_in_closed_period"` |
 | v3.21 | 10/10/2569 | **staging E-012 (มติ PO 10/10/2569)** — §6.4 เพิ่ม `PATCH /api/advances/:id/clear-review` และ `PATCH /api/advances/:id/reopen-clear` (การเงินเท่านั้น `manage:approve_advance` · ไม่ใช่การเงิน = 404 ไม่ leak) · `AdvanceDto` เพิ่ม `receiptFileUrl`/`clearReviewedAt`/`clearReviewedByName` |
+| v3.22 | 10/10/2569 | **staging E-052** — §6.12 `GET /api/accounting/wht-certificates` รับ `?payoutBatchId=<uuid>` กรองใบของรอบจ่ายเดียว (หน้ารอบจ่ายที่ `completed` แสดงปุ่ม "50 ทวิ" ต่อผู้รับ) · สิทธิ์เดิม |
+| v3.23 | 10/10/2569 | **staging E-008 (มติ PO 10/10/2569)** — §6.9 เพิ่ม `GET /api/finance/revenue-pending` (อ่านอย่างเดียว · สิทธิ์ view ของ `manage_billing` · scope ภายในองค์กรเท่านั้น ฝั่งบริษัทได้ว่าง · ไม่ลง audit) คืนเคสที่ปิดงานแล้วแต่รายได้รอบปัจจุบันยังไม่เกิด + `reason` (`field_days_not_settled`/`expense_not_approved`/`warehouse_gate`/`no_snapshot`/`missing_basis`/`gates_passed`) + `reasonText` — ตัดสินด้วยเกตเดียวกับ `tryCreateRevenue` (`19` §6.1) |
 
 ขอบเขตเอกสารนี้: รวม API Endpoint ทั้งหมดของโมดูล Finance/Accounting เป็นรายการเดียว จัดกลุ่มตาม resource เพื่อให้ backend implement ตาม REST convention เดียวกันทั้งระบบ
 
@@ -184,6 +186,7 @@ PATCH  /api/adjustments/:id/reject
 GET    /api/finance/dashboard-kpi
 GET    /api/finance/closed-periods                      (v3.20 — งวดที่สร้างเอกสารใหม่ไม่ได้ · หน้าสร้างรอบวางบิล/รอบจ่าย · P11)
 GET    /api/finance/exceptions
+GET    /api/finance/revenue-pending                     (v3.23 — เคสปิดงานแล้วที่รายได้ยังไม่เกิด + เหตุผลตามเกต 19 §6.1 · E-008)
 GET    /api/reports/profitability
 GET    /api/reports/profitability/:dimension_id/drilldown
 ```
@@ -207,7 +210,7 @@ PATCH  /api/accounting/expenses/:id/cost-center
 ### 6.12 Accounting: WHT (ไฟล์ 33)
 
 ```
-GET    /api/accounting/wht-certificates
+GET    /api/accounting/wht-certificates            ?periodId&status&filingForm&payoutBatchId
 PATCH  /api/accounting/wht-certificates/:id/cancel
 GET    /api/accounting/wht-filing-summary
 PATCH  /api/accounting/wht-filing-summary/:id/mark-filed

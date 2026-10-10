@@ -1,3 +1,4 @@
+import type { CaseStatusTimelineEntry } from '@/lib/cases/status-timeline'
 import type { DocumentMode, DocumentSlot } from '@/lib/cases/case'
 import type { TeamCostSnapshot } from '@/lib/cases/team-cost'
 import type { TeamSuggestionResult } from '@/lib/cases/team-suggestion'
@@ -276,6 +277,8 @@ export interface CaseDetailDto extends CaseListItemDto {
   /** ไฟล์เอกสารลูกหนี้ถูกลบตามนโยบายระยะเก็บข้อมูลเมื่อไร (PDPA — มติ PO U97) · ยังไม่ถูกลบ = `null` */
   debtorDocumentsPurgedAt: string | null
   editHistory: CaseEditHistoryDto[]
+  /** ประวัติสถานะจาก audit ของเคส เก่า → ใหม่ (staging E-004) · พอร์ทัลไม่เห็นชื่อพนักงาน/บันทึกภายใน */
+  statusHistory: CaseStatusTimelineEntry[]
   recycleHistory: CaseRecycleHistoryDto[]
   readiness: CaseReadinessDto
   /** หลักฐานปิดงานชุดล่าสุด — เฉพาะผู้มีสิทธิ์ตีกลับหลักฐาน (UAT BUG-045) · อื่น ๆ = `null` */

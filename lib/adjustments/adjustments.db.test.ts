@@ -375,6 +375,17 @@ suite('Phase 3.7 — ระดับอนุมัติตาม `period_statu
     expect(approved.missingApproverRoles).toEqual([])
   })
 
+  it('staging E-061 — รอบ collecting: ผู้บริหารอนุมัติแทนการเงินไม่ได้ ⇒ `INSUFFICIENT_APPROVAL_LEVEL` (ไม่นับเป็นอนุมัติบางส่วน)', async () => {
+    const created = await newAdjustment('collecting')
+    await expectCode(
+      () => adjustments.approveAdjustment(ctx(executive), created.id, { note: '' }),
+      'INSUFFICIENT_APPROVAL_LEVEL',
+    )
+    const after = await adjustments.approveAdjustment(ctx(), created.id, { note: '' })
+    expect(after.status).toBe('approved')
+    expect(after.approvedRoles).toEqual(['การเงิน'])
+  })
+
   it('รอบ sent_to_accountant — การเงินอนุมัติแล้วยังรอผู้บริหาร แล้วจึงครบ', async () => {
     const created = await newAdjustment('sent_to_accountant')
     expect(created.requiredApproverRoles).toEqual(['การเงิน', 'บริหาร'])

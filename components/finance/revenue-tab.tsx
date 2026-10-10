@@ -9,6 +9,7 @@ import { ArAgingPanel } from '@/components/finance/ar-aging-panel'
 import { BillingStatusBadge } from '@/components/finance/billing-status-badge'
 import { BillingDetailModal } from '@/components/finance/billing-detail-modal'
 import { CreateBillingModal } from '@/components/finance/create-billing-modal'
+import { RevenuePendingPanel } from '@/components/finance/revenue-pending-panel'
 import { useBillingBatches, useRevenues } from '@/components/finance/use-billing'
 import { ReasonConfirmModal, REASON_MIN_LENGTH } from '@/components/settings/reason-confirm-modal'
 import { REASON_MAX } from '@/lib/api/validation'
@@ -34,6 +35,7 @@ import { cn } from '@/components/ui/cn'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { fmtDate } from '@/lib/format/datetime'
 import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
+import { REVENUE_TRIGGER_HINT } from '@/lib/revenue/pending'
 import { MANAGE_BILLING } from '@/lib/revenue/revenue'
 import {
   BILLING_STATUS_FILTERS,
@@ -164,7 +166,7 @@ export function RevenueTab() {
         <StatCard
           label="รายได้ที่ยังไม่ถูกรวมรอบ"
           value={kpiValue(revenuesReady ? unbilledCount : null, fmtCount)}
-          hint="เกิดอัตโนมัติเมื่อรายการเบิกอนุมัติและคลังยืนยันส่งมอบ"
+          hint={REVENUE_TRIGGER_HINT}
         />
       </div>
 
@@ -325,7 +327,7 @@ export function RevenueTab() {
           <div>
             <h2 className="text-base font-semibold text-slate-900">รายการรายได้ (Revenue)</h2>
             <p className="mt-0.5 text-xs text-slate-500">
-              เกิดอัตโนมัติเมื่อรายการเบิกอนุมัติและคลังยืนยันส่งมอบแล้ว — ไม่มีการสร้าง/แก้ด้วยมือ
+              {REVENUE_TRIGGER_HINT} — ไม่มีการสร้าง/แก้ด้วยมือ (เคสที่ยังไม่เกิดดูเหตุผลได้ที่ตาราง “เคสรอเกิดรายได้”)
             </p>
           </div>
           <FilterGroup
@@ -410,6 +412,9 @@ export function RevenueTab() {
           </Table>
         </div>
       </Card>
+
+      {/* staging E-008 — เคสที่ปิดงานแล้วแต่รายได้ยังไม่เกิด + เหตุผล */}
+      <RevenuePendingPanel />
 
       <CreateBillingModal open={createOpen} onClose={() => setCreateOpen(false)} onCreated={reloadAll} />
 

@@ -8,6 +8,7 @@ import {
   adjustmentSignPrefix,
   adjustmentStatusBadgeGroup,
   canActOnAdjustment,
+  canFillAdjustmentApproval,
   periodStatusBadgeGroup,
   periodStatusLabel,
 } from '@/lib/adjustments/adjustment-ui'
@@ -69,5 +70,16 @@ describe('targetSearchState (staging E-070)', () => {
   it('ผลของคำขอปัจจุบัน — error หรือพร้อมแสดง อย่างใดอย่างหนึ่ง', () => {
     expect(targetSearchState({ key: 'k', error: 'เชื่อมต่อระบบไม่สำเร็จ' }, 'k')).toBe('error')
     expect(targetSearchState({ key: 'k', error: null }, 'k')).toBe('ready')
+  })
+})
+
+describe('canFillAdjustmentApproval (E-061)', () => {
+  it('งวดเปิดรอการเงิน — ผู้บริหารไม่เห็นปุ่ม · การเงินเห็น', () => {
+    expect(canFillAdjustmentApproval({ roleName: 'บริหาร', isSuperadmin: false }, ['การเงิน'])).toBe(false)
+    expect(canFillAdjustmentApproval({ roleName: 'การเงิน', isSuperadmin: false }, ['การเงิน'])).toBe(true)
+  })
+
+  it('Superadmin เติมได้ทุกบทบาท', () => {
+    expect(canFillAdjustmentApproval({ roleName: 'Superadmin', isSuperadmin: true }, ['บริหาร'])).toBe(true)
   })
 })

@@ -47,6 +47,7 @@ import type {
   CaseTeamOptionsDto,
 } from '@/lib/cases/types'
 import { fmtDate, fmtDateTime } from '@/lib/format/datetime'
+import { caseEditedFieldsText } from '@/lib/cases/status-timeline'
 import { debtorDocumentsPurgedText } from '@/lib/settings/data-retention'
 import { fmtSatangSymbol } from '@/lib/format/money'
 
@@ -381,6 +382,9 @@ export function CaseDetailModal({
             )}
 
             {detail.recycleHistory.length > 0 && <RecycleHistorySection detail={detail} />}
+
+            {/* staging E-004 — ประวัติสถานะ (จาก audit ฝั่ง server) + ประวัติการแก้ไข */}
+            {(detail.statusHistory.length > 0 || detail.editHistory.length > 0) && <CaseHistorySection detail={detail} />}
 
             {showsReasonBox(status) && (
               <section>
@@ -754,6 +758,58 @@ function RecycleHistorySection({ detail }: { detail: CaseDetailDto }) {
           </li>
         ))}
       </ul>
+    </section>
+  )
+}
+
+function CaseHistorySection({ detail }: { detail: CaseDetailDto }) {
+  return (
+    <section data-testid="case-history">
+      <h3 className="mb-3 border-b border-slate-100 pb-2 text-sm font-bold text-slate-800">ประวัติเคส</h3>
+      {detail.statusHistory.length > 0 && (
+        <ol className="space-y-2">
+          {detail.statusHistory.map((entry, index) => (
+            <li key={`${entry.at}-${index}`} className="flex gap-3 text-xs">
+              <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-slate-400" aria-hidden />
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-semibold text-slate-800">{entry.label}</span>
+                  <StatusBadge
+                    status={entry.toStatus}
+                    group={caseStatusBadgeGroup(entry.toStatus)}
+                    label={entry.toStatusLabel}
+                  />
+                </div>
+                {entry.note !== null && (
+                  <p className="mt-0.5 whitespace-pre-wrap text-slate-600">เหตุผล: {entry.note}</p>
+                )}
+                <div className="text-[11px] text-slate-400">
+                  {fmtDateTime(entry.at)}
+                  {entry.actorName !== null && ` · ${entry.actorName}`}
+                </div>
+              </div>
+            </li>
+          ))}
+        </ol>
+      )}
+      {detail.editHistory.length > 0 && (
+        <div className="mt-4">
+          <div className="mb-2 text-xs font-semibold text-slate-700">ประวัติการแก้ไขข้อมูล</div>
+          <ul className="space-y-2">
+            {detail.editHistory.map((entry) => (
+              <li key={entry.id} className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs">
+                <div className="text-slate-700">แก้ไข: {caseEditedFieldsText(entry.changedFields)}</div>
+                {entry.note !== null && entry.note.trim() !== '' && (
+                  <div className="text-slate-600">หมายเหตุ: {entry.note}</div>
+                )}
+                <div className="text-[11px] text-slate-400">
+                  {fmtDateTime(entry.editedAt)} · {entry.editedByName}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </section>
   )
 }

@@ -130,3 +130,33 @@ export function payoutTransferText(batch: PayoutTransferSource): string {
 export function countPendingPayoutBatches(batches: readonly PayoutBatchDto[]): number {
   return batches.filter((batch) => isPendingPayoutStatus(batch.status)).length
 }
+
+/** ลิงก์ 50 ทวิ ต่อผู้รับในหน้ารอบจ่าย (staging E-052) */
+export interface PayoutWhtCertificateLink {
+  id: string
+  label: string
+  certificateNumber: string
+  href: string
+}
+
+/**
+ * staging E-052 — ปุ่ม "50 ทวิ" ต่อผู้รับในหน้ารอบจ่ายที่จ่ายสำเร็จ: ใบที่ยังใช้งาน (ใบยกเลิกไม่มีปุ่ม)
+ * เรียงตามชื่อผู้รับ แล้วเลขที่ใบ · ใบเกิดเมื่อรอบ `completed` เท่านั้น (รอบสถานะอื่น = ว่าง)
+ */
+export function payoutWhtCertificateLinks(
+  batchStatus: PayoutBatchStatus,
+  certificates: readonly { id: string; certificateNumber: string; payeeName: string; status: string }[],
+): PayoutWhtCertificateLink[] {
+  if (batchStatus !== 'completed') return []
+  return [...certificates]
+    .filter((certificate) => certificate.status === 'active')
+    .sort(
+      (a, b) => a.payeeName.localeCompare(b.payeeName, 'th') || a.certificateNumber.localeCompare(b.certificateNumber),
+    )
+    .map((certificate) => ({
+      id: certificate.id,
+      label: `50 ทวิ · ${certificate.payeeName}`,
+      certificateNumber: certificate.certificateNumber,
+      href: `/api/accounting/wht-certificates/${certificate.id}/pdf`,
+    }))
+}

@@ -42,6 +42,7 @@ import {
   adjustmentSignPrefix,
   adjustmentStatusBadgeGroup,
   canActOnAdjustment,
+  canFillAdjustmentApproval,
   periodStatusBadgeGroup,
   periodStatusLabel,
   type AdjustmentStatusFilter,
@@ -66,8 +67,12 @@ export function AdjustmentTab() {
   const canViewLockedSources = session !== null && canViewFinanceTabSection(session, 'adjustment.locked-sources')
   // BUG-130 — ปุ่มอนุมัติ/ปฏิเสธต้องถือ capability "ของระดับนั้น" (รอบ locked = ผู้บริหารเท่านั้น)
   // ตัวเดียวกับที่ API ตรวจ (`approvalCapabilityFor`) — ซ่อนเป็นแค่ UX, API ยังปฏิเสธเองเสมอ (DEC-002)
+  // E-061 — ต้องเป็นบทบาทที่รายการนี้ยังรออยู่ด้วย (งวดเปิด ผู้บริหารอนุมัติแทนการเงินไม่ได้)
   const canReview = (row: AdjustmentDto): boolean =>
-    canActOnAdjustment(row.status) && can('manage', approvalCapabilityFor(row.periodStatusAtTarget))
+    canActOnAdjustment(row.status) &&
+    can('manage', approvalCapabilityFor(row.periodStatusAtTarget)) &&
+    session !== null &&
+    canFillAdjustmentApproval(session, row.missingApproverRoles)
 
   // ตัวกรองอยู่ใน URL — refresh/Back กลับมายังกรองเหมือนเดิม (preship R6-008)
   const [status, setStatus] = useUrlFilter<AdjustmentStatusFilter>(FINANCE_FILTER_PARAMS.adjustmentStatus, ADJUSTMENT_STATUS_FILTERS, 'all')

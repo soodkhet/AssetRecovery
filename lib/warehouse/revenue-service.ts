@@ -158,6 +158,32 @@ export function lotGateOf(lotStatuses: readonly (string | null)[]): LotGateState
 }
 
 /**
+ * วันลงพื้นที่ (พนักงาน × วันไทยของเช็คอิน) ที่ยังไม่ถูก settle รายการรายวัน (มติ PO UAT Q21) — คืนชุด
+ * `roundKey(caseId, trackingRound)` · ใช้ร่วม `tryCreateRevenue()` กับรายการ "เคสรอเกิดรายได้" (staging E-008)
+ */
+export async function loadUnsettledFieldRounds(
+  client: Pick<WarehouseTxClient, '$queryRaw'>,
+  organizationId: string,
+  caseIds: readonly string[],
+): Promise<Set<string>> {
+  if (caseIds.length === 0) return new Set()
+  const rows = await client.$queryRaw<{ caseId: string; trackingRound: number }[]>`
+    SELECT DISTINCT ci.case_id::text AS "caseId", a.tracking_round AS "trackingRound"
+      FROM check_ins ci
+      JOIN case_assignments a ON a.id = ci.assignment_id
+     WHERE ci.organization_id = ${organizationId}::uuid
+       AND ci.case_id = ANY(${[...caseIds]}::uuid[])
+       AND NOT EXISTS (
+             SELECT 1 FROM field_day_settlements s
+              WHERE s.organization_id = ci.organization_id
+                AND s.agent_id = a.agent_id
+                AND s.field_date = (ci.checked_in_at AT TIME ZONE 'Asia/Bangkok')::date
+           )
+  `
+  return new Set(rows.map((row) => roundKey(row.caseId, Number(row.trackingRound))))
+}
+
+/**
  * โหลดสถานะจริงของเคสในล็อตแล้วตัดสิน — เรียกจาก `confirmLot()` (step 4)
  *
  * อ่าน 4 ชุดในทรานแซกชันเดียวกับ step 1–2 จึงเห็นผลของทั้งสอง step แล้ว (asset `handed_over`
@@ -238,24 +264,12 @@ export async function tryCreateRevenue(
     }),
     // มติ PO 03/10/2569 (UAT Q21): วันลงพื้นที่ (พนักงาน × วันไทยของเช็คอิน) ที่ยังไม่ถูก settle
     // รายการรายวัน — อ่าน**หลัง**ล็อกแถวเคส จึงเห็นการ settle ที่ commit ก่อนหน้าเสมอ · แยกตามรอบติดตาม (O72)
-    tx.$queryRaw<{ caseId: string; trackingRound: number }[]>`
-      SELECT DISTINCT ci.case_id::text AS "caseId", a.tracking_round AS "trackingRound"
-        FROM check_ins ci
-        JOIN case_assignments a ON a.id = ci.assignment_id
-       WHERE ci.organization_id = ${input.organizationId}::uuid
-         AND ci.case_id = ANY(${caseIds}::uuid[])
-         AND NOT EXISTS (
-               SELECT 1 FROM field_day_settlements s
-                WHERE s.organization_id = ci.organization_id
-                  AND s.agent_id = a.agent_id
-                  AND s.field_date = (ci.checked_in_at AT TIME ZONE 'Asia/Bangkok')::date
-             )
-    `,
+    loadUnsettledFieldRounds(tx, input.organizationId, caseIds),
   ])
 
   const assetsByCase = groupBy(assets, (row) => row.caseId)
   const revenueRounds = new Set(revenues.map((row) => roundKey(row.caseId, row.trackingRound)))
-  const unsettledRounds = new Set(unsettledDays.map((row) => roundKey(row.caseId, Number(row.trackingRound))))
+  const unsettledRounds = unsettledDays
   const currentRoundOf = new Map(cases.map((row) => [row.id, row.trackingRound]))
   // รายการเบิกผูกรอบผ่านการมอบหมาย (`case_assignments.tracking_round`) — รายการที่ไม่ผูกการมอบหมาย = รอบปัจจุบัน
   const expensesByRound = groupBy(expenses, (row) =>
@@ -437,7 +451,7 @@ interface RoundBasis {
   debtAmountSatang: number | null
 }
 
-function roundKey(caseId: string, trackingRound: number): string {
+export function roundKey(caseId: string, trackingRound: number): string {
   return `${caseId}#${trackingRound}`
 }
 

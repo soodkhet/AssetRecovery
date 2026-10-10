@@ -96,3 +96,16 @@ export function assertApprovalLevelSufficient(input: {
 export function requiresSeparateAuditEntry(periodStatus: AccountingPeriodStatus | null): boolean {
   return adjustmentApprovalPolicyFor(periodStatus).separateAuditEntry
 }
+
+/**
+ * E-061 — ผู้กดอนุมัติต้อง "เติม" บทบาทที่ยังขาดอยู่อย่างน้อย 1 ตัว (`20` §6.2)
+ * เช่น งวด `collecting` ต้องการการเงินเท่านั้น ⇒ ผู้บริหารกดอนุมัติแทนไม่ได้ (ถึงจะมี capability ก็ตาม)
+ * — `stampedRoles` = บทบาทที่ผู้กดครั้งนี้นับให้ (`approverRolesOf`)
+ */
+export function actorFillsMissingRole(
+  periodStatus: AccountingPeriodStatus | null,
+  previousRoles: readonly string[],
+  stampedRoles: readonly string[],
+): boolean {
+  return missingApproverRoles(periodStatus, previousRoles).some((role) => stampedRoles.includes(role))
+}

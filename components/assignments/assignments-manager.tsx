@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AssignmentModal } from '@/components/assignments/assignment-modal'
 import { KanbanBoard } from '@/components/assignments/kanban-board'
+import { TeamCasesPanel } from '@/components/assignments/team-cases-panel'
 import { usePermission } from '@/components/auth/permission-provider'
 import { kpiValue } from '@/components/ui/kpi-value'
 import { CaseDetailModal } from '@/components/cases/case-detail-modal'
@@ -45,6 +46,7 @@ import { ASSIGNMENT_MANAGE_CAPABILITY } from '@/lib/assignments/permissions'
 import { ASSIGNMENT_STATE_FILTERS } from '@/lib/assignments/schemas'
 import type { AssignmentState } from '@/lib/assignments/assignment'
 import type { AssignmentListItemDto, AssignmentListResultDto } from '@/lib/assignments/types'
+import type { TeamVisibleCaseStatus } from '@/lib/cases/team-visibility'
 import { fmtCount, fmtSatang } from '@/lib/format/money'
 
 /**
@@ -85,10 +87,15 @@ function buildListPath(filters: Filters, page: number): string {
 export function AssignmentsManager({
   canAct,
   initialStatus = 'all',
+  initialView = 'list',
+  initialTeamStatus = 'all',
 }: {
   canAct: boolean
   /** ตัวกรองสถานะตอนเปิดหน้า — ลิงก์จากคิวแดชบอร์ดส่ง `ready_to_assign` มา */
   initialStatus?: AssignmentState | 'all'
+  /** staging E-005 — `team` = เปิดแท็บ "เคสทั้งหมดของทีม" (ลิงก์ "ดูเคสทั้งหมด" จากแดชบอร์ด) */
+  initialView?: 'list' | 'team'
+  initialTeamStatus?: TeamVisibleCaseStatus | 'all'
 }) {
   const { can } = usePermission()
   /**
@@ -105,7 +112,7 @@ export function AssignmentsManager({
   const [page, setPage] = useState(1)
   const [counts, setCounts] = useState<Readonly<Record<string, number | null>>>({})
 
-  const [view, setView] = useState<'list' | 'kanban'>('list')
+  const [view, setView] = useState<'list' | 'kanban' | 'team'>(initialView)
   /** เพิ่มค่าเมื่อ mutation สำเร็จ — ใช้บังคับให้กระดาน Kanban โหลดใหม่โดยไม่ล้าง filter ที่ตั้งไว้ */
   const [reloadToken, setReloadToken] = useState(0)
   const [target, setTarget] = useState<AssignmentTarget | null>(null)
@@ -175,6 +182,25 @@ export function AssignmentsManager({
   const teams = result?.teams ?? []
   const total = result?.total ?? 0
   const lastPage = Math.max(1, Math.ceil(total / PAGE_SIZE))
+
+  if (view === 'team') {
+    return (
+      <>
+        <TeamCasesPanel
+          initialStatus={initialTeamStatus}
+          onBack={() => setView('list')}
+          onOpenCase={(caseId) => setDetailCaseId(caseId)}
+        />
+        <CaseDetailModal
+          open={detailCaseId !== null}
+          caseId={detailCaseId}
+          hideWorkflowActions
+          description="ดูรายละเอียดเคสของทีม (อ่านอย่างเดียว)"
+          onClose={() => setDetailCaseId(null)}
+        />
+      </>
+    )
+  }
 
   if (view === 'kanban') {
     return (
@@ -274,6 +300,10 @@ export function AssignmentsManager({
                 ดูภาพรวมทีม
               </Button>
             )}
+            {/* staging E-005 — เคสทุกสถานะของทีม รวมที่ปิดแล้ว (อ่านอย่างเดียว) */}
+            <Button variant="secondary" className="lg:w-40" onClick={() => setView('team')}>
+              เคสทั้งหมดของทีม
+            </Button>
           </div>
         </div>
 

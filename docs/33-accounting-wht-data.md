@@ -26,6 +26,7 @@
 | v3.9 | 06/10/2569 | **มติ PO 06/10/2569 (U105)**: ผู้รับเงื่อนไข (2) ออกให้ตลอดไป / (3) ออกให้ครั้งเดียว (เมื่อค่าตั้งอนุญาต) — **เงินได้บนใบ 50 ทวิ = เงินได้ + ภาษีที่บริษัทออกให้** (มาจาก `gross` ของรายการรอบจ่ายที่ทบยอดแล้ว `22` §6.9.2) · ภาษีที่หัก = ภาษีที่ออกให้ · สรุป ภ.ง.ด. นับตามใบ (ไม่เปลี่ยนวิธีรวม) · ช่อง "ผู้จ่ายเงิน" ติ๊กตาม **snapshot ของรายการรอบจ่าย** (`payout_batch_items.wht_condition` · NULL = รอบเก่า = (1)) ไม่ใช่ค่าปัจจุบันของผู้รับ |
 | v3.10 | 07/10/2569 | **มติ PO 07/10/2569 (U127 · U128)**: §7.2 + §9 ยกเลิก/ออกใบหลังรอบ `filed` ⇒ ธง "ต้องยื่นเพิ่มเติม" + ยอดต่าง + แจ้งบัญชี + ปุ่ม "ยื่นเพิ่มเติมแล้ว" (`supplementary_required_at`/`supplementary_filed_at`/`supplementary_filed_by` · endpoint `mark-supplementary-filed` · error `WHT_SUPPLEMENTARY_FILING_NOT_REQUIRED` · event `wht.supplementary_filing_required`) · (U128) ไฟล์ `05_WHT_Data.csv` เลือกใบตาม**เดือนที่จ่าย** (`payment_date`) + แถวกลับรายการ/แถวออกแทนของงวดก่อนที่ส่งชุดไปแล้ว (ดู `37` §6.1) |
 | v3.11 | 10/10/2569 | **staging E-015 (มติ PO 10/10/2569)**: §9 Mark ว่ายื่นแล้วได้เมื่อสิ้นเดือนของงวดแล้วเท่านั้น (`PERIOD_NOT_ENDED`) — กันรอบจ่ายที่เกิดหลัง Mark ตกเดือนที่ "ยื่นแล้ว" · หลังสิ้นเดือนกดได้ทุกวัน |
+| v3.12 | 10/10/2569 | **staging E-052** — §14 list รับตัวกรอง `payoutBatchId` · หน้ารอบจ่ายที่จ่ายสำเร็จมีปุ่ม "50 ทวิ" ต่อผู้รับ (ใบ active เท่านั้น) — ไม่แก้เมนู |
 
 ขอบเขตเอกสารนี้: สรุปข้อมูลภาษีหัก ณ ที่จ่ายทั้งหมดที่เกิดจากการจ่ายเงิน (ไฟล์ 17/32) พร้อมออกหนังสือรับรองการหักภาษี ณ ที่จ่าย (ใบ 50 ทวิ) ให้ผู้ถูกหัก และเตรียมข้อมูลสำหรับยื่นแบบ ภ.ง.ด.3/53 ส่งกรมสรรพากร
 
@@ -183,7 +184,7 @@
 
 | Method | Endpoint | Purpose |
 |---|---|---|
-| GET | /api/accounting/wht-certificates | list |
+| GET | /api/accounting/wht-certificates | list (`periodId` · `status` · `filingForm` · `payoutBatchId`) |
 | PATCH | /api/accounting/wht-certificates/:id/cancel | ยกเลิกหนังสือรับรอง (ต้องมี cancel_reason) — เพิ่ม 04/07/2569 DEC-006/D4 |
 | GET | /api/accounting/wht-filing-summary | สรุปต่อรอบเดือน |
 | PATCH | /api/accounting/wht-filing-summary/:id/mark-filed | mark ว่ายื่นแล้ว |

@@ -21,8 +21,17 @@ import { fmtDate, fmtDateTime } from '@/lib/format/datetime'
 import { payoutItemTaxSplit } from '@/lib/finance/wht-calc'
 import { fmtCount, fmtPercent, fmtSatangSymbol } from '@/lib/format/money'
 import { PAYOUT_SIDE_LABEL } from '@/lib/payout/payout'
-import { canCancelPayout, PAYOUT_STATUS_LABEL_SHORT, payoutStatusBadgeGroup } from '@/lib/payout/payout-ui'
+import {
+  canCancelPayout,
+  PAYOUT_STATUS_LABEL_SHORT,
+  payoutStatusBadgeGroup,
+  payoutWhtCertificateLinks,
+  type PayoutWhtCertificateLink,
+} from '@/lib/payout/payout-ui'
 import type { PayoutBatchDetailDto, PayoutBatchDto } from '@/lib/payout/types'
+import type { WhtCertificateListDto } from '@/lib/wht/types'
+import { MANAGE_WHT } from '@/lib/wht/wht'
+import { usePermission } from '@/components/auth/permission-provider'
 
 /**
  * Modal "ดูรายการในรอบจ่าย" (`17` §8 · mockup `finance.html` `payout-detail`) — **อ่านอย่างเดียว**
@@ -45,6 +54,8 @@ export function PayoutDetailModal({
   canManage?: boolean
   onCancelRequest?: (batch: PayoutBatchDto) => void
 }) {
+  const { can } = usePermission()
+  const canViewWht = can('view', MANAGE_WHT)
   const [detail, setDetail] = useState<PayoutBatchDetailDto | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<{ title: string; message: string } | null>(null)
@@ -161,6 +172,11 @@ export function PayoutDetailModal({
             {batch.cancelReason !== null && ` — เหตุผล: ${batch.cancelReason}`}
             {' · '}รายการทั้งหมดกลับไปรอจ่ายแล้ว ตารางด้านล่างเป็นประวัติ ณ วันที่สร้างรอบ
           </InlineAlert>
+        )}
+
+        {/* staging E-052 — 50 ทวิ ต่อผู้รับ (รอบที่จ่ายสำเร็จแล้ว · ผู้ถือสิทธิ์อ่านทะเบียน 50 ทวิ) */}
+        {batch.status === 'completed' && canViewWht && (
+          <PayoutWhtCertificates batchId={batch.id} batchStatus={batch.status} />
         )}
 
         {/* มติ PO U133 — รอบจ่าย AP ที่ใช้ + กำหนดจ่าย (snapshot ตอนสร้างรอบ) */}
@@ -288,5 +304,53 @@ function DocLink({ href, children }: { href: string; children: React.ReactNode }
     >
       {children}
     </a>
+  )
+}
+
+/**
+ * staging E-052 — ปุ่ม "50 ทวิ" ต่อผู้รับ: ดึงทะเบียนเฉพาะรอบนี้ (`?payoutBatchId=`) แล้วเปิด PDF ของแต่ละใบ
+ * — API ตรวจสิทธิ์อ่าน 50 ทวิเองเสมอ (DEC-002)
+ */
+function PayoutWhtCertificates({ batchId, batchStatus }: { batchId: string; batchStatus: PayoutBatchDto['status'] }) {
+  const [links, setLinks] = useState<PayoutWhtCertificateLink[] | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      const result = await callApi<WhtCertificateListDto>(
+        `/api/accounting/wht-certificates?payoutBatchId=${encodeURIComponent(batchId)}`,
+      )
+      if (cancelled) return
+      if (result.error !== undefined) {
+        setError(result.error.message)
+        return
+      }
+      setLinks(payoutWhtCertificateLinks(batchStatus, result.data?.items ?? []))
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [batchId, batchStatus])
+
+  return (
+    <div className="rounded-lg border border-slate-200 p-3">
+      <div className="mb-2 text-xs font-semibold text-slate-700">หนังสือรับรองการหักภาษี ณ ที่จ่าย (50 ทวิ)</div>
+      {error !== null ? (
+        <p className="text-xs text-red-600">โหลดรายการ 50 ทวิ ไม่สำเร็จ — {error}</p>
+      ) : links === null ? (
+        <p className="text-xs text-slate-500">กำลังโหลด…</p>
+      ) : links.length === 0 ? (
+        <p className="text-xs text-slate-500">รอบนี้ไม่มีผู้รับที่ถูกหักภาษี ณ ที่จ่าย</p>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {links.map((link) => (
+            <DocLink key={link.id} href={link.href}>
+              {link.label} <span className="font-mono text-[10px] text-slate-500">{link.certificateNumber}</span>
+            </DocLink>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }

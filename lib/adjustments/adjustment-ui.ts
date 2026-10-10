@@ -91,3 +91,15 @@ export function targetSearchState(
   if (result === null || result.key !== requestKey) return 'loading'
   return result.error === null ? 'ready' : 'error'
 }
+
+/**
+ * E-061 — ผู้ใช้เติมบทบาทที่รายการยังรออยู่ได้ไหม (Superadmin นับครบทุกบทบาท — DEC-009)
+ * ซ่อนปุ่มเป็นแค่ UX — API ปฏิเสธ `INSUFFICIENT_APPROVAL_LEVEL` เองเสมอ (DEC-002)
+ */
+export function canFillAdjustmentApproval(
+  session: { roleName: string; isSuperadmin: boolean },
+  missingApproverRoles: readonly string[],
+): boolean {
+  if (session.isSuperadmin) return true
+  return missingApproverRoles.includes(session.roleName.trim())
+}

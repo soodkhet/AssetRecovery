@@ -90,13 +90,15 @@ export function expenseRowHighlight(status: ExpenseStatus): string | null {
   return status === 'needs_revision' ? 'bg-orange-50/30' : null
 }
 
-/** ตัวกรองสถานะของแท็บรออนุมัติ (mockup 5 pill) — ค่าตรงกับ `compensationListQuerySchema` */
+/** ตัวกรองสถานะของแท็บรออนุมัติ (mockup 5 pill + "รอคลัง" E-037) — ค่าตรงกับ `compensationListQuerySchema` */
 export const CLAIM_STATUS_FILTERS = [
   { value: 'all', label: 'ทั้งหมด' },
   { value: 'pending_approval', label: 'รอขั้น 1 (ผู้จัดการ)' },
   { value: 'pending_finance_approval', label: 'รอขั้น 2 (การเงิน)' },
   { value: 'needs_revision', label: 'ถูกตีกลับ' },
   { value: 'approved', label: 'อนุมัติแล้ว' },
+  // E-037 — รายการที่คลังยังไม่ยืนยันรับเครื่อง (อ่านอย่างเดียว ยังไม่เข้าคิวอนุมัติ)
+  { value: 'pending_warehouse_confirm', label: 'รอคลัง' },
 ] as const
 
 export type ClaimStatusFilter = (typeof CLAIM_STATUS_FILTERS)[number]['value']

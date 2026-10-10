@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { compensationListQuerySchema } from '@/lib/compensation/approval-types'
 import type { CompensationApprovalDto } from '@/lib/compensation/approval-types'
 import {
   approvalErrorToast,
@@ -167,14 +168,24 @@ describe('รายละเอียดตาราง', () => {
     expect(expenseRowHighlight('approved')).toBeNull()
   })
 
-  it('ตัวกรอง 5 ตัวตรงกับค่าที่ API รับ', () => {
+  it('ตัวกรอง 6 ตัวตรงกับค่าที่ API รับ (รวม "รอคลัง" — E-037)', () => {
     expect(CLAIM_STATUS_FILTERS.map((filter) => filter.value)).toEqual([
       'all',
       'pending_approval',
       'pending_finance_approval',
       'needs_revision',
       'approved',
+      'pending_warehouse_confirm',
     ])
+    for (const filter of CLAIM_STATUS_FILTERS) {
+      expect(compensationListQuerySchema.safeParse({ status: filter.value }).success).toBe(true)
+    }
+  })
+
+  it('E-037 — แถวรอคลังเป็นแถวอ่านอย่างเดียว (ไม่มีปุ่มอนุมัติ/ตีกลับ/ปฏิเสธ)', () => {
+    expect(
+      expenseRowActions({ status: 'pending_warehouse_confirm', canApprove: true, expenseType: 'hotel' }),
+    ).toEqual(['view_formula'])
   })
 
   it('ยอดรออนุมัติรวมนับเฉพาะรายการที่ยังอยู่ในคิวจริง', () => {

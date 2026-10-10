@@ -159,7 +159,7 @@ describe('GET /api/dashboard — scope ทีม', () => {
     // คิวระดับองค์กรไม่ถูกยิง
     expect(prismaMock.advance.count).not.toHaveBeenCalled()
     expect(prismaMock.exception.count).not.toHaveBeenCalled()
-    expect(body.data?.caseBoard?.href).toBe('/cases/assign')
+    expect(body.data?.caseBoard?.href).toBe('/cases/assign?view=team')
   })
 
   it('ผู้จัดการที่ไม่มีทีมในความดูแล — นับได้ 0 (ไม่เห็นเคสทั้งองค์กร)', async () => {

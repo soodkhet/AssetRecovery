@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { PayoutBatchDto } from '@/lib/payout/types'
 import {
+  payoutWhtCertificateLinks,
   canCancelPayout,
   canCompletePayout,
   canDownloadPaymentFile,
@@ -130,5 +131,24 @@ describe('payout-ui — ปุ่มมาจาก state machine เดีย�
       expect(hasAdvanceOffset(batch())).toBe(false)
       expect(payoutTransferText(batch())).toBe('ยอดโอน ฿18,236.00')
     })
+  })
+})
+
+describe('payoutWhtCertificateLinks (staging E-052)', () => {
+  const certs = [
+    { id: 'c2', certificateNumber: 'WHT-2569-0002', payeeName: 'สมหญิง ใจดี', status: 'active' },
+    { id: 'c1', certificateNumber: 'WHT-2569-0001', payeeName: 'กมล ทองดี', status: 'active' },
+    { id: 'c0', certificateNumber: 'WHT-2569-0000', payeeName: 'กมล ทองดี', status: 'cancelled' },
+  ]
+
+  it('รอบจ่ายสำเร็จ — ใบที่ใช้งานเรียงตามชื่อผู้รับ · ใบยกเลิกไม่มีปุ่ม · ลิงก์ไป PDF ของใบ', () => {
+    expect(payoutWhtCertificateLinks('completed', certs)).toEqual([
+      { id: 'c1', label: '50 ทวิ · กมล ทองดี', certificateNumber: 'WHT-2569-0001', href: '/api/accounting/wht-certificates/c1/pdf' },
+      { id: 'c2', label: '50 ทวิ · สมหญิง ใจดี', certificateNumber: 'WHT-2569-0002', href: '/api/accounting/wht-certificates/c2/pdf' },
+    ])
+  })
+
+  it('รอบที่ยังไม่จ่ายสำเร็จ — ไม่มีปุ่ม', () => {
+    expect(payoutWhtCertificateLinks('file_generated', certs)).toEqual([])
   })
 })
