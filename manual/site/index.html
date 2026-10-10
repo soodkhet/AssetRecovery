@@ -1,0 +1,268 @@
+<title>คู่มือ AssetRecovery</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anuphan:wght@500;600;700&family=Sarabun:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<style>
+/* Layout: คู่มือปฏิบัติงาน — เมนูเล่มติดซ้าย + คอลัมน์อ่าน ~70 ตัวอักษร · มือถือเมนูกลายเป็นแถบเลือกเล่มด้านบน */
+:root {
+  --bg: #f6f8f7;          /* พื้นกระดาษอมเขียวอ่อน */
+  --surface: #ffffff;
+  --ink: #15211d;          /* ตัวอักษรหลัก slate อมเขียว */
+  --muted: #5b6b66;
+  --line: #dde5e2;
+  --accent: #0f7a5c;       /* emerald เดียวกับแอป */
+  --accent-soft: #e3f2ec;
+  --code-bg: #eef3f1;
+  --warn-bg: #fff7e6; --warn-ink: #7a4b00; --warn-line: #f0d9a8;
+  --f-display: "Anuphan", "Noto Sans Thai", system-ui, sans-serif;
+  --f-body: "Sarabun", "Noto Sans Thai", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f1614; --surface: #151f1c; --ink: #e4ece9; --muted: #9db0aa; --line: #26332f;
+  --accent: #4cc39b; --accent-soft: #173a2f; --code-bg: #1b2724;
+  --warn-bg: #2d2412; --warn-ink: #f2cf8a; --warn-line: #4d3d1c; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0f1614; --surface: #151f1c; --ink: #e4ece9; --muted: #9db0aa; --line: #26332f;
+  --accent: #4cc39b; --accent-soft: #173a2f; --code-bg: #1b2724;
+  --warn-bg: #2d2412; --warn-ink: #f2cf8a; --warn-line: #4d3d1c; color-scheme: dark }
+
+html, body { background: var(--bg); color: var(--ink); }
+body { font: 17px/1.75 var(--f-body); margin: 0; }
+.shell { display: grid; grid-template-columns: 290px minmax(0, 1fr); min-height: 100%; }
+nav.side { position: sticky; top: env(safe-area-inset-top, 0px); align-self: start; height: 100vh; overflow-y: auto;
+  border-right: 1px solid var(--line); padding: 28px 20px 40px; display: flex; flex-direction: column; gap: 22px; background: var(--surface); }
+.brand { display: flex; flex-direction: column; gap: 2px; }
+.brand b { font: 700 1.25rem/1.2 var(--f-display); letter-spacing: -0.01em; }
+.brand span { color: var(--muted); font-size: .85rem; }
+.group { display: flex; flex-direction: column; gap: 2px; }
+.group h2 { font: 600 .72rem/1 var(--f-display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 6px; }
+.group a { display: grid; grid-template-columns: 2.2em 1fr; align-items: baseline; padding: 7px 10px; border-radius: 8px;
+  color: var(--ink); text-decoration: none; font-size: .95rem; line-height: 1.4; }
+.group a .no { font: 500 .8rem var(--f-mono); color: var(--muted); }
+.group a:hover { background: var(--accent-soft); }
+.group a[aria-current="page"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.group a[aria-current="page"] .no { color: var(--accent); }
+.group a:focus-visible, .pick:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.mobilebar { display: none; }
+main { padding: 40px 48px 96px; min-width: 0; }
+article { max-width: 46rem; margin: 0 auto; min-width: 0; }
+.status { color: var(--muted); padding: 40px 0; }
+article h1 { font: 700 2.1rem/1.25 var(--f-display); letter-spacing: -0.015em; margin: 0 0 18px; text-wrap: balance; }
+article h2 { font: 600 1.45rem/1.35 var(--f-display); margin: 48px 0 12px; padding-top: 12px; border-top: 1px solid var(--line); text-wrap: balance; }
+article h3 { font: 600 1.15rem/1.4 var(--f-display); margin: 32px 0 8px; }
+article h4 { font: 600 1rem/1.4 var(--f-display); margin: 24px 0 6px; color: var(--muted); }
+article p, article li { max-width: 68ch; }
+article a { color: var(--accent); text-underline-offset: 3px; }
+article strong { font-weight: 600; }
+article code { font: .86em var(--f-mono); background: var(--code-bg); padding: .1em .35em; border-radius: 4px; overflow-wrap: anywhere; }
+article pre { background: var(--code-bg); padding: 14px 16px; border-radius: 8px; overflow-x: auto; font: .85rem/1.6 var(--f-mono); }
+article pre code { background: none; padding: 0; }
+article img { display: block; max-width: 100%; height: auto; margin: 16px 0 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+article img + em, article p > em:only-child { display: block; color: var(--muted); font-size: .88rem; }
+.tablewrap { overflow-x: auto; margin: 16px 0; border: 1px solid var(--line); border-radius: 8px; }
+article table { border-collapse: collapse; width: 100%; font-size: .92rem; font-variant-numeric: tabular-nums; }
+article th { background: var(--code-bg); text-align: left; font-weight: 600; font-family: var(--f-display); }
+article th, article td { padding: 8px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+article tr:last-child td { border-bottom: 0; }
+article blockquote { margin: 18px 0; padding: 12px 16px; border: 1px solid var(--warn-line); background: var(--warn-bg); color: var(--warn-ink); border-radius: 8px; }
+article blockquote p { margin: 4px 0; }
+article hr { border: 0; border-top: 1px solid var(--line); margin: 40px 0; }
+.mermaidwrap { overflow-x: auto; margin: 16px 0; padding: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+pre.mermaid { background: none; text-align: center; }
+.pager { display: flex; justify-content: space-between; gap: 16px; margin-top: 64px; padding-top: 20px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.pager a { color: var(--accent); text-decoration: none; font-family: var(--f-display); font-weight: 600; }
+@media (max-width: 860px) {
+  .shell { grid-template-columns: minmax(0, 1fr); }
+  nav.side { display: none; }
+  .mobilebar { display: flex; flex-direction: column; gap: 8px; position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5;
+    background: var(--surface); border-bottom: 1px solid var(--line); padding: 12px 16px; }
+  .mobilebar b { font: 700 1.05rem var(--f-display); }
+  .pick { font: 1rem var(--f-body); padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); width: 100%; }
+  main { padding: 24px 16px 72px; }
+  article h1 { font-size: 1.65rem; }
+}
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+
+<div class="shell">
+  <nav class="side" aria-label="เล่มคู่มือ">
+    <div class="brand"><b>คู่มือ AssetRecovery</b><span>ระบบติดตามทรัพย์คืนให้บริษัทไฟแนนซ์ · ฉบับ ต.ค. 2569</span></div>
+    <div id="groups"></div>
+  </nav>
+  <div class="mobilebar">
+    <b>คู่มือ AssetRecovery</b>
+    <label for="pick" hidden>เลือกเล่ม</label>
+    <select id="pick" class="pick" aria-label="เลือกเล่มคู่มือ"></select>
+  </div>
+  <main><article id="doc"><p class="status">กำลังเปิดคู่มือ…</p></article></main>
+</div>
+
+<script>
+const DOCS = [
+  { group: 'เริ่มที่นี่', items: [
+    { id: 'start', no: '', title: 'ภาพรวมและวิธีใช้คู่มือ', file: null },
+  ]},
+  { group: 'คู่มือผู้ใช้ 7 เล่ม', items: [
+    { id: 'book-01', no: '1', title: 'ผู้ดูแลระบบ', file: 'books/01-admin.md' },
+    { id: 'book-02', no: '2', title: 'ธุรการและเจ้าหน้าที่อนุมัติเคส', file: 'books/02-intake.md' },
+    { id: 'book-03', no: '3', title: 'ทีมติดตามทรัพย์', file: 'books/03-field-team.md' },
+    { id: 'book-04', no: '4', title: 'คลังและส่งมอบ', file: 'books/04-warehouse.md' },
+    { id: 'book-05', no: '5', title: 'การเงิน', file: 'books/05-finance.md' },
+    { id: 'book-06', no: '6', title: 'บัญชีและผู้บริหาร', file: 'books/06-accounting-exec.md' },
+    { id: 'book-07', no: '7', title: 'พอร์ทัลบริษัทไฟแนนซ์', file: 'books/07-portal.md' },
+  ]},
+  { group: 'ผังระบบ', items: [
+    { id: 'diagram-workflow', no: 'A', title: 'Work Flow Diagram', file: 'diagrams/01-workflow.md' },
+    { id: 'diagram-usecase', no: 'B', title: 'Use Case Diagram', file: 'diagrams/02-use-case.md' },
+    { id: 'diagram-roles', no: 'C', title: 'Flow Chart ราย role', file: 'diagrams/03-role-flowcharts.md' },
+  ]},
+  { group: 'อ้างอิง', items: [
+    { id: 'preset', no: '', title: 'ค่าตั้งมาตรฐานการเงิน/ภาษีไทย', file: 'settings-preset.md' },
+  ]},
+]
+const FLAT = DOCS.flatMap((g) => g.items)
+const byFile = new Map(FLAT.filter((d) => d.file).map((d) => [d.file, d.id]))
+
+const START = `# คู่มือ AssetRecovery
+
+ระบบนี้ใช้บริหารงานติดตามทรัพย์ (มือถือ/อุปกรณ์) คืนจากลูกหนี้ให้บริษัทไฟแนนซ์ ตั้งแต่รับเคส ส่งทีมลงพื้นที่ รับเครื่องเข้าคลัง ส่งมอบคืน ไปจนถึงวางบิล จ่ายค่าตอบแทน และส่งข้อมูลให้สำนักงานบัญชีปิดงวด
+
+## เลือกเล่มตามหน้าที่ของคุณ
+
+| คุณคือ | อ่านเล่ม |
+|---|---|
+| ผู้ดูแลระบบ (ตั้งค่าครั้งแรก · ผู้ใช้ · สิทธิ์) | เล่ม 1 |
+| ธุรการรับเคส · เจ้าหน้าที่อนุมัติเคส | เล่ม 2 |
+| ผู้จัดการทีม · หัวหน้าทีม · พนักงานภาคสนาม (มือถือ) | เล่ม 3 |
+| ธุรการคลัง (รับเครื่อง · ล็อตส่งมอบ) | เล่ม 4 |
+| ฝ่ายการเงิน | เล่ม 5 |
+| ฝ่ายบัญชี · ผู้บริหาร | เล่ม 6 |
+| พนักงานบริษัทไฟแนนซ์ (ลูกค้า) | เล่ม 7 |
+
+## เส้นทางงานหลักในหนึ่งเคส
+
+1. **รับเคส** — ธุรการกรอกหรือนำเข้าไฟล์ แนบสัญญาและบัตรประชาชน แล้วส่งตรวจ
+2. **อนุมัติเคส** — เจ้าหน้าที่ตรวจเอกสาร ยืนยันทีมที่ระบบเสนอจากจังหวัดของลูกหนี้
+3. **มอบหมาย** — หัวหน้าหรือผู้จัดการทีมเลือกพนักงาน
+4. **ลงพื้นที่** — พนักงานรับงานบนมือถือ จัดวัน เช็คอิน ถ่ายหลักฐาน ปิดงานสำเร็จหรือไม่สำเร็จ
+5. **รับเครื่องเข้าคลัง** — ตรวจ IMEI 15 หลักและสภาพเครื่อง
+6. **ส่งมอบคืนบริษัทไฟแนนซ์** — รวมเครื่องเป็นล็อตต่อบริษัท แนบใบเซ็นรับ แล้วยืนยันล็อต
+7. **อนุมัติค่าตอบแทน** — ผู้จัดการขั้นที่ 1 · การเงินขั้นที่ 2 (ยอดสูงต้องผ่านผู้บริหาร)
+8. **รายได้และวางบิล** — รายได้เกิดเมื่อค่าตอบแทนอนุมัติครบและล็อตยืนยันแล้ว จากนั้นวางบิลและส่งบิล
+9. **รับชำระ** — ฝ่ายบัญชีนำเข้ารายการเดินบัญชี จับคู่ยอด ออกใบเสร็จ/ใบกำกับภาษี
+10. **จ่ายค่าตอบแทน** — การเงินสร้างรอบจ่าย ไฟล์โอนธนาคาร และหนังสือรับรองการหักภาษี ณ ที่จ่าย (50 ทวิ)
+11. **ปิดงวด** — ฝ่ายบัญชีส่งชุดเอกสาร (Accounting Pack) ให้สำนักงานบัญชีหลังสิ้นเดือน แล้วล็อกงวด
+
+> ภาพหน้าจอในคู่มือนี้มาจากการทดลองใช้งานจริงบนระบบทดสอบ ชื่อบุคคล บริษัท และตัวเลขทั้งหมดเป็นข้อมูลสมมติ
+
+## เรื่องที่ควรรู้ก่อนเริ่ม
+
+- วันที่บนหน้าจอเป็นปี **พ.ศ.** รูปแบบ วว/ดด/ปปปป เวลาเป็นเวลาไทย
+- เงินแสดงเป็นบาท ทศนิยม 2 ตำแหน่ง
+- แต่ละคนเห็นเมนูตามสิทธิ์ของตำแหน่ง ถ้าไม่เห็นเมนูที่คู่มือพูดถึง ให้ติดต่อผู้ดูแลระบบ
+- ทุกการแก้ไขสำคัญมีบันทึกการใช้งาน (ใคร ทำอะไร เมื่อไร เหตุผล) แก้ย้อนหลังหรือลบไม่ได้
+`
+
+function navLink(d) {
+  const a = document.createElement('a')
+  a.href = `#${d.id}`
+  a.dataset.id = d.id
+  a.innerHTML = `<span class="no">${d.no}</span><span></span>`
+  a.lastChild.textContent = d.title
+  return a
+}
+const groupsEl = document.getElementById('groups')
+const pick = document.getElementById('pick')
+for (const g of DOCS) {
+  const wrap = document.createElement('div'); wrap.className = 'group'
+  const h = document.createElement('h2'); h.textContent = g.group; wrap.append(h)
+  const og = document.createElement('optgroup'); og.label = g.group
+  for (const d of g.items) {
+    wrap.append(navLink(d))
+    const o = document.createElement('option'); o.value = d.id; o.textContent = (d.no ? d.no + ' · ' : '') + d.title; og.append(o)
+  }
+  groupsEl.append(wrap); pick.append(og)
+}
+pick.addEventListener('change', () => { location.hash = pick.value })
+
+marked.setOptions({ gfm: true, breaks: false })
+const cache = new Map()
+async function loadText(file) {
+  if (cache.has(file)) return cache.get(file)
+  const res = await fetch(file)
+  if (!res.ok) throw new Error(`เปิดไฟล์ ${file} ไม่ได้ (${res.status})`)
+  const text = await res.text(); cache.set(file, text); return text
+}
+
+/** ปรับลิงก์/ภาพที่เขียนสัมพัทธ์กับไฟล์ต้นฉบับ ให้ชี้ไฟล์ที่เผยแพร่คู่กับหน้านี้ */
+function resolvePath(base, href) {
+  const dir = base.includes('/') ? base.slice(0, base.lastIndexOf('/') + 1) : ''
+  const parts = (dir + href).split('/'); const out = []
+  for (const p of parts) { if (p === '..') out.pop(); else if (p !== '.') out.push(p) }
+  return out.join('/')
+}
+
+function render(md, file) {
+  const doc = document.getElementById('doc')
+  doc.innerHTML = marked.parse(md)
+  for (const img of doc.querySelectorAll('img')) {
+    const src = img.getAttribute('src') || ''
+    if (file && !/^(https?:|data:)/.test(src)) img.src = resolvePath(file, src)
+    img.loading = 'lazy'; img.decoding = 'async'
+  }
+  for (const a of doc.querySelectorAll('a[href]')) {
+    const href = a.getAttribute('href')
+    if (/^(https?:|mailto:)/.test(href)) { a.target = '_blank'; a.rel = 'noopener'; continue }
+    if (href.startsWith('#')) continue
+    const [path, frag] = href.split('#')
+    const target = file ? resolvePath(file, path) : path
+    const id = byFile.get(target)
+    if (id) a.href = `#${id}`
+    else if (/\.(md)$/.test(target)) { a.removeAttribute('href'); a.title = 'ไฟล์นี้ไม่ได้อยู่ในชุดคู่มือออนไลน์' }
+  }
+  for (const t of doc.querySelectorAll('table')) {
+    const w = document.createElement('div'); w.className = 'tablewrap'; t.replaceWith(w); w.append(t)
+  }
+  let hasMermaid = false
+  for (const code of doc.querySelectorAll('pre > code.language-mermaid')) {
+    const pre = document.createElement('pre'); pre.className = 'mermaid'; pre.textContent = code.textContent
+    const w = document.createElement('div'); w.className = 'mermaidwrap'; w.append(pre)
+    code.parentElement.replaceWith(w); hasMermaid = true
+  }
+  if (hasMermaid && window.mermaid?.run) window.mermaid.run({ querySelector: 'pre.mermaid' }).catch(() => {})
+}
+
+function pager(id) {
+  const i = FLAT.findIndex((d) => d.id === id)
+  const prev = FLAT[i - 1], next = FLAT[i + 1]
+  const nav = document.createElement('nav'); nav.className = 'pager'; nav.setAttribute('aria-label', 'เล่มก่อนหน้าและถัดไป')
+  nav.innerHTML = `<span>${prev ? '' : ''}</span><span></span>`
+  if (prev) { const a = document.createElement('a'); a.href = `#${prev.id}`; a.textContent = `← ${prev.title}`; nav.firstChild.replaceWith(a) }
+  if (next) { const a = document.createElement('a'); a.href = `#${next.id}`; a.textContent = `${next.title} →`; nav.lastChild.replaceWith(a) }
+  document.getElementById('doc').append(nav)
+}
+
+async function show() {
+  const id = location.hash.slice(1) || 'start'
+  const d = FLAT.find((x) => x.id === id) || FLAT[0]
+  for (const a of groupsEl.querySelectorAll('a')) {
+    if (a.dataset.id === d.id) a.setAttribute('aria-current', 'page')
+    else a.removeAttribute('aria-current')
+  }
+  pick.value = d.id
+  const doc = document.getElementById('doc')
+  try {
+    if (!d.file) render(START, null)
+    else { doc.innerHTML = '<p class="status">กำลังเปิดคู่มือ…</p>'; render(await loadText(d.file), d.file) }
+    pager(d.id)
+    document.title = d.id === 'start' ? 'คู่มือ AssetRecovery' : `${d.title} · คู่มือ AssetRecovery`
+    window.scrollTo(0, 0)
+  } catch (e) {
+    doc.innerHTML = '<p class="status"></p>'
+    doc.firstChild.textContent = `เปิดเล่มนี้ไม่ได้: ${e.message} — ลองโหลดหน้าใหม่`
+  }
+}
+window.addEventListener('hashchange', show)
+show()
+</script>
