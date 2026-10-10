@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { INTAKE_PHOTO_ANGLES } from '@/lib/warehouse/intake'
 import {
+  intakePhotoTitle,
   angleOfIntakePhoto,
   flattenIntakePhotos,
   groupIntakePhotos,
@@ -80,5 +81,12 @@ describe('intakePhotoWarning', () => {
     const warning = intakePhotoWarning(5)
     expect(warning).toContain('2')
     expect(warning).toContain('รับเข้าคลังต่อได้')
+  })
+})
+
+describe('intakePhotoTitle (staging E-047)', () => {
+  it('หัวเรื่องเป็นชื่อมุม — เลขเคส ไม่ใช่ชื่อไฟล์ UUID', () => {
+    expect(intakePhotoTitle('assets/org/8bd6f012-74c0-4dff-b9f5-6141fb5fc5b9-intake-E2E-08-front.jpg', 'E2E-08')).toMatch(/— E2E-08$/)
+    expect(intakePhotoTitle('assets/org/other.jpg', 'E2E-08')).toBe('รูปเพิ่มเติม — E2E-08')
   })
 })

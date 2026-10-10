@@ -53,8 +53,83 @@ const TONE: Record<CaseStatusAction, CaseActionButton['tone']> = {
   reject_recycle: 'danger',
 }
 
-/** action ที่พาเคสไปสถานะสุดท้าย (`rejected` ไม่มีเส้นออก — `23`) ต้องยืนยันก่อน */
-const CONFIRM_REQUIRED: ReadonlySet<CaseStatusAction> = new Set(['reject'])
+/**
+ * action ที่ต้องเปิดกล่องยืนยันก่อน — `reject` (ไปสถานะสุดท้าย `rejected`) · `approve_recycle` (staging E-034 —
+ * ขึ้นรอบติดตามใหม่และกลับเข้าคิวมอบหมายทันที ย้อนกลับไม่ได้)
+ */
+const CONFIRM_REQUIRED: ReadonlySet<CaseStatusAction> = new Set(['reject', 'approve_recycle'])
+
+/** ข้อความกล่องยืนยันต่อ action (staging E-034) */
+export const CASE_ACTION_CONFIRM: Partial<
+  Record<CaseStatusAction, { title: string; description: string; confirmLabel: string; danger: boolean }>
+> = {
+  reject: {
+    title: 'ไม่รับเคส',
+    description:
+      'เคสจะถูกปิดเป็น “ไม่รับเคส” ทันทีและย้อนกลับไม่ได้ — บริษัทไฟแนนซ์จะเห็นสถานะนี้พร้อมเหตุผล ถ้าต้องการให้แก้ข้อมูลแล้วส่งใหม่ ให้ใช้ “ขอข้อมูลเพิ่ม” แทน',
+    confirmLabel: 'ยืนยันไม่รับเคส',
+    danger: true,
+  },
+  approve_recycle: {
+    title: 'อนุมัติรีไซเกิล',
+    description:
+      'เคสจะขึ้นรอบติดตามใหม่และกลับเข้าคิวมอบหมายทันที (ย้อนกลับไม่ได้) — ค่าบริการรอบใหม่บันทึกตามเทมเพลตปัจจุบัน',
+    confirmLabel: 'ยืนยันอนุมัติรีไซเกิล',
+    danger: false,
+  },
+}
+
+/** ข้อความ toast เมื่อทำสำเร็จ (staging E-032 — เดิมต่อคำบนปุ่ม + "แล้ว" และใช้สีแดงกับปุ่มโทน danger) */
+const SUCCESS_TOAST: Record<CaseStatusAction, string> = {
+  review: 'ส่งตรวจเคสแล้ว',
+  accept: 'รับเคสแล้ว',
+  reject: 'บันทึกไม่รับเคสแล้ว',
+  request_more_info: 'ส่งขอข้อมูลเพิ่มแล้ว',
+  return_to_draft: 'กลับไปแก้ไขเป็นร่างแล้ว',
+  create_recycle_request: 'ส่งคำขอรีไซเกิลแล้ว',
+  approve_recycle: 'อนุมัติรีไซเกิลแล้ว',
+  reject_recycle: 'บันทึกไม่อนุมัติรีไซเกิลแล้ว',
+}
+
+export function caseActionSuccessTitle(action: CaseStatusAction): string {
+  return SUCCESS_TOAST[action]
+}
+
+/** คำบรรยายหัว modal ต่อโหมด (staging E-033 — โหมดอ่านอย่างเดียวที่ยังตีกลับหลักฐานได้ต้องไม่บอกว่า "แก้ไม่ได้") */
+export function caseDetailDescription(mode: CaseDetailMode, options: { canRejectEvidence?: boolean } = {}): string {
+  if (mode === 'review') return 'ตรวจข้อมูล เอกสาร และทีมที่ระบบเสนอ แล้วตัดสินใจได้ในหน้าเดียว'
+  if (mode === 'recycle_review') return 'พิจารณาคำขอรีไซเกิล — อนุมัติแล้วเคสจะขึ้นรอบใหม่และกลับเข้าคิวมอบหมายทันที'
+  if (mode === 'recycle_request') return 'เคสปิดแบบไม่สำเร็จ — ขอรีไซเกิลได้เมื่อไฟแนนซ์ต้องการให้ลองติดตามใหม่'
+  if (options.canRejectEvidence === true) {
+    return 'ตรวจหลักฐานปิดงาน — ตีกลับให้พนักงานส่งใหม่ได้ถ้าหลักฐานไม่น่าเชื่อถือ (ข้อมูลเคสแก้จากหน้านี้ไม่ได้)'
+  }
+  return 'ดูรายละเอียดเคส (สถานะนี้แก้ไขจากหน้านี้ไม่ได้)'
+}
+
+/** ป้ายช่องเหตุผล/หมายเหตุต่อโหมด (staging E-034) */
+export function caseReasonFieldLabel(mode: CaseDetailMode): string {
+  if (mode === 'review') return 'จำเป็นเมื่อไม่รับเคส หรือขอข้อมูลเพิ่ม'
+  if (mode === 'recycle_review') return 'จำเป็นเมื่อไม่อนุมัติ · เมื่ออนุมัติจะบันทึกเป็นหมายเหตุผู้อนุมัติ'
+  return 'จำเป็นสำหรับคำขอรีไซเกิล'
+}
+
+/** สถานะคำขอรีไซเกิลเป็นภาษาผู้ใช้ (staging E-032) */
+export const RECYCLE_STATUS_LABEL: Readonly<Record<string, string>> = {
+  pending: 'รออนุมัติ',
+  approved: 'อนุมัติแล้ว',
+  rejected: 'ไม่อนุมัติ',
+}
+
+/** บรรทัดหัวประวัติรีไซเกิล — คำขอที่ยังรออนุมัติยังไม่มีเลขรอบ ⇒ ใช้รอบปัจจุบัน → รอบถัดไป (staging E-032) */
+export function recycleHistoryLine(
+  entry: { previousRound: number | null; newRound: number | null; status: string },
+  currentRound: number,
+): string {
+  const from = entry.previousRound ?? currentRound
+  const to = entry.newRound ?? (entry.status === 'rejected' ? null : from + 1)
+  const status = RECYCLE_STATUS_LABEL[entry.status] ?? entry.status
+  return to === null ? `รอบ ${from} · ${status}` : `รอบ ${from} → ${to} · ${status}`
+}
 
 /** ลำดับปุ่มบน modal ต่อโหมด (`38` §7.5) — ซ้ายไปขวา */
 const MODE_ACTIONS: Record<CaseDetailMode, readonly CaseStatusAction[]> = {

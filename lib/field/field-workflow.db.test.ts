@@ -334,6 +334,24 @@ suite('Phase 2.8 — flow เต็ม รับงาน → จัดวัน
     expect(audit?.actorId).toBe(AGENT_A)
   })
 
+  it('staging E-038 — เคสรอบที่ 2 รอรับงาน: บอกเหตุผลไม่สำเร็จของรอบก่อน (เฉพาะเคสของตัวเอง)', async () => {
+    const caseId = await seedReadyToClose()
+    await field.closeFieldCase(
+      agentA,
+      caseId,
+      { outcome: 'closed_fail', failReason: 'other', failReasonDetail: 'ลูกหนี้ย้ายออกแล้ว', photos: ['p.jpg'], videos: ['v.mp4'], productPhotos: [] },
+      { actor: agentA, meta },
+    )
+    // จำลองอนุมัติรีไซเกิล — ขึ้นรอบ 2 แล้วมอบหมายใหม่
+    await db().case.update({ where: { id: caseId }, data: { status: 'approved', trackingRound: 2, outcome: null } })
+    await assignments.assignCase(manager, caseId, { agentId: agentA.id }, { actor: manager, meta })
+
+    const pending = (await field.listFieldCases(agentA, { status: 'pending_accept', view: 'own' })).items
+    const card = pending.find((item) => item.caseId === caseId)
+    expect(card?.trackingRound).toBe(2)
+    expect(card?.previousRoundFailReason).toContain('ลูกหนี้ย้ายออกแล้ว')
+  })
+
   it('เคสไม่สำเร็จปิดได้โดยไม่ต้องมีรูปสินค้า (§20)', async () => {
     const caseId = await seedReadyToClose()
     const closed = await field.closeFieldCase(

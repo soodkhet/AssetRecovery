@@ -37,6 +37,7 @@ import {
   selectableAssetIds,
   type AssetFilterState,
   type FilterOption,
+  imeiSearchHint,
 } from '@/lib/warehouse/asset-filters'
 import { documentDeviceText } from '@/lib/warehouse/handover-doc'
 import { WAREHOUSE_CREATE_LOT_CAPABILITY } from '@/lib/warehouse/permissions'
@@ -347,7 +348,7 @@ export function CustodyTab({
             error={error === null ? null : { title: error.title, message: error.message, code: error.code }}
             isEmpty={drillRows.length === 0}
             emptyTitle="ไม่พบเครื่องตามเงื่อนไข"
-            emptyDescription="ลองล้างคำค้นหรือวันที่รับเข้า"
+            emptyDescription={imeiSearchHint(detailSearch) ?? 'ลองล้างคำค้นหรือวันที่รับเข้า'}
           />
           <TBody>
             {!loading &&

@@ -13,6 +13,7 @@ import { Button, EmptyState, ErrorState, InlineAlert, LoadingState, StatusBadge 
 import { cn } from '@/components/ui/cn'
 import { REQUEST_ADVANCE } from '@/lib/advances/advance'
 import {
+  advanceCardAmounts,
   advanceStatusBadgeGroup,
   advanceStatusLabel,
   canSettleAdvance,
@@ -80,7 +81,15 @@ export function AdvancesTab() {
             >
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="text-lg font-extrabold text-slate-900">{fmtSatangSymbol(advance.requestedSatang)}</p>
+                  {/* staging E-053 — ตัวเลขหลัก = ยอดที่อนุมัติ (เงินที่ได้รับจริง) */}
+                  <p className="text-lg font-extrabold text-slate-900">
+                    {fmtSatangSymbol(advanceCardAmounts(advance).headlineSatang)}
+                  </p>
+                  {advanceCardAmounts(advance).requestedNoteSatang !== null && (
+                    <p className="text-[11px] text-slate-500">
+                      ขอ {fmtSatangSymbol(advanceCardAmounts(advance).requestedNoteSatang ?? 0)}
+                    </p>
+                  )}
                   <p className="text-[13px] text-slate-600">{advance.purpose}</p>
                 </div>
                 <StatusBadge

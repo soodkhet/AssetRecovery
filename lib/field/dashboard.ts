@@ -14,6 +14,8 @@ import type { FieldCaseListItemDto } from '@/lib/field/types'
 export interface FieldDashboardModel {
   /** บล็อก 1 — Draft ค้าง (แตะแล้วไปแท็บ "กำลังติดตาม") */
   draftCases: FieldCaseListItemDto[]
+  /** staging E-036 — เคสที่ถูกตีกลับหลักฐาน (`needs_revision`) ต้องส่งหลักฐานใหม่ */
+  revisionCases: FieldCaseListItemDto[]
   /** บล็อก 2 — เคสที่ต้องไปวันนี้ เรียงตามลำดับที่จัดไว้ */
   todayCases: FieldCaseListItemDto[]
   /** บล็อก 3 — สรุปภาพรวม 3 สถานะ */
@@ -32,6 +34,7 @@ export function buildFieldDashboard(
   return {
     // draft ค้างเกิดได้เฉพาะเคสที่ยังทำงานอยู่ (ปิดงานแล้ว draft ถูกล้าง — `41` §6.5)
     draftCases: activeItems.filter((item) => item.hasDraft),
+    revisionCases: activeItems.filter((item) => item.status === 'needs_revision'),
     todayCases: activeItems
       .filter((item) => item.status === 'scheduled' && item.scheduleDate === todayIso)
       .sort((a, b) => (a.scheduleOrder ?? 0) - (b.scheduleOrder ?? 0)),
@@ -94,4 +97,9 @@ export function buildSevenDayTrend(
  */
 export function successRatePct(successCount: number, failCount: number): number | null {
   return successRateOf(successCount, failCount)
+}
+
+/** staging E-036 — ลิงก์แบนเนอร์เคสถูกตีกลับ: 1 เคส ⇒ เปิดเคสนั้นในแท็บติดตาม · หลายเคส ⇒ แท็บติดตาม */
+export function revisionBannerHref(cases: readonly Pick<FieldCaseListItemDto, 'caseId'>[]): string {
+  return cases.length === 1 ? `/field/tracking?case=${cases[0]!.caseId}` : '/field/tracking'
 }

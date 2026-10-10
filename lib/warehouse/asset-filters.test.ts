@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { AssetStatus } from '@/lib/generated/prisma/enums'
 import {
+  IMEI_PARTIAL_SEARCH_HINT,
+  imeiSearchHint,
   EMPTY_ASSET_FILTERS,
   buildAssetListQuery,
   filterByReceivedDate,
@@ -228,5 +230,14 @@ describe('filterByReceivedDate', () => {
   it('เทียบวันตามเวลาไทย ไม่ใช่ UTC', () => {
     expect(filterByReceivedDate(items, '2026-07-02').map((item) => item.id)).toEqual(['1', '2'])
     expect(filterByReceivedDate(items, '2026-07-01')).toEqual([])
+  })
+})
+
+describe('imeiSearchHint (staging E-043)', () => {
+  it('ตัวเลข 6–14 หลัก ⇒ บอกให้พิมพ์ครบ 15 หลัก · ครบ 15/ข้อความอื่น ⇒ ไม่มี', () => {
+    expect(imeiSearchHint('35-6789 012')).toBe(IMEI_PARTIAL_SEARCH_HINT)
+    expect(imeiSearchHint('356789012345678')).toBeNull()
+    expect(imeiSearchHint('12345')).toBeNull()
+    expect(imeiSearchHint('สมชาย')).toBeNull()
   })
 })

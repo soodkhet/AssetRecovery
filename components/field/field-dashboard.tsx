@@ -9,7 +9,7 @@ import { IconAlert, IconCheck, IconChevronRight, IconCompass, IconWallet } from 
 import { ErrorState, LoadingState } from '@/components/ui'
 import { apiPath } from '@/lib/api/contract'
 import { callApi } from '@/lib/api/types'
-import { buildFieldDashboard, buildSevenDayTrend, successRatePct } from '@/lib/field/dashboard'
+import { buildFieldDashboard, buildSevenDayTrend, revisionBannerHref, successRatePct } from '@/lib/field/dashboard'
 import type { FieldCaseListItemDto, FieldCaseListResultDto, FieldIncomeSummaryDto } from '@/lib/field/types'
 import { toInputDate } from '@/lib/format/datetime'
 import { fmtRatioPct, fmtSatangSymbol } from '@/lib/format/money'
@@ -197,6 +197,25 @@ export function FieldDashboard() {
 
   return (
     <>
+      {/* staging E-036 — เคสถูกตีกลับหลักฐาน ต้องส่งใหม่ */}
+      {model.revisionCases.length > 0 && (
+        <Link
+          href={revisionBannerHref(model.revisionCases)}
+          className="focus-ring mb-4 flex items-center gap-3 rounded-2xl border-2 border-orange-300 bg-orange-50 p-4 shadow-sm"
+        >
+          <IconAlert className="h-5 w-5 shrink-0 text-orange-600" />
+          <span>
+            <span className="block text-sm font-extrabold text-orange-800">
+              มี {model.revisionCases.length} เคสถูกตีกลับหลักฐาน — ต้องส่งหลักฐานใหม่
+            </span>
+            <span className="mt-0.5 block text-xs text-orange-600">
+              {model.revisionCases.map((item) => item.caseRef).slice(0, 3).join(', ')}
+              {model.revisionCases.length > 3 ? ' …' : ''} · แตะเพื่อดูเหตุผลและแก้ไข
+            </span>
+          </span>
+        </Link>
+      )}
+
       {model.draftCases.length > 0 && (
         <Link
           href="/field/tracking"

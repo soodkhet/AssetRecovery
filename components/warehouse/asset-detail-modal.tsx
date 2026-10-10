@@ -7,7 +7,7 @@ import { Button, InlineAlert, Modal, StatusBadge } from '@/components/ui'
 import { fmtDateTime } from '@/lib/format/datetime'
 import { compareAssetIdentity } from '@/lib/warehouse/imei'
 import { INTAKE_PHOTO_ANGLE_LABELS } from '@/lib/warehouse/intake'
-import { angleOfIntakePhoto, groupIntakePhotos } from '@/lib/warehouse/intake-photos'
+import { angleOfIntakePhoto, intakePhotoTitle, groupIntakePhotos } from '@/lib/warehouse/intake-photos'
 import { colorCapacityCheckText } from '@/lib/warehouse/handover-doc'
 import type { AssetDetailDto } from '@/lib/warehouse/types'
 import { assetConditionBadgeGroup, assetConditionLabel } from '@/lib/warehouse/warehouse-ui'
@@ -104,7 +104,12 @@ export function AssetDetailModal({
                       key={path}
                       type="button"
                       onClick={() =>
-                        setViewing({ fileUrl: path, originalName: fileNameOf(path), mimeType: 'image/jpeg' })
+                        setViewing({
+                          fileUrl: path,
+                          originalName: fileNameOf(path),
+                          mimeType: 'image/jpeg',
+                          title: intakePhotoTitle(path, asset.caseRef),
+                        })
                       }
                       className="focus-ring rounded-lg border border-slate-200 bg-slate-50 px-2 py-3 text-center text-[11px] font-semibold text-slate-600 hover:bg-slate-100"
                     >

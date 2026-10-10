@@ -210,3 +210,14 @@ export function filterByReceivedDate(items: readonly AssetListItemDto[], date: s
   if (date === '') return [...items]
   return items.filter((item) => item.receivedAt !== null && toInputDate(item.receivedAt) === date)
 }
+
+/**
+ * staging E-043 — ค้นหา IMEI ต้องครบ 15 หลัก (Rule 10 · exact match) · คำค้นที่เป็นตัวเลข 6–14 หลัก (ตัดช่องว่าง/ขีด/จุด)
+ * แล้วไม่พบ ⇒ บอกเหตุผลแทนข้อความ "ไม่พบ" เฉย ๆ · อื่น ๆ = `null`
+ */
+export const IMEI_PARTIAL_SEARCH_HINT = 'IMEI ต้องพิมพ์ครบ 15 หลัก — ระบบค้นแบบตรงทั้งหมดเพื่อกันจับคู่ผิดเครื่อง'
+
+export function imeiSearchHint(keyword: string): string | null {
+  const digits = keyword.replace(/[\s.-]/g, '')
+  return /^\d{6,14}$/.test(digits) ? IMEI_PARTIAL_SEARCH_HINT : null
+}

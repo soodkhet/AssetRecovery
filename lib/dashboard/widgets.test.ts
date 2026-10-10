@@ -248,3 +248,14 @@ describe('การ์ด AR ผู้บริหาร — บรรทัด 
     }
   })
 })
+
+describe('ลิงก์คิวเคสเปิดรายการที่กรองสถานะไว้แล้ว (staging E-040)', () => {
+  it.each([
+    ['case_draft', '/cases/submit?status=draft'],
+    ['case_need_info', '/cases/submit?status=need_info'],
+    ['case_pending_review', '/cases/submit?status=pending_review'],
+    ['case_recycle_review', '/cases/submit?status=pending_recycle_review'],
+  ])('%s → %s', (id, href) => {
+    expect(DASHBOARD_QUEUES.find((queue) => queue.id === id)?.href).toBe(href)
+  })
+})

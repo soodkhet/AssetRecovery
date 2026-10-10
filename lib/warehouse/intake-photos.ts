@@ -1,5 +1,5 @@
 import { sanitizeFileName } from '@/lib/cases/document-upload'
-import { INTAKE_PHOTO_ANGLES, type IntakePhotoAngle } from '@/lib/warehouse/intake'
+import { INTAKE_PHOTO_ANGLES, INTAKE_PHOTO_ANGLE_LABELS, type IntakePhotoAngle } from '@/lib/warehouse/intake'
 
 /**
  * รูปหลักฐานตอนรับเข้าคลัง 7 มุม (`44` §8.2 ขั้น 3/3) — **pure ล้วน**
@@ -96,4 +96,10 @@ export function intakePhotoWarning(filledAngles: number): string | null {
   if (filledAngles >= INTAKE_PHOTO_ANGLES.length) return null
   const missing = INTAKE_PHOTO_ANGLES.length - filledAngles
   return `ยังไม่ได้ถ่ายอีก ${missing} มุม (แนะนำให้ครบ ${INTAKE_PHOTO_ANGLES.length} มุม) — รับเข้าคลังต่อได้`
+}
+
+/** หัวเรื่องหน้าต่างดูรูป (staging E-047) — "ด้านหน้า — เลขเคส" แทนชื่อไฟล์ดิบที่มี UUID */
+export function intakePhotoTitle(path: string, caseRef: string): string {
+  const angle = angleOfIntakePhoto(path)
+  return `${angle === null ? 'รูปเพิ่มเติม' : INTAKE_PHOTO_ANGLE_LABELS[angle]} — ${caseRef}`
 }

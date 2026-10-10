@@ -102,6 +102,8 @@ export interface FieldCaseListItemDto {
   assignmentId: string
   caseRef: string
   trackingRound: number
+  /** staging E-038 — รอบที่ 2 ขึ้นไป: เหตุผลปิดไม่สำเร็จของรอบก่อน (เฉพาะเคสของตัวเอง) · ไม่มี = `null`/ไม่ระบุ */
+  previousRoundFailReason?: string | null
   status: AssignmentStatus
   group: FieldGroup
   agentId: string

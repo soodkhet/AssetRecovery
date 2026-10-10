@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { advanceListQuerySchema } from '@/lib/advances/schemas'
 import {
+  advanceCardAmounts,
   advanceRequestErrorText,
   ADVANCE_STATUS_LABEL,
   advanceStatusBadgeGroup,
@@ -257,5 +258,21 @@ describe('canReviewAdvanceClear (staging E-012)', () => {
     expect(canReviewAdvanceClear(advance({ status: 'cleared', clearReviewedAt: null }))).toBe(true)
     expect(canReviewAdvanceClear(advance({ status: 'cleared', clearReviewedAt: '2026-10-10T05:00:00Z' }))).toBe(false)
     expect(canReviewAdvanceClear(advance({ status: 'approved', clearReviewedAt: null }))).toBe(false)
+  })
+})
+
+describe('advanceCardAmounts (staging E-053)', () => {
+  it('อนุมัติแล้ว ⇒ ตัวเลขหลักเป็นยอดอนุมัติ + บรรทัด "ขอ" เมื่อยอดต่างกัน', () => {
+    expect(advanceCardAmounts({ requestedSatang: 300_000, approvedSatang: 250_000 })).toEqual({
+      headlineSatang: 250_000,
+      requestedNoteSatang: 300_000,
+    })
+    expect(advanceCardAmounts({ requestedSatang: 300_000, approvedSatang: 300_000 }).requestedNoteSatang).toBeNull()
+  })
+  it('ยังไม่อนุมัติ ⇒ ยอดที่ขอ', () => {
+    expect(advanceCardAmounts({ requestedSatang: 300_000, approvedSatang: null })).toEqual({
+      headlineSatang: 300_000,
+      requestedNoteSatang: null,
+    })
   })
 })

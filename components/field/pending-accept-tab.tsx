@@ -60,6 +60,12 @@ export function PendingAcceptTab() {
             return (
               <div key={item.assignmentId} className="rounded-2xl border border-amber-200 bg-white p-4 shadow-sm">
                 <div className="mb-2">
+                  {/* staging E-038 — เคสรีไซเกิล: บอกรอบที่ + เหตุผลไม่สำเร็จของรอบก่อน */}
+                  {item.trackingRound > 1 && (
+                    <div className="mb-1 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-800">
+                      รอบที่ {item.trackingRound}
+                    </div>
+                  )}
                   <div className="text-base font-bold text-slate-800">{item.debtorName ?? '—'}</div>
                   <div className="mt-0.5 flex items-center gap-1 text-xs text-slate-400">
                     <IconMapPin className="h-4 w-4" />
@@ -78,6 +84,11 @@ export function PendingAcceptTab() {
                   </span>{' '}
                   · มอบหมายเมื่อ {fmtDateTime(item.assignedAt)}
                 </div>
+                {item.previousRoundFailReason != null && (
+                  <div className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    รอบก่อนไม่สำเร็จ: {item.previousRoundFailReason}
+                  </div>
+                )}
                 {item.commissionSatang !== null && (
                   <div className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700">
                     จะได้รับถ้าจบงานสำเร็จ{' '}

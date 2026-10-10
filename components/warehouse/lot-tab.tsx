@@ -31,7 +31,7 @@ import { callApi, type ApiCallError } from '@/lib/api/types'
 import { fmtDateTime } from '@/lib/format/datetime'
 import { monthLabel } from '@/lib/field/month-filter'
 import { documentDeviceText } from '@/lib/warehouse/handover-doc'
-import { matchesAssetSearch, type FilterOption } from '@/lib/warehouse/asset-filters'
+import { imeiSearchHint, matchesAssetSearch, type FilterOption } from '@/lib/warehouse/asset-filters'
 import { lotDocumentSlots } from '@/lib/warehouse/lot-documents'
 import {
   DELIVERED_STATUS_OPTIONS,
@@ -354,7 +354,7 @@ export function LotTab({
               error={null}
               isEmpty={assets.length === 0}
               emptyTitle="ไม่พบเครื่องตามคำค้น"
-              emptyDescription="ลองล้างคำค้นเพื่อดูรายการทั้งหมดของล็อตนี้"
+              emptyDescription={imeiSearchHint(detailSearch) ?? 'ลองล้างคำค้นเพื่อดูรายการทั้งหมดของล็อตนี้'}
             />
             <TBody>
               {assets.map((asset) => (

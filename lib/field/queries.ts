@@ -71,6 +71,7 @@ import { toTeamViewCaseDetail, toTeamViewListItem } from '@/lib/field/team-view'
 import { loadEvidenceTimelines, resubmittedAtIso } from '@/lib/field/resubmission'
 import { Prisma } from '@/lib/generated/prisma/client'
 import type { AssignmentStatus, CaseOutcome, ExpenseStatus, FuelMode } from '@/lib/generated/prisma/enums'
+import { closeFailReasonText } from '@/lib/field/fail-reasons'
 import { prisma } from '@/lib/prisma'
 
 /**
@@ -444,9 +445,10 @@ export async function listFieldCases(user: SessionUser, query: FieldCaseListQuer
     select: assignmentSelect,
   })
 
-  const [pending, closedExtras] = await Promise.all([
+  const [pending, closedExtras, previousFail] = await Promise.all([
     pendingReassignmentCaseIds(rows.map((row) => row.caseId)),
     loadClosedCardExtras(user.organizationId, rows),
+    loadPreviousRoundFailReasons(user.organizationId, rows),
   ])
 
   return {
@@ -454,11 +456,45 @@ export async function listFieldCases(user: SessionUser, query: FieldCaseListQuer
     group: query.status ?? null,
     readOnly: query.view === 'team',
     items: rows.map((row) => {
-      const item = toListItem(row, pending.has(row.caseId), closedExtras.get(row.id))
+      const item = {
+        ...toListItem(row, pending.has(row.caseId), closedExtras.get(row.id)),
+        previousRoundFailReason: previousFail.get(row.id) ?? null,
+      }
       // มุมมองทีม: เคสของเพื่อนร่วมทีมเห็นแค่ชื่อลูกหนี้/พื้นที่/วัน/ชื่อพนักงาน (preship R3-005 · PDPA)
       return query.view === 'team' ? toTeamViewListItem(item, user.id) : item
     }),
   }
+}
+
+/**
+ * staging E-038 (มติ PO 10/10/2569) — เคสรอบที่ 2 ขึ้นไป: เหตุผลปิดไม่สำเร็จของรอบก่อน (หลักฐานปิดงานล่าสุดที่เป็น
+ * `closed_fail` ของรอบก่อนหน้า) ให้พนักงานรู้บริบทก่อนรับงาน · ไม่แสดงหมายเหตุคำขอรีไซเคิล (ข้อมูลภายใน)
+ */
+async function loadPreviousRoundFailReasons(
+  organizationId: string,
+  rows: readonly AssignmentRow[],
+): Promise<Map<string, string>> {
+  const recycled = rows.filter((row) => row.trackingRound > 1)
+  const result = new Map<string, string>()
+  if (recycled.length === 0) return result
+  const evidences = await prisma.caseEvidence.findMany({
+    where: {
+      organizationId,
+      caseId: { in: [...new Set(recycled.map((row) => row.caseId))] },
+      outcome: 'closed_fail',
+      failReason: { not: null },
+    },
+    orderBy: { submittedAt: 'desc' },
+    select: { caseId: true, failReason: true, failReasonDetail: true, assignment: { select: { trackingRound: true } } },
+  })
+  for (const row of recycled) {
+    const previous = evidences.find(
+      (evidence) => evidence.caseId === row.caseId && evidence.assignment.trackingRound < row.trackingRound,
+    )
+    const text = previous === undefined ? null : closeFailReasonText(previous.failReason, previous.failReasonDetail)
+    if (text !== null) result.set(row.id, text)
+  }
+  return result
 }
 
 // ── GET /api/field/teammates (`41` §6.6 — ช่อง "พักร่วมกับ") ────────────────

@@ -25,7 +25,17 @@ import {
 import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
 import { countDocuments, DOCUMENT_SLOT_LABEL, documentModeOf, type DocumentSlot } from '@/lib/cases/case'
-import { caseDetailMode, caseModalActions, showsReasonBox, type CaseActionButton } from '@/lib/cases/case-actions'
+import {
+  CASE_ACTION_CONFIRM,
+  caseActionSuccessTitle,
+  caseDetailDescription,
+  caseDetailMode,
+  caseModalActions,
+  caseReasonFieldLabel,
+  recycleHistoryLine,
+  showsReasonBox,
+  type CaseActionButton,
+} from '@/lib/cases/case-actions'
 import { isImageMime } from '@/lib/cases/document-upload'
 import {
   assetTypeLabel,
@@ -193,8 +203,8 @@ export function CaseDetailModal({
       }
 
       showToast({
-        tone: button.tone === 'danger' ? 'error' : 'success',
-        title: `${button.label}แล้ว`,
+        tone: 'success',
+        title: caseActionSuccessTitle(button.action),
         description: `${response.data.case.caseRef} → ${caseStatusLabel(response.data.case.status)}`,
       })
       // มติ PO U129 — เตือนเท่านั้น (ไม่บล็อก)
@@ -214,6 +224,9 @@ export function CaseDetailModal({
       setBusyAction(null)
     }
   }
+
+  // staging E-034 — ข้อความกล่องยืนยันตาม action (ไม่รับเคส / อนุมัติรีไซเกิล)
+  const confirmCopy = confirmingReject === null ? undefined : CASE_ACTION_CONFIRM[confirmingReject.action]
 
   const showRejectEvidence =
     detail !== null &&
@@ -262,16 +275,7 @@ export function CaseDetailModal({
           title ??
           (detail === null ? 'รายละเอียดเคส' : `เคส ${detail.caseRef} · รอบที่ ${detail.trackingRound}`)
         }
-        description={
-          description ??
-          (mode === 'review'
-            ? 'ตรวจข้อมูล เอกสาร และทีมที่ระบบเสนอ แล้วตัดสินใจได้ในหน้าเดียว'
-            : mode === 'recycle_review'
-              ? 'พิจารณาคำขอรีไซเกิล — อนุมัติแล้วเคสจะขึ้นรอบใหม่และกลับเข้าคิวมอบหมายทันที'
-              : mode === 'recycle_request'
-                ? 'เคสปิดแบบไม่สำเร็จ — ขอรีไซเกิลได้เมื่อไฟแนนซ์ต้องการให้ลองติดตามใหม่'
-                : 'ดูรายละเอียดเคส (สถานะนี้แก้ไขจากหน้านี้ไม่ได้)')
-        }
+        description={description ?? caseDetailDescription(mode, { canRejectEvidence: showRejectEvidence })}
         footer={
           <>
             <Button variant="secondary" onClick={onClose} disabled={busyAction !== null}>
@@ -393,7 +397,7 @@ export function CaseDetailModal({
                 </h3>
                 <Field
                   id="case-review-reason"
-                  label={mode === 'review' ? 'จำเป็นเมื่อไม่รับเคส หรือขอข้อมูลเพิ่ม' : 'จำเป็นสำหรับคำขอ/การไม่อนุมัติรีไซเกิล'}
+                  label={caseReasonFieldLabel(mode)}
                 >
                   <Textarea
                     maxLength={1000}
@@ -420,15 +424,21 @@ export function CaseDetailModal({
           setConfirmingReject(null)
           if (button !== null) void runAction(button)
         }}
-        title={`ไม่รับเคส ${detail?.caseRef ?? ''}`}
-        description="เคสจะถูกปิดเป็น “ไม่รับเคส” ทันทีและย้อนกลับไม่ได้ — บริษัทไฟแนนซ์จะเห็นสถานะนี้พร้อมเหตุผล ถ้าต้องการให้แก้ข้อมูลแล้วส่งใหม่ ให้ใช้ “ขอข้อมูลเพิ่ม” แทน"
-        confirmLabel="ยืนยันไม่รับเคส"
-        confirmVariant="danger"
+        title={`${confirmCopy?.title ?? ''} ${detail?.caseRef ?? ''}`}
+        description={confirmCopy?.description ?? ''}
+        confirmLabel={confirmCopy?.confirmLabel ?? 'ยืนยัน'}
+        confirmVariant={
+          confirmCopy?.danger === false ? 'primary' : 'danger'
+        }
       >
-        <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
-          <p className="mb-1 font-semibold text-slate-800">เหตุผลที่จะบันทึก</p>
-          <p className="max-h-32 overflow-y-auto whitespace-pre-wrap break-words">{reason.trim()}</p>
-        </div>
+        {reason.trim() !== '' && (
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+            <p className="mb-1 font-semibold text-slate-800">
+              {confirmingReject?.action === 'approve_recycle' ? 'หมายเหตุผู้อนุมัติ' : 'เหตุผลที่จะบันทึก'}
+            </p>
+            <p className="max-h-32 overflow-y-auto whitespace-pre-wrap break-words">{reason.trim()}</p>
+          </div>
+        )}
       </ConfirmModal>
 
       <ReasonConfirmModal
@@ -745,9 +755,7 @@ function RecycleHistorySection({ detail }: { detail: CaseDetailDto }) {
       <ul className="space-y-2">
         {detail.recycleHistory.map((entry) => (
           <li key={entry.id} className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs">
-            <div className="font-semibold text-slate-700">
-              รอบ {entry.previousRound ?? '—'} → {entry.newRound ?? '—'} · {entry.status}
-            </div>
+            <div className="font-semibold text-slate-700">{recycleHistoryLine(entry, detail.trackingRound)}</div>
             <div className="text-slate-600">หมายเหตุคำขอ: {entry.requestNote}</div>
             {entry.decisionNote !== null && <div className="text-slate-600">ผลการพิจารณา: {entry.decisionNote}</div>}
             <div className="text-[11px] text-slate-400">

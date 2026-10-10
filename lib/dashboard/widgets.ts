@@ -71,7 +71,8 @@ export const DASHBOARD_QUEUES: readonly DashboardQueueDef[] = [
     label: 'เคสร่างที่ยังไม่ส่งพิจารณา',
     hint: 'กรอกข้อมูล/แนบเอกสารให้ครบแล้วส่งพิจารณา',
     linkLabel: 'ไปที่ รับเคส',
-    href: '/cases/submit',
+    // staging E-040 — เปิดรายการที่กรองสถานะของคิวนี้ไว้แล้ว
+    href: '/cases/submit?status=draft',
     menuId: 'cases.submit',
     anyOf: ['record_admin_data'],
     teamScoped: false,
@@ -82,7 +83,8 @@ export const DASHBOARD_QUEUES: readonly DashboardQueueDef[] = [
     label: 'เคสที่ขอข้อมูลเพิ่ม',
     hint: 'รอข้อมูลเพิ่มเติมจากบริษัทไฟแนนซ์ก่อนพิจารณาต่อ',
     linkLabel: 'ไปที่ รับเคส',
-    href: '/cases/submit',
+    // staging E-040 — เปิดรายการที่กรองสถานะของคิวนี้ไว้แล้ว
+    href: '/cases/submit?status=need_info',
     menuId: 'cases.submit',
     anyOf: ['record_admin_data', 'approve_case'],
     teamScoped: false,
@@ -93,7 +95,8 @@ export const DASHBOARD_QUEUES: readonly DashboardQueueDef[] = [
     label: 'เคสรอพิจารณารับ',
     hint: 'ตรวจข้อมูลแล้วตัดสินรับเคส / ไม่รับ / ขอข้อมูลเพิ่ม',
     linkLabel: 'ไปที่ รับเคส',
-    href: '/cases/submit',
+    // staging E-040 — เปิดรายการที่กรองสถานะของคิวนี้ไว้แล้ว
+    href: '/cases/submit?status=pending_review',
     menuId: 'cases.submit',
     anyOf: ['approve_case'],
     teamScoped: false,
@@ -104,7 +107,8 @@ export const DASHBOARD_QUEUES: readonly DashboardQueueDef[] = [
     label: 'คำขอรีไซเกิลรออนุมัติ',
     hint: 'เคสปิดไม่สำเร็จที่ขอเปิดติดตามรอบใหม่',
     linkLabel: 'ไปที่ รับเคส',
-    href: '/cases/submit',
+    // staging E-040 — เปิดรายการที่กรองสถานะของคิวนี้ไว้แล้ว
+    href: '/cases/submit?status=pending_recycle_review',
     menuId: 'cases.submit',
     anyOf: ['approve_recycle'],
     teamScoped: true,

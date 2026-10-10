@@ -17,6 +17,8 @@ export interface ViewableFile {
   mimeType: string
   uploadedByName?: string
   uploadedAt?: string
+  /** หัวเรื่องที่อ่านง่าย (staging E-047) — ไม่ระบุ = ชื่อไฟล์ */
+  title?: string
 }
 
 /**
@@ -78,7 +80,7 @@ export function FileViewerModal({
       open={open}
       onClose={onClose}
       size="lg"
-      title={document.originalName}
+      title={document.title ?? document.originalName}
       description={
         document.uploadedByName === undefined
           ? undefined

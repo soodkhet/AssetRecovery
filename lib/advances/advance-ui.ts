@@ -187,3 +187,18 @@ export function totalReturnOutstandingSatang(items: readonly Pick<AdvanceDto, 'r
 export function canReviewAdvanceClear(advance: Pick<AdvanceDto, 'status' | 'clearReviewedAt'>): boolean {
   return advance.status === 'cleared' && advance.clearReviewedAt === null
 }
+
+/**
+ * staging E-053 — ตัวเลขหลักบนการ์ดเงินทดรอง (มือถือ) = ยอดที่อนุมัติ (เงินที่ได้รับจริง) · ยังไม่อนุมัติ = ยอดที่ขอ
+ * บรรทัดรอง "ขอ ฿…" แสดงเมื่อยอดอนุมัติต่างจากยอดที่ขอ
+ */
+export function advanceCardAmounts(advance: { requestedSatang: number; approvedSatang: number | null }): {
+  headlineSatang: number
+  requestedNoteSatang: number | null
+} {
+  if (advance.approvedSatang === null) return { headlineSatang: advance.requestedSatang, requestedNoteSatang: null }
+  return {
+    headlineSatang: advance.approvedSatang,
+    requestedNoteSatang: advance.approvedSatang === advance.requestedSatang ? null : advance.requestedSatang,
+  }
+}

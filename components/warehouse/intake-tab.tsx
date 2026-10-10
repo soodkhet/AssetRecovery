@@ -32,6 +32,7 @@ import {
   filterOptionsOrFallback,
   type AssetFilterState,
   type FilterOption,
+  imeiSearchHint,
 } from '@/lib/warehouse/asset-filters'
 import { ASSET_CONDITIONS } from '@/lib/warehouse/schemas'
 import type { AssetListDto, AssetListItemDto } from '@/lib/warehouse/types'
@@ -233,8 +234,8 @@ export function IntakeTab({
               loading={loading}
               error={error === null ? null : { title: error.title, message: error.message, code: error.code }}
               isEmpty={items.length === 0}
-              emptyTitle="ไม่มีเครื่องรอรับเข้าคลัง"
-              emptyDescription="เครื่องจะเข้ามาที่นี่อัตโนมัติเมื่อเคสถูกปิดงานสำเร็จ"
+              emptyTitle={imeiSearchHint(filters.search) === null ? 'ไม่มีเครื่องรอรับเข้าคลัง' : 'ไม่พบเครื่องตามคำค้น'}
+              emptyDescription={imeiSearchHint(filters.search) ?? 'เครื่องจะเข้ามาที่นี่อัตโนมัติเมื่อเคสถูกปิดงานสำเร็จ'}
               onRetry={
                 <Button variant="secondary" onClick={reload}>
                   ลองใหม่

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { TREND_DAYS, buildFieldDashboard, buildSevenDayTrend, successRatePct } from '@/lib/field/dashboard'
+import { revisionBannerHref, TREND_DAYS, buildFieldDashboard, buildSevenDayTrend, successRatePct } from '@/lib/field/dashboard'
 import type { FieldCaseListItemDto } from '@/lib/field/types'
 
 function item(overrides: Partial<FieldCaseListItemDto> = {}): FieldCaseListItemDto {
@@ -125,5 +125,18 @@ describe('% ความสำเร็จสะสม (`41` §6.8 — ห้า
     expect(successRatePct(2, 1)).toBe(66.67)
     expect(successRatePct(3, 0)).toBe(100)
     expect(successRatePct(0, 4)).toBe(0)
+  })
+})
+
+describe('แบนเนอร์เคสถูกตีกลับหลักฐาน (staging E-036)', () => {
+  it('รวมเคส needs_revision · 1 เคส ⇒ ลิงก์เปิดเคสนั้น · หลายเคส ⇒ แท็บติดตาม', () => {
+    const model = buildFieldDashboard(
+      [item({ caseId: 'r1', status: 'needs_revision' }), item({ caseId: 's1', status: 'scheduled' })],
+      [],
+      '2026-10-10',
+    )
+    expect(model.revisionCases.map((row) => row.caseId)).toEqual(['r1'])
+    expect(revisionBannerHref(model.revisionCases)).toBe('/field/tracking?case=r1')
+    expect(revisionBannerHref([item({ caseId: 'a' }), item({ caseId: 'b' })])).toBe('/field/tracking')
   })
 })

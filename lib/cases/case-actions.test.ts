@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest'
-import { caseDetailMode, caseModalActions, caseRowActions, caseRowOpensReview, showsReasonBox } from '@/lib/cases/case-actions'
+import {
+  CASE_ACTION_CONFIRM,
+  caseActionSuccessTitle,
+  caseDetailDescription,
+  caseDetailMode,
+  caseModalActions,
+  caseReasonFieldLabel,
+  caseRowActions,
+  caseRowOpensReview,
+  recycleHistoryLine,
+  showsReasonBox,
+} from '@/lib/cases/case-actions'
 
 /** `38` §7.5 — 4 โหมดของ Case Detail/Review Modal + ปุ่มต่อโหมด */
 
@@ -100,5 +111,30 @@ describe('caseRowOpensReview (staging E-025)', () => {
   it('สถานะที่ไม่ใช่การรอตัดสินใจ ⇒ ดูรายละเอียดเสมอ', () => {
     expect(caseRowOpensReview('closed_fail', approver)).toBe(false)
     expect(caseRowOpensReview('draft', approver)).toBe(false)
+  })
+})
+
+describe('ข้อความรีไซเกิล/คำบรรยาย/ยืนยัน (staging E-032/E-033/E-034)', () => {
+  it('toast สำเร็จเป็นภาษาผู้ใช้ ไม่ต่อคำบนปุ่ม', () => {
+    expect(caseActionSuccessTitle('create_recycle_request')).toBe('ส่งคำขอรีไซเกิลแล้ว')
+    expect(caseActionSuccessTitle('reject')).toBe('บันทึกไม่รับเคสแล้ว')
+  })
+
+  it('ประวัติรีไซเกิล — คำขอที่ยังรอแสดงรอบปัจจุบัน → ถัดไป + สถานะไทย', () => {
+    expect(recycleHistoryLine({ previousRound: null, newRound: null, status: 'pending' }, 1)).toBe('รอบ 1 → 2 · รออนุมัติ')
+    expect(recycleHistoryLine({ previousRound: 1, newRound: 2, status: 'approved' }, 2)).toBe('รอบ 1 → 2 · อนุมัติแล้ว')
+    expect(recycleHistoryLine({ previousRound: null, newRound: null, status: 'rejected' }, 1)).toBe('รอบ 1 · ไม่อนุมัติ')
+  })
+
+  it('โหมดอ่านอย่างเดียวที่ตีกลับหลักฐานได้ ⇒ คำบรรยายไม่บอกว่าแก้ไม่ได้อย่างเดียว', () => {
+    expect(caseDetailDescription('readonly', { canRejectEvidence: true })).toContain('ตีกลับ')
+    expect(caseDetailDescription('readonly')).toContain('แก้ไขจากหน้านี้ไม่ได้')
+  })
+
+  it('อนุมัติรีไซเกิลต้องยืนยัน · ป้ายช่องหมายเหตุบอกว่าใช้ตอนอนุมัติได้', () => {
+    const buttons = caseModalActions('pending_recycle_review', () => true)
+    expect(buttons.find((b) => b.action === 'approve_recycle')?.confirmRequired).toBe(true)
+    expect(CASE_ACTION_CONFIRM.approve_recycle?.danger).toBe(false)
+    expect(caseReasonFieldLabel('recycle_review')).toContain('อนุมัติ')
   })
 })
