@@ -37,7 +37,7 @@ import {
 } from '@/lib/warehouse/intake'
 import { assertLotAssets } from '@/lib/warehouse/lot-assets'
 import { bangkokDayRange, buildLotCompanyGroups } from '@/lib/warehouse/lot-company-groups'
-import { assertLotConfirmDocuments, assertLotMutable, initialLotStatus, lotTab } from '@/lib/warehouse/lot-status'
+import { assertLotConfirmDocuments, assertLotDeliveredAt, assertLotMutable, initialLotStatus, lotTab } from '@/lib/warehouse/lot-status'
 import { nextDocumentNumber } from '@/lib/document-numbering/queries'
 import { revenueOutcomeByCase, tryCreateRevenue } from '@/lib/warehouse/revenue-service'
 import { periodKeyOf } from '@/lib/accounting/period'
@@ -1000,6 +1000,7 @@ export async function confirmLot(
 
   const confirmedAt = new Date()
   const deliveredAt = input.deliveredAt === null ? confirmedAt : new Date(input.deliveredAt)
+  assertLotDeliveredAt(deliveredAt, { now: confirmedAt, lotCreatedAt: current.createdAt })
 
   let result: {
     assetIds: string[]

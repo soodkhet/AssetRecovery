@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
+import { WarehouseError } from '@/lib/warehouse/errors'
 import {
   assertLotConfirmDocuments,
+  assertLotDeliveredAt,
   assertLotMutable,
   canConfirmLot,
   initialLotStatus,
@@ -89,5 +91,33 @@ describe('เอกสารที่ต้องแนบก่อนยืน�
 
   it('url ที่เป็นช่องว่างล้วนไม่นับว่าแนบแล้ว', () => {
     expect(canConfirmLot('finance_pickup', { signedDocUrl: '   ', deliveryProofUrl: null })).toBe(false)
+  })
+})
+
+describe('assertLotDeliveredAt (staging E-007)', () => {
+  const now = new Date('2026-10-10T05:00:00Z')
+  const lotCreatedAt = new Date('2026-10-09T03:00:00Z')
+  const codeOf = (fn: () => void): string => {
+    try {
+      fn()
+      return 'NO_ERROR'
+    } catch (error) {
+      return error instanceof WarehouseError ? error.code : 'OTHER'
+    }
+  }
+
+  it('เวลาที่ผ่านมาแล้ว และหลังสร้างล็อต ⇒ ผ่าน · เผื่อนาฬิกาคลาด 5 นาที', () => {
+    expect(codeOf(() => assertLotDeliveredAt(new Date('2026-10-10T04:00:00Z'), { now, lotCreatedAt }))).toBe('NO_ERROR')
+    expect(codeOf(() => assertLotDeliveredAt(new Date('2026-10-10T05:04:00Z'), { now, lotCreatedAt }))).toBe('NO_ERROR')
+  })
+  it('อนาคตเกิน 5 นาที ⇒ LOT_DELIVERED_AT_IN_FUTURE', () => {
+    expect(codeOf(() => assertLotDeliveredAt(new Date('2026-10-11T03:00:00Z'), { now, lotCreatedAt }))).toBe(
+      'LOT_DELIVERED_AT_IN_FUTURE',
+    )
+  })
+  it('ก่อนวันสร้างล็อต (เช่น ปีผิด) ⇒ LOT_DELIVERED_AT_BEFORE_LOT', () => {
+    expect(codeOf(() => assertLotDeliveredAt(new Date('2025-10-09T03:00:00Z'), { now, lotCreatedAt }))).toBe(
+      'LOT_DELIVERED_AT_BEFORE_LOT',
+    )
   })
 })

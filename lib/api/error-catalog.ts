@@ -119,6 +119,7 @@ export const ERROR_CATALOG = {
   ADVANCE_INVALID_STATUS: { status: 400, severity: 'reject', source: '24 §6.4' },
   ADVANCE_RETURN_EXCEEDS_OUTSTANDING: { status: 400, severity: 'reject', source: '24 §6.4' },
   ADVANCE_IN_PENDING_PAYOUT: { status: 400, severity: 'reject', source: '24 §6.4' },
+  ADVANCE_CLEAR_NOT_REOPENABLE: { status: 400, severity: 'reject', source: '24 §6.4' },
   // มติ PO 06/10/2569 (U103) — ใบรับรองแทนใบเสร็จรับเงิน
   SUBSTITUTE_RECEIPT_EXCEEDS_LIMIT: { status: 400, severity: 'reject', source: '24 §6.4' },
   SUBSTITUTE_RECEIPT_NOT_SIGNED: { status: 400, severity: 'reject', source: '24 §6.4' },
@@ -336,6 +337,8 @@ export const ERROR_CATALOG = {
   ASSET_NOT_FOUND: { status: 404, severity: 'reject', source: '44 §12' },
   ASSET_INVALID_STATUS: { status: 400, severity: 'reject', source: '44 §12' },
   LOT_NOT_FOUND: { status: 404, severity: 'reject', source: '44 §12' },
+  LOT_DELIVERED_AT_IN_FUTURE: { status: 400, severity: 'reject', source: '44 §12' },
+  LOT_DELIVERED_AT_BEFORE_LOT: { status: 400, severity: 'reject', source: '44 §12' },
   // มติ PO U129 — เติมเข้า `44` §12 + บันทึกใน `24` (Rule 04 — doc + code คอมมิตเดียวกัน)
   IMEI_DUPLICATE_ACTIVE_ASSET: { status: 400, severity: 'reject', source: '44 §12' },
 

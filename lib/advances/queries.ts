@@ -4,8 +4,10 @@ import {
   advanceCreateAccess,
   advanceExcessClaimNote,
   APPROVE_ADVANCE,
+  advanceReopenClearProblem,
   advanceReturnState,
   effectiveAdvanceReturnSatang,
+  REOPENABLE_EXCESS_CLAIM_STATUSES,
   assertAdvanceRejectionReason,
   assertCanChangeReturnMethod,
   assertNoUnclearedAdvance,
@@ -24,7 +26,9 @@ import { AdvanceError } from '@/lib/advances/errors'
 import type {
   AdvanceCreateInput,
   AdvanceApproveInput,
+  AdvanceClearReviewInput,
   AdvanceListQuery,
+  AdvanceReopenClearInput,
   AdvanceRejectInput,
   AdvanceReturnMethodChangeInput,
   AdvanceSeparateReturnInput,
@@ -45,7 +49,7 @@ import { Prisma } from '@/lib/generated/prisma/client'
 import type { AdvanceStatus } from '@/lib/generated/prisma/enums'
 import { notifyAdvanceAwaitingApproval, notifyExpensesAwaitingApproval } from '@/lib/notifications/approval-queue'
 import { dispatchToResolvedUsers, payeeUserIds } from '@/lib/notifications/dispatch'
-import { advanceDecidedMessage } from '@/lib/notifications/messages'
+import { advanceClearReopenedMessage, advanceDecidedMessage } from '@/lib/notifications/messages'
 import { captureLetterheadSnapshot } from '@/lib/organization/letterhead'
 import { prisma } from '@/lib/prisma'
 import { getFinancePolicy } from '@/lib/settings/queries/finance-policy'
@@ -90,6 +94,10 @@ const advanceSelect = {
   clearedAt: true,
   rejectionReason: true,
   returnMethod: true,
+  // staging E-012 — ใบเสร็จตอนเคลียร์ + การตรวจของการเงิน
+  receiptFileUrl: true,
+  clearReviewedAt: true,
+  clearReviewedByUser: { select: { fullName: true } },
   payoutBatchItemId: true,
   // มติ PO U74 — รอบจ่ายที่จ่ายเงินทดรองนี้ (ชี้ด้วย `payout_batch_item_id` · แถวของรอบที่ยกเลิกแล้วไม่ถูกชี้)
   payoutItems: { select: { id: true, payoutBatch: { select: { id: true, name: true, status: true } } } },
@@ -211,6 +219,9 @@ function toDto(row: AdvanceRow, now: Date): AdvanceDto {
     payoutBatch: payoutBatchOf(row),
     paidOut: paidOutOf(row),
     substituteReceipt: substituteReceiptRefOf(row.substituteReceipts),
+    receiptFileUrl: row.receiptFileUrl,
+    clearReviewedAt: row.clearReviewedAt?.toISOString() ?? null,
+    clearReviewedByName: row.clearReviewedByUser?.fullName ?? null,
   }
 }
 
@@ -614,7 +625,16 @@ export async function settleAdvance(
     const claimed = await tx.advance.updateMany({
       where: { id: advanceId, organizationId: user.organizationId, status: current.status, deletedAt: null },
       // ⚠️ ห้ามส่ง `returnSatang` — เป็น generated column ของ DB (`02` §5)
-      data: { status, usedSatang: input.usedSatang, clearedAt: at, returnMethod, updatedBy: user.id },
+      data: {
+        status,
+        usedSatang: input.usedSatang,
+        clearedAt: at,
+        returnMethod,
+        // staging E-012 — เก็บใบเสร็จที่เคลียร์ไว้ที่แถว (เดิมอยู่ใน audit เท่านั้น การเงินเปิดดูไม่ได้)
+        receiptFileUrl,
+        receiptFileHash: receipt?.sha256 ?? null,
+        updatedBy: user.id,
+      },
     })
     if (claimed.count !== 1) {
       throw new AdvanceError('ADVANCE_INVALID_STATUS', { detail: `advance=${advanceId} ถูกเปลี่ยนสถานะไปแล้ว` })
@@ -696,6 +716,203 @@ export async function settleAdvance(
   // มติ PO U29 — คำขอเบิกส่วนเกินเข้าคิวอนุมัติค่าตอบแทน ⇒ แจ้งผู้อนุมัติขั้น 1
   if (excessClaimId !== null) notifyExpensesAwaitingApproval(user.organizationId, [excessClaimId])
   return { ...toDto(updated, now), excessClaimId }
+}
+
+// ── การเงินตรวจ/ตีกลับการเคลียร์ (staging E-012 · มติ PO 10/10/2569 · `15` §9.1 · `23` §6.4) ─────────────
+
+function assertCanReviewClear(user: SessionUser, advanceId: string): void {
+  // ไม่ใช่การเงิน ⇒ ตอบเหมือนไม่มีรายการ (ไม่ leak) — แบบเดียวกับเปลี่ยนวิธีคืน
+  if (!user.isSuperadmin && !canApproveAdvance(user)) {
+    throw new AdvanceError('ADVANCE_NOT_FOUND', { detail: `advance=${advanceId} (ไม่ใช่ผู้ถือสิทธิ์การเงิน)` })
+  }
+}
+
+/**
+ * `PATCH /api/advances/:id/clear-review` — การเงินตรวจการเคลียร์แล้ว (ไม่เปลี่ยนสถานะ · ประทับผู้ตรวจ/เวลา + audit)
+ * ตรวจแล้วตีกลับไม่ได้อีก (ใช้รายการปรับปรุง)
+ */
+export async function reviewAdvanceClear(
+  context: AdvanceMutationContext,
+  advanceId: string,
+  input: AdvanceClearReviewInput,
+  now: Date = new Date(),
+): Promise<AdvanceDto> {
+  const user = context.actor
+  assertCanReviewClear(user, advanceId)
+  const current = await findAdvance(user, advanceId)
+  if (current.status !== 'cleared' || current.clearReviewedAt !== null) {
+    throw new AdvanceError('ADVANCE_INVALID_STATUS', {
+      detail: `advance=${advanceId} status=${current.status} reviewed=${current.clearReviewedAt !== null}`,
+      message: current.clearReviewedAt !== null ? 'การเคลียร์นี้ตรวจแล้ว' : 'ตรวจได้เฉพาะเงินทดรองที่เคลียร์ยอดแล้ว',
+    })
+  }
+  const at = new Date()
+  const updated = await prisma.$transaction(async (tx) => {
+    const claimed = await tx.advance.updateMany({
+      where: { id: advanceId, organizationId: user.organizationId, status: 'cleared', clearReviewedAt: null, deletedAt: null },
+      data: { clearReviewedAt: at, clearReviewedBy: user.id, updatedBy: user.id },
+    })
+    if (claimed.count !== 1) {
+      throw new AdvanceError('ADVANCE_INVALID_STATUS', { detail: `advance=${advanceId} ถูกเปลี่ยนไปแล้ว` })
+    }
+    await emitAudit(
+      {
+        organizationId: user.organizationId,
+        actorId: user.id,
+        actorRole: user.roleName,
+        action: 'confirm',
+        targetType: TARGET,
+        targetId: advanceId,
+        before: { clear_reviewed_at: null },
+        after: { clear_reviewed_at: at.toISOString(), used_satang: current.usedSatang, receipt_file_url: current.receiptFileUrl },
+        reason: input.note ?? 'ตรวจการเคลียร์ยอดเงินทดรองแล้ว',
+        ipAddress: context.meta.ipAddress,
+        userAgent: context.meta.userAgent,
+        diffOnly: false,
+      },
+      tx,
+    )
+    return tx.advance.findUniqueOrThrow({ where: { id: advanceId }, select: advanceSelect })
+  })
+  return toDto(updated, now)
+}
+
+/** คำขอเบิกส่วนเกินที่สร้างตอนเคลียร์ครั้งล่าสุด — อ้างจาก audit ของการเคลียร์ (ไม่มี FK ตรง) */
+async function lastSettleExcessClaimId(organizationId: string, advanceId: string): Promise<string | null> {
+  const audit = await prisma.auditLog.findFirst({
+    where: { organizationId, targetType: TARGET, targetId: advanceId, action: 'status_change' },
+    orderBy: { createdAt: 'desc' },
+    select: { afterData: true },
+  })
+  const after = audit?.afterData
+  if (after === null || after === undefined || typeof after !== 'object' || Array.isArray(after)) return null
+  const id = (after as Record<string, unknown>)['excess_claim_id']
+  return typeof id === 'string' ? id : null
+}
+
+/**
+ * `PATCH /api/advances/:id/reopen-clear` — การเงินตีกลับการเคลียร์ (เหตุผลบังคับ) ⇒ `cleared → approved` และล้างค่าการเคลียร์
+ * (ยอดใช้จริง · วิธีคืน · ใบเสร็จ) · คำขอเบิกส่วนเกินที่ยังไม่อนุมัติ ⇒ `superseded` (เคลียร์ใหม่จะสร้างใหม่) · แจ้งผู้ขอ
+ * ทำไม่ได้เมื่อมีรายการต่อเนื่องที่ย้อนเองไม่ได้ (`advanceReopenClearProblem()`) ⇒ `ADVANCE_CLEAR_NOT_REOPENABLE`
+ */
+export async function reopenAdvanceClear(
+  context: AdvanceMutationContext,
+  advanceId: string,
+  input: AdvanceReopenClearInput,
+  now: Date = new Date(),
+): Promise<AdvanceDto> {
+  const user = context.actor
+  assertCanReviewClear(user, advanceId)
+  const reason = assertAdvanceRejectionReason(input.reason)
+  const current = await findAdvance(user, advanceId)
+  const status = nextAdvanceStatus(current.status, 'reopen_clear')
+  // การเคลียร์เดิมลงงวดของวันเคลียร์ — งวดนั้นปิดแล้วย้อนไม่ได้ (ใช้รายการปรับปรุง)
+  await assertPeriodOpenAt({
+    organizationId: user.organizationId,
+    at: current.clearedAt ?? now,
+    targetType: 'advances',
+    targetId: advanceId,
+  })
+  const excessClaimId = await lastSettleExcessClaimId(user.organizationId, advanceId)
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const locked = await lockAdvanceForReturn(tx as ExpenseTxClient, user.organizationId, advanceId)
+    const excess =
+      excessClaimId === null
+        ? null
+        : await tx.expense.findUnique({ where: { id: excessClaimId }, select: { status: true, payoutBatchItemId: true } })
+    const problem = advanceReopenClearProblem({
+      clearReviewedAt: locked.clearReviewedAt,
+      activeReturnCount: locked.returns.filter((entry) => entry.reversedAt === null).length,
+      activeSubstituteReceiptNumber:
+        locked.substituteReceipts.find((receipt) => receipt.status !== 'cancelled')?.receiptNumber ?? null,
+      excessClaim: excess === null ? null : { status: excess.status, inPayout: excess.payoutBatchItemId !== null },
+    })
+    if (locked.status !== 'cleared' || problem !== null) {
+      throw new AdvanceError('ADVANCE_CLEAR_NOT_REOPENABLE', {
+        detail: `advance=${advanceId} status=${locked.status}`,
+        ...(problem === null ? {} : { message: problem }),
+      })
+    }
+
+    const claimed = await tx.advance.updateMany({
+      where: { id: advanceId, organizationId: user.organizationId, status: 'cleared', clearReviewedAt: null, deletedAt: null },
+      // ⚠️ ห้ามส่ง `returnSatang` — generated column (ยอดคืนกลับเป็นยอดอนุมัติเอง และ `effectiveAdvanceReturnSatang` ซ่อนไว้)
+      data: {
+        status,
+        usedSatang: 0,
+        clearedAt: null,
+        returnMethod: null,
+        receiptFileUrl: null,
+        receiptFileHash: null,
+        updatedBy: user.id,
+      },
+    })
+    if (claimed.count !== 1) {
+      throw new AdvanceError('ADVANCE_INVALID_STATUS', { detail: `advance=${advanceId} ถูกเปลี่ยนไปแล้ว` })
+    }
+
+    let excessSuperseded = false
+    if (excessClaimId !== null && excess !== null && (REOPENABLE_EXCESS_CLAIM_STATUSES as readonly string[]).includes(excess.status)) {
+      const superseded = await tx.expense.updateMany({
+        where: { id: excessClaimId, status: excess.status, payoutBatchItemId: null },
+        data: { status: 'superseded', updatedBy: user.id },
+      })
+      excessSuperseded = superseded.count === 1
+      if (excessSuperseded) {
+        await emitAudit(
+          {
+            organizationId: user.organizationId,
+            actorId: user.id,
+            actorRole: user.roleName,
+            action: 'status_change',
+            targetType: 'expenses',
+            targetId: excessClaimId,
+            before: { status: excess.status },
+            after: { status: 'superseded', advance_id: advanceId },
+            reason: `ตีกลับการเคลียร์เงินทดรอง ${current.advanceNumber} — ${reason}`,
+            ipAddress: context.meta.ipAddress,
+            userAgent: context.meta.userAgent,
+            diffOnly: false,
+          },
+          tx,
+        )
+      }
+    }
+
+    await emitAudit(
+      {
+        organizationId: user.organizationId,
+        actorId: user.id,
+        actorRole: user.roleName,
+        action: 'reject',
+        targetType: TARGET,
+        targetId: advanceId,
+        before: {
+          status: current.status,
+          used_satang: current.usedSatang,
+          return_method: current.returnMethod,
+          cleared_at: current.clearedAt?.toISOString() ?? null,
+          receipt_file_url: current.receiptFileUrl,
+        },
+        after: { status, used_satang: 0, excess_claim_superseded: excessSuperseded ? excessClaimId : null },
+        reason,
+        ipAddress: context.meta.ipAddress,
+        userAgent: context.meta.userAgent,
+        diffOnly: false,
+      },
+      tx,
+    )
+    return tx.advance.findUniqueOrThrow({ where: { id: advanceId }, select: advanceSelect })
+    // ผู้ขอได้เงินทดรองใหม่ไปแล้วระหว่างนี้ ⇒ ชน `uniq_active_advance_per_payee` = ADVANCE_PENDING_SETTLEMENT
+  }).catch(rethrowDuplicateAdvance)
+
+  dispatchToResolvedUsers(
+    user.organizationId,
+    () => payeeUserIds(user.organizationId, [updated.payeeId]),
+    advanceClearReopenedMessage({ advanceId, advanceNumber: updated.advanceNumber, reason }),
+  )
+  return toDto(updated, now)
 }
 
 /**

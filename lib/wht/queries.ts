@@ -1,7 +1,9 @@
 import { assertOrgWideReadable } from '@/lib/auth/scope'
 import { payeeAddressLine, payeeDisplayName } from '@/lib/payees/payee'
 import type { AccountingMutationContext } from '@/lib/accounting/queries'
-import { PERIOD_ASSUMED_OPEN, type PeriodClosedLookup } from '@/lib/accounting/period'
+import { isPeriodEnded, PERIOD_ASSUMED_OPEN, periodCloseAvailableFrom, type PeriodClosedLookup } from '@/lib/accounting/period'
+import { AccountingError } from '@/lib/accounting/errors'
+import { fmtDate } from '@/lib/format/datetime'
 import { assertPeriodOpenAt, loadPeriodClosedLookup } from '@/lib/accounting/period-guard'
 import { emitAudit } from '@/lib/audit/audit'
 import type { SessionUser } from '@/lib/auth/types'
@@ -221,6 +223,8 @@ function toFilingDto(row: FilingRow, now: Date, current: FilingAmounts | null = 
       row.supplementaryRequiredAt === null || current === null ? null : supplementaryFilingDiff(row, current),
     supplementaryFiledAt: row.supplementaryFiledAt?.toISOString() ?? null,
     supplementaryFiledByName: row.supplementaryFiledByUser?.fullName ?? null,
+    markFiledAvailableFrom: periodCloseAvailableFrom({ yearBe: row.period.yearBe, month: row.period.month }).toISOString(),
+    canMarkFiledNow: isPeriodEnded({ yearBe: row.period.yearBe, month: row.period.month }, now),
   }
 }
 
@@ -843,6 +847,15 @@ export async function markWhtFilingFiled(
     throw new WhtError('WHT_FILING_SUMMARY_NOT_FOUND', { detail: `wht_filing_summary=${summaryId}` })
   }
   assertFilingMarkable(summary.status)
+  // staging E-015 (มติ PO 10/10/2569) — ภ.ง.ด. ยื่นรวมทั้งเดือน ⇒ Mark ก่อนสิ้นเดือนไม่ได้ (รอบจ่ายที่เกิดหลัง Mark
+  // จะตกเดือนที่ "ยื่นแล้ว" ต้องยื่นเพิ่มเติม) · ตั้งแต่ 00:00 วันที่ 1 ของเดือนถัดไป Mark ได้ทุกวัน (รวมวันหยุด/ย้อนหลัง)
+  const periodKey = { yearBe: summary.period.yearBe, month: summary.period.month }
+  if (!isPeriodEnded(periodKey, now)) {
+    throw new AccountingError('PERIOD_NOT_ENDED', {
+      detail: `wht_filing_summary=${summary.id} now=${now.toISOString()}`,
+      message: `งวด ${summary.periodLabel} ยังไม่สิ้นเดือน — บันทึกว่ายื่นแล้วได้ตั้งแต่ ${fmtDate(periodCloseAvailableFrom(periodKey))}`,
+    })
+  }
 
   const filed = await prisma.$transaction(async (tx) => {
     const claimed = await tx.whtFilingSummary.updateMany({

@@ -141,7 +141,7 @@ sequenceDiagram
 | Warehouse (44) | `asset.intake_rejected` (IMEI ไม่ตรง), `lot.confirmed` | `44-asset-custody-handover.md` |
 | Finance (15/16) | `expense.rejected`, `expense.approved` | `16-compensation-approval.md` |
 | Finance (17) | `payout_batch.completed` (ผู้ดูแลรอบจ่าย) · `payout.paid_to_payee` (ผู้รับเงินแต่ละคน พร้อมยอดโอนสุทธิของตัวเอง · ไม่แจ้งคนที่ยอดโอน 0 · กันซ้ำต่อรอบ+ผู้รับ) — v4.9 | `17-payroll-and-payout.md` |
-| Finance (15) | `advance.approved` (ผู้ขอ: ยอดอนุมัติ · ยอดที่ขอถ้าถูกปรับลด · กำหนดเคลียร์) · `advance.rejected` (ผู้ขอ พร้อมเหตุผล) — v4.9 | `15-claims-and-advances.md` §9 |
+| Finance (15) | `advance.approved` (ผู้ขอ: ยอดอนุมัติ · ยอดที่ขอถ้าถูกปรับลด · กำหนดเคลียร์) · `advance.rejected` (ผู้ขอ พร้อมเหตุผล) · `advance.clear_reopened` (ผู้ขอ: การเงินตีกลับการเคลียร์ พร้อมเหตุผล — staging E-012) — v4.9 | `15-claims-and-advances.md` §9 |
 | Accounting (33) | WHT ใกล้ครบกำหนดยื่น (reminder) | `33-accounting-wht-data.md` |
 | Accounting (34) | Exception ใหม่ (ระดับ critical) | `34-accounting-document-checklist-exceptions.md` |
 | คิวอนุมัติ (15/16/20) | `expense.approval_requested` (ผู้ถือ capability ของขั้นที่รออยู่ · ผู้จัดการเฉพาะทีมของรายการ) · `advance.approval_requested` (ผู้ถือ `approve_advance`) · `adjustment.approval_requested` (บทบาทที่ยังขาดตามสถานะงวด) — แจ้งทันทีเมื่อเข้าคิว/ขยับขั้น · ผู้ขอไม่ได้รับของตัวเอง — v4.3 มติ PO 05/10/2569 U29 | `16` §9.1 · `15` · `20` §6.2 |

@@ -196,6 +196,12 @@ export const NOTIFICATION_EVENTS = {
     source: '90 §6.3 v4.9 · 15 §9 (staging E-011)',
     description: 'เงินทดรองได้รับอนุมัติ — แจ้งผู้ขอ (ยอดอนุมัติ + กำหนดเคลียร์)',
   },
+  'advance.clear_reopened': {
+    module: 'การเงิน',
+    level: 'warning',
+    source: '90 §6.3 v4.9 · 15 §9.1 (staging E-012)',
+    description: 'การเงินตีกลับการเคลียร์ยอดเงินทดรอง (มีเหตุผล) — ผู้ขอต้องเคลียร์ใหม่',
+  },
   'advance.rejected': {
     module: 'การเงิน',
     level: 'warning',

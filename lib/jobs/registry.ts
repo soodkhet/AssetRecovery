@@ -1,4 +1,5 @@
 import { resolveExpiredReassignments } from '@/lib/assignments/timeout-job'
+import { isDevToolsEnabled } from '@/lib/env'
 import { runAdvanceOverdueJob } from '@/lib/advances/overdue-job'
 import { runPurgeDebtorDocumentsJob } from '@/lib/cases/debtor-document-purge-job'
 import type { SessionUser } from '@/lib/auth/types'
@@ -99,7 +100,7 @@ async function actorOf(job: JobRow): Promise<SessionUser> {
  * (มติ PO UAT Q21) · cron/`POST /api/jobs` ใส่ `date` มาก็ไม่มีผล ⇒ งานจริงคิดเฉพาะวันที่จบแล้วเสมอ
  */
 export function devSettleDateOf(job: Pick<JobRow, 'payload'>): { date?: string } {
-  if (process.env.NODE_ENV === 'production') return {}
+  if (!isDevToolsEnabled()) return {}
   const payload = payloadOf(job as JobRow)
   if (payload[DEV_TRIGGER_PAYLOAD_FLAG] !== true) return {}
   const date = payload['date']
@@ -112,7 +113,7 @@ export function devSettleDateOf(job: Pick<JobRow, 'payload'>): { date?: string }
  * ที่นี่ตรวจซ้ำแค่รูปแบบ · cron/`POST /api/jobs` ใส่ `asOf` มาก็ไม่มีผล ⇒ งานจริงใช้เวลาจริงเสมอ
  */
 export function devSimulatedNowOf(job: Pick<JobRow, 'payload'>): Date | null {
-  if (process.env.NODE_ENV === 'production') return null
+  if (!isDevToolsEnabled()) return null
   const payload = payloadOf(job as JobRow)
   if (payload[DEV_TRIGGER_PAYLOAD_FLAG] !== true) return null
   const asOf = payload['asOf']

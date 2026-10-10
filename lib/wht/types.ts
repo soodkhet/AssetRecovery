@@ -87,6 +87,10 @@ export interface WhtFilingSummaryDto {
    */
   supplementaryRequired: boolean
   supplementaryRequiredAt: string | null
+  /** staging E-015 — Mark ว่ายื่นแล้วได้ตั้งแต่ (00:00 วันที่ 1 ของเดือนถัดไป · ISO UTC) */
+  markFiledAvailableFrom: string
+  /** สิ้นเดือนของงวดแล้วหรือยัง ณ ตอนอ่าน — ปุ่ม Mark จางจนกว่าจะ `true` (API ตรวจซ้ำ `PERIOD_NOT_ENDED`) */
+  canMarkFiledNow: boolean
   /** ยอดปัจจุบันจากใบที่มีผล − ยอดที่ยื่น · `null` = ไม่ติดธง */
   supplementaryDiff: SupplementaryFilingDiff | null
   supplementaryFiledAt: string | null

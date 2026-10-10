@@ -99,3 +99,23 @@ export function assertLotConfirmDocuments(type: HandoverType, docs: LotDocumentU
   if (missing.includes('signed_doc')) throw new WarehouseError('LOT_MISSING_SIGNED_DOC', { context: { type } })
   if (missing.includes('delivery_proof')) throw new WarehouseError('LOT_MISSING_DELIVERY_PROOF', { context: { type } })
 }
+
+/** เผื่อนาฬิกาเครื่องผู้ใช้เร็วกว่า server เล็กน้อย — เกินนี้ถือว่าเป็นเวลาในอนาคต */
+export const LOT_DELIVERED_AT_CLOCK_SKEW_MS = 5 * 60 * 1000
+
+/**
+ * วันเวลาที่ผู้รับมารับ/ส่งมอบจริงต้องเกิดขึ้นแล้ว และไม่ก่อนวันสร้างล็อต (staging E-007 · `44` §12) — วันนี้คือ
+ * วันรับรู้รายได้ของเคสในล็อต (`19` §6.1) ⇒ เวลาในอนาคต/ย้อนไปก่อนมีล็อต = งวดบัญชีผิด · ตรวจที่ server เสมอ
+ */
+export function assertLotDeliveredAt(deliveredAt: Date, bounds: { now: Date; lotCreatedAt: Date }): void {
+  if (deliveredAt.getTime() > bounds.now.getTime() + LOT_DELIVERED_AT_CLOCK_SKEW_MS) {
+    throw new WarehouseError('LOT_DELIVERED_AT_IN_FUTURE', {
+      context: { deliveredAt: deliveredAt.toISOString(), now: bounds.now.toISOString() },
+    })
+  }
+  if (deliveredAt.getTime() < bounds.lotCreatedAt.getTime()) {
+    throw new WarehouseError('LOT_DELIVERED_AT_BEFORE_LOT', {
+      context: { deliveredAt: deliveredAt.toISOString(), lotCreatedAt: bounds.lotCreatedAt.toISOString() },
+    })
+  }
+}

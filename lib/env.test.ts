@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { DEPLOYMENT_ENV_NAMES, deploymentEnvWarnings, getPublicEnv, getServerEnv } from '@/lib/env'
+import { DEPLOYMENT_ENV_NAMES, deploymentEnvWarnings, getPublicEnv, getServerEnv, isDevToolsEnabled } from '@/lib/env'
 import { BUDDHIST_YEAR_OFFSET, DISPLAY_TIMEZONE } from '@/lib/constants'
 
 const KEYS = [
@@ -93,5 +93,22 @@ describe('deploymentEnvWarnings (R2-004)', () => {
   it('ตั้งครบ ⇒ ไม่เตือน', () => {
     const all = Object.fromEntries(DEPLOYMENT_ENV_NAMES.map((name) => [name, 'set']))
     expect(deploymentEnvWarnings({ VERCEL_ENV: 'production', ...all })).toEqual([])
+  })
+})
+
+describe('isDevToolsEnabled (staging E-013)', () => {
+  it('เครื่อง dev/test เปิด · production build นอก Vercel ปิด', () => {
+    expect(isDevToolsEnabled({ NODE_ENV: 'development' })).toBe(true)
+    expect(isDevToolsEnabled({ NODE_ENV: 'test' })).toBe(true)
+    expect(isDevToolsEnabled({ NODE_ENV: 'production' })).toBe(false)
+  })
+  it('Vercel Preview เปิดเฉพาะเมื่อ ENABLE_DEV_TOOLS=1', () => {
+    expect(isDevToolsEnabled({ NODE_ENV: 'production', VERCEL_ENV: 'preview' })).toBe(false)
+    expect(isDevToolsEnabled({ NODE_ENV: 'production', VERCEL_ENV: 'preview', ENABLE_DEV_TOOLS: '1' })).toBe(true)
+    expect(isDevToolsEnabled({ NODE_ENV: 'production', VERCEL_ENV: 'preview', ENABLE_DEV_TOOLS: 'true' })).toBe(false)
+  })
+  it('Vercel Production ปิดเสมอ แม้ตั้ง ENABLE_DEV_TOOLS', () => {
+    expect(isDevToolsEnabled({ NODE_ENV: 'production', VERCEL_ENV: 'production', ENABLE_DEV_TOOLS: '1' })).toBe(false)
+    expect(isDevToolsEnabled({ NODE_ENV: 'development', VERCEL_ENV: 'development' })).toBe(false)
   })
 })

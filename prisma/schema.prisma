@@ -1099,6 +1099,7 @@ model User {
   documentSeriesUpdated         DocumentNumberSeries[]          @relation("document_number_series_updated_by")
   advancesUpdated               Advance[]                       @relation("advances_updated_by")
   advancesApproved              Advance[]                       @relation("advances_approved_by")
+  advancesClearReviewed         Advance[]                       @relation("advances_clear_reviewed_by")
   payoutBatchesCreated          PayoutBatch[]                   @relation("payout_batches_created_by")
   payoutBatchesUpdated          PayoutBatch[]                   @relation("payout_batches_updated_by")
   payoutBatchesCancelled        PayoutBatch[]                   @relation("payout_batches_cancelled_by")
@@ -2948,6 +2949,15 @@ model Advance {
   /// (มีค่าได้เฉพาะ `cleared` ที่ `return_satang > 0`) อยู่ใน raw SQL `20261005181000_advance_returns`
   returnMethod    AdvanceReturnMethod? @map("return_method")
 
+  /// staging E-012 (มติ PO 10/10/2569) — ใบเสร็จที่แนบตอนเคลียร์ยอด (ผ่าน `verifyUploadedFile()` แล้ว) · เดิมเก็บใน audit
+  /// เท่านั้น การเงินจึงเปิดดูไม่ได้ · backfill จาก audit ใน migration `20261010120000_advance_clear_review`
+  receiptFileUrl  String?   @map("receipt_file_url")
+  receiptFileHash String?   @map("receipt_file_hash")
+  /// staging E-012 — การเงินกด "ตรวจการเคลียร์แล้ว" (ไม่ใช่สถานะใหม่ — สถานะยังเป็น `cleared`) · ตีกลับการเคลียร์ = กลับ
+  /// `approved` + ล้างค่าการเคลียร์ (`23` §6.4 `reopen_clear`) · CHECK มีค่าได้เฉพาะ `cleared`
+  clearReviewedAt DateTime? @map("clear_reviewed_at") @db.Timestamptz(6)
+  clearReviewedBy String?   @map("clear_reviewed_by") @db.Uuid
+
   /// A4 (มติ PO 2026-08-12) — ขาจ่ายเงินทดรองผ่านรอบจ่าย (คู่กับ `payout_batch_items.advance_id`)
   payoutBatchItemId String? @map("payout_batch_item_id") @db.Uuid
 
@@ -2961,11 +2971,12 @@ model Advance {
   updatedBy String?   @map("updated_by") @db.Uuid
   deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  organization   Organization @relation(fields: [organizationId], references: [id])
-  payee          PayeeProfile @relation(fields: [payeeId], references: [id])
-  approvedByUser User?        @relation("advances_approved_by", fields: [approvedBy], references: [id])
-  createdByUser  User         @relation("advances_created_by", fields: [createdBy], references: [id])
-  updatedByUser  User?        @relation("advances_updated_by", fields: [updatedBy], references: [id])
+  organization        Organization @relation(fields: [organizationId], references: [id])
+  payee               PayeeProfile @relation(fields: [payeeId], references: [id])
+  approvedByUser      User?        @relation("advances_approved_by", fields: [approvedBy], references: [id])
+  clearReviewedByUser User?        @relation("advances_clear_reviewed_by", fields: [clearReviewedBy], references: [id])
+  createdByUser       User         @relation("advances_created_by", fields: [createdBy], references: [id])
+  updatedByUser       User?        @relation("advances_updated_by", fields: [updatedBy], references: [id])
 
   payoutItems        PayoutBatchItem[]
   bankTransactions   BankTransaction[]   @relation("bank_tx_matched_advance")

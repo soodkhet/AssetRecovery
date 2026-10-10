@@ -619,6 +619,14 @@ suite('Phase 4.5 — เลขที่ (D11) · mark-filed · Period Lock', () 
     const periodId = await junePeriodId()
     const summary = await db().whtFilingSummary.findUniqueOrThrow({ where: { periodId } })
 
+    // staging E-015 — ก่อนสิ้นเดือนของงวด (มิ.ย. 2569) Mark ไม่ได้ และไม่เปลี่ยนสถานะ · 00:00 วันที่ 1 ก.ค. (เวลาไทย) ได้
+    const juneEnd = new Date('2026-06-30T16:59:59Z')
+    await expectCode(
+      () => wht.markWhtFilingFiled(ctx, summary.id, { reason: 'ยื่นก่อนสิ้นเดือน' }, juneEnd),
+      'PERIOD_NOT_ENDED',
+    )
+    expect((await db().whtFilingSummary.findUniqueOrThrow({ where: { id: summary.id } })).status).toBe('pending')
+
     const filed = await wht.markWhtFilingFiled(ctx, summary.id, { reason: 'ยื่นผ่าน e-Filing เลขที่ 2569-0001' })
     expect(filed.status).toBe('filed')
     expect(filed.filedAt).not.toBeNull()

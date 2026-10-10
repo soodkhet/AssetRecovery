@@ -7,6 +7,7 @@ import { usePermission } from '@/components/auth/permission-provider'
 import { AdvanceFormModal } from '@/components/finance/advance-form-modal'
 import { AdvanceRequestPdfLink, AdvanceReturnHistory } from '@/components/finance/advance-doc-links'
 import { SubstituteReceiptPanel } from '@/components/substitute-receipts/substitute-receipt-panel'
+import { AdvanceClearReviewActions } from '@/components/finance/advance-clear-review'
 import { AdvanceReviewModal } from '@/components/finance/advance-review-modal'
 import { ChangeReturnMethodModal, RecordSeparateReturnModal } from '@/components/finance/advance-return-modals'
 import { SettleAdvanceButton } from '@/components/finance/settle-advance-button'
@@ -249,7 +250,14 @@ export function AdvanceTab() {
                       />
                       {/* Rule 05 — action สำคัญต้องเห็นวันเวลาบน list ไม่ใช่ต้องไปขุดใน audit */}
                       {advance.clearedAt !== null ? (
-                        <p className="mt-1 text-[10px] text-slate-400">เคลียร์ยอด {fmtDateTime(advance.clearedAt)}</p>
+                        <>
+                          <p className="mt-1 text-[10px] text-slate-400">เคลียร์ยอด {fmtDateTime(advance.clearedAt)}</p>
+                          <p className="text-[10px] text-slate-400">
+                            {advance.clearReviewedAt === null
+                              ? 'การเงินยังไม่ตรวจ'
+                              : `ตรวจแล้ว · ${advance.clearReviewedByName ?? '-'} · ${fmtDateTime(advance.clearReviewedAt)}`}
+                          </p>
+                        </>
                       ) : (
                         advance.approvedAt !== null && (
                           <p className="mt-1 text-[10px] text-slate-400">อนุมัติ {fmtDateTime(advance.approvedAt)}</p>
@@ -298,6 +306,12 @@ export function AdvanceTab() {
                             เปลี่ยนวิธีคืน
                           </Button>
                         )}
+                        {/* staging E-012 — เปิดใบเสร็จที่เคลียร์ · ตรวจแล้ว · ตีกลับการเคลียร์ */}
+                        <AdvanceClearReviewActions
+                          advance={advance}
+                          canManage={canApproveAdvance}
+                          onChanged={() => void reload()}
+                        />
                       </div>
                     </Td>
                   </Tr>

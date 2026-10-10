@@ -1,4 +1,5 @@
 import type { NextRequest } from 'next/server'
+import { isDevToolsEnabled } from '@/lib/env'
 import { MANAGE_ACCOUNTING_PERIOD, UNLOCK_PERIOD } from '@/lib/accounting/period'
 import { lockPeriod, sendPeriod } from '@/lib/accounting/queries'
 import { devPeriodCloseSchema } from '@/lib/accounting/schemas'
@@ -54,7 +55,7 @@ function devPeriodCloseHandler(action: 'send' | 'lock') {
 export function devPeriodCloseRoute(action: 'send' | 'lock') {
   const handler = devPeriodCloseHandler(action)
   return async (request: NextRequest, context: RouteContext): Promise<Response> => {
-    if (process.env.NODE_ENV === 'production') return notFound()
+    if (!isDevToolsEnabled()) return notFound()
     return handler(request, context)
   }
 }

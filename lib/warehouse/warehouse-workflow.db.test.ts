@@ -837,6 +837,18 @@ suite('Phase 2.13 — ยืนยันส่งมอบ = $transaction 4 ข�
     expect((await db().handoverLot.findUniqueOrThrow({ where: { id: lotId } })).status).toBe('pending_attach')
   })
 
+  it('staging E-007 — วันเวลาส่งมอบในอนาคต = LOT_DELIVERED_AT_IN_FUTURE (ล็อต/เครื่อง/รายการเบิกไม่ขยับ)', async () => {
+    const { caseId, lotId } = await seedPendingLot()
+    const future = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+    await expectCode(
+      () => warehouse.confirmLot(admin, lotId, { ...confirmInput(), deliveredAt: future }, ctx(admin)),
+      'LOT_DELIVERED_AT_IN_FUTURE',
+    )
+    expect((await db().handoverLot.findUniqueOrThrow({ where: { id: lotId } })).status).toBe('pending_attach')
+    const expenses = await db().expense.findMany({ where: { caseId }, select: { status: true } })
+    expect(expenses.every((row) => row.status === 'pending_warehouse_confirm')).toBe(true)
+  })
+
   it('we_deliver ที่ขาดหลักฐานจัดส่ง = LOT_MISSING_DELIVERY_PROOF', async () => {
     const { lotId } = await seedPendingLot('we_deliver')
     await expectCode(() => warehouse.confirmLot(admin, lotId, confirmInput(), ctx(admin)), 'LOT_MISSING_DELIVERY_PROOF')

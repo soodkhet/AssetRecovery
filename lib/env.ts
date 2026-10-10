@@ -50,6 +50,22 @@ export function isVercelDeployment(source: Record<string, string | undefined> = 
   return (source.VERCEL_ENV ?? '').trim() !== ''
 }
 
+/**
+ * เครื่องมือทดสอบ (dev trigger · ทางลัดปิดงวด · วันจำลอง) เปิดอยู่หรือไม่ — staging E-013 (มติ PO 10/10/2569 · `91` §14.1)
+ *
+ * - เครื่อง dev (`next dev` / test — ไม่ใช่ production build และไม่อยู่บน Vercel) ⇒ เปิด
+ * - Vercel **Preview** (staging) ⇒ เปิดเฉพาะเมื่อตั้ง `ENABLE_DEV_TOOLS=1` เอง (opt-in · Vercel ตั้ง `NODE_ENV=production`
+ *   ทุก environment จึงใช้ `NODE_ENV` แยกไม่ได้ — เดิมทำให้ staging ทดสอบงานเบื้องหลังไม่ได้เลย)
+ * - Vercel **Production** ⇒ ปิดเสมอ ไม่ว่าตั้ง env อะไร · production build นอก Vercel ⇒ ปิด (fail closed)
+ */
+export function isDevToolsEnabled(source: Record<string, string | undefined> = process.env): boolean {
+  const vercelEnv = (source.VERCEL_ENV ?? '').trim()
+  if (vercelEnv === 'production') return false
+  if (vercelEnv === 'preview') return (source.ENABLE_DEV_TOOLS ?? '').trim() === '1'
+  if (vercelEnv !== '') return false
+  return source.NODE_ENV !== 'production'
+}
+
 /** ชื่อ env ที่ deployment ยังไม่ได้ตั้ง (บอกแค่ชื่อ ห้ามมีค่า) — เครื่อง dev คืนว่างเสมอ */
 export function deploymentEnvWarnings(source: Record<string, string | undefined> = process.env): string[] {
   if (!isVercelDeployment(source)) return []

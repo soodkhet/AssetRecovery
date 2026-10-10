@@ -85,11 +85,14 @@ export function WhtTab() {
               กำหนดนำส่งวันที่ {pending.filingDueLabel} — ยื่นล่าช้ามีเบี้ยปรับ/เงินเพิ่ม
               {warning === null ? '' : ` · ${warning.message}`}
             </span>
-            {canManage && (
-              <Button size="sm" variant={pending.isOverdue ? 'danger' : 'secondary'} onClick={() => setMarking(pending)}>
-                Mark ว่ายื่นแล้ว
-              </Button>
-            )}
+            {canManage &&
+              (pending.canMarkFiledNow ? (
+                <Button size="sm" variant={pending.isOverdue ? 'danger' : 'secondary'} onClick={() => setMarking(pending)}>
+                  Mark ว่ายื่นแล้ว
+                </Button>
+              ) : (
+                <MarkFiledNotYet availableFrom={pending.markFiledAvailableFrom} />
+              ))}
           </div>
         </InlineAlert>
       )}
@@ -186,11 +189,15 @@ export function WhtTab() {
                       )}
                     </Td>
                     <Td className="text-right whitespace-nowrap">
-                      {row.status === 'pending' && canManage && (
-                        <Button size="sm" variant="success" onClick={() => setMarking(row)}>
-                          Mark Filed
-                        </Button>
-                      )}
+                      {row.status === 'pending' &&
+                        canManage &&
+                        (row.canMarkFiledNow ? (
+                          <Button size="sm" variant="success" onClick={() => setMarking(row)}>
+                            Mark Filed
+                          </Button>
+                        ) : (
+                          <MarkFiledNotYet availableFrom={row.markFiledAvailableFrom} />
+                        ))}
                       {row.supplementaryRequired && canManage && (
                         <Button size="sm" variant="secondary" onClick={() => setSupplementing(row)}>
                           ยื่นเพิ่มเติมแล้ว
@@ -328,6 +335,21 @@ export function WhtTab() {
         onClose={() => setSupplementing(null)}
         onFiled={() => void reload()}
       />
+    </div>
+  )
+}
+
+/**
+ * ยังไม่สิ้นเดือนของงวด ⇒ ปุ่มจาง + บอกวันที่ Mark ได้ (staging E-015) — API ปฏิเสธ `PERIOD_NOT_ENDED` ซ้ำอีกชั้น
+ * ภ.ง.ด. ยื่นรวมทั้งเดือน ถ้า Mark ก่อนแล้วมีรอบจ่ายเพิ่ม ต้องยื่นเพิ่มเติม
+ */
+function MarkFiledNotYet({ availableFrom }: { availableFrom: string }) {
+  return (
+    <div className="flex flex-col items-end gap-0.5">
+      <Button size="sm" variant="secondary" disabled>
+        Mark ว่ายื่นแล้ว
+      </Button>
+      <span className="text-[10px] text-slate-400">ทำได้ตั้งแต่ {fmtDate(availableFrom)}</span>
     </div>
   )
 }

@@ -1,4 +1,5 @@
 import { AccountingError } from '@/lib/accounting/errors'
+import { isDevToolsEnabled } from '@/lib/env'
 import { getOrganizationProfileIssues } from '@/lib/organization/queries'
 import {
   assertAuthorizeNote,
@@ -569,7 +570,7 @@ export function simulatedDateTag(simulatedNow: Date): string {
 
 /** production ห้ามมีวันจำลองหลุดเข้ามาเด็ดขาด (กันชั้นที่สองต่อจาก route ที่ตอบ 404) */
 function effectiveSimulation(simulation: PeriodCloseSimulation | undefined): PeriodCloseSimulation | undefined {
-  return process.env.NODE_ENV === 'production' ? undefined : simulation
+  return isDevToolsEnabled() ? simulation : undefined
 }
 
 async function transitionPeriod(

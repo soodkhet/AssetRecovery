@@ -90,6 +90,7 @@
 | v4.63 | 07/10/2569 | **มติ O75** (migration `20261008153000_billing_status_debit_note_backfill` — ข้อมูลเท่านั้น ไม่เปลี่ยนโครงสร้าง): enum `billing_batch_status` เดิม · state machine เพิ่มเส้น `paid → partially_paid` (`23` §6.8) · backfill รอบ `paid` ที่ยอดตามเอกสาร (ใบแจ้งหนี้ − ใบลดหนี้ + ใบเพิ่มหนี้ active) ยังค้าง > 0 ⇒ `partially_paid` + `audit_logs` (actor system · reason ระบุ migration) · รันซ้ำได้ |
 | v4.64 | 07/10/2569 | **มติ O77** (migration `20261008180000_asset_color_capacity_note`): `assets.color_capacity_note TEXT` (สิ่งที่พบเมื่อผลตรวจสี/ความจุ = ไม่ตรง) + CHECK `chk_assets_color_capacity_note` (มีข้อความได้เฉพาะ `color_capacity_matched = false`) · `color_capacity_matched` บังคับเลือกตอนรับเข้า (ระดับ API) |
 | v4.65 | 09/10/2569 | **ดัชนี FK ของแคตตาล็อกรุ่น** (migration `20261009100000_device_model_fk_indexes` — เพิ่ม index เท่านั้น ไม่เปลี่ยนคอลัมน์): `idx_device_tacs_model (device_model_id)` + `idx_cases_device_model (device_model_id)` — FK ทั้งสอง `ON DELETE SET NULL` ไป `device_models` ต้องหาแถวลูกด้วย `WHERE device_model_id = ?` ต่อทุกรุ่นที่ลบ · `idx_device_tacs_org_model` ขึ้นต้น `organization_id` ใช้ค้นแบบนี้ไม่ได้ → seq scan `device_tacs` ทั้งตารางต่อรุ่น (staging ~130k รุ่น × ~255k TAC: reset ค้าง > 16 นาที) · คงแบบเดียวกับดัชนี FK ลูกอื่นที่ไม่ขึ้นต้น org (เช่น `idx_case_contacts_case`) · `device_models.brand_id` มี `uniq_device_models_brand_name` ขึ้นต้น `brand_id` อยู่แล้ว |
+| v4.66 | 10/10/2569 | **staging E-012 (มติ PO 10/10/2569)** — `advances.receipt_file_url/receipt_file_hash` (ใบเสร็จตอนเคลียร์ · backfill จาก audit) + `clear_reviewed_at/clear_reviewed_by` (การเงินตรวจการเคลียร์ — ไม่ใช่สถานะใหม่) + CHECK 2 ตัว · migration `20261010120000_advance_clear_review` · การตีกลับการเคลียร์ใช้ transition `reopen_clear` (`23` §6.4) ไม่เพิ่ม enum |
 
 ขอบเขตเอกสารนี้: Full Production Database Schema — ทุก table, column, type, FK, index, unique constraint, enum, migration order และ seed data สรุปจาก spec ไฟล์ทั้งหมดไว้ในที่เดียว ใช้เป็น source of truth เดียวก่อนเขียน Prisma schema
 
@@ -1833,6 +1834,16 @@ ALTER TABLE advances ADD COLUMN return_method advance_return_method;            
 ALTER TABLE advances ADD CONSTRAINT chk_advances_return_method_shape
   CHECK (return_method IS NULL OR (status = 'cleared' AND return_satang > 0));
 CREATE INDEX idx_advances_org_return_method ON advances(organization_id, return_method, status);
+-- v4.66 staging E-012 (มติ PO 10/10/2569) — การเงินตรวจการเคลียร์ + ใบเสร็จตอนเคลียร์ (migration `20261010120000_advance_clear_review`)
+ALTER TABLE advances ADD COLUMN receipt_file_url  TEXT;                            -- ใบเสร็จที่แนบตอนเคลียร์ (เดิมอยู่ใน audit เท่านั้น)
+ALTER TABLE advances ADD COLUMN receipt_file_hash TEXT;                            -- SHA-256 ของ server
+ALTER TABLE advances ADD COLUMN clear_reviewed_at TIMESTAMPTZ;                     -- การเงินกด "ตรวจแล้ว" (ไม่ใช่สถานะใหม่)
+ALTER TABLE advances ADD COLUMN clear_reviewed_by UUID REFERENCES users(id);
+ALTER TABLE advances ADD CONSTRAINT chk_advances_clear_review_shape
+  CHECK ((clear_reviewed_at IS NULL AND clear_reviewed_by IS NULL)
+      OR (clear_reviewed_at IS NOT NULL AND clear_reviewed_by IS NOT NULL AND status = 'cleared'));
+ALTER TABLE advances ADD CONSTRAINT chk_advances_receipt_cleared_only
+  CHECK (receipt_file_url IS NULL OR status = 'cleared');
 
 -- ── payout_batches ───────────────────────────────────────────
 -- รอบจ่ายเงิน ตามไฟล์ 17

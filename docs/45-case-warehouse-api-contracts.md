@@ -147,7 +147,7 @@ Notification (90 §6.3): expense.rejected / payout_batch.completed / advance.ove
                    expense.approval_requested / advance.approval_requested /
                    adjustment.approval_requested / field_allowance.period_locked /
                    wht.supplementary_filing_required (มติ PO 07/10/2569 U127)
-                   payout.paid_to_payee / advance.approved / advance.rejected (`90` §6.3 v4.9 — staging E-011)
+                   payout.paid_to_payee / advance.approved / advance.rejected / advance.clear_reopened (`90` §6.3 v4.9 — staging E-011/E-012)
                    device_catalog.tac_update_failed (มติ PO 07/10/2569 U167 · DEC-017 — อัปเดตฐาน TAC
                    ไม่สำเร็จ · โมดูลตั้งค่า · ระดับ critical · ถึงผู้ถือ manage_device_catalog ระดับ manage ·
                    เข้าคิวผ่าน notification_outbox ในทรานแซกชันเดียวกับแถวประวัติ · กันซ้ำวันละครั้งตามวันไทย)

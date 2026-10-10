@@ -550,6 +550,20 @@ export function payoutPaidToPayeeMessage(input: {
 
 // ── Advance (15 §9.1 — job) ─────────────────────────────────────────────────
 
+/** การเงินตีกลับการเคลียร์ยอดเงินทดรอง — ผู้ขอต้องเคลียร์ใหม่ (staging E-012 · `90` §6.3 v4.9) */
+export function advanceClearReopenedMessage(input: {
+  advanceId: string
+  advanceNumber: string
+  reason: string
+}): NotificationMessage {
+  return {
+    eventCode: 'advance.clear_reopened',
+    title: 'การเงินตีกลับการเคลียร์เงินทดรอง',
+    body: withReason(`${input.advanceNumber} — เคลียร์ยอดใหม่อีกครั้ง`, input.reason),
+    linkPath: '/field/advances',
+  }
+}
+
 /** การเงินพิจารณาคำขอเงินทดรองแล้ว — แจ้งผู้ขอ (staging E-011 · `90` §6.3 v4.9) */
 export function advanceDecidedMessage(
   input: {

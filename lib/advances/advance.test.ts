@@ -6,6 +6,7 @@ import {
   assertWithinAdvanceMax,
   canAdvanceAction,
   effectiveAdvanceReturnSatang,
+  advanceReopenClearProblem,
   isAdvanceOverdue,
   nextAdvanceStatus,
   resolveApprovedSatang,
@@ -48,12 +49,15 @@ describe('state machine ของเงินทดรอง (`23` §6.4)', () =
     }
   })
 
-  it('สถานะ terminal ทำ action ใดไม่ได้เลย', () => {
+  it('สถานะ terminal ทำ action ใดไม่ได้เลย — ยกเว้นการเงินตีกลับการเคลียร์ (cleared → approved · staging E-012)', () => {
     for (const status of TERMINAL_ADVANCE_STATUSES) {
       for (const action of ADVANCE_ACTIONS) {
-        expect(canAdvanceAction(status, action)).toBe(false)
+        const allowed = status === 'cleared' && action === 'reopen_clear'
+        expect(canAdvanceAction(status, action)).toBe(allowed)
       }
     }
+    expect(nextAdvanceStatus('cleared', 'reopen_clear')).toBe('approved')
+    expect(canAdvanceAction('rejected', 'reopen_clear')).toBe(false)
   })
 
   it('action ที่สถานะทำไม่ได้ = ADVANCE_INVALID_STATUS', () => {
@@ -288,5 +292,25 @@ describe('effectiveAdvanceReturnSatang (staging E-048)', () => {
 
   it('เคลียร์แล้ว = ยอดคืนจริง', () => {
     expect(effectiveAdvanceReturnSatang('cleared', 32_000)).toBe(32_000)
+  })
+})
+
+describe('advanceReopenClearProblem (staging E-012)', () => {
+  const base = {
+    clearReviewedAt: null,
+    activeReturnCount: 0,
+    activeSubstituteReceiptNumber: null,
+    excessClaim: null,
+  }
+  it('ไม่มีรายการต่อเนื่อง / ส่วนเกินยังรออนุมัติ ⇒ ตีกลับได้', () => {
+    expect(advanceReopenClearProblem(base)).toBeNull()
+    expect(advanceReopenClearProblem({ ...base, excessClaim: { status: 'pending_approval', inPayout: false } })).toBeNull()
+  })
+  it('ตรวจแล้ว / มีรับคืน / มีใบรับรองค้าง / ส่วนเกินอนุมัติแล้ว ⇒ บอกเหตุ', () => {
+    expect(advanceReopenClearProblem({ ...base, clearReviewedAt: new Date() })).toContain('ตรวจการเคลียร์นี้แล้ว')
+    expect(advanceReopenClearProblem({ ...base, activeReturnCount: 1 })).toContain('รับคืน')
+    expect(advanceReopenClearProblem({ ...base, activeSubstituteReceiptNumber: 'CRT-2569-0001' })).toContain('CRT-2569-0001')
+    expect(advanceReopenClearProblem({ ...base, excessClaim: { status: 'approved', inPayout: false } })).toContain('ส่วนเกิน')
+    expect(advanceReopenClearProblem({ ...base, excessClaim: { status: 'pending_approval', inPayout: true } })).toContain('ส่วนเกิน')
   })
 })

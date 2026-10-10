@@ -24,7 +24,7 @@ import type {
  * (สูตร/ยาม อยู่ที่ `lib/finance/advance-calc.ts` ของ Phase 3.1 ห้ามคำนวณซ้ำที่นี่)
  */
 
-export const ADVANCE_ACTIONS = ['approve', 'reject', 'mark_overdue', 'settle'] as const
+export const ADVANCE_ACTIONS = ['approve', 'reject', 'mark_overdue', 'settle', 'reopen_clear'] as const
 export type AdvanceAction = (typeof ADVANCE_ACTIONS)[number]
 
 const TRANSITIONS: Readonly<Record<AdvanceAction, { from: readonly AdvanceStatus[]; to: AdvanceStatus }>> = {
@@ -33,6 +33,9 @@ const TRANSITIONS: Readonly<Record<AdvanceAction, { from: readonly AdvanceStatus
   // `15` §10 — auto-mark โดย background job เท่านั้น (ไม่มี endpoint ให้ user เรียก)
   mark_overdue: { from: ['approved'], to: 'overdue' },
   settle: { from: ['approved', 'overdue'], to: 'cleared' },
+  // staging E-012 (มติ PO 10/10/2569 · `23` §6.4) — การเงินตีกลับการเคลียร์ (เหตุผลบังคับ) ⇒ กลับรอเคลียร์
+  // ไม่ใช่สถานะใหม่ · เลยกำหนดแล้ว job `advance_overdue` มาร์คให้เองตามปกติ
+  reopen_clear: { from: ['cleared'], to: 'approved' },
 }
 
 /**
@@ -348,4 +351,45 @@ export function assertSettleNotInPendingPayout(
     context: { payoutBatchId: null, payoutBatchName: null, payoutBatchStatus: null },
     detail: `advance=${advanceId} ยังไม่เคยอยู่ในรอบจ่ายที่ completed`,
   })
+}
+
+// ── การเงินตรวจ/ตีกลับการเคลียร์ยอด (staging E-012 · มติ PO 10/10/2569 · `15` §9.1 · `23` §6.4) ──────────
+
+/** สถานะของคำขอเบิกส่วนเกินที่ยังถอนได้ตอนตีกลับการเคลียร์ (ยังไม่อนุมัติ/ยังไม่เข้ารอบจ่าย) */
+export const REOPENABLE_EXCESS_CLAIM_STATUSES = [
+  'pending_approval',
+  'pending_finance_approval',
+  'needs_revision',
+] as const
+
+export interface AdvanceReopenClearState {
+  clearReviewedAt: Date | null
+  /** แถวรับคืน/หักกลบที่ยังไม่กลับรายการ */
+  activeReturnCount: number
+  /** ใบรับรองแทนใบเสร็จที่ยังไม่ยกเลิก (เลขที่) — `null` = ไม่มี */
+  activeSubstituteReceiptNumber: string | null
+  /** คำขอเบิกส่วนเกินที่สร้างตอนเคลียร์ — `null` = ไม่มี */
+  excessClaim: { status: string; inPayout: boolean } | null
+}
+
+/**
+ * ตีกลับการเคลียร์ได้ไหม — คืนข้อความภาษาไทยของเหตุที่ทำไม่ได้ (`null` = ทำได้) · เงื่อนไขเหล่านี้คือสิ่งที่ "ย้อน
+ * อัตโนมัติไม่ได้อย่างปลอดภัย" (เงินเคลื่อนแล้ว/เอกสารที่ออกให้คนอื่นแล้ว) ⇒ ให้ผู้ใช้จัดการก่อน หรือใช้รายการปรับปรุง
+ */
+export function advanceReopenClearProblem(state: AdvanceReopenClearState): string | null {
+  if (state.clearReviewedAt !== null) return 'การเงินตรวจการเคลียร์นี้แล้ว — ตีกลับไม่ได้ ใช้รายการปรับปรุงแทน'
+  if (state.activeReturnCount > 0) {
+    return 'มีการรับคืนหรือหักกลบยอดคืนในรอบจ่ายแล้ว — กลับรายการรับคืน/ยกเลิกรอบจ่ายที่หักกลบก่อน'
+  }
+  if (state.activeSubstituteReceiptNumber !== null) {
+    return `ยกเลิกใบรับรองแทนใบเสร็จ ${state.activeSubstituteReceiptNumber} ก่อน แล้วจึงตีกลับการเคลียร์`
+  }
+  if (state.excessClaim !== null) {
+    const pending = (REOPENABLE_EXCESS_CLAIM_STATUSES as readonly string[]).includes(state.excessClaim.status)
+    const settled = state.excessClaim.status === 'superseded' || state.excessClaim.status === 'rejected'
+    if (state.excessClaim.inPayout || (!pending && !settled)) {
+      return 'คำขอเบิกส่วนเกินของการเคลียร์นี้อนุมัติหรือเข้ารอบจ่ายแล้ว — ตีกลับการเคลียร์ไม่ได้ ใช้รายการปรับปรุงแทน'
+    }
+  }
+  return null
 }

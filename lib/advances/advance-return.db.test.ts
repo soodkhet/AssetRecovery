@@ -546,3 +546,52 @@ suite('ยามระดับ DB (trigger/CHECK)', () => {
     await expect(insert(1, ADV2_ID)).rejects.toThrow()
   })
 })
+
+suite('การเงินตรวจ/ตีกลับการเคลียร์ (staging E-012)', () => {
+  it('ตีกลับ ⇒ กลับรอเคลียร์ ล้างยอดใช้จริง/วิธีคืน · audit มีเหตุผล · เคลียร์ใหม่ได้', async () => {
+    await settleAdv1()
+    const reopened = await advances.reopenAdvanceClear(ctx, ADV_ID, { reason: 'ใบเสร็จไม่ชัด ให้แนบใหม่แล้วเคลียร์อีกครั้ง' })
+    expect(reopened.status).toBe('approved')
+    expect(reopened.usedSatang).toBe(0)
+    expect(reopened.returnMethod).toBeNull()
+    expect(reopened.returnSatang).toBe(0)
+    expect(reopened.clearedAt).toBeNull()
+    const audit = await db().auditLog.findFirst({
+      where: { organizationId: ORG_ID, targetType: 'advances', targetId: ADV_ID, action: 'reject' },
+    })
+    expect(audit?.reason).toContain('ใบเสร็จไม่ชัด')
+
+    const again = await advances.settleAdvance(ctx, ADV_ID, { usedSatang: 250_000, receiptFileUrl: null, note: null })
+    expect(again.status).toBe('cleared')
+    expect(again.returnSatang).toBe(50_000)
+  })
+
+  it('ตรวจแล้ว ⇒ ประทับผู้ตรวจ · ตรวจซ้ำ/ตีกลับไม่ได้', async () => {
+    await settleAdv1()
+    const reviewed = await advances.reviewAdvanceClear(ctx, ADV_ID, { note: null })
+    expect(reviewed.status).toBe('cleared')
+    expect(reviewed.clearReviewedAt).not.toBeNull()
+    expect(reviewed.clearReviewedByName).not.toBeNull()
+    await expectCode(() => advances.reviewAdvanceClear(ctx, ADV_ID, { note: null }), 'ADVANCE_INVALID_STATUS')
+    await expectCode(
+      () => advances.reopenAdvanceClear(ctx, ADV_ID, { reason: 'ตีกลับหลังตรวจแล้ว' }),
+      'ADVANCE_CLEAR_NOT_REOPENABLE',
+    )
+  })
+
+  it('ผู้ที่ไม่ใช่การเงินตีกลับ/ตรวจไม่ได้ (ไม่ leak) · เหตุผลสั้นถูกปฏิเสธ', async () => {
+    await settleAdv1()
+    await expectCode(() => advances.reopenAdvanceClear(agentCtx, ADV_ID, { reason: 'ขอเคลียร์ใหม่เอง' }), 'ADVANCE_NOT_FOUND')
+    await expectCode(() => advances.reviewAdvanceClear(agentCtx, ADV_ID, { note: null }), 'ADVANCE_NOT_FOUND')
+    await expectCode(() => advances.reopenAdvanceClear(ctx, ADV_ID, { reason: ' ' }), 'REJECTION_REASON_REQUIRED')
+  })
+
+  it('ใช้เกินยอด ⇒ คำขอเบิกส่วนเกินที่ยังไม่อนุมัติถูกแทนที่เมื่อตีกลับ', async () => {
+    await seedApprovedAdvance(ADV_ID, 300_000)
+    const settled = await advances.settleAdvance(ctx, ADV_ID, { usedSatang: 320_000, receiptFileUrl: null, note: null })
+    expect(settled.excessClaimId).not.toBeNull()
+    await advances.reopenAdvanceClear(ctx, ADV_ID, { reason: 'ยอดใช้จริงเกินไม่มีหลักฐาน' })
+    const claim = await db().expense.findUniqueOrThrow({ where: { id: settled.excessClaimId ?? '' } })
+    expect(claim.status).toBe('superseded')
+  })
+})

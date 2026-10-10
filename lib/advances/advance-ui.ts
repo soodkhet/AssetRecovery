@@ -179,3 +179,11 @@ export function canRecordAdvanceSeparateReturn(advance: Pick<AdvanceDto, 'return
 export function totalReturnOutstandingSatang(items: readonly Pick<AdvanceDto, 'returnOutstandingSatang'>[]): number {
   return items.reduce((total, item) => total + item.returnOutstandingSatang, 0)
 }
+
+/**
+ * ปุ่ม "ตรวจแล้ว" / "ตีกลับการเคลียร์" ของการเงิน (staging E-012) — เฉพาะที่เคลียร์แล้วและยังไม่ตรวจ
+ * (เงื่อนไขที่ย้อนไม่ได้ เช่น มีรับคืนแล้ว ตรวจซ้ำที่ API — `ADVANCE_CLEAR_NOT_REOPENABLE`)
+ */
+export function canReviewAdvanceClear(advance: Pick<AdvanceDto, 'status' | 'clearReviewedAt'>): boolean {
+  return advance.status === 'cleared' && advance.clearReviewedAt === null
+}

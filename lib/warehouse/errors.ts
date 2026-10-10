@@ -35,6 +35,9 @@ export const WAREHOUSE_ERROR_CODES = [
   'REQUIRED_MISSING',
   // มติ PO U129 — ปิดงานสำเร็จแต่ IMEI ซ้ำกับเครื่องที่ยังไม่ส่งมอบ (แทน 500 จาก `uniq_assets_active_imei`)
   'IMEI_DUPLICATE_ACTIVE_ASSET',
+  // staging E-007 (มติ PO 10/10/2569) — วันเวลาส่งมอบจริงต้องไม่อยู่ในอนาคต/ไม่ก่อนวันสร้างล็อต
+  'LOT_DELIVERED_AT_IN_FUTURE',
+  'LOT_DELIVERED_AT_BEFORE_LOT',
 ] as const
 
 export type WarehouseErrorCode = (typeof WAREHOUSE_ERROR_CODES)[number]
@@ -60,6 +63,8 @@ const HTTP_STATUS: Record<WarehouseErrorCode, number> = {
   LOT_NOT_FOUND: 404,
   REQUIRED_MISSING: 400,
   IMEI_DUPLICATE_ACTIVE_ASSET: 400,
+  LOT_DELIVERED_AT_IN_FUTURE: 400,
+  LOT_DELIVERED_AT_BEFORE_LOT: 400,
 }
 
 const MESSAGES: Record<WarehouseErrorCode, ErrorMessage> = {
@@ -128,6 +133,14 @@ const MESSAGES: Record<WarehouseErrorCode, ErrorMessage> = {
     message:
       'ปิดงานสำเร็จไม่ได้ — IMEI ของเคสนี้ตรงกับเครื่องของอีกเคสที่ยังอยู่ในคลังหรือยังไม่ส่งมอบ ' +
       'ติดต่อคลังหรือผู้ดูแลเคสเพื่อตรวจสอบ IMEI ก่อนปิดงาน',
+  },
+  LOT_DELIVERED_AT_IN_FUTURE: {
+    title: 'วันเวลาส่งมอบอยู่ในอนาคต',
+    message: 'ใส่วันเวลาที่ผู้รับมารับหรือพัสดุถึงจริง ซึ่งต้องไม่เกินเวลาปัจจุบัน — วันนี้ใช้กำหนดงวดบัญชีของรายได้',
+  },
+  LOT_DELIVERED_AT_BEFORE_LOT: {
+    title: 'วันเวลาส่งมอบก่อนวันสร้างล็อต',
+    message: 'วันเวลาส่งมอบจริงต้องไม่ก่อนวันที่สร้างล็อตนี้ — ตรวจปีและวันที่อีกครั้ง',
   },
 }
 

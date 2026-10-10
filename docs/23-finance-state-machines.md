@@ -28,6 +28,7 @@
 | v2.13 | 07/10/2569 | **มติ PO O74**: §6.4 guard ของ `approved → overdue` — ต้องจ่ายออกแล้ว (เคยอยู่ในรอบจ่าย `completed` — U83) · ยังไม่จ่ายคง `approved` · ไม่เพิ่ม state |
 | v2.14 | 07/10/2569 | **มติ PO U166 → U167 (DEC-017)**: §6.18 job เปลี่ยนเป็น `device_tac_sync` (รายวัน · ไม่เปลี่ยน `manual_status` · ไม่ทับ TAC เดิม) · รุ่นไม่ทราบปีจากฐาน TAC ไม่แสดงตั้งต้น · `device_tacs.source` เป็นแหล่งที่มา ไม่ใช่ state · `device_tac_updates.status` บันทึกครั้งเดียว — ยังไม่ใช่ state machine |
 | v2.15 | 07/10/2569 | **มติ O75**: §6.8 เพิ่มเส้น `paid → partially_paid` เมื่อเอกสาร (ใบเพิ่มหนี้/ยกเลิกใบลดหนี้) ทำให้ยอดตามเอกสารค้าง > 0 · สถานะทั้งตอนรับเงินและตอนเอกสารเปลี่ยนยอดเทียบ**ยอดตามเอกสาร** |
+| v2.16 | 10/10/2569 | **staging E-012 (มติ PO 10/10/2569)** — §6.4 เพิ่ม transition `cleared → approved` (`reopen_clear` — การเงินตีกลับการเคลียร์ · เหตุผลบังคับ · เงื่อนไขในหมายเหตุ) · ไม่เพิ่มสถานะ |
 
 ขอบเขตเอกสารนี้: รวม state machine ของทุก entity ในโมดูล Finance/Accounting ไว้ในที่เดียว เพื่อให้เห็นภาพรวมและตรวจสอบความสอดคล้องระหว่างกัน
 
@@ -82,9 +83,12 @@ pending_approval → pending_warehouse_confirm (hold_for_warehouse — เฉพ
 ```
 pending_approval → approved (รวมความหมาย "รอเคลียร์ยอด")
 approved → overdue (auto-mark โดย background job เมื่อเลย due_clear_date **และจ่ายออกแล้ว** — เคยอยู่ในรอบจ่าย completed · มติ PO O74)
-approved/overdue → cleared (terminal, เคลียร์ยอดเสร็จ)
+approved/overdue → cleared (เคลียร์ยอดเสร็จ — terminal ยกเว้นเส้น reopen_clear ด้านล่าง)
+cleared → approved (reopen_clear — การเงินตีกลับการเคลียร์ เหตุผลบังคับ · v2.16 staging E-012)
 pending_approval → rejected (terminal, การเงินไม่อนุมัติ)
 ```
+
+> **ตีกลับการเคลียร์ (มติ PO 10/10/2569 — staging E-012)**: การเงิน (`manage:approve_advance`) ตีกลับได้เฉพาะ `cleared` ที่**ยังไม่ได้กด "ตรวจแล้ว"** (`clear_reviewed_at`) และไม่มีรายการต่อเนื่องที่ย้อนเองไม่ได้: แถวรับคืน/หักกลบที่ยังไม่กลับรายการ · ใบรับรองแทนใบเสร็จที่ยังไม่ยกเลิก · คำขอเบิกส่วนเกินที่อนุมัติ/เข้ารอบจ่ายแล้ว ⇒ `ADVANCE_CLEAR_NOT_REOPENABLE` · ผล: สถานะกลับ `approved` (เลยกำหนดแล้ว job มาร์ค `overdue` ตามปกติ) ล้างยอดใช้จริง/วิธีคืน/ใบเสร็จ · คำขอเบิกส่วนเกินที่ยังไม่อนุมัติ ⇒ `superseded` · แจ้งผู้ขอ (`advance.clear_reopened`) · งวดของวันเคลียร์ปิดแล้ว ⇒ Period Lock
 
 > **Guard ของ `settle` (มติ PO 05/10/2569 — UAT U74)**: เงินทดรองที่ถูกดึงเข้ารอบจ่าย (§6.6 — ผ่าน `advances.payout_batch_item_id`) ซึ่งยังเป็น `draft`/`checking`/`file_generated` ⇒ **ห้าม settle** (`ADVANCE_IN_PENDING_PAYOUT`) จนกว่ารอบนั้น `completed` · รอบ `cancelled` ⇒ เงินทดรองหลุดจากรอบแล้ว ไม่ติด guard · การสร้างรอบจ่ายดึงเฉพาะเงินทดรอง `approved`/`overdue` (ตรวจซ้ำตอนยึดรายการ) ⇒ เงินทดรอง `cleared` ไม่ถูกดึงเข้ารอบอีก
 >

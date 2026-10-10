@@ -323,6 +323,18 @@
 | Impact | migration `20261008150000_device_tac` (ลบแถว `source='api'` — เคสคง `asset_description`, `device_model_id` → NULL · enum `device_catalog_source` = `tacdb`/`manual` · ลบ `device_brands.external_id`/`last_synced_at` · ตาราง `device_tacs` · ค่าตั้ง `tac_etag`/`tac_checked_at`/`tac_imported_at`/`capacity_options`/`color_options` · `cases.asset_capacity`/`asset_color` · `assets.device_capacity`/`device_color`/`color_capacity_matched` · ยกเลิก job `device_catalog_sync` ที่ค้างคิว) + `20261008150100_device_tac_updates` (`tac_source_sha`/`tac_source_updated_at`/`stale_alert_days` · ตาราง `device_tac_updates`) · `lib/device-catalog/{tac,tac-source,tac-import,tac-sync-job,tac-queries,device-attributes}.ts` · job `device_tac_sync` · event `device_catalog.tac_update_failed` (`45` §7) · error `DEVICE_TAC_FILE_INVALID` (`24`) · upload target `device_tac_file` · `13` §6.18 · `38` §6.2 · `91` §6.1 · ไม่มี capability ใหม่ (`manage_device_catalog`) · ถอด RapidAPI client/job/env `RAPIDAPI_*` |
 | Reversible | สูง — หยุด job/ไม่นำเข้าได้ทันที (ตัวเลือกเดิม + ระบุเองยังใช้ได้) · เคสเก็บข้อความ snapshot (ยี่ห้อ/รุ่น/ความจุ/สี) ⇒ ถอด TAC ออกได้โดยข้อมูลเคสไม่เสีย |
 
+### DEC-018 — เครื่องมือทดสอบบน Vercel Preview เปิดด้วย `ENABLE_DEV_TOOLS=1` (10/10/2569)
+
+| Field | Value |
+|---|---|
+| Status | ✅ ใช้งาน |
+| Decision | ตัวตัดสิน "เปิดเครื่องมือทดสอบ" (dev trigger job · ส่ง/ล็อกงวดด้วยวันจำลอง · `date`/`asOf` ของงานที่สั่งจาก dev trigger) ย้ายจาก `NODE_ENV !== 'production'` ไปเป็น `isDevToolsEnabled()` (`lib/env.ts`): `VERCEL_ENV=production` ⇒ ปิดเสมอ · `VERCEL_ENV=preview` ⇒ เปิดเฉพาะเมื่อ `ENABLE_DEV_TOOLS=1` · `VERCEL_ENV` อื่น ⇒ ปิด · ไม่อยู่บน Vercel ⇒ เปิดเมื่อไม่ใช่ production build · หน้า "งานเบื้องหลัง" มีแผง "รันตอนนี้" เมื่อเปิด |
+| Approved by | Product Owner — มติ 10/10/2569 (staging E-013 · `.claude/preship/staging-e2e-20261010/DECISIONS.md`) |
+| Alternatives | (ก) ✅ opt-in env บน Preview · (ข) เปิดทุก `VERCEL_ENV !== 'production'` — เสี่ยงถ้ามี preview อื่นต่อฐานข้อมูลจริง · (ค) คงสคริปต์จากเครื่อง (`uat/bin/staging-prep.sh job-allowance`) — ใช้ได้งานเดียวและต้องมีสิทธิ์ฐาน staging |
+| Risk | ตั้ง `ENABLE_DEV_TOOLS=1` ผิด scope (Production) — **ไม่มีผล** เพราะ `VERCEL_ENV=production` ปิดก่อนเสมอ · endpoint ยังต้องผ่าน `requirePermission(manage_jobs)` + audit ตามปกติ |
+| Impact | `lib/env.ts` · `app/api/dev/trigger-job` · `lib/accounting/dev-period-close.ts` · `lib/accounting/queries.ts` · `lib/jobs/registry.ts` · `components/jobs/dev-trigger-panel.tsx` · `91` §14.1 v2.15 · env ใหม่ `ENABLE_DEV_TOOLS` (ตั้งเฉพาะ Vercel Preview) |
+| Reversible | สูง — ลบ env ⇒ กลับเป็นปิดบน Preview ทันที |
+
 ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items)
 
 - [ ] ยืนยันรายละเอียดเมื่อเริ่ม sprint เฉพาะ module (Open Item เดิม)

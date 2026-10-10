@@ -18,6 +18,8 @@ export const ADVANCE_ERROR_CODES = [
   'ADVANCE_RETURN_EXCEEDS_OUTSTANDING',
   // มติ PO 05/10/2569 (UAT U74) — เคลียร์ยอดขณะเงินทดรองอยู่ในรอบจ่ายที่ยังไม่โอนจริง
   'ADVANCE_IN_PENDING_PAYOUT',
+  // staging E-012 (มติ PO 10/10/2569) — ตีกลับการเคลียร์ไม่ได้ (มีรับคืน/หักกลบแล้ว · ตรวจแล้ว · มีใบใหม่ค้าง ฯลฯ)
+  'ADVANCE_CLEAR_NOT_REOPENABLE',
 ] as const
 
 export type AdvanceErrorCode = (typeof ADVANCE_ERROR_CODES)[number]
@@ -31,6 +33,7 @@ const HTTP_STATUS: Record<AdvanceErrorCode, number> = {
   REJECTION_REASON_REQUIRED: 400,
   ADVANCE_RETURN_EXCEEDS_OUTSTANDING: 400,
   ADVANCE_IN_PENDING_PAYOUT: 400,
+  ADVANCE_CLEAR_NOT_REOPENABLE: 400,
 }
 
 const MESSAGES: Record<AdvanceErrorCode, ErrorMessage> = {
@@ -61,6 +64,10 @@ const MESSAGES: Record<AdvanceErrorCode, ErrorMessage> = {
   ADVANCE_IN_PENDING_PAYOUT: {
     title: 'เงินทดรองยังอยู่ในรอบจ่ายที่ยังไม่โอน',
     message: 'เคลียร์ยอดได้หลังรอบจ่ายที่จ่ายเงินทดรองนี้ยืนยันโอนเงินสำเร็จแล้ว',
+  },
+  ADVANCE_CLEAR_NOT_REOPENABLE: {
+    title: 'ตีกลับการเคลียร์ยอดไม่ได้',
+    message: 'การเคลียร์นี้มีรายการต่อเนื่องแล้ว — จัดการรายการนั้นก่อน หรือใช้รายการปรับปรุงแทน',
   },
 }
 

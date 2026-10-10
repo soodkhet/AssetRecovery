@@ -103,6 +103,21 @@ export const advanceReturnMethodChangeSchema = z.object({
   reason: z.string().trim().min(5, 'ระบุเหตุผลอย่างน้อย 5 ตัวอักษร').max(500, 'เหตุผลยาวเกินไป'),
 })
 
+/** staging E-012 — การเงินตรวจการเคลียร์แล้ว (หมายเหตุไม่บังคับ) */
+export const advanceClearReviewSchema = z.object({
+  note: z
+    .string()
+    .trim()
+    .max(500, 'หมายเหตุยาวเกินไป')
+    .nullish()
+    .transform((value) => (value === undefined || value === null || value === '' ? null : value)),
+})
+
+/** staging E-012 — ตีกลับการเคลียร์ (เหตุผลบังคับ — ผู้ขอเห็นในแจ้งเตือน) */
+export const advanceReopenClearSchema = z.object({
+  reason: z.string().trim().min(5, 'ระบุเหตุผลอย่างน้อย 5 ตัวอักษร').max(500, 'เหตุผลยาวเกินไป'),
+})
+
 /**
  * รับคืนแยก (การเงิน · มติ U30) — ช่องทาง + วันที่ + ยอด + หลักฐาน (path จากกลไกอัปโหลดผ่าน server)
  * `receivedDate` เป็นคอลัมน์ `DATE` ⇒ `dateOnlySchema()` (เที่ยงคืน UTC)
@@ -125,6 +140,8 @@ export const advanceListQuerySchema = z.object({
 export type AdvanceCreateInput = z.infer<typeof advanceCreateSchema>
 export type AdvanceApproveInput = z.infer<typeof advanceApproveSchema>
 export type AdvanceRejectInput = z.infer<typeof advanceRejectSchema>
+export type AdvanceClearReviewInput = z.infer<typeof advanceClearReviewSchema>
+export type AdvanceReopenClearInput = z.infer<typeof advanceReopenClearSchema>
 /** `returnMethod` ไม่ระบุ = ค่าเริ่มต้นหักกลบ (ผู้เรียกฝั่ง server/เทสต์ที่ไม่ได้ผ่าน schema) */
 export type AdvanceSettleInput = Omit<z.infer<typeof advanceSettleSchema>, 'returnMethod' | 'substituteReceipt'> & {
   returnMethod?: z.infer<typeof advanceReturnMethodSchema>

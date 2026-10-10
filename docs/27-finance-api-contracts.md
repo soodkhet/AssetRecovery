@@ -35,6 +35,7 @@
 | v3.18 | 07/10/2569 | **มติ PO 07/10/2569 (U170 · BUG-180)**: `GET /api/settings/assumptions?include=current_value` — เพิ่ม `currentValue` (ค่าที่ใช้อยู่) ต่อรายการสำหรับหน้ารวมในเมนูบัญชี · ไม่ส่ง = รูปแบบเดิม (ป้ายบนหน้าตั้งค่า) |
 | v3.19 | 07/10/2569 | **มติ PO 07/10/2569 (U127 · U140)**: เพิ่ม `PATCH /api/accounting/wht-filing-summary/:id/mark-supplementary-filed` (ล้างธงต้องยื่นเพิ่มเติม · `manage_wht` · reason บังคับ) · `GET /api/settings/assumptions` + `POST /api/settings/assumptions/:key/confirm` (ป้าย "รอนักบัญชียืนยัน" บนหน้าตั้งค่า · confirm = `manage_accountant_questions` · reason บังคับ) |
 | v3.20 | 08/10/2569 | **preship R7-009 · มติชั่วคราว P11 (รอ PO ยืนยัน)** — §6.9 เติม `GET /api/finance/closed-periods` (อ่านอย่างเดียว · สิทธิ์ view ของ `manage_billing` หรือ `manage_payout_batch` · คืน `{ closedPeriods: { yearBe, month }[] }` = งวด `locked`/`sent_to_accountant` · ไม่เปิดงวดใหม่ ไม่ลง audit) ให้หน้าสร้างรอบวางบิล/รอบจ่ายไม่เสนอวันตัดรอบในงวดที่ปิด · `POST /api/billing-batches` · `POST /api/payout-batches` วันตัดรอบในงวดปิด ⇒ `PERIOD_LOCKED_DIRECT_EDIT` เดิม + `reason: "cutoff_in_closed_period"` |
+| v3.21 | 10/10/2569 | **staging E-012 (มติ PO 10/10/2569)** — §6.4 เพิ่ม `PATCH /api/advances/:id/clear-review` และ `PATCH /api/advances/:id/reopen-clear` (การเงินเท่านั้น `manage:approve_advance` · ไม่ใช่การเงิน = 404 ไม่ leak) · `AdvanceDto` เพิ่ม `receiptFileUrl`/`clearReviewedAt`/`clearReviewedByName` |
 
 ขอบเขตเอกสารนี้: รวม API Endpoint ทั้งหมดของโมดูล Finance/Accounting เป็นรายการเดียว จัดกลุ่มตาม resource เพื่อให้ backend implement ตาม REST convention เดียวกันทั้งระบบ
 
@@ -123,6 +124,8 @@ PATCH  /api/advances/:id/approve
 PATCH  /api/advances/:id/reject
 PATCH  /api/advances/:id/settle
 PATCH  /api/advances/:id/return-method                 (v3.8 มติ PO U30 — เปลี่ยนวิธีคืนยอด · การเงิน)
+PATCH  /api/advances/:id/clear-review                  (v3.21 staging E-012 — การเงินตรวจการเคลียร์แล้ว · `note?`)
+PATCH  /api/advances/:id/reopen-clear                  (v3.21 staging E-012 — การเงินตีกลับการเคลียร์ · `reason` บังคับ · `cleared → approved`)
 POST   /api/advances/:id/returns                       (v3.8 มติ PO U30 — บันทึกรับคืนแยก · การเงิน)
 ```
 

@@ -24,6 +24,7 @@ import { fmtDateTime } from '@/lib/format/datetime'
 import { fmtCount } from '@/lib/format/money'
 import { JOB_STATUS_GROUP, JOB_STATUS_LABEL, type JobViewStatus } from '@/lib/jobs/job-state'
 import { JOB_TYPES, JOB_TYPE_SPECS } from '@/lib/jobs/job-types'
+import { DevTriggerPanel } from '@/components/jobs/dev-trigger-panel'
 
 /**
  * ตั้งค่าทั่วไป → งานเบื้องหลัง (Job Log) — `91` §8/§14
@@ -42,7 +43,7 @@ const STATUS_OPTIONS: readonly JobViewStatus[] = [
   'cancelled',
 ]
 
-export function JobsManager() {
+export function JobsManager({ devToolsEnabled = false }: { devToolsEnabled?: boolean } = {}) {
   const [filters, setFilters] = useState<JobFilters>(EMPTY_JOB_FILTERS)
   const [offset, setOffset] = useState(0)
   const [openedId, setOpenedId] = useState<string | null>(null)
@@ -64,6 +65,8 @@ export function JobsManager() {
         title="งานเบื้องหลัง (Job Log)"
         description="สถานะงานที่ระบบทำให้เบื้องหลัง — ตั้งเวลาโดยระบบหรือสั่งจากหน้าจอ · งานที่ล้มเหลวจะถูกลองใหม่อัตโนมัติจนครบเพดาน แล้วรอผู้ดูแลระบบสั่งทำใหม่"
       />
+
+      {devToolsEnabled && <DevTriggerPanel onTriggered={() => setRefreshToken((value) => value + 1)} />}
 
       <Card>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">

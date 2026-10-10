@@ -6,6 +6,7 @@ import {
   advanceStatusBadgeGroup,
   advanceStatusLabel,
   canReviewAdvance,
+  canReviewAdvanceClear,
   canSettleAdvance,
   countAwaitingSettlement,
   countOverdue,
@@ -61,6 +62,9 @@ function advance(overrides: Partial<AdvanceDto> = {}): AdvanceDto {
     payoutBatch: null,
     paidOut: true,
     substituteReceipt: null,
+    receiptFileUrl: null,
+    clearReviewedAt: null,
+    clearReviewedByName: null,
     ...overrides,
   }
 }
@@ -245,5 +249,13 @@ describe('มติ PO U74 — ปุ่มเคลียร์ยอดปิ�
     expect(
       settleBlockedReason(advance({ status: 'cleared', payoutBatch: { id: 'pb-1', name: 'รอบ 1', status: 'draft' } })),
     ).toBeNull()
+  })
+})
+
+describe('canReviewAdvanceClear (staging E-012)', () => {
+  it('เฉพาะเคลียร์แล้วและยังไม่ตรวจ', () => {
+    expect(canReviewAdvanceClear(advance({ status: 'cleared', clearReviewedAt: null }))).toBe(true)
+    expect(canReviewAdvanceClear(advance({ status: 'cleared', clearReviewedAt: '2026-10-10T05:00:00Z' }))).toBe(false)
+    expect(canReviewAdvanceClear(advance({ status: 'approved', clearReviewedAt: null }))).toBe(false)
   })
 })

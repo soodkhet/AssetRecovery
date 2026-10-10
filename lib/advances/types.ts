@@ -55,6 +55,11 @@ export interface AdvanceDto {
   paidOut: boolean
   /** มติ PO U103 — ใบรับรองแทนใบเสร็จที่ออกตอนเคลียร์ยอด (ติ๊ก "ไม่มีใบเสร็จ") · ไม่มี = `null` */
   substituteReceipt: SubstituteReceiptRefDto | null
+  /** staging E-012 — ใบเสร็จที่แนบตอนเคลียร์ (path ใน Storage — เปิดผ่าน signed URL) · ไม่มี = `null` */
+  receiptFileUrl: string | null
+  /** staging E-012 — การเงินตรวจการเคลียร์แล้วเมื่อ/โดย · ยังไม่ตรวจ = `null` */
+  clearReviewedAt: string | null
+  clearReviewedByName: string | null
 }
 
 /** 1 แถวของสมุดย่อย `advance_returns` (มติ PO U30) */

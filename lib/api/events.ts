@@ -121,6 +121,11 @@ export const EVENT_REGISTRY: Readonly<Record<DomainEventName, DomainEventContrac
     source: '90 §6.3 v4.9 · 15 §9',
     description: 'การเงินไม่อนุมัติเงินทดรอง (ต้องมีเหตุผล) — แจ้งผู้ขอ',
   },
+  'advance.clear_reopened': {
+    module: 'finance',
+    source: '90 §6.3 v4.9 · 15 §9.1',
+    description: 'การเงินตีกลับการเคลียร์ยอด (`cleared → approved` · `23` §6.4 reopen_clear) — แจ้งผู้ขอ',
+  },
   'payout.paid_to_payee': {
     module: 'finance',
     source: '90 §6.3 v4.9 · 17 §9',

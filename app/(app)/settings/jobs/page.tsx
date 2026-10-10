@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import { JobsManager } from '@/components/jobs/jobs-manager'
+import { isDevToolsEnabled } from '@/lib/env'
 import { requireMenuPage } from '@/lib/nav/menu-guard'
 
 export const metadata: Metadata = { title: 'งานเบื้องหลัง (Job Log)' }
@@ -11,5 +12,6 @@ export const metadata: Metadata = { title: 'งานเบื้องหลั
  */
 export default async function SettingsJobsPage() {
   await requireMenuPage('settings.jobs')
-  return <JobsManager />
+  // staging E-013 — แผงสั่งงานทันทีเฉพาะระบบทดสอบ (Vercel Preview ที่ตั้ง ENABLE_DEV_TOOLS=1 / เครื่อง dev)
+  return <JobsManager devToolsEnabled={isDevToolsEnabled()} />
 }

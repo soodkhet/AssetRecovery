@@ -1,20 +1,20 @@
 'use client'
 
 import { useState, type ReactNode } from 'react'
-import { Button, Field, InlineAlert, Input, Modal, useToast } from '@/components/ui'
+import { Button, ConfirmModal, Field, InlineAlert, Input, Modal, useToast } from '@/components/ui'
 import { buttonClass } from '@/components/ui/button'
 import { cn } from '@/components/ui/cn'
 import { FileViewerModal, type ViewableFile } from '@/components/cases/file-viewer-modal'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
-import { fromInputDateTime, toInputDateTime } from '@/lib/format/datetime'
+import { fmtDateTime, fromInputDateTime, toInputDateTime } from '@/lib/format/datetime'
 import {
   LOT_DOCUMENT_ACCEPT,
   lotDocumentMime,
   lotDocumentSlots,
   type LotDocumentSlot,
 } from '@/lib/warehouse/lot-documents'
-import { canConfirmLot, type LotDocument } from '@/lib/warehouse/lot-status'
+import { canConfirmLot, LOT_DELIVERED_AT_CLOCK_SKEW_MS, type LotDocument } from '@/lib/warehouse/lot-status'
 import type { LotConfirmResultDto, LotDetailDto } from '@/lib/warehouse/types'
 import { uploadLotDocument, WarehouseUploadError } from '@/lib/warehouse/upload-client'
 import { HANDOVER_TYPE_LABEL } from '@/lib/warehouse/warehouse-ui'
@@ -52,6 +52,8 @@ export function AttachDocModal({
   const [error, setError] = useState<ApiCallError | null>(null)
   const [dateError, setDateError] = useState<string | null>(null)
   const [viewing, setViewing] = useState<ViewableFile | null>(null)
+  /** วันเวลาที่ผ่านการตรวจแล้ว รอผู้ใช้กดยืนยันในกล่องถามซ้ำ (ยืนยันล็อตย้อนไม่ได้ — staging E-007) */
+  const [pendingDeliveredAt, setPendingDeliveredAt] = useState<Date | null>(null)
 
   const slots = lotDocumentSlots({
     type: lot.type,
@@ -84,15 +86,24 @@ export function AttachDocModal({
     }
   }
 
-  async function confirm(): Promise<void> {
+  /** ตรวจวันเวลาก่อน (UX — server ตรวจซ้ำด้วย `LOT_DELIVERED_AT_*`) แล้วเปิดกล่องถามยืนยัน */
+  function requestConfirm(): void {
     setError(null)
     const deliveredAt = fromInputDateTime(deliveredLocal)
     if (deliveredAt === null) {
       setDateError(`ต้องระบุวันเวลาที่${isPickup ? 'ผู้รับมารับ' : 'ส่งมอบ'}จริง`)
       return
     }
+    if (deliveredAt.getTime() > Date.now() + LOT_DELIVERED_AT_CLOCK_SKEW_MS) {
+      setDateError('วันเวลาต้องไม่เกินเวลาปัจจุบัน — ใส่เวลาที่เกิดขึ้นจริง')
+      return
+    }
     setDateError(null)
+    setPendingDeliveredAt(deliveredAt)
+  }
 
+  async function confirm(deliveredAt: Date): Promise<void> {
+    setPendingDeliveredAt(null)
     setSubmitting(true)
     try {
       const response = await callApi<LotConfirmResultDto>(
@@ -136,7 +147,7 @@ export function AttachDocModal({
               variant="primary"
               loading={submitting}
               disabled={!ready || uploading !== null}
-              onClick={() => void confirm()}
+              onClick={requestConfirm}
             >
               ยืนยันส่งมอบสำเร็จ
             </Button>
@@ -194,6 +205,8 @@ export function AttachDocModal({
           >
             <Input
               type="datetime-local"
+              // เลือกเวลาในอนาคตไม่ได้ (staging E-007) — ช่องนี้เป็นข้อยกเว้นเดียวที่ใช้ปี ค.ศ. (Rule 01)
+              max={toInputDateTime(new Date())}
               value={deliveredLocal}
               invalid={dateError !== null}
               onChange={(event) => setDeliveredLocal(event.target.value)}
@@ -211,6 +224,17 @@ export function AttachDocModal({
         </div>
       </Modal>
 
+      <ConfirmModal
+        open={pendingDeliveredAt !== null}
+        onClose={() => setPendingDeliveredAt(null)}
+        onConfirm={() => {
+          if (pendingDeliveredAt !== null) void confirm(pendingDeliveredAt)
+        }}
+        title={`ยืนยันส่งมอบ ${lot.lotNumber}?`}
+        description={`${lot.assetCount} เครื่อง · ${lot.companyName} · ${isPickup ? 'ผู้รับมารับ' : 'ส่งมอบ'}เมื่อ ${fmtDateTime(pendingDeliveredAt)} — ยืนยันแล้วแก้ไขไม่ได้ทุกกรณี`}
+        confirmLabel="ยืนยันส่งมอบล็อต"
+        confirmVariant="primary"
+      />
       <FileViewerModal open={viewing !== null} document={viewing} onClose={() => setViewing(null)} />
     </>
   )

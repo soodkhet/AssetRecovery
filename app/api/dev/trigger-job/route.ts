@@ -1,4 +1,5 @@
 import type { NextRequest } from 'next/server'
+import { isDevToolsEnabled } from '@/lib/env'
 import { z } from 'zod'
 import { apiSuccess } from '@/lib/api/envelope'
 import { readJsonBody, toModuleErrorResponse, validationErrorResponse, withApiPermission } from '@/lib/api/http'
@@ -122,6 +123,7 @@ const triggerJob = withApiPermission(
 )
 
 export async function POST(request: NextRequest, context: unknown): Promise<Response> {
-  if (process.env.NODE_ENV === 'production') return notFound()
+  // staging E-013 — Vercel Preview เปิดได้ด้วย `ENABLE_DEV_TOOLS=1` · production ปิดเสมอ
+  if (!isDevToolsEnabled()) return notFound()
   return triggerJob(request, context)
 }

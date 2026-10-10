@@ -65,6 +65,7 @@ export const EVENT_NAMES = [
   'payout.paid_to_payee',
   'advance.approved',
   'advance.rejected',
+  'advance.clear_reopened',
   // Accounting (30/33/34/36) — `90` §6.3 + mockup `notifications.html`
   'wht.filing_due_reminder',
   // มติ PO 07/10/2569 U127 — ยกเลิก/ออกใบ 50 ทวิ ในเดือนที่ยื่น ภ.ง.ด. แล้ว ⇒ ต้องยื่นเพิ่มเติม
