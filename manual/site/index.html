@@ -184,7 +184,7 @@ for (const g of DOCS) {
   }
   groupsEl.append(wrap); pick.append(og)
 }
-pick.addEventListener('change', () => { location.hash = pick.value })
+pick.addEventListener('change', () => go(pick.value))
 
 marked.setOptions({ gfm: true, breaks: false })
 const cache = new Map()
@@ -218,8 +218,14 @@ function render(md, file) {
     const [path, frag] = href.split('#')
     const target = file ? resolvePath(file, path) : path
     const id = byFile.get(target)
-    if (id) a.href = `#${id}`
+    if (id) { a.href = `#${id}`; if (frag) a.dataset.frag = frag }
     else if (/\.(md)$/.test(target)) { a.removeAttribute('href'); a.title = 'ไฟล์นี้ไม่ได้อยู่ในชุดคู่มือออนไลน์' }
+  }
+  const seen = new Map()
+  for (const h of doc.querySelectorAll('h1, h2, h3, h4')) {
+    let slug = h.textContent.trim().toLowerCase().replace(/[^\p{L}\p{M}\p{N}\s_-]/gu, '').replace(/\s/g, '-')
+    const n = seen.get(slug) || 0; seen.set(slug, n + 1); if (n) slug += `-${n}`
+    h.id = slug
   }
   for (const t of doc.querySelectorAll('table')) {
     const w = document.createElement('div'); w.className = 'tablewrap'; t.replaceWith(w); w.append(t)
@@ -243,8 +249,31 @@ function pager(id) {
   document.getElementById('doc').append(nav)
 }
 
-async function show() {
-  const id = location.hash.slice(1) || 'start'
+// หน้าเผยแพร่ในกรอบที่ไม่ส่งต่อการคลิกลิงก์ # — นำทางด้วยสคริปต์เอง
+let currentId = null
+function scrollToFrag(frag) {
+  if (!frag) { window.scrollTo(0, 0); return }
+  let key = frag; try { key = decodeURIComponent(frag) } catch {}
+  const el = document.getElementById(key)
+  if (el) el.scrollIntoView({ block: 'start' })
+}
+async function go(id, frag) {
+  if (id !== currentId) await show(id)
+  scrollToFrag(frag)
+  try { history.replaceState(null, '', `#${id}`) } catch {}
+}
+document.addEventListener('click', (e) => {
+  const a = e.target.closest('a[href^="#"]')
+  if (!a) return
+  e.preventDefault()
+  const key = a.getAttribute('href').slice(1)
+  if (FLAT.some((d) => d.id === key)) go(key, a.dataset.frag)
+  else scrollToFrag(key)
+})
+
+async function show(want) {
+  const id = want || location.hash.slice(1) || 'start'
+  currentId = FLAT.some((x) => x.id === id) ? id : FLAT[0].id
   const d = FLAT.find((x) => x.id === id) || FLAT[0]
   for (const a of groupsEl.querySelectorAll('a')) {
     if (a.dataset.id === d.id) a.setAttribute('aria-current', 'page')
@@ -263,6 +292,6 @@ async function show() {
     doc.firstChild.textContent = `เปิดเล่มนี้ไม่ได้: ${e.message} — ลองโหลดหน้าใหม่`
   }
 }
-window.addEventListener('hashchange', show)
+window.addEventListener('hashchange', () => { const k = location.hash.slice(1); if (FLAT.some((d) => d.id === k) && k !== currentId) show(k) })
 show()
 </script>
