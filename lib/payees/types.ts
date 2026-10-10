@@ -1,3 +1,4 @@
+import type { PayeeIncomeCategoryOverride } from '@/lib/payees/payee'
 import type { AddressDtoLike } from '@/lib/address/address-value'
 import type { PayeeType, PayoutBatchSide, WhtCondition } from '@/lib/generated/prisma/enums'
 
@@ -46,6 +47,10 @@ export interface PayeeDto {
   branchCode: string
   /** เงื่อนไขการหัก (1)/(2)/(3) — พิมพ์บนใบ 50 ทวิ */
   whtCondition: WhtCondition
+  /** ชื่อนิติบุคคลตามหนังสือรับรอง (staging E-002) — บุคคลธรรมดา = `null` */
+  legalName: string | null
+  /** ประเภทเงินได้รายคน (staging E-021) — `null` = ตามค่าตั้งองค์กร */
+  incomeCategoryOverride: PayeeIncomeCategoryOverride | null
   isVerified: boolean
   verifiedAt: string | null
   verifiedByName: string | null

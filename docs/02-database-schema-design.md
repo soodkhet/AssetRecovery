@@ -91,6 +91,7 @@
 | v4.64 | 07/10/2569 | **มติ O77** (migration `20261008180000_asset_color_capacity_note`): `assets.color_capacity_note TEXT` (สิ่งที่พบเมื่อผลตรวจสี/ความจุ = ไม่ตรง) + CHECK `chk_assets_color_capacity_note` (มีข้อความได้เฉพาะ `color_capacity_matched = false`) · `color_capacity_matched` บังคับเลือกตอนรับเข้า (ระดับ API) |
 | v4.65 | 09/10/2569 | **ดัชนี FK ของแคตตาล็อกรุ่น** (migration `20261009100000_device_model_fk_indexes` — เพิ่ม index เท่านั้น ไม่เปลี่ยนคอลัมน์): `idx_device_tacs_model (device_model_id)` + `idx_cases_device_model (device_model_id)` — FK ทั้งสอง `ON DELETE SET NULL` ไป `device_models` ต้องหาแถวลูกด้วย `WHERE device_model_id = ?` ต่อทุกรุ่นที่ลบ · `idx_device_tacs_org_model` ขึ้นต้น `organization_id` ใช้ค้นแบบนี้ไม่ได้ → seq scan `device_tacs` ทั้งตารางต่อรุ่น (staging ~130k รุ่น × ~255k TAC: reset ค้าง > 16 นาที) · คงแบบเดียวกับดัชนี FK ลูกอื่นที่ไม่ขึ้นต้น org (เช่น `idx_case_contacts_case`) · `device_models.brand_id` มี `uniq_device_models_brand_name` ขึ้นต้น `brand_id` อยู่แล้ว |
 | v4.66 | 10/10/2569 | **staging E-012 (มติ PO 10/10/2569)** — `advances.receipt_file_url/receipt_file_hash` (ใบเสร็จตอนเคลียร์ · backfill จาก audit) + `clear_reviewed_at/clear_reviewed_by` (การเงินตรวจการเคลียร์ — ไม่ใช่สถานะใหม่) + CHECK 2 ตัว · migration `20261010120000_advance_clear_review` · การตีกลับการเคลียร์ใช้ transition `reopen_clear` (`23` §6.4) ไม่เพิ่ม enum |
+| v4.67 | 11/10/2569 | **staging E-002/E-010/E-021/E-009 (มติ PO 10/10/2569)** — migration `20261011090000_payee_legal_name_income_override`: `payee_profiles` + `legal_name VARCHAR(255)` (CHECK `chk_payee_profiles_legal_name` — `corporate` ต้องมี · backfill จากชื่อผู้ใช้เดิม) + `income_category_override wht_income_category` (CHECK `chk_payee_profiles_income_override` — NULL หรือ `sec_40_2`/`sec_40_8` เฉพาะ `individual`) · migration `20261011090200_bank_file_include_header`: `bank_file_formats` + `include_header BOOLEAN NOT NULL DEFAULT false` · migration `20261011090100_advance_clear_reviewer_fk_action` แก้ FK action ของ `advances.clear_reviewed_by` ให้ตรง Prisma (SET NULL/CASCADE) |
 
 ขอบเขตเอกสารนี้: Full Production Database Schema — ทุก table, column, type, FK, index, unique constraint, enum, migration order และ seed data สรุปจาก spec ไฟล์ทั้งหมดไว้ในที่เดียว ใช้เป็น source of truth เดียวก่อนเขียน Prisma schema
 
@@ -1033,6 +1034,7 @@ CREATE TABLE bank_file_formats (
   file_type       bank_file_type NOT NULL,
   encoding        bank_file_encoding NOT NULL,  -- 🔶 TIS-620/UTF-8 ต้องทดสอบจริงกับธนาคารก่อน production
   column_mapping  TEXT NOT NULL,                -- คอลัมน์ตามลำดับ คั่นด้วย , — ต้องอยู่ในคำศัพท์ของ purpose (ตรวจที่ Zod/service)
+  include_header  BOOLEAN NOT NULL DEFAULT false, -- staging E-009 — ไฟล์โอนมีแถวหัวคอลัมน์ (เฉพาะ purpose = payment)
   test_status     bank_file_test_status NOT NULL DEFAULT 'pending',  -- ต้อง 'passed' ก่อนใช้ตัดโอนจริง
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   created_by UUID NOT NULL REFERENCES users(id),
@@ -1678,6 +1680,8 @@ CREATE TABLE payee_profiles (
   id_document_hash VARCHAR(64),  -- v4.58 SHA-256 ของเอกสารยืนยันตัวตนที่ server ตรวจเอง (มติ PO U150)
   id_document_unverified BOOLEAN NOT NULL DEFAULT false,  -- v4.58 URL เก่าที่พิมพ์เอง = ไม่ผ่านการตรวจ ⇒ เกตยืนยันถือว่าไม่มีเอกสาร · CHECK chk_payee_profiles_id_document_verified
   wht_40_2_pct    NUMERIC(5,2) CHECK (wht_40_2_pct IS NULL OR wht_40_2_pct BETWEEN 0 AND 100),  -- อัตราหัก 40(1)/40(2) ต่อคน (มติ PO 05/10/2569 UAT U7 · U33 ช่องเดียวใช้ทั้งสองประเภท — ไฟล์ 18 §6.3)
+  legal_name      VARCHAR(255),                 -- staging E-002/E-010 — ชื่อนิติบุคคลตามหนังสือรับรอง (CHECK: corporate ต้องมี) ใช้บน 50 ทวิ · ภ.ง.ด.53 · ไฟล์โอน · เช็คชื่อบัญชี
+  income_category_override wht_income_category, -- staging E-021 — ประเภทเงินได้รายคน (NULL = ตามค่าตั้งองค์กร · CHECK: sec_40_2/sec_40_8 เฉพาะ individual) ชนะค่าองค์กร
   -- ข้อมูลผู้ถูกหักบนใบ 50 ทวิ (มติ PO 06/10/2569 UAT U94 ข้อ 1 — ไฟล์ 18 §7.1) · ที่อยู่บังคับครบก่อนยืนยัน
   name_title          VARCHAR(50),                   -- คำนำหน้า (บุคคลธรรมดา)
   address_detail      TEXT,

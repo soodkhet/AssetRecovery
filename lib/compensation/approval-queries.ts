@@ -143,6 +143,7 @@ const expenseSelect = {
       wht402Pct: true,
       whtCondition: true,
       payeeType: true,
+      incomeCategoryOverride: true,
     },
   },
   /** BUG-176 — รายการเข้ารอบจ่ายแล้ว ⇒ แสดงยอดที่บันทึกในรอบ (คัดตัวที่ตรง `payoutBatchItemId`) */
@@ -384,6 +385,7 @@ function whtOf(row: ExpenseRow, settings: ApprovalWhtSettings): ApprovalWhtPrevi
       wht402Pct: row.payee.wht402Pct === null ? null : row.payee.wht402Pct.toNumber(),
       whtCondition: row.payee.whtCondition,
       payeeType: row.payee.payeeType,
+      incomeCategoryOverride: row.payee.incomeCategoryOverride,
       side,
       typeDefaultTaxProfile: pickTaxProfileDefault(settings.typeDefaults, side, row.payee.payeeType),
     },

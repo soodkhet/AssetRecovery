@@ -34,3 +34,32 @@ describe('<PayeeFieldsSection> ช่องกติกาภาษี', () => {
     expect(html).not.toMatch(/§|ไฟล์ \d/)
   })
 })
+
+describe('<PayeeFieldsSection> ชื่อนิติบุคคล + ประเภทเงินได้รายคน (staging E-002/E-021)', () => {
+  function render(payeeType: 'individual' | 'corporate'): string {
+    return renderToStaticMarkup(
+      <PayeeFieldsSection
+        form={{ ...EMPTY_PAYEE_FIELDS, payeeType }}
+        onChange={() => undefined}
+        errors={{}}
+        taxProfiles={[]}
+        allowGrossUp={false}
+        originalCondition={null}
+        payoutSide="outsource"
+      />,
+    )
+  }
+
+  it('นิติบุคคล: มีช่องชื่อตามหนังสือรับรอง · ไม่มีตัวเลือกประเภทเงินได้รายคน', () => {
+    const html = render('corporate')
+    expect(html).toContain('ชื่อนิติบุคคล (ตามหนังสือรับรอง)')
+    expect(html).not.toContain('ตามค่าตั้งองค์กร')
+  })
+
+  it('บุคคลธรรมดา: เลือกประเภทเงินได้รายคนได้ (ค่าเริ่มต้นตามองค์กร) · ไม่มีช่องชื่อนิติบุคคล', () => {
+    const html = render('individual')
+    expect(html).toContain('ตามค่าตั้งองค์กร')
+    expect(html).toContain('เงินได้ 40(2)')
+    expect(html).not.toContain('ชื่อนิติบุคคล (ตามหนังสือรับรอง)')
+  })
+})

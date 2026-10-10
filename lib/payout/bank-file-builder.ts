@@ -15,7 +15,7 @@ import { parseColumnMapping, type BankFileColumn } from '@/lib/settings/bank-fil
  * - ผลลัพธ์ deterministic ล้วน: input เดิม → ไฟล์เดิม (ทำให้ hash เทียบย้อนหลังได้)
  */
 
-/** ค่าที่ระบบเติมลงแต่ละแถวของไฟล์โอน (1 แถว = 1 รายการใน `payout_batch_items`) */
+/** ค่าที่ระบบเติมลงแต่ละแถวของไฟล์โอน (1 แถว = 1 ผู้รับในรอบ — staging E-009 · เดิม 1 แถวต่อรายการ) */
 export interface PaymentFileRowInput {
   receivingBankCode: string
   receivingAccountNo: string
@@ -37,6 +37,8 @@ export interface PaymentFileInput {
   payerName: string
   transferDate: Date
   rows: readonly PaymentFileRowInput[]
+  /** staging E-009 — แถวแรกเป็นชื่อคอลัมน์ตาม `column_mapping` (ตั้งต่อรูปแบบไฟล์ `bank_file_formats.include_header`) */
+  includeHeader?: boolean
 }
 
 export interface PaymentFileContent {
@@ -108,11 +110,59 @@ export function buildPaymentFile(input: PaymentFileInput): PaymentFileContent {
       .join(separator),
   )
 
+  // แถวหัวคอลัมน์ไม่นับเป็นรายการโอน (`rowCount` = จำนวนผู้รับในไฟล์)
+  const header = input.includeHeader === true && lines.length > 0 ? [columns.join(separator)] : []
+  const all = [...header, ...lines]
+
   return {
-    text: lines.length === 0 ? '' : `${lines.join('\n')}\n`,
+    text: all.length === 0 ? '' : `${all.join('\n')}\n`,
     columns,
     rowCount: input.rows.length,
   }
+}
+
+/** รายการโอนของผู้รับหนึ่งรายการ (ก่อนรวม) — ลำดับตามรายการในรอบ */
+export interface TransferEntry<P> {
+  payeeId: string
+  transferSatang: number
+  /** ข้อความต่อท้ายหมายเหตุของรายการนี้ (เช่น เลขเงินทดรองที่หักคืน) */
+  remarkParts: readonly string[]
+  payee: P
+}
+
+export interface PayeeTransfer<P> {
+  payeeId: string
+  transferSatang: number
+  remarkParts: string[]
+  payee: P
+  /** ลำดับผู้รับในไฟล์ (เริ่ม 1) — ใช้ทำเลขอ้างอิงที่คงที่ทุกครั้งที่สร้างไฟล์ซ้ำ */
+  sequence: number
+}
+
+/**
+ * staging E-009 (มติ PO 10/10/2569) — **1 บรรทัดต่อผู้รับ**: รวมยอดโอนทุกรายการของผู้รับเดียวกันในรอบ
+ * (ลดค่าธรรมเนียมโอนและบรรทัดใน statement) · ลำดับตามรายการแรกของผู้รับ · ยอดรวมเป็น 0 ไม่ใส่ไฟล์
+ * — ยอดเป็นจำนวนเต็ม satang บวกกันตรง ๆ (Rule 01)
+ */
+export function groupTransfersByPayee<P>(entries: readonly TransferEntry<P>[]): PayeeTransfer<P>[] {
+  const byPayee = new Map<string, Omit<PayeeTransfer<P>, 'sequence'>>()
+  for (const entry of entries) {
+    const current = byPayee.get(entry.payeeId)
+    if (current === undefined) {
+      byPayee.set(entry.payeeId, {
+        payeeId: entry.payeeId,
+        transferSatang: entry.transferSatang,
+        remarkParts: [...entry.remarkParts],
+        payee: entry.payee,
+      })
+      continue
+    }
+    current.transferSatang += entry.transferSatang
+    for (const part of entry.remarkParts) if (!current.remarkParts.includes(part)) current.remarkParts.push(part)
+  }
+  return [...byPayee.values()]
+    .filter((transfer) => transfer.transferSatang > 0)
+    .map((transfer, index) => ({ ...transfer, sequence: index + 1 }))
 }
 
 /**

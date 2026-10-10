@@ -190,8 +190,14 @@ export function resolveIncomeCategory(
    * ม.3 เตรส · ม.69 ทวิ) และยื่น ภ.ง.ด.53 (`filingFormOf()`) · ไม่ใช้อัตราต่อคน · ไม่ระบุ = บุคคลธรรมดา (เดิม)
    */
   payeeType: PayeeType = 'individual',
+  /**
+   * ประเภทเงินได้รายคน (staging E-021 · `payee_profiles.income_category_override`) — **ชนะค่าองค์กรเสมอ**
+   * (ยกเว้นนิติบุคคลที่เป็น 40(8)/ภ.ง.ด.53 เสมอ) · `null`/ไม่ระบุ = ตามค่าตั้งองค์กร
+   */
+  payeeOverride: WhtIncomeCategory | null = null,
 ): WhtIncomeCategory {
   if (payeeType === 'corporate') return 'sec_40_8'
+  if (payeeOverride !== null) return payeeOverride
   if (policy.incomeTypeMode === 'all_40_2') return 'sec_40_2'
   if (policy.incomeTypeMode === 'all_40_8') return 'sec_40_8'
   if (side === 'inhouse') return policy.inhouseIncomeCategory

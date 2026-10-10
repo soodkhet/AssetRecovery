@@ -1,5 +1,5 @@
 import { calculatePayeeBatchWht, type PayeeTaxProfileValues } from '@/lib/finance/wht-calc'
-import type { ExpenseType, PayeeType, PayoutBatchSide, WhtCondition } from '@/lib/generated/prisma/enums'
+import type { ExpenseType, PayeeType, PayoutBatchSide, WhtCondition, WhtIncomeCategory } from '@/lib/generated/prisma/enums'
 import { isInWhtBase, isWhtConditionAllowed, resolveIncomeCategory, type WhtPolicyValues } from '@/lib/settings/wht-policy'
 
 /**
@@ -21,6 +21,8 @@ export interface AccruedWhtItem {
   /** WHT ของรายการในรอบจ่ายที่ยังไม่โอน · `null` = ยังไม่อยู่ในรอบ */
   batchWhtSatang: number | null
   payeeType: PayeeType
+  /** ประเภทเงินได้รายคน (staging E-021) — ไม่ระบุ/`null` = ตามค่าตั้งองค์กร */
+  incomeCategoryOverride?: WhtIncomeCategory | null
   side: PayoutBatchSide | null
   payeeTaxProfile: PayeeTaxProfileValues | null
   /** Tax Profile ค่าเริ่มต้นตามประเภทผู้รับ (มติ PO U121) · ไม่ระบุ/`null` = ไม่มี */
@@ -69,7 +71,7 @@ export function estimateAccruedWhtSatang(
           }
         }),
         {
-          incomeCategory: resolveIncomeCategory(policy, first.side, first.payeeType),
+          incomeCategory: resolveIncomeCategory(policy, first.side, first.payeeType, first.incomeCategoryOverride ?? null),
           section402Pct: first.section402Pct,
           condition:
             first.whtCondition !== null && first.whtCondition !== undefined &&

@@ -450,6 +450,8 @@ const bankFileFormatFields = z.object({
   encoding: bankFileEncodingSchema,
   /** คอลัมน์ตามลำดับที่ธนาคารกำหนด คั่นด้วย `,` — ต้องเป็นคำศัพท์ของชนิดนั้นเท่านั้น (ตรวจใน refine) */
   columnMapping: z.string().trim().min(1, 'เลือกคอลัมน์อย่างน้อย 1 คอลัมน์').max(2000, 'รายชื่อคอลัมน์ยาวเกินไป'),
+  /** staging E-009 — ไฟล์โอนมีแถวหัวคอลัมน์ (ใช้เฉพาะไฟล์โอนเงิน) · ไม่ส่ง = ไม่มี */
+  includeHeader: z.boolean().default(false),
 })
 
 const refineBankFileFormat: RefineFn<z.infer<typeof bankFileFormatFields>> = (values, ctx) => {

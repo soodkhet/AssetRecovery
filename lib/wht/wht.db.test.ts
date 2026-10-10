@@ -237,9 +237,10 @@ beforeAll(async () => {
     ON CONFLICT (id) DO NOTHING
   `)
   await tx.$executeRawUnsafe(`
-    INSERT INTO payee_profiles (id, organization_id, user_id, payee_type, national_id, is_verified, created_by)
-    VALUES ('${PAYEE_PERSON_ID}', '${ORG_ID}', '${AGENT_ID}', 'individual', '3100000001234', true, '${USER_ID}'),
-           ('${PAYEE_COMPANY_ID}', '${ORG_ID}', '${VENDOR_ID}', 'corporate', '0105560099999', true, '${USER_ID}')
+    INSERT INTO payee_profiles (id, organization_id, user_id, payee_type, national_id, is_verified, created_by, legal_name)
+    VALUES ('${PAYEE_PERSON_ID}', '${ORG_ID}', '${AGENT_ID}', 'individual', '3100000001234', true, '${USER_ID}', NULL),
+           ('${PAYEE_COMPANY_ID}', '${ORG_ID}', '${VENDOR_ID}', 'corporate', '0105560099999', true, '${USER_ID}',
+            'บริษัท เร็วดี จำกัด')
     ON CONFLICT (id) DO NOTHING
   `)
 

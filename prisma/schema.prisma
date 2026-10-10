@@ -1789,6 +1789,8 @@ model BankFileFormat {
   /// 🔶 TIS-620/UTF-8 ต้องทดสอบกับธนาคารจริงก่อน production
   encoding       BankFileEncoding
   columnMapping  String             @map("column_mapping")
+  /// staging E-009 — แถวแรกของไฟล์โอนเป็นชื่อคอลัมน์ (ตามที่ธนาคารกำหนด) · ค่าเริ่มต้นไม่มี
+  includeHeader  Boolean            @default(false) @map("include_header")
   testStatus     BankFileTestStatus @default(pending) @map("test_status")
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -2720,6 +2722,11 @@ model PayeeProfile {
   /// (ช่องเดียวใช้ทั้งสองประเภท — ผู้รับหนึ่งคนอยู่ประเภทเดียวต่อรอบ · มติ PO 05/10/2569 UAT U33)
   /// NULL = ยังไม่กรอก ⇒ สร้างรอบจ่ายที่มีผู้รับ 40(2) ไม่ได้ · CHECK 0–100 ใน raw SQL (มติ PO 05/10/2569 UAT U7)
   wht402Pct      Decimal?  @map("wht_40_2_pct") @db.Decimal(5, 2)
+  /// ชื่อนิติบุคคลตามหนังสือรับรอง (staging E-002/E-010) — บังคับเมื่อ `corporate` (CHECK raw SQL)
+  /// ใช้บน 50 ทวิ · ภ.ง.ด.53 · ไฟล์โอน · เช็คชื่อบัญชี (`payeeLegalName()`) · บุคคลธรรมดาใช้ชื่อผู้ใช้
+  legalName      String?   @map("legal_name") @db.VarChar(255)
+  /// ประเภทเงินได้รายคน (staging E-021) — NULL = ตามค่าตั้งองค์กร · 40(2)/40(8) เท่านั้น · นิติบุคคลต้อง NULL (CHECK)
+  incomeCategoryOverride WhtIncomeCategory? @map("income_category_override")
 
   bankName      String? @map("bank_name")
   accountName   String? @map("account_name")

@@ -119,6 +119,8 @@ export interface BankFileFormatValues {
   encoding: BankFileEncoding
   /** รายชื่อคอลัมน์ตามลำดับที่ธนาคารกำหนด คั่นด้วย `,` */
   columnMapping: string
+  /** staging E-009 — ไฟล์โอนมีแถวหัวคอลัมน์ (statement ไม่ใช้) · ไม่ระบุ = ไม่มี */
+  includeHeader?: boolean
 }
 
 export interface BankFileTestResult {
@@ -274,7 +276,8 @@ export function testStatusAfterEdit(
     before.bankCode !== after.bankCode ||
     before.columnMapping !== after.columnMapping ||
     before.fileType !== after.fileType ||
-    before.encoding !== after.encoding
+    before.encoding !== after.encoding ||
+    (before.includeHeader ?? false) !== (after.includeHeader ?? false)
   return affectsFile ? 'pending' : currentStatus
 }
 

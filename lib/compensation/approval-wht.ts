@@ -4,7 +4,7 @@ import {
   type PayeeTaxProfileValues,
   type WhtRateOrigin,
 } from '@/lib/finance/wht-calc'
-import type { ExpenseType, PayeeType, PayoutBatchSide, WhtCondition } from '@/lib/generated/prisma/enums'
+import type { ExpenseType, PayeeType, PayoutBatchSide, WhtCondition, WhtIncomeCategory } from '@/lib/generated/prisma/enums'
 import {
   isInWhtBase,
   resolveIncomeCategory,
@@ -38,6 +38,8 @@ export interface ApprovalWhtInput {
     whtCondition: WhtCondition
     payeeType: PayeeType
     side: PayoutBatchSide | null
+    /** ประเภทเงินได้รายคน (staging E-021) — ไม่ระบุ/`null` = ตามค่าตั้งองค์กร */
+    incomeCategoryOverride?: WhtIncomeCategory | null
     /** Tax Profile ค่าเริ่มต้นตามประเภทผู้รับ (ฝั่ง × ชนิด — มติ PO U121) · ไม่ระบุ/`null` = ไม่มี */
     typeDefaultTaxProfile?: PayeeTaxProfileValues | null
   }
@@ -78,7 +80,7 @@ export const WHT_RATE_MISSING_WARNING =
   'ผู้รับเงินยังไม่มีอัตราหัก ณ ที่จ่าย (ไม่มี Tax Profile รายคน ไม่มีค่าเริ่มต้นตามประเภทผู้รับ และรายการไม่มีอัตราจากแผน) — ต้องกำหนดก่อนสร้างรอบจ่าย (ยอดภาษีที่แสดงยังไม่รวม)'
 
 export function approvalWhtPreview(input: ApprovalWhtInput): ApprovalWhtPreview {
-  const incomeCategory = resolveIncomeCategory(input.policy, input.payee.side, input.payee.payeeType)
+  const incomeCategory = resolveIncomeCategory(input.policy, input.payee.side, input.payee.payeeType, input.payee.incomeCategoryOverride ?? null)
   const includedInBase = isInWhtBase(input.policy, input.expenseType)
   const missing402 = usesPerPayeeWhtRate(incomeCategory) && includedInBase && input.payee.wht402Pct === null
 

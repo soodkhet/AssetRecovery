@@ -260,6 +260,8 @@ export interface BankFileFormatDto {
   fileType: BankFileType
   encoding: BankFileEncoding
   columnMapping: string
+  /** staging E-009 — ไฟล์โอนมีแถวหัวคอลัมน์ */
+  includeHeader: boolean
   columns: string[]
   testStatus: BankFileTestStatus
   /** ใช้สร้างไฟล์โอนเงินจริงได้หรือยัง (`BANK_FILE_NOT_TESTED` gate — `13` §6.8) */

@@ -68,6 +68,8 @@ interface FormState {
   encoding: Encoding
   /** คอลัมน์ตามลำดับ — `''` = ช่องที่ยังไม่เลือก */
   columns: string[]
+  /** staging E-009 — ไฟล์โอนมีแถวหัวคอลัมน์ */
+  includeHeader: boolean
   reason: string
 }
 
@@ -85,6 +87,7 @@ const EMPTY_FORM: FormState = {
   fileType: 'CSV',
   encoding: 'UTF_8',
   columns: defaultColumns('payment'),
+  includeHeader: false,
   reason: '',
 }
 
@@ -163,6 +166,7 @@ export function BankFileFormatsTab() {
             fileType: target.fileType,
             encoding: target.encoding === 'TIS_620' ? 'TIS_620' : 'UTF_8',
             columns: target.columns.length === 0 ? [''] : [...target.columns],
+            includeHeader: target.includeHeader,
             reason: '',
           },
     )
@@ -220,7 +224,8 @@ export function BankFileFormatsTab() {
       form.purpose !== editing.purpose ||
       form.bankCode !== (editing.bankCode ?? '') ||
       form.fileType !== editing.fileType ||
-      form.encoding !== editing.encoding)
+      form.encoding !== editing.encoding ||
+      (form.purpose === 'payment' && form.includeHeader !== editing.includeHeader))
 
   async function save(): Promise<void> {
     const parsed = bankFileFormatCreateSchema.safeParse({
@@ -229,6 +234,7 @@ export function BankFileFormatsTab() {
       fileType: form.fileType,
       encoding: form.encoding,
       columnMapping,
+      includeHeader: form.purpose === 'payment' && form.includeHeader,
       reason: form.reason.trim(),
     })
     if (!parsed.success) {
@@ -536,6 +542,22 @@ export function BankFileFormatsTab() {
           {form.purpose === 'statement' && (
             <div className="text-[10px] text-slate-500">ตัวนำเข้า statement อ่านไฟล์ CSV UTF-8 หรือ Excel (.xlsx)</div>
           )}
+          {form.purpose === 'payment' && (
+            <div>
+              <label className="flex items-center gap-2 text-xs font-medium text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={form.includeHeader}
+                  onChange={(event) => set('includeHeader', event.target.checked)}
+                  className="focus-ring h-4 w-4 rounded border-slate-300"
+                />
+                มีแถวหัวคอลัมน์ (แถวแรกของไฟล์เป็นชื่อคอลัมน์)
+              </label>
+              <p className="mt-1 pl-6 text-[10px] text-slate-500">
+                ตรวจกับรูปแบบที่ธนาคารกำหนดก่อนเปิด · ไฟล์โอนรวมยอดเป็น 1 บรรทัดต่อผู้รับเสมอ
+              </p>
+            </div>
+          )}
 
           <Field id="bank-file-columns" label="คอลัมน์ (ตามลำดับในไฟล์)" required error={errors.columnMapping}>
             <div id="bank-file-columns" className="space-y-2">
@@ -605,7 +627,7 @@ export function BankFileFormatsTab() {
 
           {resetsTestStatus && (
             <InlineAlert tone="warning" title="การแก้ครั้งนี้จะรีเซ็ตสถานะทดสอบ">
-              เปลี่ยนชนิด ธนาคาร คอลัมน์ ชนิดไฟล์ หรือ encoding แล้ว ระบบจะตั้งสถานะกลับเป็น “ยังไม่ทดสอบ” — ต้องกดทดสอบใหม่ก่อนใช้งานจริง
+              เปลี่ยนชนิด ธนาคาร คอลัมน์ ชนิดไฟล์ encoding หรือแถวหัวคอลัมน์แล้ว ระบบจะตั้งสถานะกลับเป็น “ยังไม่ทดสอบ” — ต้องกดทดสอบใหม่ก่อนใช้งานจริง
             </InlineAlert>
           )}
 

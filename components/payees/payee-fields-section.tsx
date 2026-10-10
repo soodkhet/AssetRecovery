@@ -24,11 +24,14 @@ import type { WhtCondition } from '@/lib/generated/prisma/enums'
 import {
   nameTitleChoiceOf,
   nameTitleFromForm,
+  PAYEE_INCOME_CATEGORY_OVERRIDE_LABEL,
+  PAYEE_INCOME_CATEGORY_OVERRIDES,
   PAYEE_NAME_TITLE_OPTIONS,
   PAYEE_REQUIRED_ADDRESS_FIELDS,
   WHT_CONDITION_LABEL,
   selectableWhtConditions,
   whtConditionHint,
+  type PayeeIncomeCategoryOverride,
   type PayeeNameTitleChoice,
 } from '@/lib/payees/payee'
 import type { PayeeDto } from '@/lib/payees/types'
@@ -68,6 +71,10 @@ export interface PayeeFieldsForm {
   branchKind: BranchKind
   branchNumber: string
   whtCondition: WhtCondition
+  /** staging E-002 — ชื่อนิติบุคคลตามหนังสือรับรอง (corporate) */
+  legalName: string
+  /** staging E-021 — ประเภทเงินได้รายคน · `''` = ตามค่าตั้งองค์กร */
+  incomeCategoryOverride: PayeeIncomeCategoryOverride | ''
 }
 
 export const EMPTY_PAYEE_FIELDS: PayeeFieldsForm = {
@@ -86,6 +93,8 @@ export const EMPTY_PAYEE_FIELDS: PayeeFieldsForm = {
   branchKind: 'head_office',
   branchNumber: '',
   whtCondition: 'withhold',
+  legalName: '',
+  incomeCategoryOverride: '',
 }
 
 export function payeeFieldsFromDto(payee: PayeeDto): PayeeFieldsForm {
@@ -105,6 +114,8 @@ export function payeeFieldsFromDto(payee: PayeeDto): PayeeFieldsForm {
     branchKind: branchKindOf(payee.branchCode),
     branchNumber: isHeadOfficeBranch(payee.branchCode) ? '' : payee.branchCode,
     whtCondition: payee.whtCondition,
+    legalName: payee.legalName ?? '',
+    incomeCategoryOverride: payee.incomeCategoryOverride ?? '',
   }
 }
 
@@ -123,6 +134,8 @@ export function payeeFieldsPayload(form: PayeeFieldsForm): Record<string, unknow
     address: form.address,
     branchCode: form.payeeType === 'corporate' ? branchCodeFromForm(form.branchKind, form.branchNumber) : '00000',
     whtCondition: form.whtCondition,
+    legalName: form.payeeType === 'corporate' ? form.legalName : null,
+    incomeCategoryOverride: form.payeeType === 'individual' && form.incomeCategoryOverride !== '' ? form.incomeCategoryOverride : null,
   }
 }
 
@@ -213,6 +226,47 @@ export function PayeeFieldsSection({
         ))}
       </Select>
     </Field>
+
+    {form.payeeType === 'corporate' && (
+      <Field
+        id="payee-legal-name"
+        label="ชื่อนิติบุคคล (ตามหนังสือรับรอง)"
+        required
+        hint="พิมพ์บนหนังสือรับรองการหักภาษี ณ ที่จ่าย ภ.ง.ด.53 และใช้เทียบกับชื่อบัญชีธนาคาร"
+        error={errors.legalName}
+      >
+        <Input
+          id="payee-legal-name"
+          value={form.legalName}
+          onChange={(event) => onChange('legalName', event.target.value)}
+          placeholder="เช่น บริษัท เร็วดี จำกัด"
+        />
+      </Field>
+    )}
+
+    {form.payeeType === 'individual' && (
+      <Field
+        id="payee-income-category"
+        label="ประเภทเงินได้"
+        hint="ไม่ตั้ง = ตามค่าตั้งภาษีขององค์กร · ค่าที่ตั้งรายคนชนะค่าองค์กร"
+        error={errors.incomeCategoryOverride}
+      >
+        <Select
+          id="payee-income-category"
+          value={form.incomeCategoryOverride}
+          onChange={(event) =>
+            onChange('incomeCategoryOverride', event.target.value as PayeeFieldsForm['incomeCategoryOverride'])
+          }
+        >
+          <option value="">ตามค่าตั้งองค์กร</option>
+          {PAYEE_INCOME_CATEGORY_OVERRIDES.map((value) => (
+            <option key={value} value={value}>
+              {PAYEE_INCOME_CATEGORY_OVERRIDE_LABEL[value]}
+            </option>
+          ))}
+        </Select>
+      </Field>
+    )}
 
     {form.payeeType === 'individual' ? (
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

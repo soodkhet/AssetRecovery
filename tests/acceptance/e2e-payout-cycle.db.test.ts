@@ -557,7 +557,8 @@ suite('Phase 8.1 — E2E `29` §6.2: ปิดงานไม่สำเร็�
     }
     const firstFile = await payout.generatePaymentFile(ctx(finance), batch.id, generateInput)
     expect(firstFile.result.generated).toBe(true)
-    expect(firstFile.result.rowCount).toBe(3)
+    // staging E-009 — 3 รายการของผู้รับคนเดียว ⇒ 1 บรรทัดโอน (รวมยอด)
+    expect(firstFile.result.rowCount).toBe(1)
     expect(firstFile.result.fileHash).toMatch(/^[a-f0-9]{64}$/)
 
     const withKey = await db().payoutBatch.findUniqueOrThrow({ where: { id: batch.id } })

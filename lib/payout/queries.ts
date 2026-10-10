@@ -18,13 +18,14 @@ import { nextDocumentNumber } from '@/lib/document-numbering/queries'
 import { summarizePayoutBatch } from '@/lib/finance/payout-calc'
 import { Prisma } from '@/lib/generated/prisma/client'
 import type { PayoutBatchSide, PayoutBatchStatus, WhtCondition } from '@/lib/generated/prisma/enums'
-import { maskAccountNumber, payeeAddressLine, payeeDisplayName } from '@/lib/payees/payee'
+import { maskAccountNumber, payeeAddressLine, payeeDisplayName, payeeLegalName } from '@/lib/payees/payee'
 import { formatBranch } from '@/lib/format/branch'
 import { PayeeError } from '@/lib/payees/errors'
 import { resolveBankCode } from '@/lib/payout/bank-codes'
 import {
   buildPaymentFile,
   encodePaymentFile,
+  groupTransfersByPayee,
   PAYMENT_FILE_EXTENSION,
   PAYMENT_FILE_MIME,
   type PaymentFileRowInput,
@@ -187,6 +188,8 @@ const itemSelect = {
       accountName: true,
       accountNumber: true,
       nationalId: true,
+      payeeType: true,
+      legalName: true,
       user: { select: { fullName: true, email: true, phone: true, team: { select: { name: true } } } },
     },
   },
@@ -495,6 +498,8 @@ async function collectExpenseCandidates(
           whtCondition: true,
           // นิติบุคคล ⇒ ไม่ใช่เงินได้ 40(1)/40(2) ไม่ว่าโหมดค่าตั้งเป็นอะไร (มติ PO U96 #2)
           payeeType: true,
+          // staging E-021 — ประเภทเงินได้รายคนชนะค่าองค์กร
+          incomeCategoryOverride: true,
           taxProfile: { select: { whtPct: true, whtBasis: true, whtMinThresholdSatang: true } },
           user: {
             select: { fullName: true, team: { select: { side: true } }, role: { select: { roleGroup: true } } },
@@ -533,7 +538,7 @@ async function collectExpenseCandidates(
   const missing402: string[] = []
   for (const members of indicesByPayee.values()) {
     const first = sided[members[0]!]!
-    const category = resolveIncomeCategory(policy, first.side, first.row.payee.payeeType)
+    const category = resolveIncomeCategory(policy, first.side, first.row.payee.payeeType, first.row.payee.incomeCategoryOverride)
     const hasBaseItem = members.some((index) => isInWhtBase(policy, sided[index]!.row.expenseType))
     if (usesPerPayeeWhtRate(category) && hasBaseItem && first.row.payee.wht402Pct === null) {
       missing402.push(first.row.payee.user.fullName)
@@ -569,7 +574,7 @@ async function collectExpenseCandidates(
   const missingRate: string[] = []
   for (const members of indicesByPayee.values()) {
     const first = sided[members[0]!]!
-    const incomeCategory = resolveIncomeCategory(policy, first.side, first.row.payee.payeeType)
+    const incomeCategory = resolveIncomeCategory(policy, first.side, first.row.payee.payeeType, first.row.payee.incomeCategoryOverride)
     const typeDefault = pickTaxProfileDefault(typeDefaults.profiles, first.side, first.row.payee.payeeType)
     const { lines, rateMissing } = calculatePayeeBatchWht(
       members.map((index) => {
@@ -1190,7 +1195,16 @@ export async function generatePaymentFile(
   const [format, account, items] = await Promise.all([
     prisma.bankFileFormat.findFirst({
       where: { id: input.bankFileFormatId, organizationId: user.organizationId, deletedAt: null },
-      select: { id: true, purpose: true, bankName: true, fileType: true, encoding: true, columnMapping: true, testStatus: true },
+      select: {
+        id: true,
+        purpose: true,
+        bankName: true,
+        fileType: true,
+        encoding: true,
+        columnMapping: true,
+        testStatus: true,
+        includeHeader: true,
+      },
     }),
     prisma.bankAccount.findFirst({
       where: { id: input.bankAccountId, organizationId: user.organizationId, deletedAt: null },
@@ -1218,36 +1232,40 @@ export async function generatePaymentFile(
     now,
   )
 
-  // มติ PO U30 — ยอดโอน = net − หักคืนเงินทดรอง · บรรทัดที่ถูกหักจนเหลือ 0 ไม่ต้องโอน (ไม่ใส่แถวยอด 0
-  // ให้ธนาคาร) · เลขอ้างอิงต่อแถวยึดลำดับรายการเดิมเพื่อให้คงที่ทุกครั้งที่สร้างไฟล์ซ้ำ
-  const transferable = items
-    .map((item, index) => ({ item, index, transferSatang: payoutTransferSatang(item.netSatang, item.advanceOffsetSatang) }))
-    .filter((entry) => entry.transferSatang > 0)
+  // มติ PO U30 — ยอดโอน = net − หักคืนเงินทดรอง · staging E-009 — รวม **1 บรรทัดต่อผู้รับ** (ยอดรวม 0 ไม่ใส่แถว)
+  // เลขอ้างอิงต่อแถวยึดลำดับผู้รับตามรายการแรกเพื่อให้คงที่ทุกครั้งที่สร้างไฟล์ซ้ำ
+  const transfers = groupTransfersByPayee(
+    items.map((item) => ({
+      payeeId: item.payeeId,
+      transferSatang: payoutTransferSatang(item.netSatang, item.advanceOffsetSatang),
+      remarkParts: item.advanceReturns.map((entry) => advanceOffsetLineLabel(entry.advance.advanceNumber)),
+      payee: item.payee,
+    })),
+  )
 
-  const rows = transferable.map(({ item, index, transferSatang }): PaymentFileRowInput => {
-    const bankCode = resolveBankCode(item.payee.bankName)
-    if (bankCode === null || item.payee.accountNumber === null) {
+  const rows = transfers.map(({ payee, payeeId, transferSatang, remarkParts, sequence }): PaymentFileRowInput => {
+    // staging E-010 — นิติบุคคลใช้ชื่อตามหนังสือรับรองเมื่อไม่ได้กรอกชื่อบัญชี
+    const legalName = payeeLegalName({ payeeType: payee.payeeType, legalName: payee.legalName, userFullName: payee.user.fullName })
+    const bankCode = resolveBankCode(payee.bankName)
+    if (bankCode === null || payee.accountNumber === null) {
       throw new PayeeError('REQUIRED_MISSING', {
-        detail: `payee=${item.payeeId} bank_name=${item.payee.bankName ?? ''}`,
+        detail: `payee=${payeeId} bank_name=${payee.bankName ?? ''}`,
         context: {
           fields: ['bank_name', 'account_number'],
-          payees: [item.payee.user.fullName],
+          payees: [legalName],
         },
       })
     }
     return {
       receivingBankCode: bankCode,
-      receivingAccountNo: item.payee.accountNumber,
-      receivingAccountName: item.payee.accountName ?? item.payee.user.fullName,
+      receivingAccountNo: payee.accountNumber,
+      receivingAccountName: payee.accountName ?? legalName,
       netSatang: transferSatang,
-      citizenId: item.payee.nationalId,
-      email: item.payee.user.email,
-      mobileNo: item.payee.user.phone,
-      remark:
-        item.advanceReturns.length === 0
-          ? batch.name
-          : `${batch.name} ${item.advanceReturns.map((entry) => advanceOffsetLineLabel(entry.advance.advanceNumber)).join(' ')}`,
-      referenceNo: `${idempotencyKey}-${index + 1}`,
+      citizenId: payee.nationalId,
+      email: payee.user.email,
+      mobileNo: payee.user.phone,
+      remark: remarkParts.length === 0 ? batch.name : `${batch.name} ${remarkParts.join(' ')}`,
+      referenceNo: `${idempotencyKey}-${sequence}`,
     }
   })
 
@@ -1258,6 +1276,7 @@ export async function generatePaymentFile(
     payerName: account.accountName,
     transferDate: now,
     rows,
+    includeHeader: format.includeHeader,
   })
   const bytes = encodePaymentFile(file.text, format.encoding)
   const fileHash = sha256Hex(bytes)

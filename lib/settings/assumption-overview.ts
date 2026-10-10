@@ -57,7 +57,7 @@ export function settingAssumptionCurrentValues(
       : WHT_INCOME_TYPE_MODE_LABEL[policy.incomeTypeMode]
   const tolerance = `เพดาน ${fmtSatangSymbol(input.writeOffToleranceSatang)}`
   return {
-    wht_income_type: incomeType,
+    wht_income_type: `${incomeType} · ตั้งรายคนได้ (ค่ารายคนชนะ)`,
     wht_base: `หักจาก: ${joinOrNone(
       policy.baseExpenseTypes.map((type) => EXPENSE_TYPE_LABEL[type]),
       'ไม่มีรายการในฐาน',

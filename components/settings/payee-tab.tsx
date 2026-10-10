@@ -311,6 +311,8 @@ export function PayeeTab() {
               <Tr key={item.id}>
                 <Td>
                   <span className="font-semibold text-slate-800">{item.name}</span>
+                  {/* staging E-002 — ชื่อที่พิมพ์บนเอกสารภาษีของนิติบุคคล */}
+                  {item.legalName !== null && <div className="text-[10px] text-slate-700">{item.legalName}</div>}
                   <div className="text-[10px] text-slate-500">{item.teamName ?? item.roleName}</div>
                   {item.advanceReturnOutstandingSatang > 0 && (
                     <div className="text-[10px] font-semibold text-amber-700">

@@ -1,4 +1,4 @@
-import type { PayeeType, WhtCondition } from '@/lib/generated/prisma/enums'
+import type { PayeeType, WhtCondition, WhtIncomeCategory } from '@/lib/generated/prisma/enums'
 import { formatThaiAddressLine } from '@/lib/address/address-value'
 import { isValidTaxId, normalizeTaxId } from '@/lib/finance-companies/company'
 import { HEAD_OFFICE_BRANCH_CODE } from '@/lib/format/branch'
@@ -45,6 +45,31 @@ export interface PayeeValues {
   branchCode: string
   /** เงื่อนไขการหัก (1)/(2)/(3) — บันทึก/พิมพ์บนใบ 50 ทวิ เท่านั้น ไม่เปลี่ยนสูตร */
   whtCondition: WhtCondition
+  /** ชื่อนิติบุคคลตามหนังสือรับรอง (staging E-002/E-010) — บังคับเมื่อ `corporate` · บุคคลธรรมดา = `null` */
+  legalName: string | null
+  /** ประเภทเงินได้รายคน (staging E-021) — `null` = ตามค่าตั้งองค์กร · นิติบุคคล = `null` เสมอ */
+  incomeCategoryOverride: PayeeIncomeCategoryOverride | null
+}
+
+/** ค่าที่ตั้งรายคนได้ (staging E-021) — 40(1) ใช้ไม่ได้ (เงินเดือนไม่ได้จ่ายผ่านระบบนี้) */
+export const PAYEE_INCOME_CATEGORY_OVERRIDES = ['sec_40_2', 'sec_40_8'] as const satisfies readonly WhtIncomeCategory[]
+export type PayeeIncomeCategoryOverride = (typeof PAYEE_INCOME_CATEGORY_OVERRIDES)[number]
+
+export const PAYEE_INCOME_CATEGORY_OVERRIDE_LABEL: Readonly<Record<PayeeIncomeCategoryOverride, string>> = {
+  sec_40_2: 'เงินได้ 40(2) — ค่าธรรมเนียม/ค่านายหน้า',
+  sec_40_8: 'เงินได้ 40(8) — ค่าจ้างทำของ/รับจ้างอิสระ',
+}
+
+/**
+ * ชื่อผู้ถูกหักที่ใช้บนเอกสารภาษี/ไฟล์โอน/เช็คชื่อบัญชี (staging E-002/E-010) — นิติบุคคล = ชื่อตามหนังสือรับรอง
+ * (`legal_name`) · บุคคลธรรมดา = ชื่อผู้ใช้ · **ตัวเดียว**ที่ทุกจุดใช้ ห้ามอ่าน `user.fullName` ตรง ๆ สำหรับเอกสารภาษี
+ */
+export function payeeLegalName(input: { payeeType: PayeeType; legalName: string | null; userFullName: string }): string {
+  if (input.payeeType === 'corporate') {
+    const legal = (input.legalName ?? '').trim()
+    if (legal !== '') return legal
+  }
+  return input.userFullName
 }
 
 // ── คำนำหน้า / เงื่อนไขการหัก (มติ PO 06/10/2569 UAT U94 ข้อ 1) ────────────────
@@ -163,6 +188,9 @@ export const PAYEE_VERIFICATION_RESET_FIELDS = [
   'addressPostalCode',
   'branchCode',
   'whtCondition',
+  // staging E-002/E-021 — ชื่อบนเอกสารภาษีและประเภทเงินได้ เปลี่ยนแล้วต้องตรวจซ้ำ
+  'legalName',
+  'incomeCategoryOverride',
 ] as const satisfies readonly (keyof PayeeValues)[]
 
 export type PayeeVerificationResetField = (typeof PAYEE_VERIFICATION_RESET_FIELDS)[number]
@@ -200,7 +228,22 @@ export function normalizePayeeValues(values: PayeeValues): PayeeValues {
     // บุคคลธรรมดาไม่มีสาขา — เก็บเป็นสำนักงานใหญ่ให้คอลัมน์ NOT NULL และไม่พิมพ์บนเอกสาร
     branchCode: values.payeeType === 'corporate' ? (trimOrNull(values.branchCode) ?? HEAD_OFFICE_BRANCH_CODE) : HEAD_OFFICE_BRANCH_CODE,
     whtCondition: values.whtCondition,
+    legalName: values.payeeType === 'corporate' ? trimOrNull(values.legalName) : null,
+    incomeCategoryOverride: values.payeeType === 'corporate' ? null : values.incomeCategoryOverride,
   }
+}
+
+/** staging E-002 — นิติบุคคลต้องมีชื่อตามหนังสือรับรองตั้งแต่ตอนบันทึก (DB CHECK `chk_payee_profiles_legal_name`) */
+export function assertCorporateLegalName(values: PayeeValues): void {
+  if (values.payeeType !== 'corporate' || normalizePayeeValues(values).legalName !== null) return
+  throw new PayeeError('REQUIRED_MISSING', {
+    detail: 'legal_name required for corporate payee',
+    context: { fields: ['legalName'] },
+    message: {
+      title: 'ยังไม่ได้กรอกชื่อนิติบุคคล',
+      message: 'ผู้รับเงินนิติบุคคลต้องกรอกชื่อบริษัทตามหนังสือรับรอง — ใช้พิมพ์บนหนังสือรับรองการหักภาษีและไฟล์โอน',
+    },
+  })
 }
 
 /** `18` §7.1 — ตรวจแค่รูปแบบ 13 หลัก (ไม่มี checksum) · ว่างได้ตอนสร้าง ตรวจเข้มตอนยืนยัน */
@@ -372,5 +415,7 @@ export function toPayeeAuditPayload(values: PayeeValues): Record<string, unknown
     address_postal_code: normalized.addressPostalCode,
     branch_code: normalized.branchCode,
     wht_condition: normalized.whtCondition,
+    legal_name: normalized.legalName,
+    income_category_override: normalized.incomeCategoryOverride,
   }
 }

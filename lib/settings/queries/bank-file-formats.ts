@@ -32,6 +32,7 @@ const formatSelect = {
   fileType: true,
   encoding: true,
   columnMapping: true,
+  includeHeader: true,
   testStatus: true,
   deletedAt: true,
   updatedAt: true,
@@ -50,6 +51,7 @@ function toDto(row: FormatRow): BankFileFormatDto {
     fileType: row.fileType,
     encoding: row.encoding,
     columnMapping: row.columnMapping,
+    includeHeader: row.includeHeader,
     columns,
     testStatus: row.testStatus,
     usable: row.testStatus === 'passed' && row.deletedAt === null,
@@ -65,6 +67,7 @@ function toValues(dto: BankFileFormatDto): BankFileFormatValues {
     fileType: dto.fileType,
     encoding: dto.encoding,
     columnMapping: dto.columnMapping,
+    includeHeader: dto.includeHeader,
   }
 }
 
@@ -76,6 +79,7 @@ function toAuditPayload(values: BankFileFormatValues, testStatus: string): Recor
     file_type: values.fileType,
     encoding: values.encoding,
     column_mapping: values.columnMapping.trim(),
+    include_header: values.purpose === 'payment' && values.includeHeader === true,
     test_status: testStatus,
   }
 }
@@ -132,6 +136,7 @@ export async function createBankFileFormat(
         fileType: values.fileType,
         encoding: values.encoding,
         columnMapping: values.columnMapping.trim(),
+        includeHeader: values.purpose === 'payment' && values.includeHeader === true,
         // รูปแบบใหม่เริ่มที่ `pending` เสมอ — ใช้ตัดโอนจริงไม่ได้จนกว่าจะทดสอบผ่าน (`13` §6.8)
         testStatus: 'pending',
         createdBy: context.actor.id,
@@ -180,6 +185,7 @@ export async function updateBankFileFormat(
         fileType: values.fileType,
         encoding: values.encoding,
         columnMapping: values.columnMapping.trim(),
+        includeHeader: values.purpose === 'payment' && values.includeHeader === true,
         testStatus: nextStatus,
         updatedBy: context.actor.id,
       },

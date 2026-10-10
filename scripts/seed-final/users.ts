@@ -80,7 +80,8 @@ export function payeeFieldsFor(username: string, fullName: string): Record<strin
     // U150 — ไฟล์อัปโหลดที่ server ตรวจแล้ว (path ใต้ prefix ขององค์กร)
     idDocumentUrl: row.idDoc ? `payees/${ORG_ID}/id-documents/seed-final-${username.replaceAll('.', '-')}.pdf` : null,
     wht402Pct: row.wht402Pct, nameTitle: row.payeeType === 'corporate' ? 'บริษัท' : 'นาย', address,
-    ...(row.payeeType === 'corporate' ? { branchCode: '00000' } : {}), whtCondition: 'withhold',
+    // staging E-002 — นิติบุคคลต้องมีชื่อตามหนังสือรับรอง (ใช้ชื่อผู้ใช้ seed เดิม ⇒ เอกสาร/golden ไม่เปลี่ยน)
+    ...(row.payeeType === 'corporate' ? { branchCode: '00000', legalName: fullName } : {}), whtCondition: 'withhold',
   }
 }
 

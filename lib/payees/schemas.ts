@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { pctSchema, reasonSchema, requiredIdSchema } from '@/lib/api/validation'
 import { BRANCH_CODE_PATTERN } from '@/lib/format/branch'
-import { WHT_CONDITIONS } from '@/lib/payees/payee'
+import { PAYEE_INCOME_CATEGORY_OVERRIDES, WHT_CONDITIONS } from '@/lib/payees/payee'
 
 /**
  * Zod schema ชุดเดียวใช้ร่วม FE/BE ของผู้รับเงิน (ไฟล์ 18 · Rule 13)
@@ -85,6 +85,16 @@ export const payeeFieldsSchema = z.object({
     .refine((value) => BRANCH_CODE_PATTERN.test(value), 'รหัสสาขาต้องเป็นตัวเลข 5 หลัก (สำนักงานใหญ่ = 00000)')
     .optional(),
   whtCondition: whtConditionSchema.optional(),
+  /** staging E-002 — ชื่อนิติบุคคลตามหนังสือรับรอง (บังคับเมื่อ corporate — ตรวจที่ service) · ไม่ส่ง = คงค่าเดิม */
+  legalName: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? null : value),
+    z.string().trim().max(255, 'ชื่อนิติบุคคลยาวเกิน 255 ตัวอักษร').nullable().optional(),
+  ),
+  /** staging E-021 — ประเภทเงินได้รายคน · `null` = ตามค่าตั้งองค์กร · ไม่ส่ง = คงค่าเดิม */
+  incomeCategoryOverride: z.preprocess(
+    (value) => (value === '' ? null : value),
+    z.enum(PAYEE_INCOME_CATEGORY_OVERRIDES).nullable().optional(),
+  ),
 })
 
 export const payeeCreateSchema = payeeFieldsSchema.extend({

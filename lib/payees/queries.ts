@@ -7,7 +7,7 @@ import { hasCapability } from '@/lib/auth/permission'
 import type { RequestMeta } from '@/lib/auth/request-meta'
 import type { SessionUser } from '@/lib/auth/types'
 import { Prisma } from '@/lib/generated/prisma/client'
-import type { PayeeType, RoleGroup, TeamSide, WhtCondition } from '@/lib/generated/prisma/enums'
+import type { PayeeType, RoleGroup, TeamSide, WhtCondition, WhtIncomeCategory } from '@/lib/generated/prisma/enums'
 import {
   assertPayeeNationalId,
   assertPayeeReadyForVerification,
@@ -16,8 +16,11 @@ import {
   maskAccountNumber,
   missingFieldsForVerification,
   normalizePayeeValues,
+  assertCorporateLegalName,
   payeeAddressLine,
+  payeeLegalName,
   shouldResetVerification,
+  type PayeeIncomeCategoryOverride,
   toPayeeAuditPayload,
   type PayeeValues,
 } from '@/lib/payees/payee'
@@ -80,6 +83,8 @@ const payeeSelect = {
   addressPostalCode: true,
   branchCode: true,
   whtCondition: true,
+  legalName: true,
+  incomeCategoryOverride: true,
   isVerified: true,
   verifiedAt: true,
   updatedAt: true,
@@ -119,7 +124,14 @@ function toValues(row: PayeeRow): PayeeValues {
     addressPostalCode: row.addressPostalCode,
     branchCode: row.branchCode,
     whtCondition: row.whtCondition,
+    legalName: row.legalName,
+    incomeCategoryOverride: toIncomeOverride(row.incomeCategoryOverride),
   }
+}
+
+/** คอลัมน์ enum เต็ม → ค่าที่ตั้งรายคนได้ (CHECK ระดับ DB รับแค่ 40(2)/40(8) อยู่แล้ว) */
+function toIncomeOverride(value: WhtIncomeCategory | null): PayeeIncomeCategoryOverride | null {
+  return value === 'sec_40_2' || value === 'sec_40_8' ? value : null
 }
 
 /**
@@ -144,6 +156,9 @@ function mergeInput(input: PayeeFieldsInput, base: PayeeValues): PayeeValues {
     addressPostalCode: input.address === undefined ? base.addressPostalCode : input.address.postalCode,
     branchCode: input.branchCode ?? base.branchCode,
     whtCondition: input.whtCondition ?? base.whtCondition,
+    legalName: input.legalName === undefined ? base.legalName : input.legalName,
+    incomeCategoryOverride:
+      input.incomeCategoryOverride === undefined ? base.incomeCategoryOverride : input.incomeCategoryOverride,
   }
 }
 
@@ -164,6 +179,8 @@ const NEW_PAYEE_BASE: PayeeValues = {
   addressPostalCode: null,
   branchCode: '00000',
   whtCondition: 'withhold',
+  legalName: null,
+  incomeCategoryOverride: null,
 }
 
 /** `canSeeFullAccount` = ผู้ถือสิทธิ์ `manage` เท่านั้น (เลขบัญชีเต็มคือข้อมูลที่โอนเงินได้จริง) */
@@ -227,7 +244,9 @@ function toDto(row: PayeeRow, canSeeFullAccount: boolean, typeDefaults: TaxProfi
     isVerified: row.isVerified,
     verifiedAt: row.verifiedAt?.toISOString() ?? null,
     verifiedByName: row.verifiedByUser?.fullName ?? null,
-    bankAccountNameMatches: checkBankAccountName(row.user.fullName, row.accountName).matches,
+    legalName: row.legalName,
+    incomeCategoryOverride: values.incomeCategoryOverride,
+    bankAccountNameMatches: checkBankAccountName(legalNameOf(row, row.user.fullName), row.accountName).matches,
     missingForVerification: missingFieldsForVerification(values, {
       typeDefaultAvailable: rowTypeDefaultAvailable(row, typeDefaults),
     }),
@@ -319,6 +338,7 @@ function bankNameWarning(payeeName: string, accountName: string | null): ApiWarn
 }
 
 function toWriteData(values: PayeeValues) {
+  assertCorporateLegalName(values)
   const normalized = normalizePayeeValues(values)
   return {
     payeeType: normalized.payeeType,
@@ -337,7 +357,14 @@ function toWriteData(values: PayeeValues) {
     addressPostalCode: normalized.addressPostalCode,
     branchCode: normalized.branchCode,
     whtCondition: normalized.whtCondition,
+    legalName: normalized.legalName,
+    incomeCategoryOverride: normalized.incomeCategoryOverride,
   }
+}
+
+/** ชื่อที่ใช้เทียบกับชื่อบัญชี — นิติบุคคลเทียบกับชื่อตามหนังสือรับรอง (staging E-010) */
+function legalNameOf(row: { payeeType: PayeeType; legalName: string | null }, userFullName: string): string {
+  return payeeLegalName({ payeeType: row.payeeType, legalName: row.legalName, userFullName })
 }
 
 export interface PayeeMutationResult {
@@ -621,7 +648,7 @@ export async function createPayee(
 
   return {
     payee: toDto(created, true, await loadTypeDefaults(organizationId)),
-    warning: bankNameWarning(owner.fullName, data.accountName),
+    warning: bankNameWarning(legalNameOf(data, owner.fullName), data.accountName),
   }
 }
 
@@ -638,7 +665,7 @@ export async function updatePayee(
 
   return {
     payee: toDto(updated, true, await loadTypeDefaults(organizationId)),
-    warning: bankNameWarning(current.user.fullName, data.accountName),
+    warning: bankNameWarning(legalNameOf(data, current.user.fullName), data.accountName),
   }
 }
 
@@ -659,7 +686,7 @@ export async function verifyPayee(context: PayeeMutationContext, payeeId: string
 
   return {
     payee: toDto(updated, true, typeDefaults),
-    warning: bankNameWarning(current.user.fullName, updated.accountName),
+    warning: bankNameWarning(legalNameOf(updated, current.user.fullName), updated.accountName),
   }
 }
 
@@ -750,7 +777,7 @@ export async function writeUserPaymentInTx(
     assertRowReadyForVerification(fresh, prepared.policy, prepared.typeDefaults)
     row = await markPayeeVerifiedInTx(tx, context, fresh)
   }
-  return { payeeId: row.id, isVerified: row.isVerified, warning: bankNameWarning(fullName, row.accountName) }
+  return { payeeId: row.id, isVerified: row.isVerified, warning: bankNameWarning(legalNameOf(row, fullName), row.accountName) }
 }
 
 /**

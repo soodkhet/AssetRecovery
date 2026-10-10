@@ -1,5 +1,5 @@
 import { assertOrgWideReadable } from '@/lib/auth/scope'
-import { payeeAddressLine, payeeDisplayName } from '@/lib/payees/payee'
+import { payeeAddressLine, payeeDisplayName, payeeLegalName } from '@/lib/payees/payee'
 import type { AccountingMutationContext } from '@/lib/accounting/queries'
 import { isPeriodEnded, PERIOD_ASSUMED_OPEN, periodCloseAvailableFrom, type PeriodClosedLookup } from '@/lib/accounting/period'
 import { AccountingError } from '@/lib/accounting/errors'
@@ -377,6 +377,8 @@ const EXPENSE_SOURCE_SELECT = {
         select: {
           id: true,
           payeeType: true,
+          // staging E-002/E-010 — นิติบุคคลพิมพ์ชื่อตามหนังสือรับรอง
+          legalName: true,
           nationalId: true,
           nameTitle: true,
           addressDetail: true,
@@ -497,7 +499,7 @@ async function issueCertificate(
       expenseRecordId: source.id,
       incomeType: incomeTypeOf(item.taxProfile?.incomeType ?? null, incomeCategory, payee.payeeType),
       // snapshot ผู้ถูกหักจากโปรไฟล์ ณ วันออกใบ — แก้โปรไฟล์ภายหลังไม่กระทบใบนี้ (immutable ที่ DB)
-      payeeName: payee.user.fullName,
+      payeeName: payeeLegalName({ payeeType: payee.payeeType, legalName: payee.legalName, userFullName: payee.user.fullName }),
       payeeNameTitle: payee.payeeType === 'corporate' ? null : payee.nameTitle,
       payeeType: payee.payeeType,
       payeeTaxId: payee.nationalId,
@@ -533,7 +535,11 @@ async function issueCertificate(
       targetId: created.id,
       after: {
         certificate_number: certificateNumber,
-        payee_name: item.payee.user.fullName,
+        payee_name: payeeLegalName({
+          payeeType: item.payee.payeeType,
+          legalName: item.payee.legalName,
+          userFullName: item.payee.user.fullName,
+        }),
         payee_tax_id: payee.nationalId,
         payee_address: payeeAddressLine(payee),
         payee_branch_code: payee.payeeType === 'corporate' ? payee.branchCode : null,

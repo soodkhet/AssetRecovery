@@ -4,6 +4,7 @@ import {
   buildPaymentFile,
   encodePaymentFile,
   encodeTis620,
+  groupTransfersByPayee,
   type PaymentFileRowInput,
 } from '@/lib/payout/bank-file-builder'
 import { resolveBankCode } from '@/lib/payout/bank-codes'
@@ -146,5 +147,35 @@ describe('รหัสธนาคาร (ไฟล์โอนต้องม�
     expect(resolveBankCode('ธนาคารสมมติ')).toBeNull()
     expect(resolveBankCode('   ')).toBeNull()
     expect(resolveBankCode(null)).toBeNull()
+  })
+})
+
+describe('staging E-009 — 1 บรรทัดต่อผู้รับ + แถวหัวคอลัมน์', () => {
+  it('รวมยอดทุกรายการของผู้รับเดียวกัน · ลำดับตามรายการแรก · ยอดรวม 0 ไม่ใส่ไฟล์ · หมายเหตุไม่ซ้ำ', () => {
+    const grouped = groupTransfersByPayee([
+      { payeeId: 'a', transferSatang: 100_050, remarkParts: [], payee: 'A' },
+      { payeeId: 'b', transferSatang: 0, remarkParts: ['ADV-1'], payee: 'B' },
+      { payeeId: 'a', transferSatang: 20_000, remarkParts: ['ADV-2'], payee: 'A' },
+      { payeeId: 'c', transferSatang: 5_000, remarkParts: [], payee: 'C' },
+      { payeeId: 'a', transferSatang: 1, remarkParts: ['ADV-2'], payee: 'A' },
+    ])
+    expect(grouped).toEqual([
+      { payeeId: 'a', transferSatang: 120_051, remarkParts: ['ADV-2'], payee: 'A', sequence: 1 },
+      { payeeId: 'c', transferSatang: 5_000, remarkParts: [], payee: 'C', sequence: 2 },
+    ])
+  })
+
+  it('เปิดแถวหัวคอลัมน์ ⇒ บรรทัดแรกเป็นชื่อคอลัมน์ · rowCount ไม่นับหัว · ไฟล์ว่างไม่มีหัว', () => {
+    const file = buildPaymentFile({
+      ...base,
+      columnMapping: 'receiving_account_no,amount',
+      fileType: 'CSV',
+      rows: [row()],
+      includeHeader: true,
+    })
+    expect(file.text).toBe('receiving_account_no,amount\n1234567890,4850.00\n')
+    expect(file.rowCount).toBe(1)
+    const empty = buildPaymentFile({ ...base, columnMapping: 'amount', fileType: 'CSV', rows: [], includeHeader: true })
+    expect(empty.text).toBe('')
   })
 })

@@ -17,6 +17,8 @@ import {
   whtConditionHint,
   toPayeeAuditPayload,
   type PayeeValues,
+  assertCorporateLegalName,
+  payeeLegalName,
 } from '@/lib/payees/payee'
 import { payeeFieldsSchema } from '@/lib/payees/schemas'
 
@@ -37,6 +39,8 @@ const complete = (overrides: Partial<PayeeValues> = {}): PayeeValues => ({
   addressPostalCode: '10110',
   branchCode: '00000',
   whtCondition: 'withhold',
+  legalName: null,
+  incomeCategoryOverride: null,
   ...overrides,
 })
 
@@ -246,6 +250,8 @@ describe('การแสดงผล / audit', () => {
       address_postal_code: '10110',
       branch_code: '00000',
       wht_condition: 'withhold',
+      legal_name: null,
+      income_category_override: null,
     })
   })
 })
@@ -324,5 +330,39 @@ describe('U105 — ตัวเลือกเงื่อนไขการห�
     for (const text of [whtConditionHint('pay_always', true), whtConditionHint('pay_once', false)]) {
       expect(text).not.toMatch(/§|`\d\d`/)
     }
+  })
+})
+
+describe('ชื่อนิติบุคคล + ประเภทเงินได้รายคน (staging E-002/E-010/E-021)', () => {
+  it('นิติบุคคลใช้ชื่อตามหนังสือรับรองบนเอกสาร · บุคคลธรรมดาใช้ชื่อผู้ใช้', () => {
+    expect(payeeLegalName({ payeeType: 'corporate', legalName: ' บริษัท เร็วดี จำกัด ', userFullName: 'สมชาย ผู้ติดต่อ' })).toBe('บริษัท เร็วดี จำกัด')
+    expect(payeeLegalName({ payeeType: 'individual', legalName: 'ไม่ใช้', userFullName: 'สมชาย ใจดี' })).toBe('สมชาย ใจดี')
+    expect(payeeLegalName({ payeeType: 'corporate', legalName: null, userFullName: 'สมชาย ผู้ติดต่อ' })).toBe('สมชาย ผู้ติดต่อ')
+  })
+
+  it('นิติบุคคลไม่กรอกชื่อ ⇒ REQUIRED_MISSING (field legalName) · กรอกแล้วผ่าน', () => {
+    expect(() => assertCorporateLegalName(complete({ payeeType: 'corporate', legalName: '  ' }))).toThrow(PayeeError)
+    try {
+      assertCorporateLegalName(complete({ payeeType: 'corporate' }))
+    } catch (error) {
+      expect(error).toMatchObject({ code: 'REQUIRED_MISSING', context: { fields: ['legalName'] } })
+    }
+    expect(() => assertCorporateLegalName(complete({ payeeType: 'corporate', legalName: 'บริษัท ก จำกัด' }))).not.toThrow()
+    expect(() => assertCorporateLegalName(complete())).not.toThrow()
+  })
+
+  it('normalize: บุคคลธรรมดาไม่เก็บชื่อนิติบุคคล · นิติบุคคลไม่มีประเภทเงินได้รายคน', () => {
+    expect(normalizePayeeValues(complete({ legalName: 'บริษัท ก', incomeCategoryOverride: 'sec_40_2' }))).toMatchObject({
+      legalName: null,
+      incomeCategoryOverride: 'sec_40_2',
+    })
+    expect(
+      normalizePayeeValues(complete({ payeeType: 'corporate', legalName: 'บริษัท ก', incomeCategoryOverride: 'sec_40_2' })),
+    ).toMatchObject({ legalName: 'บริษัท ก', incomeCategoryOverride: null })
+  })
+
+  it('แก้ชื่อนิติบุคคล/ประเภทเงินได้ ⇒ ต้องยืนยันใหม่ และลง audit', () => {
+    expect(changedVerificationFields(complete(), complete({ incomeCategoryOverride: 'sec_40_2' }))).toEqual(['incomeCategoryOverride'])
+    expect(toPayeeAuditPayload(complete({ incomeCategoryOverride: 'sec_40_8' })).income_category_override).toBe('sec_40_8')
   })
 })

@@ -203,3 +203,15 @@ describe('(ช) U33 — ประเภทเงินได้ต่อปร�
     expect(inhouse.belowThreshold).toBe(true)
   })
 })
+
+describe('ประเภทเงินได้รายคน (staging E-021)', () => {
+  it('ค่ารายคนชนะค่าองค์กรทุกโหมด · ไม่ตั้ง = ตามค่าองค์กร', () => {
+    expect(resolveIncomeCategory(mode('all_40_8'), 'inhouse', 'individual', 'sec_40_2')).toBe('sec_40_2')
+    expect(resolveIncomeCategory(mode('all_40_2'), 'outsource', 'individual', 'sec_40_8')).toBe('sec_40_8')
+    expect(resolveIncomeCategory(mode('by_team_side'), 'inhouse', 'individual', null)).toBe('sec_40_2')
+  })
+
+  it('นิติบุคคลเป็น 40(8)/ภ.ง.ด.53 เสมอ แม้มีค่ารายคน', () => {
+    expect(resolveIncomeCategory(mode('all_40_2'), 'inhouse', 'corporate', 'sec_40_2')).toBe('sec_40_8')
+  })
+})

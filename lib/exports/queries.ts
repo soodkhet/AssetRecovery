@@ -1201,6 +1201,7 @@ async function accruedExpenseRows(
           select: {
             id: true,
             payeeType: true,
+            incomeCategoryOverride: true,
             nationalId: true,
             wht402Pct: true,
             whtCondition: true,
@@ -1229,6 +1230,7 @@ async function accruedExpenseRows(
         expenseType: row.expenseType,
         batchWhtSatang: row.payoutItems[0]?.whtSatang ?? null,
         payeeType: row.payee.payeeType,
+        incomeCategoryOverride: row.payee.incomeCategoryOverride,
         side,
         typeDefaultTaxProfile: pickTaxProfileDefault(typeDefaults.profiles, side, row.payee.payeeType)?.values ?? null,
         payeeTaxProfile:
