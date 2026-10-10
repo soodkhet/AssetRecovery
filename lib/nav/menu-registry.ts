@@ -340,7 +340,7 @@ export const MENU_ITEMS: readonly MenuItem[] = [
       // และ API บังคับ `requirePermission()` อยู่แล้ว ⇒ เมนูไม่ใช่ security boundary (DEC-002)
       {
         id: 'settings.audit-logs',
-        label: 'บันทึกการใช้งาน (Audit Log)',
+        label: 'บันทึกการใช้งาน',
         path: '/settings/audit-logs',
         audiences: ['superadmin', 'executive', 'finance', 'accounting'],
         available: true,
@@ -351,7 +351,7 @@ export const MENU_ITEMS: readonly MenuItem[] = [
       // **สั่งงาน/retry ยังไม่ได้** เพราะบังคับที่ API (`manage` + capability ของงานปลายทาง / Superadmin)
       {
         id: 'settings.jobs',
-        label: 'งานเบื้องหลัง (Job Log)',
+        label: 'งานเบื้องหลัง',
         path: '/settings/jobs',
         audiences: ['superadmin', 'executive', 'finance', 'accounting'],
         available: true,

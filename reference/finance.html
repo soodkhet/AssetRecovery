@@ -1084,7 +1084,7 @@ function renderSettingsLayout() {
       { id: 'compensation', label: 'เทมเพลตค่าตอบแทน' }, 
       { id: 'servicefee', label: 'เทมเพลตค่าบริการ' },
       { id: 'system', label: 'ตั้งค่าระบบกลาง' }, 
-      { id: 'auditlog', label: 'บันทึกการใช้งาน (Audit Log)' }
+      { id: 'auditlog', label: 'บันทึกการใช้งาน' }
     ];
     sidebarNav = generalTabs.map(t => `<button data-action="set-settings-tab" data-tab="${t.id}" class="text-left px-4 py-2.5 rounded-lg text-sm font-medium transition-colors focus-ring ${state.settingsTab === t.id ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'}">${t.label}</button>`).join('');
     
@@ -1393,7 +1393,7 @@ function renderSystemSettingsContent() {
 }
  
 function renderAuditLogContent() {
-  return `<div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6"><div class="flex justify-between items-center mb-4"><h2 class="text-lg font-bold text-slate-900">บันทึกการใช้งาน (Audit Log)</h2><button data-action="audit-filter-export" class="border border-slate-300 px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-slate-50 text-slate-700 focus-ring">Filter / Export</button></div><div class="border border-slate-200 rounded-lg overflow-hidden"><table class="w-full text-left text-sm border-collapse"><thead><tr class="bg-slate-50 text-slate-600 border-b border-slate-200 text-xs"><th class="px-4 py-3 font-medium">วันเวลา</th><th class="px-4 py-3 font-medium">การกระทำ (Action)</th><th class="px-4 py-3 font-medium">ผู้ดำเนินการ</th><th class="px-4 py-3 font-medium">เป้าหมาย (Target)</th><th class="px-4 py-3 font-medium">รายละเอียด</th></tr></thead><tbody class="divide-y divide-slate-100 bg-white">${store.auditLogs.map(log => `<tr class="hover:bg-slate-50"><td class="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">${log.date}</td><td class="px-4 py-3 font-bold text-slate-800">${log.action}</td><td class="px-4 py-3 text-slate-600">${log.user}</td><td class="px-4 py-3 text-slate-600">${log.target}</td><td class="px-4 py-3 text-xs text-slate-500">${log.detail}</td></tr>`).join('')}</tbody></table></div></div>`;
+  return `<div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6"><div class="flex justify-between items-center mb-4"><h2 class="text-lg font-bold text-slate-900">บันทึกการใช้งาน</h2><button data-action="audit-filter-export" class="border border-slate-300 px-3 py-1.5 rounded-lg text-xs font-semibold hover:bg-slate-50 text-slate-700 focus-ring">Filter / Export</button></div><div class="border border-slate-200 rounded-lg overflow-hidden"><table class="w-full text-left text-sm border-collapse"><thead><tr class="bg-slate-50 text-slate-600 border-b border-slate-200 text-xs"><th class="px-4 py-3 font-medium">วันเวลา</th><th class="px-4 py-3 font-medium">การกระทำ (Action)</th><th class="px-4 py-3 font-medium">ผู้ดำเนินการ</th><th class="px-4 py-3 font-medium">เป้าหมาย (Target)</th><th class="px-4 py-3 font-medium">รายละเอียด</th></tr></thead><tbody class="divide-y divide-slate-100 bg-white">${store.auditLogs.map(log => `<tr class="hover:bg-slate-50"><td class="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">${log.date}</td><td class="px-4 py-3 font-bold text-slate-800">${log.action}</td><td class="px-4 py-3 text-slate-600">${log.user}</td><td class="px-4 py-3 text-slate-600">${log.target}</td><td class="px-4 py-3 text-xs text-slate-500">${log.detail}</td></tr>`).join('')}</tbody></table></div></div>`;
 }
  
  

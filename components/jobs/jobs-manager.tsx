@@ -62,7 +62,7 @@ export function JobsManager({ devToolsEnabled = false }: { devToolsEnabled?: boo
   return (
     <div className="space-y-6">
       <PageHeader
-        title="งานเบื้องหลัง (Job Log)"
+        title="งานเบื้องหลัง"
         description="สถานะงานที่ระบบทำให้เบื้องหลัง — ตั้งเวลาโดยระบบหรือสั่งจากหน้าจอ · งานที่ล้มเหลวจะถูกลองใหม่อัตโนมัติจนครบเพดาน แล้วรอผู้ดูแลระบบสั่งทำใหม่"
       />
 

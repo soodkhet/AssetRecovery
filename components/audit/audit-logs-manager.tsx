@@ -55,7 +55,7 @@ export function AuditLogsManager() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="บันทึกการใช้งาน (Audit Log)"
+        title="บันทึกการใช้งาน"
         description="ประวัติการกระทำทั้งระบบ — อ่านอย่างเดียว แก้ไขหรือลบไม่ได้ทุกกรณี เก็บ 5 ปีตามกฎหมายบัญชี"
       />
 

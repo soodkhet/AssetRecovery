@@ -3,7 +3,7 @@ import { JobsManager } from '@/components/jobs/jobs-manager'
 import { isDevToolsEnabled } from '@/lib/env'
 import { requireMenuPage } from '@/lib/nav/menu-guard'
 
-export const metadata: Metadata = { title: 'งานเบื้องหลัง (Job Log)' }
+export const metadata: Metadata = { title: 'งานเบื้องหลัง' }
 
 /**
  * ตั้งค่าทั่วไป → งานเบื้องหลัง (Job Log) — `91` §8 · `06` §9
