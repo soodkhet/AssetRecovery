@@ -23,12 +23,22 @@ export interface PortalNavItem {
   section: PortalSection | null
 }
 
+/** staging E-077 (มติ U95) — ชื่อเมนู/หัวเพจ/title ของหน้าใบกำกับภาษีชื่อเดียวทุกจุด · บนมือถือย่อ */
+export const PORTAL_TAX_INVOICE_LABEL = 'ใบเสร็จรับเงิน/ใบกำกับภาษี'
+export const PORTAL_TAX_INVOICE_SHORT_LABEL = 'ใบกำกับภาษี'
+
 /** ลำดับตาม mockup `97-client-portal-mockup.html` NAV (desktop) */
 export const PORTAL_NAV_ITEMS: readonly PortalNavItem[] = [
   { key: 'overview', label: 'ภาพรวม', shortLabel: 'ภาพรวม', href: PORTAL_HOME_PATH, section: null },
   { key: 'cases', label: 'เคสของเรา', shortLabel: 'เคส', href: '/portal/cases', section: 'cases' },
   { key: 'billing', label: 'รอบวางบิล / ยอดค้างชำระ', shortLabel: 'วางบิล', href: '/portal/billing', section: 'finance' },
-  { key: 'tax-invoices', label: 'ใบกำกับภาษี', shortLabel: 'ใบกำกับ', href: '/portal/tax-invoices', section: 'finance' },
+  {
+    key: 'tax-invoices',
+    label: PORTAL_TAX_INVOICE_LABEL,
+    shortLabel: PORTAL_TAX_INVOICE_SHORT_LABEL,
+    href: '/portal/tax-invoices',
+    section: 'finance',
+  },
   { key: 'handover', label: 'ใบส่งมอบทรัพย์', shortLabel: 'ส่งมอบ', href: '/portal/handover', section: 'handover' },
   { key: 'company', label: 'ข้อมูลบริษัท', shortLabel: 'บริษัท', href: '/portal/company', section: 'profile' },
 ]
@@ -163,3 +173,18 @@ export function portalKpiCards(dto: PortalDashboardDto): PortalKpiCardModel[] {
 export function revenueSummaryIsEmpty(months: readonly { revenueSatang: number; caseCount: number }[]): boolean {
   return months.every((month) => month.revenueSatang === 0 && month.caseCount === 0)
 }
+
+export interface PortalFinanceTab {
+  key: 'billing' | 'tax-invoices'
+  label: string
+  href: string
+}
+
+/**
+ * staging E-076 — แท็บย่อยของหมวดการเงินบนมือถือ (bottom nav มีปุ่ม "การเงิน" ปุ่มเดียวชี้หน้ารอบวางบิล
+ * ⇒ ต้องมีทางไปหน้าใบกำกับภาษี) · ป้ายสั้นตามมติ U95
+ */
+export const PORTAL_FINANCE_TABS: readonly PortalFinanceTab[] = [
+  { key: 'billing', label: 'รอบวางบิล', href: '/portal/billing' },
+  { key: 'tax-invoices', label: PORTAL_TAX_INVOICE_SHORT_LABEL, href: '/portal/tax-invoices' },
+]

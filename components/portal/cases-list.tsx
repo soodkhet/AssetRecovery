@@ -42,6 +42,7 @@ import {
 } from '@/lib/portal/cases-view'
 import type { PortalCaseListResultDto } from '@/lib/portal/queries/cases'
 import type { PortalCaseListItemDto } from '@/lib/portal/serializers'
+import { portalErrorView } from '@/lib/portal/error-view'
 
 const SEARCH_DEBOUNCE_MS = 400
 const COLUMN_COUNT = 6
@@ -107,6 +108,11 @@ export function PortalCasesList({ canViewPhotos }: { canViewPhotos: boolean }) {
     ? 'ลองเปลี่ยนสถานะหรือคำค้นหา'
     : 'เคสที่บริษัทส่งเข้าระบบจะแสดงที่นี่เมื่อเจ้าหน้าที่ได้รับเรื่องแล้ว'
 
+  // staging E-071 — ไม่พบ/ไม่มีสิทธิ์ ⇒ ข้อความกลาง ไม่มีปุ่มลองใหม่
+  const errorView =
+    state.error === null
+      ? null
+      : { ...portalErrorView(state.error), ...(state.error.code === undefined ? {} : { code: state.error.code }) }
   const openCase = (caseId: string) => navigate({ ...filters, caseId })
   const retry = (
     <Button variant="secondary" onClick={state.reload}>
@@ -177,11 +183,11 @@ export function PortalCasesList({ canViewPhotos }: { canViewPhotos: boolean }) {
             <TableState
               colSpan={COLUMN_COUNT}
               loading={state.loading}
-              error={state.error}
+              error={errorView}
               isEmpty={empty}
               emptyTitle={emptyTitle}
               emptyDescription={emptyDescription}
-              onRetry={retry}
+              {...(errorView?.retryable === false ? {} : { onRetry: retry })}
             />
             {!state.loading && state.error === null && items.length > 0 && (
               <TBody>

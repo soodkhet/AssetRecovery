@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { INTAKE_PHOTO_ANGLES } from '@/lib/warehouse/intake'
 import {
+  intakePhotoAngleLabel,
   intakePhotoTitle,
   angleOfIntakePhoto,
   flattenIntakePhotos,
@@ -88,5 +89,11 @@ describe('intakePhotoTitle (staging E-047)', () => {
   it('หัวเรื่องเป็นชื่อมุม — เลขเคส ไม่ใช่ชื่อไฟล์ UUID', () => {
     expect(intakePhotoTitle('assets/org/8bd6f012-74c0-4dff-b9f5-6141fb5fc5b9-intake-E2E-08-front.jpg', 'E2E-08')).toMatch(/— E2E-08$/)
     expect(intakePhotoTitle('assets/org/other.jpg', 'E2E-08')).toBe('รูปเพิ่มเติม — E2E-08')
+  })
+})
+
+describe('intakePhotoAngleLabel (staging E-074)', () => {
+  it('อ่านมุมไม่ได้ ⇒ รูปเพิ่มเติม', () => {
+    expect(intakePhotoAngleLabel('assets/org/other.jpg')).toBe('รูปเพิ่มเติม')
   })
 })

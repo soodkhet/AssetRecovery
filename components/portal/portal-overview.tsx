@@ -3,10 +3,11 @@
 import { PortalArAgingCard, PortalRevenueSummaryCard } from '@/components/portal/portal-finance-cards'
 import { PortalKpiCard } from '@/components/portal/portal-kpi-card'
 import { usePortalData } from '@/components/portal/use-portal-data'
-import { Button, Card, EmptyState, ErrorState, LoadingState, PageHeader } from '@/components/ui'
+import { Card, EmptyState, InlineAlert, LoadingState, PageHeader } from '@/components/ui'
 import type { PortalSection } from '@/lib/portal/access'
 import { portalKpiCards, portalOverviewLoads } from '@/lib/portal/nav'
 import type { PortalArAgingDto, PortalDashboardDto, PortalRevenueSummaryDto } from '@/lib/portal/serializers'
+import { PortalErrorState } from '@/components/portal/portal-error-state'
 
 /**
  * หน้าภาพรวมของพอร์ทัล (`97` §5 KPI 4 ใบ + §6.5 แนวโน้ม 6 เดือน + AR Aging — v3 รวมรายงานไว้หน้าเดียว)
@@ -15,7 +16,16 @@ import type { PortalArAgingDto, PortalDashboardDto, PortalRevenueSummaryDto } fr
  * - รายงานการเงินยิงเฉพาะผู้มีหมวดการเงิน — หัวหน้า/แอดมินบริษัทไม่เห็นและไม่ยิง request
  * - ไม่มีข้อมูลตัวอย่าง: ทุกตัวเลขมาจาก API (คำนวณสดฝั่ง server)
  */
-export function PortalOverview({ companyName, sections }: { companyName: string; sections: readonly PortalSection[] }) {
+export function PortalOverview({
+  companyName,
+  sections,
+  deniedMessage = null,
+}: {
+  companyName: string
+  sections: readonly PortalSection[]
+  /** staging E-072 — เด้งมาจากหมวดที่ไม่มีสิทธิ์ */
+  deniedMessage?: string | null
+}) {
   const loads = portalOverviewLoads(sections)
   const dashboard = usePortalData<PortalDashboardDto>('/api/portal/dashboard', loads.dashboard)
   const revenue = usePortalData<PortalRevenueSummaryDto>('/api/portal/reports/revenue-summary?months=6', loads.financeReports)
@@ -24,6 +34,14 @@ export function PortalOverview({ companyName, sections }: { companyName: string;
   return (
     <div>
       <PageHeader title="ภาพรวม" description={`สรุปสถานะล่าสุดของ ${companyName}`} />
+
+      {deniedMessage !== null && (
+        <div className="mb-4">
+          <InlineAlert tone="warning" title="ไม่มีสิทธิ์ดูหมวดนี้">
+            {deniedMessage}
+          </InlineAlert>
+        </div>
+      )}
 
       {!loads.dashboard && !loads.financeReports ? (
         <Card padded={false}>
@@ -58,16 +76,7 @@ function PortalKpiSection({ state }: { state: ReturnType<typeof usePortalData<Po
   if (state.error !== null) {
     return (
       <Card padded={false}>
-        <ErrorState
-          title={state.error.title}
-          message={state.error.message}
-          {...(state.error.code === undefined ? {} : { code: state.error.code })}
-          action={
-            <Button variant="secondary" onClick={state.reload}>
-              ลองใหม่
-            </Button>
-          }
-        />
+        <PortalErrorState error={state.error} onRetry={state.reload} />
       </Card>
     )
   }

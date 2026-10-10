@@ -6,7 +6,7 @@ import { usePortalApiUrl } from '@/components/portal/portal-scope'
 import { InlineAlert } from '@/components/ui'
 import { TOUCH_TARGET_CLASS } from '@/components/ui/button'
 import { isTopModal, registerModal, unregisterModal } from '@/components/ui/modal-stack'
-import { portalAssetPhotoPath, wrapPhotoIndex } from '@/lib/portal/cases-view'
+import { portalAssetPhotoPath, portalPhotoLabel as photoLabel, wrapPhotoIndex } from '@/lib/portal/cases-view'
 
 /**
  * รูปสินค้าตอนรับเข้าคลัง (ภาพเครื่อง 7 มุม) ของเคส "ติดตามสำเร็จ" (`97` §6.1 v3 · มติ O46)
@@ -19,11 +19,14 @@ import { portalAssetPhotoPath, wrapPhotoIndex } from '@/lib/portal/cases-view'
 export function PortalCasePhotoGallery({
   assetId,
   photoCount,
+  photoLabels = [],
   canView,
   caseRef,
 }: {
   assetId: string
   photoCount: number
+  /** staging E-074 — ชื่อมุมของแต่ละรูป (ไม่มี = "รูปที่ N") */
+  photoLabels?: readonly string[]
   canView: boolean
   caseRef: string
 }) {
@@ -55,7 +58,7 @@ export function PortalCasePhotoGallery({
             type="button"
             onClick={() => setOpenIndex(index)}
             className="focus-ring group flex flex-col items-center gap-1 rounded-lg"
-            aria-label={`เปิดรูปที่ ${index + 1} จาก ${photoCount}`}
+            aria-label={`เปิด${photoLabel(photoLabels, index)} (${index + 1} จาก ${photoCount})`}
           >
             <span className="flex aspect-square w-full items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
               {failed.has(index) ? (
@@ -64,13 +67,13 @@ export function PortalCasePhotoGallery({
                 // eslint-disable-next-line @next/next/no-img-element -- รูป stream ผ่าน API ที่ตรวจสิทธิ์ (ไม่ผ่าน image optimizer)
                 <img
                   src={apiUrl(portalAssetPhotoPath(assetId, index))}
-                  alt={`รูปสินค้า ${caseRef} รูปที่ ${index + 1}`}
+                  alt={`รูปสินค้า ${caseRef} ${photoLabel(photoLabels, index)}`}
                   className="h-full w-full object-cover transition-transform group-hover:scale-105"
                   onError={() => markFailed(index)}
                 />
               )}
             </span>
-            <span className="text-[11px] leading-tight text-slate-500">รูปที่ {index + 1}</span>
+            <span className="text-[11px] leading-tight text-slate-500">{photoLabel(photoLabels, index)}</span>
           </button>
         ))}
       </div>
@@ -79,6 +82,7 @@ export function PortalCasePhotoGallery({
           assetId={assetId}
           caseRef={caseRef}
           count={photoCount}
+          labels={photoLabels}
           index={openIndex}
           failed={failed.has(openIndex)}
           onFailed={markFailed}
@@ -94,6 +98,7 @@ function PhotoLightbox({
   assetId,
   caseRef,
   count,
+  labels,
   index,
   failed,
   onFailed,
@@ -103,6 +108,7 @@ function PhotoLightbox({
   assetId: string
   caseRef: string
   count: number
+  labels: readonly string[]
   index: number
   failed: boolean
   onFailed: (index: number) => void
@@ -146,7 +152,7 @@ function PhotoLightbox({
     >
       <div className="flex items-center justify-between px-4 py-3 text-white" onClick={(event) => event.stopPropagation()}>
         <span className="text-sm font-semibold">
-          <span className="font-mono">{caseRef}</span> · รูปที่ {index + 1} / {count}
+          <span className="font-mono">{caseRef}</span> · {photoLabel(labels, index)} ({index + 1} / {count})
         </span>
         {/* preship R2-011 — ปุ่มปิด/ลูกศร lightbox พื้นที่แตะ ≥44px บนจอสัมผัส */}
         <button
@@ -168,7 +174,7 @@ function PhotoLightbox({
           <img
             key={index}
             src={apiUrl(portalAssetPhotoPath(assetId, index))}
-            alt={`รูปสินค้า ${caseRef} รูปที่ ${index + 1}`}
+            alt={`รูปสินค้า ${caseRef} ${photoLabel(labels, index)}`}
             className="h-full w-full object-contain"
             onClick={(event) => event.stopPropagation()}
             onError={() => onFailed(index)}

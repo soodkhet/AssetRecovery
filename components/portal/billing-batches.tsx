@@ -5,10 +5,8 @@ import { PortalKpiTile } from '@/components/portal/portal-kpi-card'
 import { usePortalApiUrl } from '@/components/portal/portal-scope'
 import { usePortalData } from '@/components/portal/use-portal-data'
 import {
-  Button,
   Card,
   EmptyState,
-  ErrorState,
   FilterGroup,
   InlineAlert,
   LoadingState,
@@ -38,6 +36,8 @@ import {
 } from '@/lib/portal/finance-ui'
 import type { PortalBillingBatchDto } from '@/lib/portal/serializers'
 import { DEBIT_NOTE_OUTSTANDING_LABEL } from '@/lib/revenue/revenue-ui'
+import { PortalErrorState } from '@/components/portal/portal-error-state'
+import { PortalFinanceTabs } from '@/components/portal/portal-finance-tabs'
 
 const FILTER_OPTIONS = portalBillingFilterOptions()
 
@@ -65,6 +65,7 @@ export function PortalBillingBatches({ canDownload = false }: { canDownload?: bo
 
   return (
     <div>
+      <PortalFinanceTabs active="billing" />
       <PageHeader
         title="รอบวางบิล / ยอดค้างชำระ"
         description="แสดงเฉพาะรอบที่ส่งบิลถึงบริษัทของท่านแล้ว (รอบที่ยังจัดทำอยู่จะไม่ปรากฏที่นี่)"
@@ -93,16 +94,7 @@ export function PortalBillingBatches({ canDownload = false }: { canDownload?: bo
         {state.loading ? (
           <LoadingState />
         ) : state.error !== null ? (
-          <ErrorState
-            title={state.error.title}
-            message={state.error.message}
-            {...(state.error.code === undefined ? {} : { code: state.error.code })}
-            action={
-              <Button variant="secondary" onClick={state.reload}>
-                ลองใหม่
-              </Button>
-            }
-          />
+          <PortalErrorState error={state.error} onRetry={state.reload} />
         ) : rows.length === 0 ? (
           <EmptyState title="ยังไม่มีรอบวางบิล" description="เมื่อมีการส่งบิลถึงบริษัทของท่าน รายการจะแสดงที่นี่" />
         ) : (

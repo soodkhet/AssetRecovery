@@ -35,6 +35,7 @@
 | v6.5 | 07/10/2569 | **มติ PO U141** — audit `view_as` ลงด้วยเมื่อเรียก `/api/portal/*?as=<id>` ตรง (ไม่ผ่านหน้า) · ใช้กลไก "ครั้งแรกต่อ session ต่อบริษัท" ตัวเดียวกับหน้า (`lib/portal/view-as-audit.ts`) จึงไม่ลงซ้ำ · audit ล้มไม่ทำให้การดูล้ม |
 | v6.6 | 07/10/2569 | **มติ PO U166 — ความจุ/สีของเครื่อง**: §6.4 รายละเอียดล็อตส่งมอบแสดงอุปกรณ์ "ยี่ห้อรุ่น · ความจุ · สี" ตามสัญญา (`GET /api/portal/handover-lots/:id` เพิ่ม `deviceCapacity`/`deviceColor`) + ใบส่งมอบ PDF พิมพ์รูปเดียวกัน · ผลตรวจ "สี/ความจุตรงกับสัญญา" ในคลังไม่ส่งออก |
 | v6.7 | 07/10/2569 | **มติ O77 (BUG-184)**: §6.1 รายละเอียดเคสแสดงทรัพย์ "ยี่ห้อรุ่น · ความจุ · สี" ตามสัญญา (`GET /api/portal/cases/:id` เพิ่ม `deviceText`) |
+| v6.8 | 11/10/2569 | **staging E-071–E-077 (มติ PO 10/10/2569)** — §5 ชื่อเมนู "ใบเสร็จรับเงิน/ใบกำกับภาษี" (มือถือย่อ) · แท็บย่อยการเงินบนมือถือ · เมนูมือถือปิดด้วย Esc/Back · หมวดไม่มีสิทธิ์กลับหน้าภาพรวมพร้อมข้อความ (`?denied=`) · error ไม่พบ/ไม่มีสิทธิ์ใช้ข้อความกลางไม่มีปุ่มลองใหม่ · §17 `serviceFee.vatLabel` + `assetPhotos.photoLabels` |
 
 ขอบเขตเอกสารนี้: พอร์ทัล **read-only** สำหรับ Company User ให้ดูสถานะเคส/เอกสารการเงิน-บัญชี/รายงานสรุปของบริษัทตัวเอง แทนการให้เจ้าหน้าที่ภายในส่งข้อมูลให้ทีละครั้ง — ไม่มีการสร้าง/แก้ไขข้อมูลใดๆ ผ่านพอร์ทัลนี้
 
@@ -103,10 +104,14 @@ Tab Strip (แนวนอน ใต้ header):
 ├── ภาพรวม (Dashboard)          — สรุป KPI สั้นๆ 4 ใบ (เคสกำลังดำเนินการ/AR ค้าง/ใบกำกับภาษีล่าสุด/Lot รอส่งมอบ)
 ├── เคสของเรา                    — List + filter สถานะสรุป (ดู §10.1)
 ├── รอบวางบิล / ยอดค้างชำระ      — ไฟล์ 19 scope-down
-├── ใบกำกับภาษี                  — ไฟล์ 31 scope-down
+├── ใบเสร็จรับเงิน/ใบกำกับภาษี    — ไฟล์ 31 scope-down (มติ U95 · staging E-077 — ชื่อเดียวทั้งเมนู/หัวเพจ/title · มือถือย่อ "ใบกำกับภาษี")
 ├── ใบส่งมอบทรัพย์               — ไฟล์ 44 scope-down
 └── ข้อมูลบริษัท (ดูอย่างเดียว)   — ไฟล์ 10 §7.1 read-only
 ```
+
+มือถือ (staging E-076): bottom nav มีปุ่ม "การเงิน" ปุ่มเดียว ⇒ หน้ารอบวางบิลและหน้าใบกำกับภาษีมีแท็บย่อย (segmented control) สลับกันได้ · เมนูแฮมเบอร์เกอร์ปิดด้วย Esc / ปุ่ม Back และล็อกการเลื่อนหน้าข้างหลัง (staging E-075)
+
+เปิดหมวดที่ไม่มีสิทธิ์ ⇒ กลับหน้าภาพรวม `?denied=<หมวด>` พร้อมข้อความบอกเหตุผล (staging E-072 — ระบบภายในใช้แบบเดียวกันที่แดชบอร์ด) · ข้อผิดพลาด "ไม่พบ/ไม่มีสิทธิ์" ใช้ข้อความกลางเดียวกันและไม่มีปุ่มลองใหม่ (staging E-071)
 
 ข้อความ "แสดงเฉพาะข้อมูลของ [บริษัท] · โหมดดูอย่างเดียว (Read-only)" ย้ายจาก sidebar footer เดิม → แสดงเป็นบรรทัดเล็กท้ายเนื้อหาแต่ละหน้าแทน
 
@@ -313,7 +318,7 @@ Company User login → Dashboard (สรุป KPI) → เลือกเมน
 
 - `GET /api/portal/dashboard` → `{ inProgressCases?: { count }, arOutstanding?: { outstandingSatang }, latestTaxInvoice?: { invoiceNumber, issueDate, totalSatang } | null, pendingLots?: { count } }` — คีย์ของหมวดที่ไม่มีสิทธิ์ไม่ถูกส่ง (และไม่ query) · เคสกำลังดำเนินการ = รหัส `tracking` · ยอดค้าง = ผลรวมยอดค้างของ batch `sent`/`partially_paid`/`paid` (สูตรกลาง — O44) · ใบกำกับล่าสุด = ใบ `active` ล่าสุดตามวันที่ออก · ล็อตรอส่งมอบ = ยังไม่ `confirmed`
 - `GET /api/portal/cases?status=&search=&page=&limit=` → `{ items: [{ id, caseRef, debtorName, statusDisplay, statusReason, createdAt, recycleRound }], total, page, limit }` — `status` รับเฉพาะรหัสฝั่งบริษัท (`under_review`/`info_requested`/`declined`/`tracking`/`recovered`/`not_recovered` — ค่าอื่น 400) · `search` = เลขสัญญาหรือชื่อลูกหนี้ · `limit` ≤ 100
-- `GET /api/portal/cases/:id` → รายการเดียวกัน + `serviceFee { model, modelLabel, ratePct, baseSatang, basis, basisLabel, failFeeSatang, projectedRevenueSatang } | null` (ยังไม่อนุมัติ = null) + `assetPhotos { assetId, photoCount, condition, conditionLabel, conditionNote } | null` (เฉพาะ "ติดตามสำเร็จ")
+- `GET /api/portal/cases/:id` → รายการเดียวกัน + `serviceFee { model, modelLabel, ratePct, baseSatang, basis, basisLabel, failFeeSatang, projectedRevenueSatang, vatLabel } | null` (ยังไม่อนุมัติ = null · `vatLabel` = "ก่อน VAT"/"รวม VAT แล้ว"/"ไม่มี VAT" ตามโหมด VAT **ปัจจุบัน**ของบริษัท — staging E-073) + `assetPhotos { assetId, photoCount, photoLabels, condition, conditionLabel, conditionNote } | null` (`photoLabels` = ชื่อมุมของแต่ละรูปตามลำดับ ไม่ส่ง path — staging E-074) (เฉพาะ "ติดตามสำเร็จ")
 - `GET /api/portal/company-profile` → `{ name, taxId, address, contactName, contactPhone, signerName, serviceFeeTemplate: { name, model, modelLabel } | null }` — บริษัทจาก session เท่านั้น
 - `GET /api/portal/assets/:id/photos/:index` (index เริ่ม 0) → ตัวไฟล์รูป (stream ผ่าน server ด้วย service role · `Cache-Control: private`) — ต้องมี `portal_download` + หมวดส่งมอบ (ทรัพย์ในล็อตหรือเคส "ติดตามสำเร็จ") **หรือ** หมวดเคส (เฉพาะเคส "ติดตามสำเร็จ") · ไม่พบ/ข้ามบริษัท/ของตัวเองแต่ยังเปิดไม่ได้ → 403 `PERMISSION_DENIED` + audit · index นอกช่วง → 404 `ASSET_NOT_FOUND` · ไฟล์หายจาก Storage → `UPLOAD_FILE_NOT_FOUND`
 

@@ -423,6 +423,8 @@ suite('Portal-P4 — GET /api/portal/cases/:id (`97` §6.1/§6.6 v4.1 · §12 ·
       failFeeSatang: 50000,
       projectedRevenueSatang: 150000,
     })
+    // staging E-073 — ป้าย VAT ภาษาไทยตามโหมดปัจจุบันของบริษัท (ไม่ส่ง enum)
+    expect(['ก่อน VAT', 'รวม VAT แล้ว', 'ไม่มี VAT']).toContain((dto.serviceFee as { vatLabel: string }).vatLabel)
     expect(dto.assetPhotos).toMatchObject({ assetId: assetIds.recovered, photoCount: 2, condition: 'normal' })
     deepScan(body)
   })

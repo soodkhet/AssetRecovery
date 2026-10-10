@@ -95,7 +95,7 @@ describe('requirePortalPage', () => {
 
   it('ไม่มีสิทธิ์หมวด → หน้าแรกพอร์ทัล', async () => {
     getSessionUserMock.mockResolvedValue(user())
-    expect(await redirectOf(requirePortalPage('finance'))).toBe('/portal')
+    expect(await redirectOf(requirePortalPage('finance'))).toBe('/portal?denied=finance')
   })
 
   it('ผู้ใช้บริษัทที่มีสิทธิ์ → ผ่าน', async () => {

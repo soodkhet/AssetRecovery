@@ -133,7 +133,9 @@ export function portalServiceFeeRows(fee: PortalServiceFeeDto | null): PortalSer
   }
   rows.push({ label: 'เมื่อติดตามไม่สำเร็จ', value: failFeeText(fee) })
   if (fee.projectedRevenueSatang !== null) {
-    rows.push({ label: 'ค่าบริการโดยประมาณ', value: fmtSatangSymbol(fee.projectedRevenueSatang) })
+    // staging E-073 — บอกว่าเป็นยอดก่อน/รวม VAT ตามโหมดปัจจุบันของบริษัท
+    const vat = fee.vatLabel === null ? '' : ` (${fee.vatLabel})`
+    rows.push({ label: 'ค่าบริการโดยประมาณ', value: `${fmtSatangSymbol(fee.projectedRevenueSatang)}${vat}` })
   }
   return rows
 }
@@ -141,4 +143,9 @@ export function portalServiceFeeRows(fee: PortalServiceFeeDto | null): PortalSer
 /** มติ U165 — ยอดกรณีไม่สำเร็จแยกจากกรณีสำเร็จ ใช้ได้ทุกโมเดล */
 function failFeeText(fee: PortalServiceFeeDto): string {
   return fee.failFeeSatang === null ? 'ไม่เรียกเก็บ' : `เรียกเก็บ ${fmtSatangSymbol(fee.failFeeSatang)}`
+}
+
+/** staging E-074 — ป้ายรูปในแกลเลอรีพอร์ทัล: ชื่อมุม (ถ้ามี) ไม่งั้น "รูปที่ N" */
+export function portalPhotoLabel(labels: readonly string[], index: number): string {
+  return labels[index] ?? `รูปที่ ${index + 1}`
 }

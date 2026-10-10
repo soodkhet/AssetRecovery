@@ -99,6 +99,12 @@ export function intakePhotoWarning(filledAngles: number): string | null {
 }
 
 /** หัวเรื่องหน้าต่างดูรูป (staging E-047) — "ด้านหน้า — เลขเคส" แทนชื่อไฟล์ดิบที่มี UUID */
+/** staging E-074 — ชื่อมุมของรูปรับเข้าคลัง (อ่านจาก path) · อ่านมุมไม่ได้ ⇒ "รูปเพิ่มเติม" */
+export function intakePhotoAngleLabel(path: string): string {
+  const angle = angleOfIntakePhoto(path)
+  return angle === null ? 'รูปเพิ่มเติม' : INTAKE_PHOTO_ANGLE_LABELS[angle]
+}
+
 export function intakePhotoTitle(path: string, caseRef: string): string {
   const angle = angleOfIntakePhoto(path)
   return `${angle === null ? 'รูปเพิ่มเติม' : INTAKE_PHOTO_ANGLE_LABELS[angle]} — ${caseRef}`

@@ -167,6 +167,7 @@ export async function findPortalCaseDetail(ctx: PortalContext, id: string): Prom
       assetDescription: true,
       assetCapacity: true,
       assetColor: true,
+      company: { select: { vatMode: true } },
     },
   })
   if (row === null) return null
@@ -175,7 +176,12 @@ export async function findPortalCaseDetail(ctx: PortalContext, id: string): Prom
   const asset = row.status === 'closed_success' ? await findCaseAsset(ctx, row.id) : null
   return {
     companyId: row.companyId,
-    dto: serializePortalCaseDetail({ ...row, assignmentStatus: row.assignments[0]?.status ?? null, asset }),
+    dto: serializePortalCaseDetail({
+      ...row,
+      assignmentStatus: row.assignments[0]?.status ?? null,
+      asset,
+      companyVatMode: row.company.vatMode,
+    }),
   }
 }
 

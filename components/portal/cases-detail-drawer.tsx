@@ -12,6 +12,7 @@ import { isTopModal, registerModal, unregisterModal } from '@/components/ui/moda
 import { fmtDate } from '@/lib/format/datetime'
 import { portalCaseDetailApiPath, portalServiceFeeRows } from '@/lib/portal/cases-view'
 import type { PortalCaseDetailDto } from '@/lib/portal/serializers'
+import { PortalErrorState } from '@/components/portal/portal-error-state'
 
 /**
  * Drawer รายละเอียดเคสของพอร์ทัล (`97` §6.1/§8 `view_case_detail` · mockup `case-detail` / mobile bottom sheet)
@@ -98,16 +99,7 @@ export function PortalCaseDetailDrawer({
           {state.loading ? (
             <LoadingState />
           ) : state.error !== null ? (
-            <ErrorState
-              title={state.error.title}
-              message={state.error.message}
-              {...(state.error.code === undefined ? {} : { code: state.error.code })}
-              action={
-                <Button variant="secondary" onClick={state.reload}>
-                  ลองใหม่
-                </Button>
-              }
-            />
+            <PortalErrorState error={state.error} onRetry={state.reload} />
           ) : detail === null ? (
             <ErrorState title="ไม่พบข้อมูลเคส" />
           ) : (
@@ -198,6 +190,7 @@ function CaseDetailBody({ detail, canViewPhotos }: { detail: PortalCaseDetailDto
           <PortalCasePhotoGallery
             assetId={photos.assetId}
             photoCount={photos.photoCount}
+            photoLabels={photos.photoLabels}
             canView={canViewPhotos}
             caseRef={detail.caseRef}
           />

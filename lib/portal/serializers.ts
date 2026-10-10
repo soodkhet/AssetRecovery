@@ -12,6 +12,7 @@ import type {
   ServiceFeeModel,
   TaxInvoiceDocKind,
   TaxInvoiceStatus,
+  VatMode,
 } from '@/lib/generated/prisma/enums'
 import { deviceAttributesText } from '@/lib/device-catalog/device-attributes'
 import { formatBranch } from '@/lib/format/branch'
@@ -31,6 +32,7 @@ import {
 import { ROW_KEY, type ReportData, type ReportRow } from '@/lib/reports/payload'
 import { hasDebitNoteOutstanding } from '@/lib/revenue/revenue-ui'
 import { TAX_INVOICE_DOC_KIND_TITLE } from '@/lib/sales/receipt-invoice'
+import { intakePhotoAngleLabel } from '@/lib/warehouse/intake-photos'
 import { INVOICE_DELIVERY_FORMAT_LABEL } from '@/lib/sales/sales'
 import { SERVICE_FEE_BASIS_LABEL, SERVICE_FEE_MODEL_LABEL } from '@/lib/service-fee/template'
 import { documentDeviceText } from '@/lib/warehouse/handover-doc'
@@ -115,6 +117,15 @@ export interface PortalCaseServiceFeeSource {
   serviceFeeBasisSnapshot: ServiceFeeBasis | null
   serviceFeeFailFeeSatang: number | null
   projectedRevenueSatang: number | null
+  /** staging E-073 — โหมด VAT **ปัจจุบัน**ของบริษัท (ใช้เป็นป้ายของยอดค่าบริการ) · ไม่ส่ง = ไม่ติดป้าย */
+  companyVatMode?: VatMode | null
+}
+
+/** staging E-073 (`97` §17) — ป้าย VAT ของยอดค่าบริการในพอร์ทัล (ภาษาไทย ไม่ส่ง enum) */
+export const PORTAL_VAT_MODE_LABEL: Readonly<Record<VatMode, string>> = {
+  exclude_vat: 'ก่อน VAT',
+  include_vat: 'รวม VAT แล้ว',
+  no_vat: 'ไม่มี VAT',
 }
 
 /** ทรัพย์ที่รับเข้าคลังของเคส (ใช้เฉพาะเคส "ติดตามสำเร็จ" — `97` §6.1 v3) */
@@ -143,12 +154,16 @@ export interface PortalServiceFeeDto {
   /** มติ U165 — ยอดค่าบริการกรณีไม่สำเร็จ (snapshot) · `null` = ไม่เรียกเก็บ */
   failFeeSatang: number | null
   projectedRevenueSatang: number | null
+  /** staging E-073 — "ก่อน VAT" / "รวม VAT แล้ว" / "ไม่มี VAT" ตามโหมดปัจจุบันของบริษัท · `null` = ไม่ทราบ */
+  vatLabel: string | null
 }
 
 export interface PortalAssetPhotosDto {
   /** ใช้ประกอบ `/api/portal/assets/:id/photos/:index` — ไม่ส่ง path ไฟล์ */
   assetId: string
   photoCount: number
+  /** staging E-074 — ชื่อมุมของแต่ละรูปตามลำดับ index (เช่น "ด้านหน้า") — อ่านจาก path แต่ไม่ส่ง path */
+  photoLabels: string[]
   condition: AssetCondition | null
   conditionLabel: string | null
   conditionNote: string | null
@@ -175,6 +190,7 @@ function serializeServiceFee(row: PortalCaseServiceFeeSource): PortalServiceFeeD
     basisLabel: basis === null ? null : SERVICE_FEE_BASIS_LABEL[basis],
     failFeeSatang: row.serviceFeeFailFeeSatang,
     projectedRevenueSatang: row.projectedRevenueSatang,
+    vatLabel: row.companyVatMode == null ? null : PORTAL_VAT_MODE_LABEL[row.companyVatMode],
   }
 }
 
@@ -204,6 +220,7 @@ export function serializePortalCaseDetail(row: PortalCaseDetailSource): PortalCa
         ? {
             assetId: asset.id,
             photoCount: asset.photos.length,
+            photoLabels: asset.photos.map((path) => intakePhotoAngleLabel(path)),
             condition: asset.condition,
             conditionLabel: asset.condition === null ? null : ASSET_CONDITION_LABEL[asset.condition],
             conditionNote: asset.conditionNote,

@@ -5,7 +5,7 @@ import { ReportBarChart } from '@/components/reports/report-bar-chart'
 import { PortalKpiTile } from '@/components/portal/portal-kpi-card'
 import { useNarrowScreen } from '@/components/portal/use-narrow-screen'
 import type { PortalDataState } from '@/components/portal/use-portal-data'
-import { Button, Card, CardHeader, EmptyState, ErrorState, LoadingState, TBody, THead, Table, Td, Th, Tr } from '@/components/ui'
+import { Card, CardHeader, EmptyState, LoadingState, TBody, THead, Table, Td, Th, Tr } from '@/components/ui'
 import { fmtDate } from '@/lib/format/datetime'
 import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
 import {
@@ -18,6 +18,7 @@ import {
 } from '@/lib/portal/finance-ui'
 import { revenueSummaryIsEmpty } from '@/lib/portal/nav'
 import type { PortalArAgingDto, PortalRevenueSummaryDto } from '@/lib/portal/serializers'
+import { PortalErrorState } from '@/components/portal/portal-error-state'
 
 type LoadState<T> = PortalDataState<T>
 
@@ -25,16 +26,7 @@ function StateOr<T>({ state, children }: { state: LoadState<T>; children: (data:
   if (state.loading) return <LoadingState />
   if (state.error !== null) {
     return (
-      <ErrorState
-        title={state.error.title}
-        message={state.error.message}
-        {...(state.error.code === undefined ? {} : { code: state.error.code })}
-        action={
-          <Button variant="secondary" onClick={state.reload}>
-            ลองใหม่
-          </Button>
-        }
-      />
+      <PortalErrorState error={state.error} onRetry={state.reload} />
     )
   }
   if (state.data === null) return <EmptyState />

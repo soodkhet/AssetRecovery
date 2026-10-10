@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  portalPhotoLabel,
   DEFAULT_PORTAL_CASES_FILTERS,
   PORTAL_CASE_STATUS_OPTIONS,
   hasActivePortalCasesFilter,
@@ -132,7 +133,15 @@ describe('portalServiceFeeRows — ค่าบริการใน drawer', ()
     basisLabel: 'มูลค่าหนี้คงเหลือ',
     failFeeSatang: 50000,
     projectedRevenueSatang: 350000,
+    vatLabel: null,
   }
+
+  it('staging E-073 — ค่าบริการโดยประมาณติดป้าย VAT ตามโหมดของบริษัท', () => {
+    expect(portalServiceFeeRows({ ...base, vatLabel: 'ก่อน VAT' })?.at(-1)).toEqual({
+      label: 'ค่าบริการโดยประมาณ',
+      value: '฿3,500.00 (ก่อน VAT)',
+    })
+  })
 
   it('ยังไม่อนุมัติ = null', () => {
     expect(portalServiceFeeRows(null)).toBeNull()
@@ -166,5 +175,12 @@ describe('portalServiceFeeRows — ค่าบริการใน drawer', ()
     const rows = portalServiceFeeRows({ ...base, model: 'FLAT', modelLabel: 'Flat Rate (เหมาจ่ายรายเคส)', failFeeSatang: null })
     expect(rows?.map((row) => row.label)).not.toContain('อัตราค่าบริการเมื่อสำเร็จ')
     expect(rows?.find((row) => row.label === 'เมื่อติดตามไม่สำเร็จ')?.value).toBe('ไม่เรียกเก็บ')
+  })
+})
+
+describe('portalPhotoLabel — staging E-074', () => {
+  it('ใช้ชื่อมุมถ้ามี ไม่งั้น "รูปที่ N"', () => {
+    expect(portalPhotoLabel(['ด้านหน้า'], 0)).toBe('ด้านหน้า')
+    expect(portalPhotoLabel(['ด้านหน้า'], 1)).toBe('รูปที่ 2')
   })
 })

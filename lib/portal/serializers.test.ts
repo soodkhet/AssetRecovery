@@ -285,6 +285,7 @@ describe('portal serializers — เนื้อหา', () => {
     expect(serializePortalCaseDetail(caseRow('closed_success')).assetPhotos).toEqual({
       assetId: 'asset-1',
       photoCount: 3,
+      photoLabels: ['รูปเพิ่มเติม', 'รูปเพิ่มเติม', 'รูปเพิ่มเติม'],
       condition: 'damaged',
       conditionLabel: 'ชำรุด',
       conditionNote: 'จอแตก',

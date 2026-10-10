@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  PORTAL_FINANCE_TABS,
   PORTAL_NAV_ITEMS,
   activePortalNavKey,
   portalBottomNavItems,
@@ -131,5 +132,20 @@ describe('revenueSummaryIsEmpty', () => {
   })
   it('มีเคสแต่ยอด 0 (เคสไม่สำเร็จที่ไม่คิดค่าบริการ) ถือว่ามีข้อมูล', () => {
     expect(revenueSummaryIsEmpty([{ revenueSatang: 0, caseCount: 1 }])).toBe(false)
+  })
+})
+
+describe('staging E-076/E-077 — ชื่อหน้าใบกำกับภาษี + แท็บการเงินบนมือถือ', () => {
+  it('เมนูใช้ชื่อเดียวตามมติ U95 · ป้ายสั้นบนมือถือ', () => {
+    const item = PORTAL_NAV_ITEMS.find((entry) => entry.key === 'tax-invoices')
+    expect(item?.label).toBe('ใบเสร็จรับเงิน/ใบกำกับภาษี')
+    expect(item?.shortLabel).toBe('ใบกำกับภาษี')
+  })
+
+  it('แท็บการเงินมี 2 หน้า ชี้หน้าเดียวกับเมนู', () => {
+    expect(PORTAL_FINANCE_TABS.map((tab) => tab.href)).toEqual(['/portal/billing', '/portal/tax-invoices'])
+    for (const tab of PORTAL_FINANCE_TABS) {
+      expect(PORTAL_NAV_ITEMS.some((entry) => entry.href === tab.href && entry.section === 'finance')).toBe(true)
+    }
   })
 })

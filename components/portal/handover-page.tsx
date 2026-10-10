@@ -5,7 +5,7 @@ import { useCallback, useMemo, useState, type FormEvent } from 'react'
 import { HandoverLotCard } from '@/components/portal/handover-lot-card'
 import { HandoverLotDetailModal } from '@/components/portal/handover-lot-detail'
 import { usePortalData } from '@/components/portal/use-portal-data'
-import { Button, Card, EmptyState, ErrorState, Field, Input, LoadingState, PageHeader, Select } from '@/components/ui'
+import { Button, Card, EmptyState, Field, Input, LoadingState, PageHeader, Select } from '@/components/ui'
 import {
   PORTAL_LOT_STATUS_FILTER_OPTIONS,
   hasActivePortalLotFilters,
@@ -18,6 +18,7 @@ import {
   type PortalLotStatusFilter,
 } from '@/lib/portal/handover-view'
 import type { PortalLotListItemDto } from '@/lib/portal/serializers'
+import { PortalErrorState } from '@/components/portal/portal-error-state'
 
 interface PortalLotListData {
   items: PortalLotListItemDto[]
@@ -140,16 +141,7 @@ export function PortalHandover({ canDownload }: { canDownload: boolean }) {
         </Card>
       ) : state.error !== null ? (
         <Card padded={false}>
-          <ErrorState
-            title={state.error.title}
-            message={state.error.message}
-            {...(state.error.code === undefined ? {} : { code: state.error.code })}
-            action={
-              <Button variant="secondary" onClick={state.reload}>
-                ลองใหม่
-              </Button>
-            }
-          />
+          <PortalErrorState error={state.error} onRetry={state.reload} />
         </Card>
       ) : data !== null && data.items.length === 0 && data.total > 0 ? (
         <Card padded={false}>

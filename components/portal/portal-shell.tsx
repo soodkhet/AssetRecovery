@@ -20,6 +20,7 @@ import {
   type PortalNavKey,
 } from '@/lib/portal/nav'
 import { portalPageHref, stripPortalViewAsPrefix } from '@/lib/portal/view-as'
+import { useOverlayDismiss } from '@/components/ui/use-overlay-dismiss'
 
 export interface PortalShellProps {
   companyName: string
@@ -217,57 +218,88 @@ function PortalMobileHeader({
       </header>
 
       {open && (
-        <div className="fixed inset-0 z-40 bg-slate-900/50 md:hidden" onClick={() => setOpen(false)}>
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label="เมนูพอร์ทัล"
-            className="absolute top-0 right-0 bottom-0 flex w-72 flex-col bg-white shadow-xl"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="flex items-center justify-between border-b border-slate-100 p-4">
-              <div className="min-w-0">
-                <div className="truncate text-sm font-bold text-slate-800">{userName}</div>
-                <div className="truncate text-[13px] text-slate-400">
-                  {roleName} · {companyName}
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                aria-label="ปิดเมนู"
-                className={cn('focus-ring inline-flex items-center justify-center rounded p-1.5 text-slate-400', TOUCH_TARGET_CLASS)}
-              >
-                <PortalIcon name="close" className="h-5 w-5" />
-              </button>
-            </div>
-            <nav aria-label="เมนูพอร์ทัล (จอเล็ก)" className="flex-1 overflow-y-auto py-2">
-              {navItems.map((item) => (
-                <Link
-                  key={item.key}
-                  href={item.href}
-                  onClick={() => setOpen(false)}
-                  aria-current={item.key === activeKey ? 'page' : undefined}
-                  className={cn(
-                    'focus-ring-inset flex w-full items-center gap-3 px-4 py-3 text-sm font-medium active:bg-slate-50',
-                    item.key === activeKey ? 'bg-slate-50 text-slate-900' : 'text-slate-600',
-                  )}
-                >
-                  <PortalIcon name={item.key} className="h-5 w-5" />
-                  <span>{item.label}</span>
-                </Link>
-              ))}
-            </nav>
-            <div className="border-t border-slate-100 p-3">
-              <div className="flex justify-center">
-                <LogoutButton />
-              </div>
-              <div className="mt-3 text-center text-[13px] text-slate-400">โหมดดูอย่างเดียว (Read-only)</div>
-            </div>
-          </div>
-        </div>
+        <PortalMenuDrawer
+          companyName={companyName}
+          userName={userName}
+          roleName={roleName}
+          navItems={navItems}
+          activeKey={activeKey}
+          onClose={() => setOpen(false)}
+        />
       )}
     </>
+  )
+}
+
+/** staging E-075 — เมนูพอร์ทัลบนจอเล็ก: Esc / Back ปิด · ล็อกการเลื่อน · โฟกัสเข้าแผง (แบบเดียวกับเมนู Field Tracker) */
+function PortalMenuDrawer({
+  companyName,
+  userName,
+  roleName,
+  navItems,
+  activeKey,
+  onClose,
+}: {
+  companyName: string
+  userName: string
+  roleName: string
+  navItems: readonly PortalNavItem[]
+  activeKey: PortalNavKey | null
+  onClose: () => void
+}) {
+  const { panelRef, navigateFromMenu } = useOverlayDismiss(onClose)
+  return (
+    <div className="fixed inset-0 z-40 bg-slate-900/50 md:hidden" onClick={onClose}>
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="เมนูพอร์ทัล"
+        tabIndex={-1}
+        className="focus:outline-none absolute top-0 right-0 bottom-0 flex w-72 flex-col bg-white shadow-xl"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-slate-100 p-4">
+          <div className="min-w-0">
+            <div className="truncate text-sm font-bold text-slate-800">{userName}</div>
+            <div className="truncate text-[13px] text-slate-400">
+              {roleName} · {companyName}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="ปิดเมนู"
+            className={cn('focus-ring inline-flex items-center justify-center rounded p-1.5 text-slate-400', TOUCH_TARGET_CLASS)}
+          >
+            <PortalIcon name="close" className="h-5 w-5" />
+          </button>
+        </div>
+        <nav aria-label="เมนูพอร์ทัล (จอเล็ก)" className="flex-1 overflow-y-auto py-2">
+          {navItems.map((item) => (
+            <Link
+              key={item.key}
+              href={item.href}
+              onClick={(event) => navigateFromMenu(event, item.href)}
+              aria-current={item.key === activeKey ? 'page' : undefined}
+              className={cn(
+                'focus-ring-inset flex w-full items-center gap-3 px-4 py-3 text-sm font-medium active:bg-slate-50',
+                item.key === activeKey ? 'bg-slate-50 text-slate-900' : 'text-slate-600',
+              )}
+            >
+              <PortalIcon name={item.key} className="h-5 w-5" />
+              <span>{item.label}</span>
+            </Link>
+          ))}
+        </nav>
+        <div className="border-t border-slate-100 p-3">
+          <div className="flex justify-center">
+            <LogoutButton />
+          </div>
+          <div className="mt-3 text-center text-[13px] text-slate-400">โหมดดูอย่างเดียว (Read-only)</div>
+        </div>
+      </div>
+    </div>
   )
 }
 

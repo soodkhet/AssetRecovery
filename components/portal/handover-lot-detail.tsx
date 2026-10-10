@@ -4,11 +4,12 @@ import type { ReactNode } from 'react'
 import { HandoverDownloadButton } from '@/components/portal/handover-download-button'
 import { usePortalApiUrl } from '@/components/portal/portal-scope'
 import { usePortalData } from '@/components/portal/use-portal-data'
-import { Button, EmptyState, ErrorState, LoadingState, Modal, RefText, StatusBadge } from '@/components/ui'
+import { Button, EmptyState, LoadingState, Modal, RefText, StatusBadge } from '@/components/ui'
 import { fmtDate, fmtDateTime } from '@/lib/format/datetime'
 import { portalAssetPhotoApiUrl, portalLotDetailApiUrl } from '@/lib/portal/handover-view'
 import type { PortalLotAssetDto, PortalLotDetailDto } from '@/lib/portal/serializers'
 import { documentDeviceText } from '@/lib/warehouse/handover-doc'
+import { PortalErrorState } from '@/components/portal/portal-error-state'
 
 /**
  * รายละเอียดล็อตส่งมอบ (modal — mockup `lot-detail` + `asset-detail` รวมเป็นหน้าต่างเดียว)
@@ -71,16 +72,7 @@ export function HandoverLotDetailModal({
       {state.loading ? (
         <LoadingState />
       ) : state.error !== null ? (
-        <ErrorState
-          title={state.error.title}
-          message={state.error.message}
-          {...(state.error.code === undefined ? {} : { code: state.error.code })}
-          action={
-            <Button variant="secondary" onClick={state.reload}>
-              ลองใหม่
-            </Button>
-          }
-        />
+        <PortalErrorState error={state.error} onRetry={state.reload} />
       ) : lot === null ? (
         <EmptyState title="ไม่พบข้อมูลล็อต" />
       ) : (

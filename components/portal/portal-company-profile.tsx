@@ -2,8 +2,9 @@
 
 import type { ReactNode } from 'react'
 import { usePortalData } from '@/components/portal/use-portal-data'
-import { Button, Card, EmptyState, ErrorState, InlineAlert, LoadingState, PageHeader, RefText } from '@/components/ui'
+import { Card, EmptyState, InlineAlert, LoadingState, PageHeader, RefText } from '@/components/ui'
 import type { PortalCompanyProfileDto } from '@/lib/portal/serializers'
+import { PortalErrorState } from '@/components/portal/portal-error-state'
 
 /**
  * ข้อมูลบริษัท (ดูอย่างเดียว) — `GET /api/portal/company-profile` (`97` §6.6 · mockup `renderProfile()`)
@@ -20,16 +21,7 @@ export function PortalCompanyProfile() {
           {state.loading ? (
             <LoadingState />
           ) : state.error !== null ? (
-            <ErrorState
-              title={state.error.title}
-              message={state.error.message}
-              {...(state.error.code === undefined ? {} : { code: state.error.code })}
-              action={
-                <Button variant="secondary" onClick={state.reload}>
-                  ลองใหม่
-                </Button>
-              }
-            />
+            <PortalErrorState error={state.error} onRetry={state.reload} />
           ) : state.data === null ? (
             <EmptyState title="ไม่พบข้อมูลบริษัท" />
           ) : (

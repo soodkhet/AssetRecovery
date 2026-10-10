@@ -9,7 +9,6 @@ import {
   Button,
   Card,
   EmptyState,
-  ErrorState,
   InlineAlert,
   LoadingState,
   PageHeader,
@@ -32,6 +31,9 @@ import {
   portalTaxInvoiceDownloadUrl,
 } from "@/lib/portal/finance-ui";
 import type { PortalTaxInvoiceDto } from "@/lib/portal/serializers";
+import { PortalErrorState } from "@/components/portal/portal-error-state";
+import { PortalFinanceTabs } from "@/components/portal/portal-finance-tabs";
+import { PORTAL_TAX_INVOICE_LABEL } from "@/lib/portal/nav";
 
 interface DownloadError {
   invoiceNumber: string;
@@ -114,8 +116,9 @@ export function PortalTaxInvoices({ canDownload }: { canDownload: boolean }) {
 
   return (
     <div>
+      <PortalFinanceTabs active="tax-invoices" />
       <PageHeader
-        title="ใบเสร็จรับเงิน/ใบกำกับภาษี"
+        title={PORTAL_TAX_INVOICE_LABEL}
         description="ออกให้เมื่อได้รับชำระเงิน (ใบแจ้งหนี้/ใบวางบิลดาวน์โหลดได้ที่หน้ารอบวางบิล)"
       />
 
@@ -145,18 +148,7 @@ export function PortalTaxInvoices({ canDownload }: { canDownload: boolean }) {
         {state.loading ? (
           <LoadingState />
         ) : state.error !== null ? (
-          <ErrorState
-            title={state.error.title}
-            message={state.error.message}
-            {...(state.error.code === undefined
-              ? {}
-              : { code: state.error.code })}
-            action={
-              <Button variant="secondary" onClick={state.reload}>
-                ลองใหม่
-              </Button>
-            }
-          />
+          <PortalErrorState error={state.error} onRetry={state.reload} />
         ) : rows.length === 0 ? (
           <EmptyState
             title="ยังไม่มีใบเสร็จรับเงิน/ใบกำกับภาษี"
