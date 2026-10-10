@@ -227,6 +227,7 @@ suite('ฐาน WHT + snapshot (U3/U8)', () => {
       issueZeroRate402Certificate: true,
       inhouseIncomeCategory: 'sec_40_2',
       outsourceIncomeCategory: 'sec_40_8',
+      thresholdScope: 'monthly_cumulative',
       allowGrossUpConditions: false,
     })
     const hotel = batch.items.find((item) => item.grossSatang === 60_000)!
@@ -381,6 +382,72 @@ suite('ประเภทเงินได้ 40(2) (U5/U7)', () => {
     const filing = await db().whtFilingSummary.findFirstOrThrow({ where: { organizationId: ORG_ID } })
     expect(filing.pnd1Satang).toBe(1250)
     expect(filing.pnd3Satang).toBe(0)
+  })
+})
+
+suite('เกณฑ์ ฿1,000 สะสมต่อผู้รับต่อเดือน (staging E-054)', () => {
+  it('ค่าเริ่มต้นสะสมต่อเดือน: รอบแรก ฿600 ไม่หัก · รอบที่สองในเดือน ฿500 ⇒ หัก 3% ของ ฿1,100 · ใบ 50 ทวิ เงินได้ ฿1,100', async () => {
+    await seedExpense(PAYEE_IN_ID, 'commission', 60_000)
+    const first = await payout.createPayoutBatch(ctx, { side: 'inhouse', cutoffDate: CUTOFF, name: null })
+    expect(first.batch.whtSatang).toBe(0)
+    expect(first.batch.whtPolicy?.thresholdScope).toBe('monthly_cumulative')
+    await completeAndSync(first.batch.id)
+
+    await seedExpense(PAYEE_IN_ID, 'commission', 50_000)
+    const second = await payout.createPayoutBatch(ctx, { side: 'inhouse', cutoffDate: CUTOFF, name: null })
+    expect(second.batch.whtSatang).toBe(3_300)
+    expect(second.batch.netSatang).toBe(46_700)
+    expect(second.batch.items[0]?.whtCarriedBaseSatang).toBe(60_000)
+    await completeAndSync(second.batch.id)
+
+    const certificates = await wht.listWhtCertificates(finance, {})
+    expect(certificates.items).toHaveLength(1)
+    expect(certificates.items[0]).toMatchObject({ grossSatang: 110_000, whtSatang: 3_300, filingForm: 'PND3' })
+
+    // รอบที่สามในเดือน — ถึงเกณฑ์แล้ว ⇒ หักตามปกติ ไม่ยกฐานซ้ำ
+    await seedExpense(PAYEE_IN_ID, 'commission', 20_000)
+    const third = await payout.createPayoutBatch(ctx, { side: 'inhouse', cutoffDate: CUTOFF, name: null })
+    expect(third.batch.whtSatang).toBe(600)
+    expect(third.batch.items[0]?.whtCarriedBaseSatang).toBe(0)
+  })
+
+  it('ค่าตั้ง "ต่อรอบจ่าย" ⇒ รอบที่สอง ฿500 ไม่หัก (พฤติกรรมเดิม)', async () => {
+    await policy.createWhtPolicy(
+      policyCtx('ให้นักบัญชีเลือกนับเกณฑ์ต่อรอบจ่าย'),
+      {
+        effectiveFrom: new Date(Date.UTC(2026, 9, 5)),
+        baseExpenseTypes: ['commission', 'no_success_fee', 'fuel', 'allowance'],
+        certificateMode: 'per_payee_batch',
+        incomeTypeMode: 'all_40_8',
+        issueZeroRate402Certificate: true,
+        inhouseIncomeCategory: 'sec_40_2',
+        outsourceIncomeCategory: 'sec_40_8',
+        allowGrossUpConditions: false,
+        thresholdScope: 'per_batch',
+        filingMethod: 'online',
+      },
+      NOW,
+    )
+    await seedExpense(PAYEE_IN_ID, 'commission', 60_000)
+    const first = await payout.createPayoutBatch(ctx, { side: 'inhouse', cutoffDate: CUTOFF, name: null })
+    await completeAndSync(first.batch.id)
+    await seedExpense(PAYEE_IN_ID, 'commission', 50_000)
+    const second = await payout.createPayoutBatch(ctx, { side: 'inhouse', cutoffDate: CUTOFF, name: null })
+    expect(second.batch.whtSatang).toBe(0)
+    expect(second.batch.whtPolicy?.thresholdScope).toBe('per_batch')
+  })
+
+  it('รอบที่ถูกยกเลิกไม่นับเป็นยอดสะสม', async () => {
+    await seedExpense(PAYEE_IN_ID, 'commission', 60_000)
+    const first = await payout.createPayoutBatch(ctx, { side: 'inhouse', cutoffDate: CUTOFF, name: null })
+    await db().$executeRawUnsafe(`
+      UPDATE payout_batches
+         SET status = 'cancelled', cancel_reason = 'ทดสอบยกเลิก', cancelled_at = now(), cancelled_by = '${FINANCE_ID}'
+       WHERE id = '${first.batch.id}'
+    `)
+    await seedExpense(PAYEE_IN_ID, 'commission', 50_000)
+    const second = await payout.createPayoutBatch(ctx, { side: 'inhouse', cutoffDate: CUTOFF, name: null })
+    expect(second.batch.whtSatang).toBe(0)
   })
 })
 

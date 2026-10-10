@@ -16,6 +16,7 @@ import {
   type WhtIncomeTypeMode,
   type WhtPolicyEntry,
   type WhtPolicySettings,
+  type WhtThresholdScope,
 } from '@/lib/settings/wht-policy'
 import { loadHolidayKeys } from '@/lib/settings/queries/holiday-keys'
 import { filingDueDateOf, filingMethodResolveDate } from '@/lib/wht/wht'
@@ -42,6 +43,7 @@ const policySelect = {
   inhouseIncomeCategory: true,
   outsourceIncomeCategory: true,
   allowGrossUpConditions: true,
+  thresholdScope: true,
   filingMethod: true,
   reason: true,
   createdAt: true,
@@ -58,6 +60,7 @@ interface PolicyRow {
   inhouseIncomeCategory: WhtIncomeCategory
   outsourceIncomeCategory: WhtIncomeCategory
   allowGrossUpConditions: boolean
+  thresholdScope: WhtThresholdScope
   filingMethod: WhtFilingMethod
   reason: string
   createdAt: Date
@@ -76,6 +79,7 @@ function toEntry(row: PolicyRow): WhtPolicyEntry & { row: PolicyRow } {
     inhouseIncomeCategory: row.inhouseIncomeCategory,
     outsourceIncomeCategory: row.outsourceIncomeCategory,
     allowGrossUpConditions: row.allowGrossUpConditions,
+    thresholdScope: row.thresholdScope,
     filingMethod: row.filingMethod,
     row,
   }
@@ -92,6 +96,7 @@ function toDto(entry: WhtPolicyEntry & { row: PolicyRow }, currentId: string | n
     inhouseIncomeCategory: entry.inhouseIncomeCategory,
     outsourceIncomeCategory: entry.outsourceIncomeCategory,
     allowGrossUpConditions: entry.allowGrossUpConditions,
+    thresholdScope: entry.thresholdScope,
     filingMethod: entry.filingMethod,
     reason: entry.row.reason,
     createdAt: toIso(entry.createdAt),
@@ -118,6 +123,7 @@ function valuesOf(entry: WhtPolicySettings | null): WhtPolicySettings {
     inhouseIncomeCategory: entry.inhouseIncomeCategory,
     outsourceIncomeCategory: entry.outsourceIncomeCategory,
     allowGrossUpConditions: entry.allowGrossUpConditions,
+    thresholdScope: entry.thresholdScope,
     filingMethod: entry.filingMethod,
   }
 }
@@ -214,8 +220,10 @@ export async function refreshPendingFilingDueDates(
   return changed
 }
 
-export interface WhtPolicyCreateValues extends WhtPolicySettings {
+export interface WhtPolicyCreateValues extends Omit<WhtPolicySettings, 'thresholdScope'> {
   effectiveFrom: Date
+  /** staging E-054 — ไม่ระบุ = สะสมต่อผู้รับต่อเดือน (ค่าเริ่มต้นตามมติ — schema ใส่ให้เสมอ) */
+  thresholdScope?: WhtThresholdScope
 }
 
 export async function createWhtPolicy(
@@ -245,6 +253,7 @@ export async function createWhtPolicy(
         inhouseIncomeCategory: values.inhouseIncomeCategory,
         outsourceIncomeCategory: values.outsourceIncomeCategory,
         allowGrossUpConditions: values.allowGrossUpConditions,
+        thresholdScope: values.thresholdScope ?? DEFAULT_WHT_POLICY.thresholdScope,
         filingMethod: values.filingMethod,
         reason: context.reason,
         createdBy: context.actor.id,
@@ -273,6 +282,7 @@ export async function createWhtPolicy(
           inhouseIncomeCategory: values.inhouseIncomeCategory,
           outsourceIncomeCategory: values.outsourceIncomeCategory,
           allowGrossUpConditions: values.allowGrossUpConditions,
+          thresholdScope: values.thresholdScope ?? DEFAULT_WHT_POLICY.thresholdScope,
           filingMethod: values.filingMethod,
           effectiveFrom: toDateOnlyIso(values.effectiveFrom),
           }),

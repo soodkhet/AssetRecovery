@@ -327,6 +327,16 @@ export interface PayeeBatchWhtOptions {
    * ผู้เรียกต้องตรวจว่าค่าตั้งอนุญาตเงื่อนไขนี้ก่อน (`isWhtConditionAllowed()`)
    */
   condition?: WhtCondition | null
+  /**
+   * staging E-054 (มติ PO 10/10/2569) — เกณฑ์ขั้นต่ำ **สะสมต่อผู้รับต่อเดือนปฏิทิน** (ท.ป.4/2528 จ่ายตามข้อตกลง
+   * เดียวกันแบ่งหลายคราว) · ไม่ระบุ = เทียบต่อรอบจ่ายเหมือนเดิม · ใช้เฉพาะหมวดที่มีเกณฑ์ (40(8)/Tax Profile)
+   */
+  monthToDate?: {
+    /** ฐานในฐาน WHT ของผู้รับในรอบก่อน ๆ ของเดือนเดียวกัน (รอบที่ไม่ถูกยกเลิก) */
+    priorBaseSatang: number
+    /** ส่วนของ `priorBaseSatang` ที่ยังไม่เคยถูกหัก (ต่ำกว่าเกณฑ์ และยังไม่ถูกยกมาหักในรอบใด) */
+    priorUnwithheldBaseSatang: number
+  } | null
 }
 
 export interface PayeeBatchWhtLine extends PayeeWhtResult {
@@ -345,6 +355,11 @@ export interface PayeeBatchWhtLine extends PayeeWhtResult {
    * — มติ PO U121) ⇒ ภาษี 0 ไม่นับเข้าฐาน/เกณฑ์ · คิวอนุมัติแสดงคำเตือน · รอบจ่ายต้องบล็อก (`WHT_RATE_MISSING`)
    */
   rateMissing: boolean
+  /**
+   * staging E-054 — ฐานของรอบก่อนในเดือนเดียวกันที่ยกมาหักพร้อมรายการนี้ (ส่วนแบ่งตามสัดส่วนฐาน) · ไม่ใช่เงินที่จ่ายรอบนี้
+   * — ใบ 50 ทวิ/ภ.ง.ด. นับเป็นเงินได้ของใบที่หักภาษีนี้ · `0` = ไม่มี
+   */
+  carriedBaseSatang: number
 }
 
 export interface PayeeBatchWht {
@@ -359,6 +374,8 @@ export interface PayeeBatchWht {
   incomeCategory: WhtIncomeCategory
   /** มีรายการในฐานที่ไม่มีอัตรา (`lines[].rateMissing`) — ผู้สร้างรอบจ่ายต้องปัดทั้งรอบ (มติ PO U121) */
   rateMissing: boolean
+  /** staging E-054 — ฐานของรอบก่อนในเดือนที่ยกมาหักในรอบนี้ (= ผลรวม `lines[].carriedBaseSatang`) */
+  carriedBaseSatang: number
 }
 
 /** 40(1)/40(2) ไม่มีเกณฑ์ขั้นต่ำ ฿1,000 และฐานเป็นยอดก่อน VAT เสมอ (มติ PO 05/10/2569 U7 · U33) */
@@ -417,7 +434,15 @@ export function calculatePayeeBatchWht(
     return { item, rate, includedInBase, rateMissing, counted, baseSatang: counted ? fullBase : 0 }
   })
   if (prepared.length === 0) {
-    return { lines: [], totalBaseSatang: 0, totalWhtSatang: 0, belowThreshold: true, incomeCategory, rateMissing: false }
+    return {
+      lines: [],
+      totalBaseSatang: 0,
+      totalWhtSatang: 0,
+      belowThreshold: true,
+      incomeCategory,
+      rateMissing: false,
+      carriedBaseSatang: 0,
+    }
   }
 
   const inBase = prepared.filter((entry) => entry.counted)
@@ -426,9 +451,17 @@ export function calculatePayeeBatchWht(
     throw new RangeError('calculatePayeeBatchWht: เกณฑ์ขั้นต่ำ WHT ไม่เท่ากันภายใน payee เดียว — ต้องจัดกลุ่มต่อ payee ก่อน')
   }
   const totalBaseSatang = inBase.reduce((sum, entry) => sum + entry.baseSatang, 0)
-  const belowThreshold = inBase.length === 0 || totalBaseSatang < threshold
+  // E-054 — เกณฑ์สะสมต่อเดือนใช้กับหมวดที่มีเกณฑ์เท่านั้น (40(1)/40(2) ไม่มีเกณฑ์ ⇒ rate402 ≠ null)
+  const monthly = rate402 === null && options.monthToDate != null ? options.monthToDate : null
+  if (monthly !== null) {
+    assertNonNegativeSatang(monthly.priorBaseSatang, 'ฐานรอบก่อนในเดือน')
+    assertNonNegativeSatang(monthly.priorUnwithheldBaseSatang, 'ฐานรอบก่อนที่ยังไม่หัก')
+  }
+  const comparedBase = totalBaseSatang + (monthly?.priorBaseSatang ?? 0)
+  const belowThreshold = inBase.length === 0 || comparedBase < threshold
 
   const whtByIndex = new Array<number>(prepared.length).fill(0)
+  const carriedByIndex = new Array<number>(prepared.length).fill(0)
   if (!belowThreshold) {
     const groups = new Map<number, number[]>()
     prepared.forEach((entry, index) => {
@@ -437,16 +470,23 @@ export function calculatePayeeBatchWht(
       members.push(index)
       groups.set(entry.rate.whtPct, members)
     })
-    for (const [pct, members] of groups) {
-      const groupBase = members.reduce((sum, index) => sum + prepared[index]!.baseSatang, 0)
+    const groupList = [...groups.entries()]
+    const groupBases = groupList.map(([, members]) => members.reduce((sum, index) => sum + prepared[index]!.baseSatang, 0))
+    // E-054 — ฐานรอบก่อนที่ยังไม่หัก ยกมาหักรอบที่ทำให้ยอดสะสมถึงเกณฑ์ · กระจายลงกลุ่มอัตรา/รายการตามสัดส่วนฐาน
+    const carriedTotal = cappedCarriedBase(monthly?.priorUnwithheldBaseSatang ?? 0, groupList, groupBases, condition)
+    const carriedByGroup = allocateLargestRemainder(carriedTotal, groupBases)
+    groupList.forEach(([pct, members], groupIndex) => {
+      const memberBases = members.map((index) => prepared[index]!.baseSatang)
+      const carried = carriedByGroup[groupIndex]!
       // U105 — (2) ทบยอด / (1)(3) ตามอัตรา · ปัดครั้งเดียวต่อกลุ่มเหมือนเดิม
-      const groupWht = whtTaxForCondition(groupBase, pct, condition)
-      allocateLargestRemainder(groupWht, members.map((index) => prepared[index]!.baseSatang)).forEach(
-        (share, position) => {
-          whtByIndex[members[position]!] = share
-        },
-      )
-    }
+      const groupWht = whtTaxForCondition(groupBases[groupIndex]! + carried, pct, condition)
+      allocateLargestRemainder(groupWht, memberBases).forEach((share, position) => {
+        whtByIndex[members[position]!] = share
+      })
+      allocateLargestRemainder(carried, memberBases).forEach((share, position) => {
+        carriedByIndex[members[position]!] = share
+      })
+    })
   }
 
   const lines = prepared.map((entry, index): PayeeBatchWhtLine => {
@@ -466,6 +506,7 @@ export function calculatePayeeBatchWht(
       includedInBase: entry.includedInBase,
       incomeCategory,
       rateMissing: entry.rateMissing,
+      carriedBaseSatang: carriedByIndex[index]!,
     }
   })
   return {
@@ -475,7 +516,37 @@ export function calculatePayeeBatchWht(
     belowThreshold,
     incomeCategory,
     rateMissing: prepared.some((entry) => entry.rateMissing),
+    carriedBaseSatang: carriedByIndex.reduce((sum, value) => sum + value, 0),
   }
+}
+
+/**
+ * E-054 — จำกัดฐานที่ยกมาไม่ให้ภาษีของรอบ (เงื่อนไข (1) หักจากผู้รับ) เกินยอดฐานของรอบนี้ (ยอดโอนติดลบไม่ได้)
+ * ส่วนที่เกินยังเป็น "ยังไม่หัก" และยกไปรอบถัดไปของเดือนเอง (ผู้เรียกคำนวณจากยอดที่บันทึกจริง)
+ * — เกิดได้เฉพาะรอบที่ยอดเล็กมากเทียบกับยอดสะสม · (2)/(3) ผู้จ่ายออกภาษี ไม่หักจากยอดผู้รับ ⇒ ไม่ต้องจำกัด
+ */
+function cappedCarriedBase(
+  priorUnwithheld: number,
+  groups: readonly (readonly [number, readonly number[]])[],
+  groupBases: readonly number[],
+  condition: WhtCondition,
+): number {
+  if (priorUnwithheld === 0 || isPayerBorneWhtCondition(condition)) return priorUnwithheld
+  const currentBase = groupBases.reduce((sum, base) => sum + base, 0)
+  const taxFor = (carried: number): number => {
+    const shares = allocateLargestRemainder(carried, groupBases)
+    return groups.reduce((sum, [pct], index) => sum + whtTaxForCondition(groupBases[index]! + shares[index]!, pct, condition), 0)
+  }
+  if (taxFor(priorUnwithheld) <= currentBase) return priorUnwithheld
+  // ค้นหาแบบ binary search บนจำนวนเต็ม satang — ภาษีเพิ่มตามฐานแบบไม่ลด
+  let low = 0
+  let high = priorUnwithheld
+  while (low < high) {
+    const mid = Math.ceil((low + high) / 2)
+    if (taxFor(mid) <= currentBase) low = mid
+    else high = mid - 1
+  }
+  return low
 }
 
 /**

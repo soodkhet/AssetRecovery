@@ -230,6 +230,9 @@ export function PayoutDetailModal({
                           : item.whtIncomeCategory === 'sec_40_2'
                             ? 'เงินได้ 40(2)'
                             : (item.taxProfileName ?? '—')}
+                        {/* staging E-054 — ยอดสะสมในเดือนถึงเกณฑ์ ⇒ หักรวมฐานของรอบก่อนที่ยังไม่ได้หัก */}
+                        {(item.whtCarriedBaseSatang ?? 0) > 0 &&
+                          ` · รวมยอดรอบก่อนในเดือน ${fmtSatangSymbol(item.whtCarriedBaseSatang ?? 0)}`}
                       </p>
                     ) : null
                   return (

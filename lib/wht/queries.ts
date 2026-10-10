@@ -361,6 +361,8 @@ const EXPENSE_SOURCE_SELECT = {
       payeeId: true,
       whtBaseIncluded: true,
       whtIncomeCategory: true,
+      // staging E-054 — ฐานรอบก่อนในเดือนที่ยกมาหักพร้อมรายการนี้ (เงินได้บนใบ)
+      whtCarriedBaseSatang: true,
       // มติ PO U105 — เงื่อนไขการหักที่ snapshot ตอนสร้างรอบ (ตัวที่ใช้คิดยอดจริง) — ไม่ใช่ค่าปัจจุบันของผู้รับ
       whtCondition: true,
       payoutBatch: {
@@ -403,6 +405,7 @@ type SourceItem = ExpenseSourceRow & {
   payeeId: string
   whtBaseIncluded: boolean
   incomeCategory: WhtIncomeCategory | null
+  carriedBaseSatang: number
 }
 type SourceGroup = CertificateGroup<SourceItem>
 
@@ -412,6 +415,7 @@ function toSourceItem(row: ExpenseSourceRow): SourceItem {
     payeeId: row.payoutBatchItem.payeeId,
     whtBaseIncluded: row.payoutBatchItem.whtBaseIncluded,
     incomeCategory: row.payoutBatchItem.whtIncomeCategory,
+    carriedBaseSatang: row.payoutBatchItem.whtCarriedBaseSatang,
   }
 }
 

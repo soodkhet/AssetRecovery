@@ -39,6 +39,7 @@ import {
   WHT_FILING_METHODS,
   WHT_FILING_METHOD_LABEL,
   WHT_INCOME_CATEGORY_LABEL,
+  WHT_THRESHOLD_SCOPE_LABEL,
   isInWhtBase,
   resolveIncomeCategory,
   usesPerPayeeWhtRate,
@@ -46,6 +47,7 @@ import {
   type WhtFilingMethod,
   type WhtIncomeCategory,
   type WhtIncomeTypeMode,
+  type WhtThresholdScope,
 } from '@/lib/settings/wht-policy'
 import {
   filingDueDateOf,
@@ -298,6 +300,35 @@ export function whtGrossUpHelp(allow: boolean): SettingHelpContent {
       {
         title: `ตารางด้านบน: เงินได้ ${money(SAMPLE_INCOME_SATANG)} อัตรา ${pct(DEFAULT_WHT_PCT)}`,
         lines: [line('(2) คิดภาษีแบบทบยอด', 'เงินได้ × อัตรา ÷ (1 − อัตรา)')],
+      },
+    ],
+    who: WHO_SUPERADMIN_EXECUTIVE,
+    when: WHEN_WHT_POLICY,
+  }
+}
+
+/** วิธีนับเกณฑ์ ฿1,000 (staging E-054 · มติ PO 10/10/2569) */
+export function whtThresholdScopeHelp(scope: WhtThresholdScope): SettingHelpContent {
+  return {
+    assumption: 'wht_threshold',
+    title: 'นับเกณฑ์ขั้นต่ำไม่หักภาษีอย่างไร',
+    what:
+      'เงินได้ 40(8)/ค่าบริการที่จ่ายต่ำกว่าเกณฑ์ใน Tax Profile (ค่าเริ่มต้น ฿1,000) ไม่ต้องหักภาษี — ถ้าจ่ายให้คนเดิมหลายรอบในเดือนเดียวกันตามข้อตกลงเดียวกัน ให้รวมยอดทั้งเดือนเทียบเกณฑ์ (ท.ป.4/2528)',
+    options: [
+      {
+        label: WHT_THRESHOLD_SCOPE_LABEL.monthly_cumulative,
+        effect:
+          'รวมยอดของผู้รับทุกรอบในเดือนปฏิทิน — รอบที่ทำให้ยอดรวมถึงเกณฑ์ หักภาษีรวมส่วนของรอบก่อนที่ยังไม่ได้หัก (หนังสือรับรองแสดงเงินได้รวม) · รอบถัดไปในเดือนหักตามปกติ',
+      },
+      { label: WHT_THRESHOLD_SCOPE_LABEL.per_batch, effect: 'เทียบเกณฑ์แยกแต่ละรอบจ่าย — รอบเล็กทุกรอบไม่หักแม้ยอดรวมทั้งเดือนเกินเกณฑ์' },
+    ],
+    examples: [
+      {
+        title: `ค่าที่เลือกอยู่: ${WHT_THRESHOLD_SCOPE_LABEL[scope]} · อัตรา 3% เกณฑ์ ฿1,000`,
+        lines:
+          scope === 'monthly_cumulative'
+            ? [line('รอบที่ 1 จ่าย ฿600', 'ยังไม่หัก (สะสม ฿600)'), line('รอบที่ 2 จ่าย ฿500', 'หัก ฿33 = 3% ของ ฿1,100 · ได้รับ ฿467')]
+            : [line('รอบที่ 1 จ่าย ฿600', 'ไม่หัก'), line('รอบที่ 2 จ่าย ฿500', 'ไม่หัก')],
       },
     ],
     who: WHO_SUPERADMIN_EXECUTIVE,

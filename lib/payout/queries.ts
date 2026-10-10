@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { assertPeriodOpenAt } from '@/lib/accounting/period-guard'
+import { periodKeyOf, periodRangeOf } from '@/lib/accounting/period'
+import { monthToDateByPayee, type MonthToDate } from '@/lib/finance/wht-month-to-date'
 import type { ApiWarning } from '@/lib/api/envelope'
 import { emitAudit } from '@/lib/audit/audit'
 import type { RequestMeta } from '@/lib/auth/request-meta'
@@ -144,6 +146,7 @@ const batchSelect = {
   whtInhouseIncomeCategory: true,
   whtOutsourceIncomeCategory: true,
   whtAllowGrossUpConditions: true,
+  whtThresholdScope: true,
   payDueDate: true,
   cycle: { select: { name: true, dueRule: true } },
   createdAt: true,
@@ -174,6 +177,7 @@ const itemSelect = {
   whtBaseIncluded: true,
   whtIncomeCategory: true,
   whtCondition: true,
+  whtCarriedBaseSatang: true,
   advanceOffsetSatang: true,
   advanceReturns: {
     where: { reversedAt: null },
@@ -235,6 +239,8 @@ function toBatchDto(row: BatchRow): PayoutBatchDto {
             outsourceIncomeCategory: row.whtOutsourceIncomeCategory ?? LEGACY_WHT_POLICY.outsourceIncomeCategory,
             // NULL = รอบที่สร้างก่อนมีค่าตั้ง U105 ⇒ ไม่อนุญาต (คิดแบบ (1) เสมอ)
             allowGrossUpConditions: row.whtAllowGrossUpConditions ?? LEGACY_WHT_POLICY.allowGrossUpConditions,
+            // NULL = รอบที่สร้างก่อน E-054 ⇒ เทียบเกณฑ์ต่อรอบจ่าย
+            thresholdScope: row.whtThresholdScope ?? LEGACY_WHT_POLICY.thresholdScope,
           },
     // มติ PO U133 — รอบจ่าย AP ที่ใช้ + กำหนดจ่ายตามรอบ (snapshot ตอนสร้าง)
     cycleName: row.cycle?.name ?? null,
@@ -273,6 +279,7 @@ function toItemDto(row: ItemRow): PayoutBatchItemDto {
     whtBaseIncluded: row.whtBaseIncluded,
     whtIncomeCategory: row.whtIncomeCategory,
     whtCondition: row.whtCondition,
+    whtCarriedBaseSatang: row.whtCarriedBaseSatang,
     advanceOffsetSatang: row.advanceOffsetSatang,
     transferSatang: payoutTransferSatang(row.netSatang, row.advanceOffsetSatang),
     advanceOffsets: row.advanceReturns.map((entry) => ({
@@ -444,6 +451,8 @@ interface Candidate {
   whtIncomeCategory: WhtIncomeCategory | null
   /** snapshot เงื่อนไขการหักของผู้รับ (มติ PO U105) — `null` = เงินทดรองจ่าย */
   whtCondition: WhtCondition | null
+  /** staging E-054 — ฐานของรอบก่อนในเดือนที่ยกมาหักพร้อมรายการนี้ (เงินทดรอง = ไม่มี) */
+  whtCarriedBaseSatang?: number
 }
 
 /** payee ที่ verified แล้วต้องมี Tax Profile เสมอ (`18` §9) ⇒ ค่านี้ไม่ควรเป็น null ตอนคิด WHT */
@@ -471,6 +480,8 @@ async function collectExpenseCandidates(
   side: PayoutBatchSide,
   policy: WhtPolicyValues,
   typeDefaults: LoadedTaxProfileDefaults,
+  /** วันสร้างรอบ — เดือนปฏิทินไทยของเกณฑ์สะสม (staging E-054) */
+  now: Date = new Date(),
 ): Promise<Candidate[]> {
   const rows = await prisma.expense.findMany({
     where: {
@@ -568,6 +579,12 @@ async function collectExpenseCandidates(
     })
   }
 
+  // staging E-054 — เกณฑ์สะสมต่อผู้รับต่อเดือน: ยอดของรอบก่อน ๆ ในเดือนเดียวกัน (ค่าตั้ง `per_batch` = ไม่ใช้)
+  const monthToDate =
+    policy.thresholdScope === 'monthly_cumulative'
+      ? await loadMonthToDate(organizationId, [...indicesByPayee.keys()], now)
+      : null
+
   const whtByIndex = new Array<PayeeBatchWhtLine | undefined>(sided.length)
   /** Tax Profile ค่าเริ่มต้นตามประเภทของผู้รับ (มติ PO U121) — snapshot id เมื่อถูกใช้จริง */
   const typeDefaultByIndex = new Array<string | null>(sided.length).fill(null)
@@ -593,6 +610,8 @@ async function collectExpenseCandidates(
         incomeCategory,
         section402Pct: first.row.payee.wht402Pct === null ? null : Number(first.row.payee.wht402Pct),
         condition: first.row.payee.whtCondition,
+        monthToDate:
+          monthToDate === null ? null : (monthToDate.get(first.row.payee.id) ?? { priorBaseSatang: 0, priorUnwithheldBaseSatang: 0 }),
       },
     )
     if (rateMissing) missingRate.push(first.row.payee.user.fullName)
@@ -633,8 +652,34 @@ async function collectExpenseCandidates(
       whtBaseIncluded: wht.includedInBase,
       whtIncomeCategory: wht.incomeCategory,
       whtCondition: wht.whtCondition,
+      whtCarriedBaseSatang: wht.carriedBaseSatang,
     }
   })
+}
+
+/**
+ * staging E-054 — ยอดสะสมของผู้รับในรอบจ่ายก่อน ๆ ของเดือนปฏิทินไทยเดียวกับวันสร้างรอบ (รอบที่ไม่ถูกยกเลิก ·
+ * รายการค่าตอบแทนในฐาน WHT หมวดที่มีเกณฑ์) — รวมยอดด้วย `monthToDateByPayee()` (pure)
+ */
+async function loadMonthToDate(
+  organizationId: string,
+  payeeIds: readonly string[],
+  now: Date,
+): Promise<Map<string, MonthToDate>> {
+  if (payeeIds.length === 0) return new Map()
+  const { start, end } = periodRangeOf(periodKeyOf(now))
+  const rows = await prisma.payoutBatchItem.findMany({
+    where: {
+      organizationId,
+      payeeId: { in: [...payeeIds] },
+      expenseId: { not: null },
+      whtBaseIncluded: true,
+      OR: [{ whtIncomeCategory: 'sec_40_8' }, { whtIncomeCategory: null }],
+      payoutBatch: { status: { not: 'cancelled' }, createdAt: { gte: start, lt: end } },
+    },
+    select: { payeeId: true, grossSatang: true, whtSatang: true, whtCarriedBaseSatang: true, whtCondition: true },
+  })
+  return monthToDateByPayee(rows)
 }
 
 /**
@@ -900,7 +945,14 @@ export async function createPayoutBatch(
   const typeDefaults = await loadTaxProfileDefaults(user.organizationId)
 
   const [expenses, advances] = await Promise.all([
-    collectExpenseCandidates(user.organizationId, input.cutoffDate, input.side, whtPolicy.values, typeDefaults),
+    collectExpenseCandidates(
+      user.organizationId,
+      input.cutoffDate,
+      input.side,
+      whtPolicy.values,
+      typeDefaults,
+      context.now ?? new Date(),
+    ),
     collectAdvanceCandidates(user.organizationId, input.cutoffDate),
   ])
 
@@ -939,6 +991,7 @@ export async function createPayoutBatch(
         whtInhouseIncomeCategory: whtPolicy.values.inhouseIncomeCategory,
         whtOutsourceIncomeCategory: whtPolicy.values.outsourceIncomeCategory,
         whtAllowGrossUpConditions: whtPolicy.values.allowGrossUpConditions,
+        whtThresholdScope: whtPolicy.values.thresholdScope,
         taxProfileDefaultId: typeDefaults.id,
         cycleId: cycle?.id ?? null,
         payDueDate,
@@ -964,6 +1017,7 @@ export async function createPayoutBatch(
           whtBaseIncluded: candidate.whtBaseIncluded,
           whtIncomeCategory: candidate.whtIncomeCategory,
           whtCondition: candidate.whtCondition,
+          whtCarriedBaseSatang: candidate.whtCarriedBaseSatang ?? 0,
           advanceOffsetSatang: lineOffsets[itemIds.length] ?? 0,
           createdBy: user.id,
         },

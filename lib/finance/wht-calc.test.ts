@@ -261,6 +261,7 @@ describe('§6.9 เกณฑ์ขั้นต่ำต่อ payee ต่อร
       payoutGrossSatang: 550_000,
       whtCondition: 'withhold',
       rateMissing: false,
+      carriedBaseSatang: 0,
     })
     expect(batch.totalWhtSatang).toBe(16_500)
   })
@@ -301,6 +302,7 @@ describe('§6.9 เกณฑ์ขั้นต่ำต่อ payee ต่อร
       belowThreshold: true,
       incomeCategory: 'sec_40_8',
       rateMissing: false,
+      carriedBaseSatang: 0,
     })
   })
 

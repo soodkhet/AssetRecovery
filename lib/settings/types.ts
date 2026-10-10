@@ -5,6 +5,7 @@ import type {
   WhtIncomeCategory,
   WhtIncomeTypeMode,
   WhtPolicySettings,
+  WhtThresholdScope,
 } from '@/lib/settings/wht-policy'
 import type {
   ExpenseType,
@@ -194,6 +195,8 @@ export interface WhtPolicyDto {
   outsourceIncomeCategory: WhtIncomeCategory
   /** อนุญาตเงื่อนไข (2) ออกให้ตลอดไป / (3) ออกให้ครั้งเดียว (U105) */
   allowGrossUpConditions: boolean
+  /** วิธีนับเกณฑ์ขั้นต่ำ (staging E-054) */
+  thresholdScope: WhtThresholdScope
   /** วิธียื่น ภ.ง.ด. (U45) */
   filingMethod: WhtFilingMethod
   reason: string

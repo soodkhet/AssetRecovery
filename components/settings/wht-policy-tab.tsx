@@ -34,6 +34,7 @@ import {
   whtFilingMethodHelp,
   whtGrossUpHelp,
   whtIncomeTypeHelp,
+  whtThresholdScopeHelp,
   whtZeroRateHelp,
 } from '@/lib/settings/help'
 import { whtPolicyCreateSchema } from '@/lib/settings/schemas'
@@ -48,6 +49,8 @@ import {
   WHT_INCOME_TYPE_MODE_LABEL,
   WHT_POLICY_EXPENSE_TYPES,
   WHT_TEAM_SIDE_INCOME_CATEGORIES,
+  WHT_THRESHOLD_SCOPES,
+  WHT_THRESHOLD_SCOPE_LABEL,
   ISSUE_ZERO_RATE_40_2_LABEL,
   ALLOW_GROSS_UP_CONDITIONS_LABEL,
   effectiveTeamSideCategories,
@@ -59,6 +62,7 @@ import {
   type WhtIncomeTypeMode,
   type WhtPolicySettings,
   type WhtPolicyValues,
+  type WhtThresholdScope,
 } from '@/lib/settings/wht-policy'
 
 /**
@@ -80,6 +84,7 @@ interface FormState {
   inhouseIncomeCategory: WhtIncomeCategory
   outsourceIncomeCategory: WhtIncomeCategory
   allowGrossUpConditions: boolean
+  thresholdScope: WhtThresholdScope
   filingMethod: WhtFilingMethod
   reason: string
 }
@@ -130,6 +135,10 @@ function PolicySummary({ values }: { values: WhtPolicySettings }) {
       <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
         <dt className="font-semibold text-slate-500">เงื่อนไขการหัก</dt>
         <dd className="mt-1 text-slate-900">{grossUpText(values.allowGrossUpConditions)}</dd>
+      </div>
+      <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+        <dt className="font-semibold text-slate-500">นับเกณฑ์ขั้นต่ำ</dt>
+        <dd className="mt-1 text-slate-900">{WHT_THRESHOLD_SCOPE_LABEL[values.thresholdScope]}</dd>
       </div>
       <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
         <dt className="font-semibold text-slate-500">วิธียื่น ภ.ง.ด.</dt>
@@ -187,6 +196,7 @@ export function WhtPolicyTab() {
       inhouseIncomeCategory: overview.current.inhouseIncomeCategory,
       outsourceIncomeCategory: overview.current.outsourceIncomeCategory,
       allowGrossUpConditions: overview.current.allowGrossUpConditions,
+      thresholdScope: overview.current.thresholdScope,
       filingMethod: overview.current.filingMethod,
       reason: '',
     })
@@ -265,6 +275,7 @@ export function WhtPolicyTab() {
             <SettingHelp help={whtIncomeTypeHelp(overview.current)} />
             <SettingHelp help={whtZeroRateHelp(overview.current.issueZeroRate402Certificate)} />
             <SettingHelp help={whtGrossUpHelp(overview.current.allowGrossUpConditions)} />
+            <SettingHelp help={whtThresholdScopeHelp(overview.current.thresholdScope)} />
             <SettingHelp help={whtFilingMethodHelp(overview.current.filingMethod)} />
           </div>
         </div>
@@ -285,13 +296,14 @@ export function WhtPolicyTab() {
               <Th>ประเภทเงินได้</Th>
               <Th>40(1)/40(2) อัตรา 0%</Th>
               <Th>เงื่อนไขการหัก</Th>
+              <Th>นับเกณฑ์ขั้นต่ำ</Th>
               <Th>วิธียื่น ภ.ง.ด.</Th>
               <Th>เหตุผล / ผู้บันทึก</Th>
               <Th className="text-right">สถานะ</Th>
             </Tr>
           </THead>
           <TableState
-            colSpan={9}
+            colSpan={10}
             loading={loading}
             error={error}
             isEmpty={history.length === 0}
@@ -331,6 +343,9 @@ export function WhtPolicyTab() {
                   </Td>
                   <Td>
                     <span className="text-xs text-slate-700">{grossUpText(item.allowGrossUpConditions)}</span>
+                  </Td>
+                  <Td>
+                    <span className="text-xs text-slate-700">{WHT_THRESHOLD_SCOPE_LABEL[item.thresholdScope]}</span>
                   </Td>
                   <Td>
                     <span className="text-xs text-slate-700">{WHT_FILING_METHOD_LABEL[item.filingMethod]}</span>
@@ -540,6 +555,27 @@ export function WhtPolicyTab() {
                 กรอก &quot;อัตราหัก 40(1)/40(2)&quot; ในข้อมูลผู้รับเงินทุกคนที่เข้าข่าย — ถ้าขาด ระบบจะไม่ให้สร้างรอบจ่ายและแสดงรายชื่อ
               </InlineAlert>
             )}
+
+            <Field
+              id="wht-policy-threshold-scope"
+              label="นับเกณฑ์ขั้นต่ำไม่หักภาษี"
+              required
+              error={errors.thresholdScope}
+              hint="ใช้กับเงินได้ 40(8)/ค่าบริการที่มีเกณฑ์ขั้นต่ำใน Tax Profile · 40(1)/40(2) ไม่มีเกณฑ์"
+            >
+              <Select
+                id="wht-policy-threshold-scope"
+                value={form.thresholdScope}
+                onChange={(event) => set('thresholdScope', event.target.value as WhtThresholdScope)}
+              >
+                {WHT_THRESHOLD_SCOPES.map((scope) => (
+                  <option key={scope} value={scope}>
+                    {WHT_THRESHOLD_SCOPE_LABEL[scope]}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <SettingHelp help={whtThresholdScopeHelp(form.thresholdScope)} />
 
             <Field
               id="wht-policy-filing"

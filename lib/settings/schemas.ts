@@ -44,6 +44,7 @@ import { TAX_PROFILE_INCOME_TYPE_CODES, WHT_BASIS_VALUES } from '@/lib/settings/
 import {
   WHT_CERTIFICATE_MODES,
   WHT_FILING_METHODS,
+  WHT_THRESHOLD_SCOPES,
   WHT_INCOME_TYPE_MODES,
   WHT_POLICY_EXPENSE_TYPES,
   WHT_TEAM_SIDE_INCOME_CATEGORIES,
@@ -386,6 +387,8 @@ export const whtPolicyCreateSchema = z.object({
   outsourceIncomeCategory: z.enum(WHT_TEAM_SIDE_INCOME_CATEGORIES).default('sec_40_8'),
   /** อนุญาตเงื่อนไขการหัก (2) ออกให้ตลอดไป / (3) ออกให้ครั้งเดียว (มติ PO 06/10/2569 U105) — ไม่ส่ง = ปิด (ค่าเริ่มต้น) */
   allowGrossUpConditions: z.boolean().default(false),
+  /** staging E-054 — วิธีนับเกณฑ์ขั้นต่ำ · ไม่ส่ง = สะสมต่อผู้รับต่อเดือน (ค่าเริ่มต้นตามมติ) */
+  thresholdScope: z.enum(WHT_THRESHOLD_SCOPES).default('monthly_cumulative'),
   /** วิธียื่น ภ.ง.ด. — ออนไลน์ (วันที่ 15) / กระดาษ (วันที่ 7) · ไม่ส่ง = ออนไลน์ (มติ PO 05/10/2569 UAT U45) */
   filingMethod: z.enum(WHT_FILING_METHODS).default('online'),
   reason: reasonSchema,

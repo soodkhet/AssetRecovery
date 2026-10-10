@@ -47,7 +47,7 @@ describe('settingAssumptionCurrentValues', () => {
 
   it('อ่านจากค่าตั้งจริง — ประเภทเงินได้ · Tax Profile ขั้นต่ำ · วันหยุด · VAT · เลขที่ใบกำกับ · เพดานค่าธรรมเนียม', () => {
     expect(values.wht_income_type).toBe('แยกตามประเภททีม — Inhouse มาตรา 40(2) · Outsource มาตรา 40(8) · ตั้งรายคนได้ (ค่ารายคนชนะ)')
-    expect(values.wht_threshold).toBe('Outsource Standard 3% 3.00% ขั้นต่ำ ฿1,000.00')
+    expect(values.wht_threshold).toBe('Outsource Standard 3% 3.00% ขั้นต่ำ ฿1,000.00 · นับสะสมต่อผู้รับต่อเดือน')
     expect(values.holidays).toBe('ปี 2569 มี 19 วัน')
     expect(values.vat_rounding).toContain('7.00%')
     expect(values.invoice_numbering).toBe('รูปแบบ INV-NNNN · เลขถัดไป INV-0043')
@@ -66,7 +66,7 @@ describe('settingAssumptionCurrentValues', () => {
       costCenters: [],
       bankFileFormats: [],
     })
-    expect(empty.wht_threshold).toBe('ยังไม่มี Tax Profile ที่ใช้งาน')
+    expect(empty.wht_threshold).toBe('ยังไม่มี Tax Profile ที่ใช้งาน · นับสะสมต่อผู้รับต่อเดือน')
     expect(empty.vat_rounding).toContain('ยังไม่ตั้งอัตรา VAT')
     expect(empty.cost_centers).toBe('ยังไม่มีศูนย์ต้นทุนที่ใช้งาน')
   })

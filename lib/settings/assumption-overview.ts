@@ -9,6 +9,7 @@ import {
   WHT_FILING_METHOD_LABEL,
   WHT_INCOME_CATEGORY_LABEL,
   WHT_INCOME_TYPE_MODE_LABEL,
+  WHT_THRESHOLD_SCOPE_LABEL,
   type WhtPolicySettings,
 } from '@/lib/settings/wht-policy'
 
@@ -66,13 +67,13 @@ export function settingAssumptionCurrentValues(
       ? 'ออกหนังสือรับรอง (ยอดภาษี 0) และรวมใน ภ.ง.ด.1'
       : 'ไม่ออกหนังสือรับรองเมื่อภาษีเป็น 0',
     wht_certificate_mode: WHT_CERTIFICATE_MODE_LABEL[policy.certificateMode],
-    wht_threshold: joinOrNone(
+    wht_threshold: `${joinOrNone(
       input.taxProfiles.map(
         (profile) =>
           `${profile.name} ${fmtPercent(profile.whtPct)} ขั้นต่ำ ${fmtSatangSymbol(profile.whtMinThresholdSatang)}`,
       ),
       'ยังไม่มี Tax Profile ที่ใช้งาน',
-    ),
+    )} · นับ${WHT_THRESHOLD_SCOPE_LABEL[policy.thresholdScope]}`,
     wht_filing_method: WHT_FILING_METHOD_LABEL[policy.filingMethod],
     wht_gross_up: policy.allowGrossUpConditions
       ? `เปิด — ${ALLOW_GROSS_UP_CONDITIONS_LABEL}`
@@ -113,7 +114,7 @@ export const SETTING_ASSUMPTION_LOCATION: Readonly<Record<SettingAssumptionKey, 
   wht_base: { financeTab: 'whtpolicy' },
   wht_zero_rate_certificate: { financeTab: 'whtpolicy' },
   wht_certificate_mode: { financeTab: 'whtpolicy' },
-  wht_threshold: { financeTab: 'tax' },
+  wht_threshold: { financeTab: 'whtpolicy' },
   wht_filing_method: { financeTab: 'whtpolicy' },
   wht_gross_up: { financeTab: 'whtpolicy' },
   holidays: { financeTab: 'holidays' },

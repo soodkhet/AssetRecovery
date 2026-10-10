@@ -81,8 +81,9 @@ export const SETTING_ASSUMPTIONS: Readonly<Record<SettingAssumptionKey, SettingA
   wht_threshold: {
     key: 'wht_threshold',
     label: 'เกณฑ์ขั้นต่ำไม่หักภาษี',
-    question: 'ไม่หักเมื่อยอดต่อคนต่อรอบจ่ายต่ำกว่า ฿1,000 และอัตรา 3% เป็นค่าเริ่มต้น',
-    source: 'ส่วนที่ 2 A1/A3 · มติ A4',
+    question:
+      'ไม่หักเมื่อยอดต่ำกว่า ฿1,000 (อัตรา 3% ค่าเริ่มต้น) โดยนับยอดสะสมต่อผู้รับต่อเดือนปฏิทิน (ค่าเริ่มต้น — ท.ป.4/2528) รอบที่ถึงเกณฑ์หักรวมส่วนของรอบก่อน · เลือกนับต่อรอบจ่ายได้ — ใช้วิธีไหน',
+    source: 'ส่วนที่ 2 A1/A3 · มติ A4 · staging E-054',
   },
   wht_filing_method: {
     key: 'wht_filing_method',

@@ -139,6 +139,7 @@ describe('normalize/audit', () => {
       issue_zero_rate_40_2_certificate: true,
       inhouse_income_category: 'sec_40_2',
       outsource_income_category: 'sec_40_8',
+      threshold_scope: 'monthly_cumulative',
       allow_gross_up_conditions: false,
       filing_method: 'online',
     })

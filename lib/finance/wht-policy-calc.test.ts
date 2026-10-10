@@ -215,3 +215,54 @@ describe('ประเภทเงินได้รายคน (staging E-021)
     expect(resolveIncomeCategory(mode('all_40_2'), 'inhouse', 'corporate', 'sec_40_2')).toBe('sec_40_8')
   })
 })
+
+describe('เกณฑ์ ฿1,000 สะสมต่อผู้รับต่อเดือน (staging E-054)', () => {
+  it('รอบแรกของเดือน ฿600 ⇒ ไม่หัก (ยังไม่ถึงเกณฑ์)', () => {
+    const result = calculatePayeeBatchWht([line(60_000, true)], { monthToDate: { priorBaseSatang: 0, priorUnwithheldBaseSatang: 0 } })
+    expect(result.belowThreshold).toBe(true)
+    expect(result.totalWhtSatang).toBe(0)
+  })
+
+  it('รอบที่ทำให้ยอดสะสมถึงเกณฑ์ ⇒ หักทั้งยอดรวมส่วนที่รอบก่อนยังไม่ได้หัก (600 + 500 → ภาษี 3% ของ 1,100 = 33)', () => {
+    const result = calculatePayeeBatchWht([line(30_000, true), line(20_000, true)], {
+      monthToDate: { priorBaseSatang: 60_000, priorUnwithheldBaseSatang: 60_000 },
+    })
+    expect(result.belowThreshold).toBe(false)
+    expect(result.totalWhtSatang).toBe(3_300)
+    expect(result.carriedBaseSatang).toBe(60_000)
+    expect(result.lines.map((entry) => entry.carriedBaseSatang)).toEqual([36_000, 24_000])
+    expect(result.lines.map((entry) => entry.whtSatang)).toEqual([1_980, 1_320])
+    expect(result.lines.every((entry) => entry.netSatang >= 0)).toBe(true)
+  })
+
+  it('เดือนนี้หักไปแล้ว ⇒ รอบถัดไปหักตามปกติแม้ยอดรอบนี้ต่ำกว่าเกณฑ์ · ไม่ยกฐานซ้ำ', () => {
+    const result = calculatePayeeBatchWht([line(20_000, true)], {
+      monthToDate: { priorBaseSatang: 110_000, priorUnwithheldBaseSatang: 0 },
+    })
+    expect(result.totalWhtSatang).toBe(600)
+    expect(result.carriedBaseSatang).toBe(0)
+  })
+
+  it('ไม่ระบุ monthToDate = เทียบต่อรอบเหมือนเดิม', () => {
+    expect(calculatePayeeBatchWht([line(50_000, true)]).totalWhtSatang).toBe(0)
+  })
+
+  it('ยอดรอบนี้เล็กมาก ⇒ จำกัดฐานที่ยกมาไม่ให้ยอดโอนติดลบ (ส่วนที่เหลือยกไปรอบถัดไป)', () => {
+    const result = calculatePayeeBatchWht([line(100, true)], {
+      monthToDate: { priorBaseSatang: 99_950, priorUnwithheldBaseSatang: 99_950 },
+    })
+    expect(result.totalWhtSatang).toBeLessThanOrEqual(100)
+    expect(result.lines[0]!.netSatang).toBeGreaterThanOrEqual(0)
+    expect(result.carriedBaseSatang).toBeLessThan(99_950)
+  })
+
+  it('40(2) ไม่มีเกณฑ์ ⇒ ไม่สนยอดสะสม ไม่ยกฐาน', () => {
+    const result = calculatePayeeBatchWht([line(50_000, true)], {
+      incomeCategory: 'sec_40_2',
+      section402Pct: 5,
+      monthToDate: { priorBaseSatang: 60_000, priorUnwithheldBaseSatang: 60_000 },
+    })
+    expect(result.totalWhtSatang).toBe(2_500)
+    expect(result.carriedBaseSatang).toBe(0)
+  })
+})

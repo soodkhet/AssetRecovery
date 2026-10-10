@@ -611,6 +611,14 @@ enum WhtIncomeTypeMode {
   @@map("wht_income_type_mode")
 }
 
+/// วิธีนับเกณฑ์ขั้นต่ำไม่หักภาษี (staging E-054 · มติ PO 10/10/2569) — สะสมต่อผู้รับต่อเดือน = ค่าเริ่มต้น
+enum WhtThresholdScope {
+  per_batch
+  monthly_cumulative
+
+  @@map("wht_threshold_scope")
+}
+
 /// ประเภทเงินได้ของผู้รับในรอบจ่าย (snapshot ต่อรายการ)
 enum WhtIncomeCategory {
   sec_40_8
@@ -1549,6 +1557,8 @@ model WhtPolicyHistory {
   /// อนุญาตเงื่อนไขการหัก (2) ออกให้ตลอดไป / (3) ออกให้ครั้งเดียว (มติ PO 06/10/2569 U105 · ค่าเริ่มต้น = ปิด)
   /// ปิด = ผู้รับใช้ได้เฉพาะ (1) และผู้รับที่ตั้ง (2)/(3) ไว้ ⇒ บล็อกการสร้างรอบจ่าย · เปิด = คิดภาษีแบบทบยอด (`22` §6.9.2)
   allowGrossUpConditions      Boolean            @default(false) @map("allow_gross_up_conditions")
+  /// วิธีนับเกณฑ์ขั้นต่ำ (staging E-054) — ต่อรอบจ่าย / สะสมต่อผู้รับต่อเดือนปฏิทิน (ค่าเริ่มต้น)
+  thresholdScope              WhtThresholdScope  @default(monthly_cumulative) @map("threshold_scope")
   /// เหตุผลบังคับ (กระทบภาษี — `90` §13)
   reason                      String
 
@@ -3039,6 +3049,8 @@ model PayoutBatch {
   whtOutsourceIncomeCategory     WhtIncomeCategory?  @map("wht_outsource_income_category")
   /// snapshot ค่าตั้ง "อนุญาตเงื่อนไข (2)/(3)" (มติ PO 06/10/2569 U105) — NULL = รอบเก่า (ไม่อนุญาต · คิดแบบ (1))
   whtAllowGrossUpConditions      Boolean?            @map("wht_allow_gross_up_conditions")
+  /// snapshot วิธีนับเกณฑ์ขั้นต่ำ (staging E-054) — NULL = รอบก่อน migration ⇒ ต่อรอบจ่าย
+  whtThresholdScope              WhtThresholdScope?  @map("wht_threshold_scope")
   /// snapshot ชุด Tax Profile ค่าเริ่มต้นตามประเภทผู้รับที่มีผล ณ วันสร้างรอบ (มติ PO U121) — NULL = ยังไม่เคยตั้ง/รอบเก่า
   /// · Tax Profile ที่ใช้จริงต่อรายการอยู่ที่ `payout_batch_items.tax_profile_id` (รวมกรณีมาจากค่าเริ่มต้น)
   taxProfileDefaultId            String?             @map("tax_profile_default_id") @db.Uuid
@@ -3097,6 +3109,9 @@ model PayoutBatchItem {
 
   grossSatang         Int @map("gross_satang")
   whtSatang           Int @default(0) @map("wht_satang")
+  /// staging E-054 — ฐานของรอบก่อนในเดือนเดียวกันที่ยังไม่ถูกหัก แล้วยกมาหักพร้อมรายการนี้ (ส่วนแบ่ง) · ไม่ใช่เงินที่จ่ายรอบนี้
+  /// ใบ 50 ทวิ/ภ.ง.ด. นับรวมเป็นเงินได้ของใบที่หักภาษีนี้ · CHECK ≥ 0
+  whtCarriedBaseSatang Int @default(0) @map("wht_carried_base_satang")
   netSatang           Int @map("net_satang")
   /// snapshot ยอดหักคืนเงินทดรองจากบรรทัดนี้ (มติ PO U30) — หลัง WHT · ยอดโอน = net − ค่านี้ (CHECK 0..net)
   advanceOffsetSatang Int @default(0) @map("advance_offset_satang")

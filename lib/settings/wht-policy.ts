@@ -38,8 +38,17 @@ export const WHT_TEAM_SIDE_INCOME_CATEGORIES = ['sec_40_1', 'sec_40_2', 'sec_40_
 /** ค่าตรง enum `wht_filing_method` (มติ PO 05/10/2569 UAT U45) */
 export const WHT_FILING_METHODS = ['online', 'paper'] as const
 
+/** ค่าตรง enum `wht_threshold_scope` (staging E-054 · มติ PO 10/10/2569) */
+export const WHT_THRESHOLD_SCOPES = ['monthly_cumulative', 'per_batch'] as const
+
+export const WHT_THRESHOLD_SCOPE_LABEL: Readonly<Record<WhtThresholdScope, string>> = {
+  monthly_cumulative: 'สะสมต่อผู้รับต่อเดือน',
+  per_batch: 'ต่อรอบจ่าย',
+}
+
 export type WhtCertificateMode = (typeof WHT_CERTIFICATE_MODES)[number]
 export type WhtFilingMethod = (typeof WHT_FILING_METHODS)[number]
+export type WhtThresholdScope = (typeof WHT_THRESHOLD_SCOPES)[number]
 export type WhtIncomeTypeMode = (typeof WHT_INCOME_TYPE_MODES)[number]
 export type WhtIncomeCategory = (typeof WHT_INCOME_CATEGORIES)[number]
 
@@ -67,6 +76,8 @@ export interface WhtPolicyValues {
   outsourceIncomeCategory: WhtIncomeCategory
   /** อนุญาตเงื่อนไข (2) ออกให้ตลอดไป / (3) ออกให้ครั้งเดียว (U105) — ปิด = ใช้ได้เฉพาะ (1) */
   allowGrossUpConditions: boolean
+  /** staging E-054 — วิธีนับเกณฑ์ขั้นต่ำ: ต่อรอบจ่าย / สะสมต่อผู้รับต่อเดือนปฏิทิน */
+  thresholdScope: WhtThresholdScope
 }
 
 /**
@@ -87,6 +98,8 @@ export const DEFAULT_WHT_POLICY: WhtPolicySettings = {
   inhouseIncomeCategory: 'sec_40_2',
   outsourceIncomeCategory: 'sec_40_8',
   allowGrossUpConditions: false,
+  // มติ PO 10/10/2569 (E-054) — ค่าเริ่มต้นสะสมต่อเดือน
+  thresholdScope: 'monthly_cumulative',
   filingMethod: 'online',
 }
 
@@ -104,6 +117,8 @@ export const LEGACY_WHT_POLICY: WhtPolicyValues = {
   outsourceIncomeCategory: 'sec_40_8',
   // ก่อน U105 ระบบคิดแบบ (1) เสมอ ⇒ รอบเก่าตีความเป็น "ไม่อนุญาต"
   allowGrossUpConditions: false,
+  // รอบก่อน E-054 เทียบเกณฑ์ต่อรอบจ่าย
+  thresholdScope: 'per_batch',
 }
 
 export const WHT_CERTIFICATE_MODE_LABEL: Record<WhtCertificateMode, string> = {
@@ -281,6 +296,7 @@ export function toWhtPolicyAuditPayload(
     inhouse_income_category: values.inhouseIncomeCategory,
     outsource_income_category: values.outsourceIncomeCategory,
     allow_gross_up_conditions: values.allowGrossUpConditions,
+    threshold_scope: values.thresholdScope,
     ...(values.filingMethod === undefined ? {} : { filing_method: values.filingMethod }),
   }
 }
@@ -300,6 +316,8 @@ export function payoutBatchWhtPolicy(snapshot: {
   whtOutsourceIncomeCategory: WhtIncomeCategory | null
   /** NULL = รอบที่สร้างก่อนมีค่าตั้ง U105 ⇒ ไม่อนุญาต (คิดแบบ (1) เสมอ) */
   whtAllowGrossUpConditions?: boolean | null
+  /** NULL = รอบที่สร้างก่อน E-054 ⇒ เทียบเกณฑ์ต่อรอบจ่าย */
+  whtThresholdScope?: WhtThresholdScope | null
 }): WhtPolicyValues {
   return {
     baseExpenseTypes: snapshot.whtBaseExpenseTypes ?? LEGACY_WHT_POLICY.baseExpenseTypes,
@@ -310,5 +328,6 @@ export function payoutBatchWhtPolicy(snapshot: {
     inhouseIncomeCategory: snapshot.whtInhouseIncomeCategory ?? LEGACY_WHT_POLICY.inhouseIncomeCategory,
     outsourceIncomeCategory: snapshot.whtOutsourceIncomeCategory ?? LEGACY_WHT_POLICY.outsourceIncomeCategory,
     allowGrossUpConditions: snapshot.whtAllowGrossUpConditions ?? LEGACY_WHT_POLICY.allowGrossUpConditions,
+    thresholdScope: snapshot.whtThresholdScope ?? LEGACY_WHT_POLICY.thresholdScope,
   }
 }

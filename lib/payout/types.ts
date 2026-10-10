@@ -65,6 +65,8 @@ export interface PayoutBatchItemDto {
   trackingRound: number
   grossSatang: number
   whtSatang: number
+  /** staging E-054 — ฐานของรอบก่อนในเดือนที่ยกมาหักพร้อมรายการนี้ (เกณฑ์สะสมต่อเดือน) · 0 = ไม่มี */
+  whtCarriedBaseSatang?: number
   netSatang: number
   /** snapshot ณ เวลาสร้างรายการ (`92` §7.1) */
   taxProfileId: string | null

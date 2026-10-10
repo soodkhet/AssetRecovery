@@ -180,6 +180,11 @@ export interface CertificateSourceItem {
   whtBaseIncluded: boolean
   /** snapshot `payout_batch_items.wht_income_category` — ใช้ตัดสินใบ 40(2) อัตรา 0% (U16) · ไม่ระบุ = 40(8) */
   incomeCategory?: WhtIncomeCategory | null
+  /**
+   * staging E-054 — ฐานของรอบก่อนในเดือนที่ยกมาหักพร้อมรายการนี้ (`payout_batch_items.wht_carried_base_satang`)
+   * เงินได้บนใบ = gross + ฐานที่ยกมา (ภาษีของใบคิดจากยอดรวมนี้) · ไม่ระบุ = 0
+   */
+  carriedBaseSatang?: number
 }
 
 export interface CertificateGroupingOptions {
@@ -222,10 +227,12 @@ export function groupCertificateSources<T extends CertificateSourceItem>(
   const groups: CertificateGroup<T>[] = []
   for (const members of buckets.values()) {
     const whtSatang = members.reduce((sum, member) => sum + member.whtSatang, 0)
+    // E-054 — ฐานรอบก่อนที่ยกมาหักในใบนี้ นับเป็นเงินได้ของใบ (ภาษีของใบคิดจากยอดรวมนี้)
+    const incomeOf = (member: T): number => member.grossSatang + (member.carriedBaseSatang ?? 0)
     const grossSatang =
       mode === 'per_item'
-        ? members[0]!.grossSatang
-        : members.filter((member) => member.whtBaseIncluded).reduce((sum, member) => sum + member.grossSatang, 0)
+        ? incomeOf(members[0]!)
+        : members.filter((member) => member.whtBaseIncluded).reduce((sum, member) => sum + incomeOf(member), 0)
     const zeroRate402 = shouldIssueZeroRate402Certificate({
       issueZeroRate402Certificate,
       // ประเภทเงินได้เป็นระดับผู้รับต่อรอบ ⇒ ทุกรายการของผู้รับเหมือนกัน
