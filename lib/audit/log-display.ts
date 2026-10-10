@@ -64,7 +64,7 @@ const TARGET_TYPE_LABEL: Readonly<Record<string, string>> = {
   case_documents: 'เอกสารเคส',
   case_assignments: 'การมอบหมายงาน',
   pending_reassignments: 'คำขอเปลี่ยนผู้รับผิดชอบ',
-  recycle_requests: 'คำขอรีไซเกิลเคส',
+  recycle_requests: 'คำขอรีไซเคิลเคส',
   case_evidences: 'หลักฐานปิดงาน',
   check_ins: 'การเช็คอิน',
   assets: 'ทรัพย์ในคลัง',

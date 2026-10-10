@@ -321,7 +321,7 @@ export function DeviceBrandList({
           error={error}
           isEmpty={data.items.length === 0}
           emptyTitle="ไม่พบแบรนด์"
-          emptyDescription="ยังไม่มีข้อมูล — กด “ดึงข้อมูลตอนนี้” ด้านบน หรือเพิ่มแบรนด์เอง"
+          emptyDescription="ยังไม่มีข้อมูล — กด “อัปเดตตอนนี้” ด้านบน หรือเพิ่มแบรนด์เอง"
           onRetry={
             <Button
               variant="secondary"

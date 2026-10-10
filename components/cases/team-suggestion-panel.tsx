@@ -1,5 +1,6 @@
 'use client'
 
+import { otherMatchedHeading, teamSelectionView } from '@/lib/cases/team-suggestion-ui'
 import { useState } from 'react'
 import { Badge, Button, InlineAlert, StatusBadge } from '@/components/ui'
 import { ROLE_GROUP_BADGE_CLASS } from '@/lib/ui/status-badge'
@@ -40,6 +41,15 @@ export function TeamSuggestionPanel({
 
   const matchedOptions = teams.filter((team) => matchedIds.has(team.id))
   const otherOptions = teams.filter((team) => !matchedIds.has(team.id))
+  // staging E-026 — ป้าย "เลือกเอง" + สถานะในพื้นที่ของทีมที่เลือกจริง · หัวข้อนับหลังตัดทีมที่เลือก
+  const view = teamSelectionView({
+    province: province ?? '',
+    selectedId: selected?.id ?? null,
+    suggested,
+    matchedIds,
+  })
+  const remainingMatched = matchedOptions.filter((team) => team.id !== selected?.id)
+  const matchedHeading = otherMatchedHeading(remainingMatched.length)
 
   return (
     <section>
@@ -55,17 +65,15 @@ export function TeamSuggestionPanel({
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <StatusBadge group="success" label="ระบบเสนอ" />
+              <StatusBadge group={view.badgeGroup} label={view.badgeLabel} />
               <div className="mt-1 text-sm font-bold text-slate-800">
                 {selected?.name ?? suggested?.name ?? '—'}
-                {selected !== null && suggested !== null && selected.id !== suggested.id && (
-                  <span className="ml-2 text-[11px] font-normal text-amber-700">
-                    (เปลี่ยนจากที่ระบบเสนอ: {suggested.name})
-                  </span>
+                {view.suggestedNote !== null && (
+                  <span className="ml-2 text-[11px] font-normal text-amber-700">({view.suggestedNote})</span>
                 )}
               </div>
               <div className="text-[11px] text-slate-600">
-                จับคู่จากจังหวัด{province}
+                {view.areaNote}
                 {selected?.supervisorName !== null && selected?.supervisorName !== undefined
                   ? ` · หัวหน้าทีม ${selected.supervisorName}`
                   : ''}
@@ -78,13 +86,9 @@ export function TeamSuggestionPanel({
 
       {(matchedOptions.length > 0 || otherOptions.length > 0) && (
         <div className="mt-3">
-          <p className="mb-2 text-xs font-semibold text-slate-600">
-            {matchedOptions.length > 0 ? 'ทีมอื่นที่ดูแลจังหวัดนี้' : 'ทีมทั้งหมด'}
-          </p>
+          {matchedHeading !== null && <p className="mb-2 text-xs font-semibold text-slate-600">{matchedHeading}</p>}
           <div className="space-y-2">
-            {matchedOptions
-              .filter((team) => team.id !== selected?.id)
-              .map((team) => (
+            {remainingMatched.map((team) => (
                 <TeamOptionCard
                   key={team.id}
                   team={team}

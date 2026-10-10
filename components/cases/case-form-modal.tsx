@@ -22,6 +22,7 @@ import {
   phoneInputError,
   DOCUMENT_SLOT_LABEL,
   isCaseDocumentDeletable,
+  imeiBlurError,
   type DebtorNationalityCode,
 } from '@/lib/cases/case'
 import {
@@ -108,6 +109,33 @@ export function CaseFormModal({
   const [deleting, setDeleting] = useState(false)
   /** `updatedAt` ของเคสที่ฟอร์มนี้แก้อยู่ — ส่งไปตรวจว่าไม่มีใครบันทึกทับระหว่างนี้ (preship R3-003) */
   const [baseUpdatedAt, setBaseUpdatedAt] = useState<string | null>(editing?.updatedAt ?? null)
+  /** staging E-027 — เลขที่สัญญาซ้ำที่ตรวจพบระหว่างกรอก (ก่อนกดบันทึก) */
+  const [refDuplicate, setRefDuplicate] = useState<{ id: string; caseRef: string; trackingRound: number } | null>(null)
+
+  async function checkRefDuplicate(): Promise<void> {
+    const caseRef = form.caseRef.trim()
+    if (caseRef === '' || form.financeCompanyId === '') {
+      setRefDuplicate(null)
+      return
+    }
+    const result = await callApi<{ duplicate: { id: string; caseRef: string; trackingRound: number } | null }>(
+      apiPath('case.refCheck', undefined, {
+        companyId: form.financeCompanyId,
+        caseRef,
+        ...(editing === null ? {} : { excludeCaseId: editing.id }),
+      }),
+    )
+    setRefDuplicate(result.data?.duplicate ?? null)
+  }
+
+  /** staging E-027 — ตรวจรูปแบบ IMEI ตอนออกจากช่อง (กติกาเดียวกับตอนบันทึก) */
+  function checkImeiOnBlur(): void {
+    const message = imeiBlurError(form.assetImeiSerial)
+    setFieldErrors((current) => {
+      const { assetImeiSerial: _ignored, ...rest } = current
+      return message === null ? rest : { ...rest, assetImeiSerial: message }
+    })
+  }
 
   // เปลี่ยนเป้าหมายของ modal (สร้าง ↔ แก้ไขเคสอื่น) = โหลดค่าเริ่มต้นใหม่ระหว่าง render
   // (ไม่ใช้ `useEffect` — กฎ `react-hooks/set-state-in-effect` ใน REUSE_INDEX)
@@ -380,8 +408,27 @@ export function CaseFormModal({
                 value={form.caseRef}
                 placeholder="เช่น SF-2026-00999"
                 invalid={fieldErrors.caseRef !== undefined}
-                onChange={(event) => patch({ caseRef: event.target.value })}
+                onChange={(event) => {
+                  patch({ caseRef: event.target.value })
+                  setRefDuplicate(null)
+                }}
+                onBlur={() => void checkRefDuplicate()}
               />
+              {refDuplicate !== null && (
+                <p className="mt-1 text-[11px] font-semibold text-red-600">
+                  เลขที่สัญญานี้มีอยู่แล้ว: <span className="font-mono">{refDuplicate.caseRef}</span> (รอบที่{' '}
+                  {refDuplicate.trackingRound}) — บันทึกซ้ำไม่ได้
+                  {onOpenExistingCase !== undefined && (
+                    <button
+                      type="button"
+                      className="focus-ring ml-2 rounded underline"
+                      onClick={() => onOpenExistingCase({ id: refDuplicate.id, caseRef: refDuplicate.caseRef })}
+                    >
+                      เปิดเคสเดิม
+                    </button>
+                  )}
+                </p>
+              )}
             </Field>
           </div>
         </section>
@@ -594,6 +641,7 @@ export function CaseFormModal({
                 value={form.assetImeiSerial}
                 invalid={fieldErrors.assetImeiSerial !== undefined}
                 onChange={(event) => patch({ assetImeiSerial: event.target.value })}
+                onBlur={checkImeiOnBlur}
               />
               {/* เตือนก่อนบันทึก ไม่บล็อก — ยังบันทึกเป็น Serial ได้ (มติ PO U54) */}
               {fieldErrors.assetImeiSerial === undefined && assetIdentifierWarning(form.assetImeiSerial) !== null && (

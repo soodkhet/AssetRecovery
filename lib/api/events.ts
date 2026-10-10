@@ -25,7 +25,7 @@ export const EVENT_REGISTRY: Readonly<Record<DomainEventName, DomainEventContrac
   'case.approved': { module: 'case', source: '38 §17.2', description: 'อนุมัติเคส — snapshot service fee ที่จุดนี้ (`10` §9.2)' },
   'case.rejected': { module: 'case', source: '38 §17.2', description: 'ปฏิเสธเคส (ต้องมี reason)' },
   'case.need_info_requested': { module: 'case', source: '38 §17.2', description: 'ขอข้อมูลเพิ่มเติมจากผู้ส่งเคส' },
-  'case.recycle_approved': { module: 'case', source: '45 §7 (flow ที่ `38` §10)', description: 'อนุมัติรีไซเกิลเคส closed_fail → tracking_round +1' },
+  'case.recycle_approved': { module: 'case', source: '45 §7 (flow ที่ `38` §10)', description: 'อนุมัติรีไซเคิลเคส closed_fail → tracking_round +1' },
 
   // ── Case Assignment & Routing (40) ─────────────────────────────────────
   'assignment.created': { module: 'assignment', source: '40 §17.2', description: 'มอบหมายเคสให้พนักงานครั้งแรก' },

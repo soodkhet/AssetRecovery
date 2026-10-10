@@ -499,6 +499,20 @@ suite('Phase 2.3 — state machine + snapshot + recycle (DB จริง)', () =
     expect(audits[0]?.after_data).not.toHaveProperty('bundleDocumentsConfirmed')
   })
 
+  it('staging E-027 — ตรวจเลขที่สัญญาซ้ำระหว่างกรอก: normalize เหมือนตอนบันทึก · ยกเว้นเคสที่กำลังแก้ · บริษัทอื่นของ company user ⇒ ไม่ leak', async () => {
+    const { checkCaseRef } = await import('@/lib/cases/queries')
+    const caseId = await seedCase('SF-2026-E027', { withDocuments: false })
+    const found = await checkCaseRef(actor, { companyId: COMPANY_ID, caseRef: ' sf-2026-e027 ' })
+    expect(found.duplicate?.id).toBe(caseId)
+    expect((await checkCaseRef(actor, { companyId: COMPANY_ID, caseRef: 'SF-2026-E027', excludeCaseId: caseId })).duplicate).toBeNull()
+    const otherCompanyUser: SessionUser = {
+      ...actor,
+      isSuperadmin: false,
+      scope: { kind: 'company', teamIds: [], companyId: '00000000-0000-4000-8000-0000000023ff', userId: actor.id },
+    }
+    expect((await checkCaseRef(otherCompanyUser, { companyId: COMPANY_ID, caseRef: 'SF-2026-E027' })).duplicate).toBeNull()
+  })
+
   it('ไม่รับเคสต้องมีเหตุผล และเมื่อมีเหตุผลแล้วไปสถานะ rejected', async () => {
     const caseId = await seedCase('SF-2026-2304', { withDocuments: true })
     await service.changeCaseStatus(actor, caseId, change({ action: 'review' }), { actor, meta })
@@ -524,7 +538,7 @@ suite('Phase 2.3 — state machine + snapshot + recycle (DB จริง)', () =
     expect(last).toMatchObject({ label: 'ไม่รับเคส', note: 'ข้อมูลลูกหนี้ไม่ตรงกับสัญญา', fromStatus: 'pending_review' })
   })
 
-  it('รีไซเกิลได้เฉพาะ closed_fail — closed_success ถูกปฏิเสธ (`38` §20)', async () => {
+  it('รีไซเคิลได้เฉพาะ closed_fail — closed_success ถูกปฏิเสธ (`38` §20)', async () => {
     const caseId = await seedCase('SF-2026-2305', { withDocuments: false, status: 'closed_success' })
     await expect(
       service.changeCaseStatus(actor, caseId, change({ action: 'create_recycle_request', reason: 'ไฟแนนซ์ขอ' }), {
@@ -535,7 +549,7 @@ suite('Phase 2.3 — state machine + snapshot + recycle (DB จริง)', () =
     expect((await caseRow(caseId))?.status).toBe('closed_success')
   })
 
-  it('รีไซเกิลซ้ำ 3 รอบติดกัน → tracking_round = 4 และ recycle_history 3 รายการ (`38` §20)', async () => {
+  it('รีไซเคิลซ้ำ 3 รอบติดกัน → tracking_round = 4 และ recycle_history 3 รายการ (`38` §20)', async () => {
     const caseId = await seedCase('SF-2026-2306', { withDocuments: false, status: 'closed_fail' })
     await db().$executeRawUnsafe(`UPDATE cases SET outcome = 'closed_fail', closed_at = NOW() WHERE id = '${caseId}'`)
 
@@ -587,7 +601,7 @@ suite('Phase 2.3 — state machine + snapshot + recycle (DB จริง)', () =
     expect(snapshots.every((entry) => entry.prev_outcome === 'closed_fail' && entry.prev_closed_at !== null)).toBe(true)
   })
 
-  it('ไม่อนุมัติรีไซเกิล → กลับ closed_fail เดิม รอบไม่ขยับ + ต้องมีเหตุผล', async () => {
+  it('ไม่อนุมัติรีไซเคิล → กลับ closed_fail เดิม รอบไม่ขยับ + ต้องมีเหตุผล', async () => {
     const caseId = await seedCase('SF-2026-2307', { withDocuments: false, status: 'closed_fail' })
     await service.changeCaseStatus(
       actor,

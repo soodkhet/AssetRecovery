@@ -47,7 +47,7 @@ const CASE_DECISION_TITLE: Readonly<Record<CaseDecisionEvent, string>> = {
   'case.approved': 'เคสผ่านการอนุมัติ',
   'case.rejected': 'เคสถูกปฏิเสธ',
   'case.need_info_requested': 'ผู้ตรวจขอข้อมูลเพิ่มเติม',
-  'case.recycle_approved': 'อนุมัติรีไซเกิลเคส',
+  'case.recycle_approved': 'อนุมัติรีไซเคิลเคส',
 }
 
 export function caseDecisionMessage(
@@ -281,7 +281,7 @@ export function caseClosedFailMessage(input: {
   return {
     eventCode: 'case.closed_fail',
     title: 'ปิดงานไม่สำเร็จ',
-    body: `เคส ${input.caseRef} ปิดงานไม่สำเร็จ${by} — พิจารณามอบหมายใหม่หรือรีไซเกิลเคส`,
+    body: `เคส ${input.caseRef} ปิดงานไม่สำเร็จ${by} — พิจารณามอบหมายใหม่หรือรีไซเคิลเคส`,
     linkPath: '/cases/assign',
   }
 }

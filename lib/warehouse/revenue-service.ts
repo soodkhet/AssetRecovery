@@ -23,9 +23,9 @@ import type { WarehouseTxClient } from '@/lib/warehouse/asset-hook'
  * - เงื่อนไข "เกิด/ไม่เกิด" อยู่ที่ `lib/finance/revenue-trigger-rules.ts` **ที่เดียว** — ที่นี่แค่แปลง
  *   ข้อมูลจาก DB เป็น input ของตัวนั้น (ห้ามเขียนเงื่อนไขซ้ำ)
  * - **ยอดเงินคิดที่ `buildRevenueRow()` เท่านั้น** (`22` §6.5–6.8) — ห้าม hardcode สูตร/อัตรา VAT ที่นี่
- * - **ประเมินต่อ (เคส, รอบติดตาม)** (มติ PO O72(2) · U125) — รอบปัจจุบันจากเคส + รอบก่อนรีไซเกิลจาก snapshot
+ * - **ประเมินต่อ (เคส, รอบติดตาม)** (มติ PO O72(2) · U125) — รอบปัจจุบันจากเคส + รอบก่อนรีไซเคิลจาก snapshot
  *   ใน `recycle_requests` · รายการเบิกผูกรอบผ่าน `case_assignments.tracking_round` ⇒ รายการรอบ 1 ที่อนุมัติหลัง
- *   รีไซเกิลยังเกิดรายได้รอบ 1 และรายการรอบ 1 ที่ค้างไม่บล็อกรายได้รอบ 2
+ *   รีไซเคิลยังเกิดรายได้รอบ 1 และรายการรอบ 1 ที่ค้างไม่บล็อกรายได้รอบ 2
  * - **idempotent ต่อ (เคส, รอบติดตาม)** — เคสที่มี Revenue ของรอบนั้นแล้วถูกข้ามเสมอ (B3 `02` §8)
  *   `02` §8 ไม่มี unique index คู่นี้ ⇒ กันซ้ำด้วยการอ่านก่อนเขียน**ในทรานแซกชันเดียวกัน** ซึ่งปลอดภัย
  *   เพราะทุกเส้นทางที่เรียกได้ล็อกแถวต้นทางไว้ก่อนแล้ว (UPDATE ล็อต/expense มาก่อนในทรานแซกชันเดียวกัน)
@@ -53,7 +53,7 @@ export type RevenueSkipReason = RevenueBlockReason | 'already_created' | 'missin
 export interface RevenueSkip {
   caseId: string
   reason: RevenueSkipReason
-  /** ระบุเฉพาะรอบก่อนรีไซเกิล (มติ PO O72) — ไม่ระบุ = รอบติดตามปัจจุบันของเคส */
+  /** ระบุเฉพาะรอบก่อนรีไซเคิล (มติ PO O72) — ไม่ระบุ = รอบติดตามปัจจุบันของเคส */
   trackingRound?: number
 }
 
@@ -228,7 +228,7 @@ export async function tryCreateRevenue(
         company: { select: { vatMode: true } },
       },
     }),
-    // มติ PO O72(2) (BUG-SF2) — ข้อมูลของรอบก่อนรีไซเกิล (เคสถูกล้าง outcome/snapshot ตอนขึ้นรอบใหม่)
+    // มติ PO O72(2) (BUG-SF2) — ข้อมูลของรอบก่อนรีไซเคิล (เคสถูกล้าง outcome/snapshot ตอนขึ้นรอบใหม่)
     tx.recycleRequest.findMany({
       where: {
         caseId: { in: caseIds },
@@ -276,7 +276,7 @@ export async function tryCreateRevenue(
     roundKey(row.caseId ?? '', row.assignment?.trackingRound ?? currentRoundOf.get(row.caseId ?? '') ?? 1),
   )
 
-  // ── ฐานของแต่ละ (เคส, รอบ) — รอบปัจจุบันจากตัวเคส · รอบก่อนรีไซเกิลจาก snapshot ใน `recycle_requests` ──
+  // ── ฐานของแต่ละ (เคส, รอบ) — รอบปัจจุบันจากตัวเคส · รอบก่อนรีไซเคิลจาก snapshot ใน `recycle_requests` ──
   const bases: RoundBasis[] = []
   for (const row of cases) {
     bases.push({
@@ -321,7 +321,7 @@ export async function tryCreateRevenue(
   for (const basis of bases) {
     const key = roundKey(basis.caseId, basis.trackingRound)
     const statuses = (expensesByRound.get(key) ?? []).map((expense) => expense.status)
-    // เครื่องเกิดเฉพาะ `closed_success` ซึ่งเป็นสถานะจบ (รีไซเกิลได้จาก `closed_fail` เท่านั้น) ⇒ เป็นของรอบปัจจุบัน
+    // เครื่องเกิดเฉพาะ `closed_success` ซึ่งเป็นสถานะจบ (รีไซเคิลได้จาก `closed_fail` เท่านั้น) ⇒ เป็นของรอบปัจจุบัน
     const lotStatuses = basis.isCurrentRound
       ? (assetsByCase.get(basis.caseId) ?? []).map((asset) => asset.lot?.status ?? null)
       : []
@@ -338,7 +338,7 @@ export async function tryCreateRevenue(
       },
     ])
     if (gates.eligibleCaseIds.length > 0) eligible.push(basis)
-    // รอบก่อนรีไซเกิล: ไม่ลงเหตุผลซ้ำทุกครั้ง (audit ยึดรอบปัจจุบัน) — ยกเว้นเกตที่ผู้ใช้ตามแก้ได้
+    // รอบก่อนรีไซเคิล: ไม่ลงเหตุผลซ้ำทุกครั้ง (audit ยึดรอบปัจจุบัน) — ยกเว้นเกตที่ผู้ใช้ตามแก้ได้
     for (const skip of gates.skipped) {
       if (basis.isCurrentRound) skipped.push(skip)
       else if (skip.reason === 'expense_not_approved' || skip.reason === 'field_days_not_settled') {
@@ -434,7 +434,7 @@ export async function tryCreateRevenue(
   return { revenueIdsCreated, eligibleCaseIds, skipped }
 }
 
-/** ฐานคิดรายได้ของ (เคส, รอบติดตาม) หนึ่ง — รอบปัจจุบันจากเคส · รอบก่อนรีไซเกิลจาก `recycle_requests` (O72) */
+/** ฐานคิดรายได้ของ (เคส, รอบติดตาม) หนึ่ง — รอบปัจจุบันจากเคส · รอบก่อนรีไซเคิลจาก `recycle_requests` (O72) */
 interface RoundBasis {
   caseId: string
   companyId: string

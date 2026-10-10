@@ -85,7 +85,7 @@ describe('role → widget (matrix ค่าเริ่มต้น)', () => {
     expect(idsOf(user)).toEqual(['exception_critical_open', 'bank_unmatched'])
   })
 
-  it('เจ้าหน้าที่อนุมัติเคส — ไม่เห็นตัวเลขเงิน · คิวพิจารณาเคส/รีไซเกิล', () => {
+  it('เจ้าหน้าที่อนุมัติเคส — ไม่เห็นตัวเลขเงิน · คิวพิจารณาเคส/รีไซเคิล', () => {
     const user = ROLE_USERS.caseApprover()
     expect(dashboardKpiSource(user)).toBe('queues')
     expect(idsOf(user)).toEqual(['case_need_info', 'case_pending_review', 'case_recycle_review'])

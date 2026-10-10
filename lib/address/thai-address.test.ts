@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
+  districtOptions,
+  subdistrictOptions,
   DISTRICT_DATA,
   THAI_PROVINCES,
   THAI_PROVINCE_REGIONS,
@@ -157,5 +159,17 @@ describe('รหัสไปรษณีย์ (`38` §6.1.2 ข้อ 2)', () =
     await expect(lookupPostalCode('00000')).resolves.toEqual([])
     await expect(lookupPostalCode('123')).resolves.toEqual([])
     await expect(lookupPostalCode('constructor')).resolves.toEqual([])
+  })
+})
+
+describe('ตัวเลือกอำเภอ/ตำบลจากรหัสไปรษณีย์ (staging E-017)', () => {
+  it('จังหวัดนอกชุดตัวอย่าง ⇒ ได้รายการตำบลจากพื้นที่ของรหัสไปรษณีย์', async () => {
+    const areas = await lookupPostalCode('12000')
+    const area = areas[0]!
+    expect(subdistrictOptions(area.province, area.district, areas)).toContain(area.subdistrict)
+    expect(districtOptions(area.province, areas)).toContain(area.district)
+  })
+  it('ไม่มีพื้นที่จากรหัส ⇒ ใช้ชุดตัวอย่างเดิม', () => {
+    expect(subdistrictOptions('ไม่มีจังหวัดนี้', 'x', [])).toEqual([])
   })
 })

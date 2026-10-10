@@ -104,7 +104,7 @@ export const CASE_STATUS_RULES: Readonly<Record<CaseStatusAction, ActionRule>> =
     reasonRequired: true,
     recycle: true,
     requiresReadiness: false,
-    label: 'ขอรีไซเกิล',
+    label: 'ขอรีไซเคิล',
   },
   approve_recycle: {
     from: ['pending_recycle_review'],
@@ -112,7 +112,7 @@ export const CASE_STATUS_RULES: Readonly<Record<CaseStatusAction, ActionRule>> =
     reasonRequired: false,
     recycle: true,
     requiresReadiness: false,
-    label: 'อนุมัติรีไซเกิล',
+    label: 'อนุมัติรีไซเคิล',
   },
   reject_recycle: {
     from: ['pending_recycle_review'],
@@ -120,7 +120,7 @@ export const CASE_STATUS_RULES: Readonly<Record<CaseStatusAction, ActionRule>> =
     reasonRequired: true,
     recycle: true,
     requiresReadiness: false,
-    label: 'ไม่อนุมัติรีไซเกิล',
+    label: 'ไม่อนุมัติรีไซเคิล',
   },
 }
 
@@ -135,7 +135,7 @@ export function nextStatusOf(action: CaseStatusAction): CaseStatusValue {
   return CASE_STATUS_RULES[action].to
 }
 
-/** action ที่ต้องเพิ่ม `tracking_round` (`38` §6.6 — อนุมัติรีไซเกิลเท่านั้น) */
+/** action ที่ต้องเพิ่ม `tracking_round` (`38` §6.6 — อนุมัติรีไซเคิลเท่านั้น) */
 export function bumpsTrackingRound(action: CaseStatusAction): boolean {
   return action === 'approve_recycle'
 }
@@ -164,7 +164,7 @@ export const CASE_ACTION_CAPABILITIES: Readonly<Record<CaseStatusAction, readonl
 /**
  * Event ที่ต้องยิงเมื่อ action สำเร็จ (`38` §16/§17.2 — ชื่อจากทะเบียน `lib/api/event-names.ts`)
  *
- * `case.status_changed` ยิงทุกครั้งที่สถานะเปลี่ยน · `case.approved` ยิงซ้ำได้ทุกรอบที่อนุมัติรีไซเกิล
+ * `case.status_changed` ยิงทุกครั้งที่สถานะเปลี่ยน · `case.approved` ยิงซ้ำได้ทุกรอบที่อนุมัติรีไซเคิล
  * (ไฟล์ 40 ต้องรองรับการสร้าง assignment ใหม่ทับรอบก่อนหน้า — `38` §16)
  *
  * ⚠️ ยังไม่มี event bus จริงในระบบ (Notification/Jobs = Phase 5.1 · consumer ฝั่ง 40 = Phase 2.6)

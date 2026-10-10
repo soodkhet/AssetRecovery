@@ -342,7 +342,7 @@ suite('Phase 2.8 — flow เต็ม รับงาน → จัดวัน
       { outcome: 'closed_fail', failReason: 'other', failReasonDetail: 'ลูกหนี้ย้ายออกแล้ว', photos: ['p.jpg'], videos: ['v.mp4'], productPhotos: [] },
       { actor: agentA, meta },
     )
-    // จำลองอนุมัติรีไซเกิล — ขึ้นรอบ 2 แล้วมอบหมายใหม่
+    // จำลองอนุมัติรีไซเคิล — ขึ้นรอบ 2 แล้วมอบหมายใหม่
     await db().case.update({ where: { id: caseId }, data: { status: 'approved', trackingRound: 2, outcome: null } })
     await assignments.assignCase(manager, caseId, { agentId: agentA.id }, { actor: manager, meta })
 

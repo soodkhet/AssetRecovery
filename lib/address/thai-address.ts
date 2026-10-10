@@ -246,3 +246,19 @@ export function commonPostalArea(
     subdistrict: areas.length === 1 ? first.subdistrict : '',
   }
 }
+
+/**
+ * staging E-017 — ตัวเลือกอำเภอ/ตำบลของช่องกรอก: ชุดตัวอย่างเดิม (`DISTRICT_DATA`) **รวมกับ**พื้นที่จากรหัสไปรษณีย์ที่ค้นได้
+ * (ข้อมูลจริงทั้งประเทศ) ⇒ จังหวัดนอกชุดตัวอย่างก็มีรายการตำบลให้เลือกหลังกรอกรหัสไปรษณีย์ · ไม่ซ้ำ คงลำดับ
+ */
+export function districtOptions(province: string, areas: readonly PostalCodeArea[]): string[] {
+  const fromPostal = areas.filter((area) => area.province === province.trim()).map((area) => area.district)
+  return [...new Set([...getDistricts(province), ...fromPostal])]
+}
+
+export function subdistrictOptions(province: string, district: string, areas: readonly PostalCodeArea[]): string[] {
+  const fromPostal = areas
+    .filter((area) => area.province === province.trim() && area.district === district.trim())
+    .map((area) => area.subdistrict)
+  return [...new Set([...getSubDistricts(province, district), ...fromPostal])]
+}

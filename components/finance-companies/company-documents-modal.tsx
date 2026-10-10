@@ -198,7 +198,11 @@ export function CompanyDocumentsModal({
       showToast({
         tone: 'success',
         title: form.replaces === null ? 'แนบเอกสารแล้ว' : 'แนบเวอร์ชันใหม่แล้ว',
-        description: `${COMPANY_DOCUMENT_LABEL[form.documentType]} — เวอร์ชันเดิมยังเก็บไว้ครบ`,
+        // staging E-023 — แนบครั้งแรกยังไม่มีเวอร์ชันเดิม
+        description:
+          form.replaces === null
+            ? COMPANY_DOCUMENT_LABEL[form.documentType]
+            : `${COMPANY_DOCUMENT_LABEL[form.documentType]} — เวอร์ชันเดิมยังเก็บไว้ครบ`,
       })
       setForm(null)
       setLoading(true)

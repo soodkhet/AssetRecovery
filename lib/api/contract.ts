@@ -48,6 +48,14 @@ export const API_CONTRACT = {
     source: '38 §17.1 · 45 §6.1',
     summary: 'Import ไฟล์ Excel/CSV แบบ batch',
   },
+  'case.refCheck': {
+    method: 'GET',
+    path: '/api/cases/ref-check',
+    module: 'case',
+    source: '38 §11 · 45 §6.1 (staging E-027)',
+    summary: 'ตรวจเลขที่สัญญาซ้ำระหว่างกรอก (อ่านอย่างเดียว · คืนเคสเดิมถ้าซ้ำ)',
+    query: ['companyId', 'caseRef', 'excludeCaseId'],
+  },
   'case.list': {
     method: 'GET',
     path: '/api/cases',

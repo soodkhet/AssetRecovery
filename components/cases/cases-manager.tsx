@@ -454,6 +454,10 @@ export function CasesManager({
                       {item.assignedTeamName ?? item.suggestedTeamName ?? (
                         <span className="text-slate-400 italic">ยังไม่เสนอ</span>
                       )}
+                      {/* staging E-028 — ยังไม่ส่งตรวจ ⇒ ทีมเสนอคำนวณสดจากจังหวัด */}
+                      {item.assignedTeamName === null && item.suggestedTeamEstimated === true && (
+                        <span className="ml-1 text-[11px] text-slate-400">(ประเมิน)</span>
+                      )}
                     </Td>
                     <Td>
                       <div className="text-xs text-slate-700">{fmtDateTime(item.createdAt)}</div>
@@ -523,6 +527,7 @@ export function CasesManager({
                   <div>
                     <span className="text-slate-400">ทีมที่เสนอ:</span>{' '}
                     {item.assignedTeamName ?? item.suggestedTeamName ?? 'ยังไม่เสนอ'}
+                    {item.assignedTeamName === null && item.suggestedTeamEstimated === true && ' (ประเมิน)'}
                   </div>
                   <div className="text-right text-slate-400">เอกสาร {item.documentCount} ไฟล์</div>
                 </div>

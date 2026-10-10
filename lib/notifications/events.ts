@@ -58,7 +58,7 @@ export const NOTIFICATION_EVENTS = {
     module: 'เคส',
     level: 'sent',
     source: '90 §6.3 · 38 §6.6',
-    description: 'อนุมัติรีไซเกิลเคส — เคสกลับเข้า pipeline ใหม่ (tracking_round +1)',
+    description: 'อนุมัติรีไซเคิลเคส — เคสกลับเข้า pipeline ใหม่ (tracking_round +1)',
   },
 
   // ── Assignment (40) — `90` §6.3 แถว 3 (+ `40` §15 — มติ PO 03/10/2569 UAT Q17) ──

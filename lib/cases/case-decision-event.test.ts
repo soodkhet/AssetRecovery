@@ -8,7 +8,7 @@ import { caseEventsFor } from '@/lib/cases/state-machine'
  */
 
 describe('caseDecisionEventOf()', () => {
-  it('รีไซเกิลชนะ approved เสมอ (ข้อความเฉพาะเจาะจงกว่า)', () => {
+  it('รีไซเคิลชนะ approved เสมอ (ข้อความเฉพาะเจาะจงกว่า)', () => {
     expect(caseDecisionEventOf(caseEventsFor('approve_recycle'))).toBe('case.recycle_approved')
   })
 

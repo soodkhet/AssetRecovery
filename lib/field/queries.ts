@@ -1153,7 +1153,7 @@ async function loadPlanSnapshot(user: SessionUser, planId: string | null, onDate
 /**
  * `90` §6.3 แถว 4 — ผลปิดงานต้องเด้งหา "คนที่ทำงานต่อ" คนละกลุ่มตามผลลัพธ์:
  * - `closed_success` → คลัง (`intake_asset`) เพราะต้องรับทรัพย์เข้าคลังก่อนรายได้จะเกิด (`19` §6.1)
- * - `closed_fail` → ผู้จัดการ/หัวหน้าทีม (`assign_case`) เพราะต้องตัดสินใจมอบหมายใหม่/รีไซเกิล (`38` §6.6)
+ * - `closed_fail` → ผู้จัดการ/หัวหน้าทีม (`assign_case`) เพราะต้องตัดสินใจมอบหมายใหม่/รีไซเคิล (`38` §6.6)
  */
 function notifyCaseClosed(
   organizationId: string,

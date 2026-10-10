@@ -225,7 +225,7 @@ export function CaseDetailModal({
     }
   }
 
-  // staging E-034 — ข้อความกล่องยืนยันตาม action (ไม่รับเคส / อนุมัติรีไซเกิล)
+  // staging E-034 — ข้อความกล่องยืนยันตาม action (ไม่รับเคส / อนุมัติรีไซเคิล)
   const confirmCopy = confirmingReject === null ? undefined : CASE_ACTION_CONFIRM[confirmingReject.action]
 
   const showRejectEvidence =
@@ -751,7 +751,7 @@ function CloseFailReasonSection({ reason }: { reason: { code: string; detail: st
 function RecycleHistorySection({ detail }: { detail: CaseDetailDto }) {
   return (
     <section>
-      <h3 className="mb-3 border-b border-slate-100 pb-2 text-sm font-bold text-slate-800">ประวัติรีไซเกิล</h3>
+      <h3 className="mb-3 border-b border-slate-100 pb-2 text-sm font-bold text-slate-800">ประวัติรีไซเคิล</h3>
       <ul className="space-y-2">
         {detail.recycleHistory.map((entry) => (
           <li key={entry.id} className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs">

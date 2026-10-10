@@ -634,7 +634,7 @@ suite('Phase 3.6 — Revenue trigger (`19` §16 ครบ 8 เคส)', () => {
   })
 
   describe('O72(2) BUG-SF2 — ประเมินรายได้ต่อรอบติดตาม (U125)', () => {
-    /** เคสรอบ 2 ที่รีไซเกิลมาจากรอบ 1 (`closed_fail` · FLAT คิดเงินเมื่อไม่สำเร็จ 500 บาท) */
+    /** เคสรอบ 2 ที่รีไซเคิลมาจากรอบ 1 (`closed_fail` · FLAT คิดเงินเมื่อไม่สำเร็จ 500 บาท) */
     async function seedRecycledCase(round2: { outcome: 'closed_success' | 'closed_fail' | null }): Promise<string> {
       const caseId = await seedCase({
         model: 'FLAT',
@@ -672,7 +672,7 @@ suite('Phase 3.6 — Revenue trigger (`19` §16 ครบ 8 เคส)', () => {
       `)
     }
 
-    it('รายการเบิกรอบ 1 อนุมัติหลังรีไซเกิล ⇒ เกิดรายได้รอบ 1 จาก snapshot ของรอบ 1 (ลงวันปิดงานรอบ 1)', async () => {
+    it('รายการเบิกรอบ 1 อนุมัติหลังรีไซเคิล ⇒ เกิดรายได้รอบ 1 จาก snapshot ของรอบ 1 (ลงวันปิดงานรอบ 1)', async () => {
       const caseId = await seedRecycledCase({ outcome: null })
       await seedRoundExpense(caseId, 1, 'approved')
 

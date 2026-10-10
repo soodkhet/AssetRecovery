@@ -76,3 +76,14 @@ export function assertTeamSuggestion(result: TeamSuggestionResult): TeamSuggesti
   }
   return result
 }
+
+/**
+ * staging E-028 — ทีมที่เสนอ "ประเมิน" สำหรับรายการเคสที่ยังไม่บันทึกทีมเสนอ (ร่าง/ขอข้อมูลเพิ่ม — `suggested_team_id`
+ * เขียนตอนส่งตรวจ) · คำนวณสดจากจังหวัดปัจจุบัน ไม่เขียน DB · ไม่มีทีมตรง = `null`
+ */
+export function estimatedSuggestedTeamName(
+  province: string | null | undefined,
+  teams: readonly TeamCoverage[],
+): string | null {
+  return matchTeamsByProvince(province, teams)[0]?.name ?? null
+}

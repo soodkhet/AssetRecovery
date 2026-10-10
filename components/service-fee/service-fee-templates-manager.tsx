@@ -22,6 +22,7 @@ import {
 import { callApi, jsonRequest, type ApiCallResult } from '@/lib/api/types'
 import {
   SERVICE_FEE_BASIS_LABEL,
+  SERVICE_FEE_MODEL_LABEL,
   describeServiceFeeFormula,
   type ServiceFeeCharge,
   type ServiceFeeModel,
@@ -72,7 +73,7 @@ function versionRow(template: ServiceFeeTemplateDto): VersionRow {
     version: template.version,
     isCurrent: template.isCurrent,
     updatedAt: template.updatedAt,
-    summary: `${template.model} · สำเร็จ: ${chargeText(formula.onSuccess)} · ไม่สำเร็จ: ${chargeText(formula.onFail)}`,
+    summary: `${SERVICE_FEE_MODEL_LABEL[template.model]} · สำเร็จ: ${chargeText(formula.onSuccess)} · ไม่สำเร็จ: ${chargeText(formula.onFail)}`,
   }
 }
 
@@ -242,7 +243,7 @@ export function ServiceFeeTemplatesManager() {
                     <div>
                       <div className="text-base font-bold text-slate-900">{template.name}</div>
                       <div className="mt-1 flex items-center gap-1.5">
-                        <Badge className={MODEL_BADGE[template.model]}>{template.model}</Badge>
+                        <Badge className={MODEL_BADGE[template.model]}>{SERVICE_FEE_MODEL_LABEL[template.model]}</Badge>
                         <span className="font-mono text-[10px] text-slate-400">v{template.version}</span>
                       </div>
                     </div>

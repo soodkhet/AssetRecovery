@@ -18,7 +18,7 @@ export const CASE_STATUS_LABEL: Readonly<Record<CaseStatusValue, string>> = {
   active: 'กำลังติดตาม',
   closed_success: 'ปิดงานสำเร็จ',
   closed_fail: 'ปิดงานไม่สำเร็จ',
-  pending_recycle_review: 'รออนุมัติรีไซเกิล',
+  pending_recycle_review: 'รออนุมัติรีไซเคิล',
 }
 
 /**

@@ -1,5 +1,5 @@
 import { CaseError } from '@/lib/cases/errors'
-import { isImeiLikeIdentifier, parseImei } from '@/lib/warehouse/imei'
+import { IMEI_FORMAT_MESSAGE, isImeiLikeIdentifier, parseImei } from '@/lib/warehouse/imei'
 import type { AddressValue } from '@/lib/address/address-value'
 
 /**
@@ -495,6 +495,11 @@ export function isAcceptableAssetIdentifier(value: string | null | undefined): b
   const trimmed = value?.trim() ?? ''
   if (trimmed === '' || !isImeiLikeIdentifier(trimmed)) return true
   return parseImei(trimmed) !== null
+}
+
+/** staging E-027 — ข้อความ error ของช่อง IMEI ตอนออกจากช่อง (กติกาเดียวกับ schema) · ถูกต้อง/ว่าง = `null` */
+export function imeiBlurError(value: string | null | undefined): string | null {
+  return isAcceptableAssetIdentifier(value) ? null : IMEI_FORMAT_MESSAGE
 }
 
 /** ค่ากลับทางของ `splitAssetIdentifier()` — ใช้ตอนส่ง DTO กลับให้ฟอร์ม */

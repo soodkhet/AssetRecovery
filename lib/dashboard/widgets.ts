@@ -104,7 +104,7 @@ export const DASHBOARD_QUEUES: readonly DashboardQueueDef[] = [
   },
   {
     id: 'case_recycle_review',
-    label: 'คำขอรีไซเกิลรออนุมัติ',
+    label: 'คำขอรีไซเคิลรออนุมัติ',
     hint: 'เคสปิดไม่สำเร็จที่ขอเปิดติดตามรอบใหม่',
     linkLabel: 'ไปที่ รับเคส',
     // staging E-040 — เปิดรายการที่กรองสถานะของคิวนี้ไว้แล้ว

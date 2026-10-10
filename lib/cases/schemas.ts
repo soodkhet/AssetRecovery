@@ -139,7 +139,7 @@ export type CaseDocumentUploadInput = z.infer<typeof caseDocumentUploadSchema>
 /**
  * `PATCH /api/cases/:id/status` (`38` §8/§17.1 · `45` §6.1)
  *
- * `reason` ใช้ได้ทั้งเป็นเหตุผลปฏิเสธ/ขอข้อมูลเพิ่ม และหมายเหตุคำขอรีไซเกิล — ตัวบังคับว่า action ไหน
+ * `reason` ใช้ได้ทั้งเป็นเหตุผลปฏิเสธ/ขอข้อมูลเพิ่ม และหมายเหตุคำขอรีไซเคิล — ตัวบังคับว่า action ไหน
  * ต้องมีค่าอยู่ที่ `assertStatusChange()` (`lib/cases/state-machine.ts`) ที่เดียว ไม่ซ้ำที่ schema
  * `teamId` = ทีมที่ผู้พิจารณายืนยันตอน `accept` (ต่างจากที่ระบบเสนอ ⇒ ต้องมี `teamChangeReason`)
  */
@@ -197,3 +197,10 @@ export const caseListQuerySchema = z.object({
 })
 
 export type CaseListQuery = z.infer<typeof caseListQuerySchema>
+
+/** staging E-027 — ตรวจเลขที่สัญญาซ้ำระหว่างกรอก */
+export const caseRefCheckQuerySchema = z.object({
+  companyId: z.guid(),
+  caseRef: trimmedText.min(1).max(100),
+  excludeCaseId: z.guid().optional(),
+})

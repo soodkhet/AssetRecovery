@@ -5,8 +5,8 @@ import { Field, Input, Select } from '@/components/ui'
 import {
   THAI_PROVINCE_REGIONS,
   commonPostalArea,
-  getDistricts,
-  getSubDistricts,
+  districtOptions,
+  subdistrictOptions,
   isValidPostalCode,
   lookupPostalCode,
   type PostalCodeArea,
@@ -41,7 +41,7 @@ const LOOKUP_HINT: Readonly<Record<LookupState, string>> = {
   idle: 'กรอกรหัสไปรษณีย์ 5 หลักเพื่อให้ระบบเติมจังหวัด/อำเภอ/ตำบลให้ หรือเลือกเองทีละขั้นก็ได้',
   loading: 'กำลังค้นหารหัสไปรษณีย์…',
   found: 'เติมจังหวัด/อำเภอ/ตำบลจากรหัสไปรษณีย์แล้ว — แก้ไขเองได้',
-  multiple: 'รหัสไปรษณีย์นี้ครอบคลุมหลายตำบล — เลือกตำบล/แขวงจากรายการด้านบน หรือกรอกเอง',
+  multiple: 'รหัสไปรษณีย์นี้ครอบคลุมหลายตำบล — เลือกตำบล/แขวงจากรายการด้านล่าง หรือพิมพ์เองในช่องตำบล',
   notfound: 'ไม่พบรหัสไปรษณีย์นี้ในระบบ — กรุณาเลือกจังหวัด/อำเภอ/ตำบลเอง',
   error: 'โหลดข้อมูลรหัสไปรษณีย์ไม่สำเร็จ — กรุณาเลือกจังหวัด/อำเภอ/ตำบลเอง',
 }
@@ -79,8 +79,9 @@ export function AddressFields({
   /** รหัสล่าสุดที่สั่งค้น — กันผลค้นเก่าทับของใหม่ และกัน blur ค้นซ้ำทับตำบลที่ผู้ใช้เลือกไว้แล้ว */
   const lastLookupCode = useRef<string | null>(null)
 
-  const districts = getDistricts(value.province)
-  const subdistricts = getSubDistricts(value.province, value.district)
+  // staging E-017 — รวมพื้นที่จากรหัสไปรษณีย์ (ข้อมูลจริงทั้งประเทศ) เข้ากับชุดตัวอย่าง
+  const districts = districtOptions(value.province, choices)
+  const subdistricts = subdistrictOptions(value.province, value.district, choices)
 
   function patch(next: Partial<AddressValue>): void {
     onChange({ ...value, ...next })

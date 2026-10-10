@@ -10,6 +10,12 @@
  */
 
 export type FuelMode = 'PER_KM' | 'DAILY_FLAT'
+
+/** ป้ายวิธีคิดค่าน้ำมันบนหน้าจอ (staging E-023 — เดิมแสดงรหัส `DAILY_FLAT` ดิบ) */
+export const FUEL_MODE_LABEL: Readonly<Record<FuelMode, string>> = {
+  PER_KM: 'ตามระยะทาง',
+  DAILY_FLAT: 'เหมาจ่ายรายวัน',
+}
 export type TeamSide = 'inhouse' | 'outsource'
 
 /** ค่าที่ผู้ใช้ตั้งได้ต่อแผน 1 เวอร์ชัน — ตรงกับคอลัมน์ `compensation_plans` (`02` §5) */

@@ -103,7 +103,7 @@ describe('Recycle (`38` §6.6 · §20)', () => {
     expect(assertStatusChange('closed_fail', 'create_recycle_request', ok)).toBe('pending_recycle_review')
   })
 
-  it('เคส closed_success ขอรีไซเกิลไม่ได้ → CASE_RECYCLE_INVALID_STATUS', () => {
+  it('เคส closed_success ขอรีไซเคิลไม่ได้ → CASE_RECYCLE_INVALID_STATUS', () => {
     expect(codeOf(() => assertStatusChange('closed_success', 'create_recycle_request', ok))).toBe(
       'CASE_RECYCLE_INVALID_STATUS',
     )
@@ -115,7 +115,7 @@ describe('Recycle (`38` §6.6 · §20)', () => {
     )
   })
 
-  it('ไม่อนุมัติรีไซเกิลโดยไม่กรอกเหตุผล → CASE_RECYCLE_REJECT_REASON_REQUIRED', () => {
+  it('ไม่อนุมัติรีไซเคิลโดยไม่กรอกเหตุผล → CASE_RECYCLE_REJECT_REASON_REQUIRED', () => {
     expect(codeOf(() => assertStatusChange('pending_recycle_review', 'reject_recycle', { hasReason: false }))).toBe(
       'CASE_RECYCLE_REJECT_REASON_REQUIRED',
     )
@@ -155,7 +155,7 @@ describe('event ต่อ action (`38` §16 · §17.2)', () => {
     }
   })
 
-  it('อนุมัติรีไซเกิลยิงทั้ง case.recycle_approved และ case.approved (`38` §16)', () => {
+  it('อนุมัติรีไซเคิลยิงทั้ง case.recycle_approved และ case.approved (`38` §16)', () => {
     expect(caseEventsFor('approve_recycle')).toEqual([
       'case.status_changed',
       'case.recycle_approved',

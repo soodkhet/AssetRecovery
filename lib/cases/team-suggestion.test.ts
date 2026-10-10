@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { CaseError } from '@/lib/cases/errors'
 import {
+  estimatedSuggestedTeamName,
   assertTeamSuggestion,
   matchTeamsByProvince,
   normalizeProvince,
@@ -76,5 +77,18 @@ describe('จับคู่ทีมจากจังหวัดที่อ�
       'suggestedTeamId',
       'suggestedTeamName',
     ])
+  })
+})
+
+describe('estimatedSuggestedTeamName (staging E-028)', () => {
+  const teams = [
+    { id: 'b', name: 'ทีม B', provinces: ['นนทบุรี'], status: 'active' },
+    { id: 'a', name: 'ทีม A', provinces: ['กรุงเทพมหานคร'], status: 'active' },
+    { id: 'x', name: 'ทีม X', provinces: ['กรุงเทพมหานคร'], status: 'inactive' },
+  ]
+  it('ประเมินทีมจากจังหวัด (ทีม active เท่านั้น) · ไม่มีจังหวัด/ไม่ตรง ⇒ null', () => {
+    expect(estimatedSuggestedTeamName('กรุงเทพมหานคร', teams)).toBe('ทีม A')
+    expect(estimatedSuggestedTeamName(null, teams)).toBeNull()
+    expect(estimatedSuggestedTeamName('เชียงใหม่', teams)).toBeNull()
   })
 })

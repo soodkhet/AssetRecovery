@@ -26,6 +26,7 @@
 | v1.11 | 07/10/2569 | **มติ PO U166 → U167 (DEC-017)** — ขึ้นทะเบียน event `device_catalog.tac_update_failed` (กลุ่ม Notification §7): job `device_tac_sync` / "อัปเดตตอนนี้" / "นำเข้าไฟล์เอง" ล้มเหลว ⇒ แจ้งผู้ดูแล Model Phone (`13` §6.18 · `91` §6.1) |
 | v1.12 | 10/10/2569 | **staging E-011 (มติ PO 10/10/2569)** — ขึ้นทะเบียน event `payout.paid_to_payee` · `advance.approved` · `advance.rejected` (กลุ่ม Notification §7 · `90` §6.3 v4.9): แจ้งผู้รับเงิน/ผู้ขอโดยตรง — ไม่มี endpoint ใหม่ |
 | v1.13 | 11/10/2569 | **staging E-035** — §6.3 เพิ่ม `GET /api/field/me/payee` (ข้อมูลรับเงินของผู้เรียกเอง · สิทธิ์ `perform_field_work` view · scope ตัวเอง · ปิดบัง) |
+| v1.14 | 11/10/2569 | **staging E-027** — §6.1 เพิ่ม `GET /api/cases/ref-check` (สิทธิ์รับเคส · อ่านอย่างเดียว · normalize แบบเดียวกับการกันซ้ำ · ผู้ใช้ฝั่งบริษัทถามได้เฉพาะบริษัทตัวเอง) |
 
 ขอบเขตเอกสารนี้: รวม API Endpoint ทั้งหมดของโมดูล Case Workflow (รับเคส/มอบหมาย/ภาคสนาม) และ Warehouse (คลังสินค้า) เป็นรายการเดียว จัดกลุ่มตาม resource เพื่อให้ backend implement ตาม REST convention เดียวกันทั้งระบบ — คู่กันกับ `27-finance-api-contracts.md` ที่รวม endpoint ฝั่ง Finance/Accounting
 
@@ -53,6 +54,7 @@
 POST   /api/cases                       รับเคส (manual form submit + API ingestion — แยกด้วย field source_channel)
 POST   /api/cases/import                Import ไฟล์ Excel/CSV แบบ batch
 GET    /api/cases                       List พร้อม filter (status, source_channel, finance_company_id, province)
+GET    /api/cases/ref-check             ตรวจเลขที่สัญญาซ้ำระหว่างกรอก (companyId, caseRef, excludeCaseId — staging E-027)
 GET    /api/cases/:id                   รายละเอียดเคส
 PATCH  /api/cases/:id                   แก้ไขเคส (edit_case — เฉพาะ draft/pending_review/need_info) เพิ่มแถวใน edit_history ทุกครั้ง
 POST   /api/cases/:id/documents         อัปโหลดเอกสารต่อ slot (document_type ระบุใน payload)

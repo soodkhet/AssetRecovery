@@ -1,5 +1,6 @@
 'use client'
 
+import { fmtThaiPhone } from '@/lib/format/phone'
 import { SettingHelp } from '@/components/settings/setting-help'
 import { organizationProfileHelp } from '@/lib/settings/help'
 import { useCallback, useEffect, useState } from 'react'
@@ -486,7 +487,7 @@ export function OrganizationProfileTab() {
               </span>
             </InfoItem>
             <InfoItem label="เบอร์โทรสำนักงาน">
-              <div className="font-medium text-slate-700">{profile.phone ?? '—'}</div>
+              <div className="font-medium text-slate-700">{profile.phone === null ? '—' : fmtThaiPhone(profile.phone)}</div>
               <div className="mt-0.5 text-xs text-slate-400">{profile.email ?? 'ไม่ระบุอีเมล'}</div>
               <div className="mt-0.5 text-xs text-slate-400">{profile.website ?? 'ไม่ระบุเว็บไซต์'}</div>
             </InfoItem>

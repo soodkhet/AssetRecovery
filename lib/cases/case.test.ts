@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { CaseError } from '@/lib/cases/errors'
 import { CASE_IMPORT_TEMPLATE_COLUMNS, IMPORT_COLUMNS } from '@/lib/cases/import'
 import {
+  imeiBlurError,
   CASE_REQUIRED_ADDRESS_FIELDS,
   readinessGapText,
   REQUIRED_FIELD_LABEL,
@@ -495,5 +496,14 @@ describe('เลขไทย/เลขเต็มความกว้างใ
     expect(normalizePhoneInputWithCaret('+66 81 234 5678', 15)).toEqual({ value: '0812345678', caret: 10 })
     expect(normalizePhoneInputWithCaret('+66 81 234 5678', 0)).toEqual({ value: '0812345678', caret: 0 })
     expect(normalizePhoneInputWithCaret('0812345678', null)).toEqual({ value: '0812345678', caret: 10 })
+  })
+})
+
+describe('imeiBlurError (staging E-027)', () => {
+  it('ตัวเลข 14 หลัก ⇒ เตือนทันทีตอนออกจากช่อง · 15 หลัก/serial/ว่าง ⇒ ไม่เตือน', () => {
+    expect(imeiBlurError('35678901234567')).not.toBeNull()
+    expect(imeiBlurError('356789012345678')).toBeNull()
+    expect(imeiBlurError('C39XK2ABC123')).toBeNull()
+    expect(imeiBlurError('')).toBeNull()
   })
 })

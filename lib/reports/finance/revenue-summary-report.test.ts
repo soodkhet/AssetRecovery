@@ -77,7 +77,7 @@ describe('F2 — สรุปรายได้', () => {
     expect(data.rows[0]?.['successPct']).toBeCloseTo(50, 6)
   })
 
-  it('เคสเดียวมีรายได้หลายใบ (รีไซเกิล) นับเป็นเคสเดียว', () => {
+  it('เคสเดียวมีรายได้หลายใบ (รีไซเคิล) นับเป็นเคสเดียว', () => {
     const data = buildRevenueSummary({
       groupBy: 'company',
       entries: [

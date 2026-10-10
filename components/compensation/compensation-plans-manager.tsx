@@ -21,7 +21,7 @@ import {
   useToast,
 } from '@/components/ui'
 import { callApi, jsonRequest, type ApiCallResult } from '@/lib/api/types'
-import { describeFuelRule } from '@/lib/compensation/plan'
+import { describeFuelRule, FUEL_MODE_LABEL } from '@/lib/compensation/plan'
 import type { CompensationPlanDto, CompensationPlanListDto } from '@/lib/compensation/types'
 import { fmtDate } from '@/lib/format/datetime'
 import { fmtPercent, fmtSatang } from '@/lib/format/money'
@@ -235,7 +235,7 @@ export function CompensationPlansManager() {
 
                 <div className="mb-4 grid grid-cols-2 gap-3">
                   <div className="col-span-2">
-                    <Stat label={`⛽ ค่าน้ำมัน (${plan.fuelMode})`} value={fuelLabel(plan)} />
+                    <Stat label={`⛽ ค่าน้ำมัน (${FUEL_MODE_LABEL[plan.fuelMode]})`} value={fuelLabel(plan)} />
                   </div>
                   <Stat label="🍽️ เบี้ยเลี้ยง" value={`${fmtSatang(plan.allowanceSatang)} บาท/วัน`} />
                   <Stat
@@ -247,7 +247,7 @@ export function CompensationPlansManager() {
                     }
                   />
                   <Stat
-                    label="✅ Commission (สำเร็จ)"
+                    label="✅ ค่าคอมมิชชั่น (สำเร็จ)"
                     tone="emerald"
                     value={`${fmtSatang(plan.commissionSatang)} บาท/เคส`}
                   />

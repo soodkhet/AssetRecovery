@@ -54,6 +54,7 @@ import { Prisma } from '@/lib/generated/prisma/client'
 import { TEAM_VISIBLE_CASE_STATUSES } from '@/lib/cases/team-visibility'
 import { resolveDeviceSelection } from '@/lib/device-catalog/queries'
 import { learnDeviceTacFromCase } from '@/lib/device-catalog/tac-queries'
+import { estimatedSuggestedTeamName } from '@/lib/cases/team-suggestion'
 import { prisma } from '@/lib/prisma'
 
 /**
@@ -237,7 +238,14 @@ export type CaseDetailRow = Prisma.CaseGetPayload<{ select: typeof detailSelect 
  * `caseScopeWhere()` คุมว่าเห็น **แถวไหน** (เฉพาะบริษัทตัวเอง) — ฟังก์ชันนี้คุมว่าเห็น **ฟิลด์ไหน**
  */
 function redactCaseListForCompany(item: CaseListItemDto): CaseListItemDto {
-  return { ...item, suggestedTeamName: null, assignedTeamName: null, createdByName: '', reviewedAt: null }
+  return {
+    ...item,
+    suggestedTeamName: null,
+    suggestedTeamEstimated: false,
+    assignedTeamName: null,
+    createdByName: '',
+    reviewedAt: null,
+  }
 }
 
 function redactCaseDetailForCompany(detail: CaseDetailDto): CaseDetailDto {
@@ -553,7 +561,20 @@ export async function listCases(user: SessionUser, query: CaseListQuery): Promis
     user.organizationId,
     rows.map((row) => row.id),
   )
-  const items = rows.map((row) => toListDto(row, submitted.get(row.id) ?? null))
+  // staging E-028 — เคสที่ยังไม่บันทึกทีมเสนอ (ร่าง/ขอข้อมูลเพิ่ม) ⇒ ประเมินสดจากจังหวัด (ไม่เขียน DB)
+  const needsEstimate = rows.some((row) => row.suggestedTeam === null && row.assignedTeam === null && row.addrProvince !== null)
+  const teams = needsEstimate
+    ? await prisma.team.findMany({
+        where: { organizationId: user.organizationId, deletedAt: null },
+        select: { id: true, name: true, provinces: true, status: true },
+      })
+    : []
+  const items = rows.map((row) => {
+    const item = toListDto(row, submitted.get(row.id) ?? null)
+    if (item.suggestedTeamName !== null || item.assignedTeamName !== null) return item
+    const estimated = estimatedSuggestedTeamName(row.addrProvince, teams)
+    return estimated === null ? item : { ...item, suggestedTeamName: estimated, suggestedTeamEstimated: true }
+  })
   return {
     items: isCompanySideViewer(user) ? items.map(redactCaseListForCompany) : items,
     total,
@@ -639,6 +660,28 @@ function rethrowDuplicate(error: unknown, caseRef: string): never {
     throw new CaseError('CASE_REF_DUPLICATE', { context: { caseRef }, detail: String(error.meta?.target ?? '') })
   }
   throw error
+}
+
+/**
+ * `GET /api/cases/ref-check` (staging E-027) — ตรวจเลขที่สัญญาซ้ำ**ระหว่างกรอก** (ก่อนกดบันทึก) ด้วยกติกาเดียวกับ
+ * `assertCaseRefAvailable()` (normalize + บริษัทเดียวกัน + รวมเคสที่ถูกลบ) · อ่านอย่างเดียว
+ * ผู้ใช้ฝั่งบริษัทไฟแนนซ์ถามได้เฉพาะบริษัทตัวเอง (บริษัทอื่น ⇒ ตอบไม่ซ้ำ — ไม่ leak)
+ */
+export async function checkCaseRef(
+  user: SessionUser,
+  input: { companyId: string; caseRef: string; excludeCaseId?: string },
+): Promise<{ duplicate: { id: string; caseRef: string; status: string; trackingRound: number } | null }> {
+  if (user.scope.kind === 'company' && user.scope.companyId !== input.companyId) return { duplicate: null }
+  const existing = await prisma.case.findFirst({
+    where: {
+      organizationId: user.organizationId,
+      companyId: input.companyId,
+      caseRefNormalized: normalizeCaseRef(input.caseRef),
+      ...(input.excludeCaseId === undefined ? {} : { id: { not: input.excludeCaseId } }),
+    },
+    select: { id: true, caseRef: true, status: true, trackingRound: true },
+  })
+  return { duplicate: existing }
 }
 
 /** pre-check ชั้นที่ 2 — คืนเคสเดิมเพื่อให้ error มีลิงก์ไปเปิดดูได้ (`38` §11/§12) */

@@ -60,7 +60,7 @@ export function PendingAcceptTab() {
             return (
               <div key={item.assignmentId} className="rounded-2xl border border-amber-200 bg-white p-4 shadow-sm">
                 <div className="mb-2">
-                  {/* staging E-038 — เคสรีไซเกิล: บอกรอบที่ + เหตุผลไม่สำเร็จของรอบก่อน */}
+                  {/* staging E-038 — เคสรีไซเคิล: บอกรอบที่ + เหตุผลไม่สำเร็จของรอบก่อน */}
                   {item.trackingRound > 1 && (
                     <div className="mb-1 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-800">
                       รอบที่ {item.trackingRound}

@@ -13,6 +13,7 @@ import { parseBrandListText } from '@/lib/device-catalog/catalog'
 import { NOT_SPECIFIED_IN_CONTRACT, parseAttributeOptionsText } from '@/lib/device-catalog/device-attributes'
 import { deviceCatalogSettingsSchema } from '@/lib/device-catalog/schemas'
 import { TAC_SOURCE_ATTRIBUTION, TAC_SOURCE_REPO_URL } from '@/lib/device-catalog/tac'
+import { shouldPollTacSummary, TAC_POLL_INTERVAL_MS, tacJobFinishedNotice } from '@/lib/device-catalog/tac-polling'
 import type {
   DeviceBrandDto,
   DeviceCatalogSettingsDto,
@@ -57,13 +58,27 @@ export function DeviceCatalogTab() {
   const fileInput = useRef<HTMLInputElement | null>(null)
 
   const fetchSummary = useCallback(async () => callApi<DeviceCatalogSummaryDto>('/api/settings/device-catalog'), [])
-  const applySummary = useCallback((result: Awaited<ReturnType<typeof fetchSummary>>) => {
-    if (result.error !== undefined) setSummaryError(result.error.message)
-    else {
-      setSummary(result.data ?? null)
+  /** สรุปล่าสุด — เทียบตอนสรุปใหม่มาถึงว่างานเบื้องหลังเพิ่งจบไหม (staging E-019) */
+  const lastSummary = useRef<DeviceCatalogSummaryDto | null>(null)
+  const applySummary = useCallback(
+    (result: Awaited<ReturnType<typeof fetchSummary>>) => {
+      if (result.error !== undefined) {
+        setSummaryError(result.error.message)
+        return
+      }
+      const next = result.data ?? null
+      // staging E-019 — งานเบื้องหลังจบ ⇒ แจ้งผล + โหลดรายการใหม่ (ไม่ต้องรีเฟรชหน้าเอง)
+      const notice = next === null ? null : tacJobFinishedNotice(lastSummary.current, next)
+      lastSummary.current = next
+      setSummary(next)
       setSummaryError(null)
-    }
-  }, [])
+      if (notice !== null) {
+        showToast({ tone: 'success', title: notice.title, description: notice.description })
+        setRefreshKey((current) => current + 1)
+      }
+    },
+    [showToast],
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -77,6 +92,16 @@ export function DeviceCatalogTab() {
   }, [applySummary, fetchSummary, refreshKey])
 
   const changed = (): void => setRefreshKey((current) => current + 1)
+
+  // staging E-019 — ระหว่างมีงานรอ/กำลังทำ ถามสรุปซ้ำทุก 5 วินาที
+  const polling = shouldPollTacSummary(summary)
+  useEffect(() => {
+    if (!polling) return
+    const timer = window.setInterval(() => {
+      void fetchSummary().then(applySummary)
+    }, TAC_POLL_INTERVAL_MS)
+    return () => window.clearInterval(timer)
+  }, [polling, fetchSummary, applySummary])
 
   function startedToast(result: DeviceCatalogSyncRequestDto | undefined, what: string): void {
     showToast({

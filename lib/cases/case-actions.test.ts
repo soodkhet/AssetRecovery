@@ -43,13 +43,13 @@ describe('caseModalActions', () => {
     expect(caseModalActions('pending_review', approver)[2]?.label).toBe('รับเคส & ยืนยันทีม')
   })
 
-  it('closed_fail = ปุ่มขอรีไซเกิลปุ่มเดียว และบังคับหมายเหตุ', () => {
+  it('closed_fail = ปุ่มขอรีไซเคิลปุ่มเดียว และบังคับหมายเหตุ', () => {
     const buttons = caseModalActions('closed_fail', approver)
     expect(buttons).toHaveLength(1)
     expect(buttons[0]).toMatchObject({ action: 'create_recycle_request', reasonRequired: true })
   })
 
-  it('pending_recycle_review = 2 ปุ่ม (ไม่อนุมัติ / อนุมัติรีไซเกิล)', () => {
+  it('pending_recycle_review = 2 ปุ่ม (ไม่อนุมัติ / อนุมัติรีไซเคิล)', () => {
     expect(caseModalActions('pending_recycle_review', approver).map((button) => button.action)).toEqual([
       'reject_recycle',
       'approve_recycle',
@@ -77,7 +77,7 @@ describe('caseRowActions', () => {
     expect(caseRowActions('need_info', admin).map((button) => button.action)).toEqual(['return_to_draft'])
   })
 
-  it('ไม่มีปุ่มพิจารณา/รีไซเกิลหลุดมาอยู่บนแถว (อยู่บน modal เท่านั้น)', () => {
+  it('ไม่มีปุ่มพิจารณา/รีไซเคิลหลุดมาอยู่บนแถว (อยู่บน modal เท่านั้น)', () => {
     expect(caseRowActions('pending_review', approver)).toEqual([])
     expect(caseRowActions('closed_fail', approver)).toEqual([])
   })
@@ -114,13 +114,13 @@ describe('caseRowOpensReview (staging E-025)', () => {
   })
 })
 
-describe('ข้อความรีไซเกิล/คำบรรยาย/ยืนยัน (staging E-032/E-033/E-034)', () => {
+describe('ข้อความรีไซเคิล/คำบรรยาย/ยืนยัน (staging E-032/E-033/E-034)', () => {
   it('toast สำเร็จเป็นภาษาผู้ใช้ ไม่ต่อคำบนปุ่ม', () => {
-    expect(caseActionSuccessTitle('create_recycle_request')).toBe('ส่งคำขอรีไซเกิลแล้ว')
+    expect(caseActionSuccessTitle('create_recycle_request')).toBe('ส่งคำขอรีไซเคิลแล้ว')
     expect(caseActionSuccessTitle('reject')).toBe('บันทึกไม่รับเคสแล้ว')
   })
 
-  it('ประวัติรีไซเกิล — คำขอที่ยังรอแสดงรอบปัจจุบัน → ถัดไป + สถานะไทย', () => {
+  it('ประวัติรีไซเคิล — คำขอที่ยังรอแสดงรอบปัจจุบัน → ถัดไป + สถานะไทย', () => {
     expect(recycleHistoryLine({ previousRound: null, newRound: null, status: 'pending' }, 1)).toBe('รอบ 1 → 2 · รออนุมัติ')
     expect(recycleHistoryLine({ previousRound: 1, newRound: 2, status: 'approved' }, 2)).toBe('รอบ 1 → 2 · อนุมัติแล้ว')
     expect(recycleHistoryLine({ previousRound: null, newRound: null, status: 'rejected' }, 1)).toBe('รอบ 1 · ไม่อนุมัติ')
@@ -131,7 +131,7 @@ describe('ข้อความรีไซเกิล/คำบรรยาย
     expect(caseDetailDescription('readonly')).toContain('แก้ไขจากหน้านี้ไม่ได้')
   })
 
-  it('อนุมัติรีไซเกิลต้องยืนยัน · ป้ายช่องหมายเหตุบอกว่าใช้ตอนอนุมัติได้', () => {
+  it('อนุมัติรีไซเคิลต้องยืนยัน · ป้ายช่องหมายเหตุบอกว่าใช้ตอนอนุมัติได้', () => {
     const buttons = caseModalActions('pending_recycle_review', () => true)
     expect(buttons.find((b) => b.action === 'approve_recycle')?.confirmRequired).toBe(true)
     expect(CASE_ACTION_CONFIRM.approve_recycle?.danger).toBe(false)

@@ -38,7 +38,7 @@ export interface CaseActionButton {
  */
 const MODAL_LABEL: Partial<Record<CaseStatusAction, string>> = {
   accept: 'รับเคส & ยืนยันทีม',
-  create_recycle_request: 'ขอรีไซเกิล (re-track)',
+  create_recycle_request: 'ขอรีไซเคิล (re-track)',
   reject_recycle: 'ไม่อนุมัติ',
 }
 
@@ -71,10 +71,10 @@ export const CASE_ACTION_CONFIRM: Partial<
     danger: true,
   },
   approve_recycle: {
-    title: 'อนุมัติรีไซเกิล',
+    title: 'อนุมัติรีไซเคิล',
     description:
       'เคสจะขึ้นรอบติดตามใหม่และกลับเข้าคิวมอบหมายทันที (ย้อนกลับไม่ได้) — ค่าบริการรอบใหม่บันทึกตามเทมเพลตปัจจุบัน',
-    confirmLabel: 'ยืนยันอนุมัติรีไซเกิล',
+    confirmLabel: 'ยืนยันอนุมัติรีไซเคิล',
     danger: false,
   },
 }
@@ -86,9 +86,9 @@ const SUCCESS_TOAST: Record<CaseStatusAction, string> = {
   reject: 'บันทึกไม่รับเคสแล้ว',
   request_more_info: 'ส่งขอข้อมูลเพิ่มแล้ว',
   return_to_draft: 'กลับไปแก้ไขเป็นร่างแล้ว',
-  create_recycle_request: 'ส่งคำขอรีไซเกิลแล้ว',
-  approve_recycle: 'อนุมัติรีไซเกิลแล้ว',
-  reject_recycle: 'บันทึกไม่อนุมัติรีไซเกิลแล้ว',
+  create_recycle_request: 'ส่งคำขอรีไซเคิลแล้ว',
+  approve_recycle: 'อนุมัติรีไซเคิลแล้ว',
+  reject_recycle: 'บันทึกไม่อนุมัติรีไซเคิลแล้ว',
 }
 
 export function caseActionSuccessTitle(action: CaseStatusAction): string {
@@ -98,8 +98,8 @@ export function caseActionSuccessTitle(action: CaseStatusAction): string {
 /** คำบรรยายหัว modal ต่อโหมด (staging E-033 — โหมดอ่านอย่างเดียวที่ยังตีกลับหลักฐานได้ต้องไม่บอกว่า "แก้ไม่ได้") */
 export function caseDetailDescription(mode: CaseDetailMode, options: { canRejectEvidence?: boolean } = {}): string {
   if (mode === 'review') return 'ตรวจข้อมูล เอกสาร และทีมที่ระบบเสนอ แล้วตัดสินใจได้ในหน้าเดียว'
-  if (mode === 'recycle_review') return 'พิจารณาคำขอรีไซเกิล — อนุมัติแล้วเคสจะขึ้นรอบใหม่และกลับเข้าคิวมอบหมายทันที'
-  if (mode === 'recycle_request') return 'เคสปิดแบบไม่สำเร็จ — ขอรีไซเกิลได้เมื่อไฟแนนซ์ต้องการให้ลองติดตามใหม่'
+  if (mode === 'recycle_review') return 'พิจารณาคำขอรีไซเคิล — อนุมัติแล้วเคสจะขึ้นรอบใหม่และกลับเข้าคิวมอบหมายทันที'
+  if (mode === 'recycle_request') return 'เคสปิดแบบไม่สำเร็จ — ขอรีไซเคิลได้เมื่อไฟแนนซ์ต้องการให้ลองติดตามใหม่'
   if (options.canRejectEvidence === true) {
     return 'ตรวจหลักฐานปิดงาน — ตีกลับให้พนักงานส่งใหม่ได้ถ้าหลักฐานไม่น่าเชื่อถือ (ข้อมูลเคสแก้จากหน้านี้ไม่ได้)'
   }
@@ -110,17 +110,17 @@ export function caseDetailDescription(mode: CaseDetailMode, options: { canReject
 export function caseReasonFieldLabel(mode: CaseDetailMode): string {
   if (mode === 'review') return 'จำเป็นเมื่อไม่รับเคส หรือขอข้อมูลเพิ่ม'
   if (mode === 'recycle_review') return 'จำเป็นเมื่อไม่อนุมัติ · เมื่ออนุมัติจะบันทึกเป็นหมายเหตุผู้อนุมัติ'
-  return 'จำเป็นสำหรับคำขอรีไซเกิล'
+  return 'จำเป็นสำหรับคำขอรีไซเคิล'
 }
 
-/** สถานะคำขอรีไซเกิลเป็นภาษาผู้ใช้ (staging E-032) */
+/** สถานะคำขอรีไซเคิลเป็นภาษาผู้ใช้ (staging E-032) */
 export const RECYCLE_STATUS_LABEL: Readonly<Record<string, string>> = {
   pending: 'รออนุมัติ',
   approved: 'อนุมัติแล้ว',
   rejected: 'ไม่อนุมัติ',
 }
 
-/** บรรทัดหัวประวัติรีไซเกิล — คำขอที่ยังรออนุมัติยังไม่มีเลขรอบ ⇒ ใช้รอบปัจจุบัน → รอบถัดไป (staging E-032) */
+/** บรรทัดหัวประวัติรีไซเคิล — คำขอที่ยังรออนุมัติยังไม่มีเลขรอบ ⇒ ใช้รอบปัจจุบัน → รอบถัดไป (staging E-032) */
 export function recycleHistoryLine(
   entry: { previousRound: number | null; newRound: number | null; status: string },
   currentRound: number,

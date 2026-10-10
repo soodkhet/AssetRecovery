@@ -72,6 +72,8 @@ export interface CaseListItemDto {
   assetBrandModel: string | null
   outstandingDebtSatang: number | null
   suggestedTeamName: string | null
+  /** staging E-028 — `true` = ทีมที่เสนอยังไม่บันทึก (คำนวณสดจากจังหวัด · ป้าย "(ประเมิน)") */
+  suggestedTeamEstimated?: boolean
   assignedTeamName: string | null
   documentCount: number
   createdAt: string

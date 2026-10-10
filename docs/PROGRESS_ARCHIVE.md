@@ -17,7 +17,7 @@
 - verify ปลายงาน: typecheck + lint + test เขียว **394 ไฟล์ / 5,672 tests** (ต้น Final 366 / 5,104)
 
 ### บั๊กที่แก้ (สำคัญ)
-- วันรับรู้รายได้ = วันยืนยันล็อต (เดิม `closed_at`) · รายได้รอบ 1 หายหลังรีไซเกิล · IMEI ซ้ำ → 500 (U129) · รอบ ภ.ง.ด. `filed` ถูกคิดทับ · job ค่าน้ำมันเขียนงวดล็อก · ใบรับรองแทนใบเสร็จระดับ view ทำ mutation ได้ · ส่ง/ล็อกงวด + อนุมัติ/ปฏิเสธเงินทดรองพร้อมกัน (CAS) · รอบจ่าย completed แต่ sync ล้ม (ตัวกวาด U134) · statement ซ้ำในวันเดียว (U136)
+- วันรับรู้รายได้ = วันยืนยันล็อต (เดิม `closed_at`) · รายได้รอบ 1 หายหลังรีไซเคิล · IMEI ซ้ำ → 500 (U129) · รอบ ภ.ง.ด. `filed` ถูกคิดทับ · job ค่าน้ำมันเขียนงวดล็อก · ใบรับรองแทนใบเสร็จระดับ view ทำ mutation ได้ · ส่ง/ล็อกงวด + อนุมัติ/ปฏิเสธเงินทดรองพร้อมกัน (CAS) · รอบจ่าย completed แต่ sync ล้ม (ตัวกวาด U134) · statement ซ้ำในวันเดียว (U136)
 - ด่าน 7: BUG-178 AR ไม่หัก CN/DN · BUG-179 ใบกำกับบิลที่ตัดค่าธรรมเนียม (U169) · BUG-180 หน้ารวมค่าตั้งรอนักบัญชี (U170) · BUG-181–183 · O74 overdue เฉพาะทดรองที่จ่ายแล้ว · O75 `paid → partially_paid` เมื่อมีใบเพิ่มหนี้
 
 ### ค้าง / จุดที่คนถัดไปควรรู้
@@ -36,7 +36,7 @@
 
 ### สิ่งที่ทำ
 - `GET /api/dashboard` (`app/api/dashboard/route.ts`) — `requireInternalSession` (บริษัทไฟแนนซ์ 403 · ไม่ล็อกอิน 401) · read-only ไม่มี audit
-- `lib/dashboard/widgets.ts` (pure) — นิยามคิวงาน 17 ชนิด (เคสร่าง · ขอข้อมูลเพิ่ม · รอพิจารณา · รีไซเกิล · รอมอบหมาย · ย้ายงานรอยินยอม · ค่าตอบแทนถึงขั้นของฉัน · เงินทดรองรออนุมัติ/เลยกำหนด · รอบจ่ายยังไม่เสร็จ · ปรับปรุงรออนุมัติ · ปัญหาวิกฤตเปิดอยู่ · เดินบัญชียังไม่จับคู่ · งวดรอล็อก · เครื่องรอรับเข้าคลัง · ใบส่งมอบยังไม่ยืนยัน · งานเบื้องหลังล้มเหลว) — เงื่อนไขเห็นคิว: ถือ capability **ระดับ manage** ชุดเดียวกับ endpoint ต้นทาง + เห็นเมนูปลายทาง + scope รองรับ (scope ทีมเห็นเฉพาะคิว `teamScoped`)
+- `lib/dashboard/widgets.ts` (pure) — นิยามคิวงาน 17 ชนิด (เคสร่าง · ขอข้อมูลเพิ่ม · รอพิจารณา · รีไซเคิล · รอมอบหมาย · ย้ายงานรอยินยอม · ค่าตอบแทนถึงขั้นของฉัน · เงินทดรองรออนุมัติ/เลยกำหนด · รอบจ่ายยังไม่เสร็จ · ปรับปรุงรออนุมัติ · ปัญหาวิกฤตเปิดอยู่ · เดินบัญชียังไม่จับคู่ · งวดรอล็อก · เครื่องรอรับเข้าคลัง · ใบส่งมอบยังไม่ยืนยัน · งานเบื้องหลังล้มเหลว) — เงื่อนไขเห็นคิว: ถือ capability **ระดับ manage** ชุดเดียวกับ endpoint ต้นทาง + เห็นเมนูปลายทาง + scope รองรับ (scope ทีมเห็นเฉพาะคิว `teamScoped`)
 - `lib/dashboard/queries.ts` — นับจำนวนอย่างเดียว (ไม่มีการรวมยอดเงิน) · scope ใช้ helper เดิม `caseScopeWhere`/`assetScopeWhere`/`lotScopeWhere` · คิวค่าตอบแทนนับจาก `listCompensationApprovals()` (`viewerCanAct`) ⇒ ตรงกับคิวในหน้าการเงินเป๊ะ · query ถูกยิงเฉพาะคิวที่ผู้ใช้เห็น
 - `components/dashboard/main-dashboard.tsx` — 4 บล็อกตาม mockup (KPI · งานรอดำเนินการของฉัน · เคสตามสถานะ · แจ้งเตือนล่าสุด) โหลดแยกกัน แต่ละบล็อกมี loading/empty/error
 - KPI แถวบน **ไม่มีสูตรใหม่**: ผู้บริหาร/Superadmin = รายงาน E1 `kpi-summary` (เดือนนี้ · การ์ด revenue/marginPct/successPct/arOutstanding ผ่าน `<KpiCard>`) · การเงิน/บัญชี = `GET /api/finance/dashboard-kpi` (KPI 4 ตัวของหน้าภาพรวมการเงิน) · role อื่น = การ์ดจำนวนงานค้างของคิวตัวเอง (ไม่โชว์เงินให้ role ที่ไม่มีสิทธิ์)
@@ -49,7 +49,7 @@
 | บริหาร | E1 | ค่าตอบแทนขั้นของฉัน · ปรับปรุงรออนุมัติ · ปัญหาวิกฤต |
 | การเงิน | การเงิน | ค่าตอบแทนขั้นของฉัน · เงินทดรองรออนุมัติ/เลยกำหนด · รอบจ่าย · ปรับปรุง |
 | บัญชี | การเงิน | ปัญหาวิกฤต · เดินบัญชียังไม่จับคู่ |
-| เจ้าหน้าที่อนุมัติเคส | จำนวนคิว | ขอข้อมูลเพิ่ม · รอพิจารณา · รีไซเกิล |
+| เจ้าหน้าที่อนุมัติเคส | จำนวนคิว | ขอข้อมูลเพิ่ม · รอพิจารณา · รีไซเคิล |
 | ธุรการ | จำนวนคิว | เคสร่าง · ขอข้อมูลเพิ่ม · รับเข้าคลัง · ใบส่งมอบ |
 | ผู้จัดการทีม (ทีมตัวเอง) | จำนวนคิว | รอมอบหมาย · ย้ายงานรอยินยอม · ค่าตอบแทนขั้นของฉัน |
 | หัวหน้าทีม (ทีมตัวเอง) | จำนวนคิว | รอมอบหมาย · ย้ายงานรอยินยอม |
@@ -460,7 +460,7 @@ migration `20260816001500_report_query_indexes` — สำรวจ `lib/reports
 | มอบหมาย (40) | `assignment.reassignment_requested` | พนักงานคนเดิม (คนที่ต้องให้ความยินยอม) | `reassignCase()` |
 | มอบหมาย (40) | `assignment.reassignment_timeout_resolved` | คนเดิม + คนใหม่ + ผู้จัดการที่ขอ | job `timeout-job.ts` |
 | ภาคสนาม (41) | `case.closed_success` | ผู้มี `intake_asset` (คลัง — เกตของรายได้ `19` §6.1) | `closeFieldCase()`/`resubmitCloseCase()` |
-| ภาคสนาม (41) | `case.closed_fail` | ผู้มี `assign_case` (มอบหมายใหม่/รีไซเกิล) | เดียวกัน |
+| ภาคสนาม (41) | `case.closed_fail` | ผู้มี `assign_case` (มอบหมายใหม่/รีไซเคิล) | เดียวกัน |
 | คลัง (44) | `asset.intake_rejected` | พนักงานที่ถือเคสนั้น | `rejectAssetIntake()` |
 | คลัง (44) | `lot.confirmed` | ผู้มี `manage_billing` (ไปวางบิลต่อ) | `confirmLot()` |
 | ค่าตอบแทน (16) | `expense.approved` (เฉพาะผ่านครบขั้น) / `expense.rejected` | ผู้รับเงิน (`payee.user_id`) | `approve/rejectCompensationExpense()` |
@@ -1413,7 +1413,7 @@ migration `20260816001500_report_query_indexes` — สำรวจ `lib/reports
 - **ฟอร์มรับเคสครบลำดับ section ตาม `38` §7.3** — เพิ่มต่อจาก 2.4: **ผู้ติดต่ออื่น** (`<CaseContactsFields>` — dynamic list, ปุ่มลบต่อแถว, เบอร์กรอง non-digit 10 หลัก, แถวว่างทั้งแถวถูกตัดทิ้ง แถวกรอกไม่ครบ = error รายช่อง) → **ข้อมูลทรัพย์** → **เอกสารแนบ + รูปสินค้า** (`<CaseAttachmentsFields>` — 3 slot พร้อมป้าย "อัปโหลดแล้ว ✓ (n ไฟล์)"/"ยังไม่อัปโหลด" ต่อ slot · dropzone drag-drop + thumbnail grid + ปุ่ม ✕ ต่อรูป · เพดาน 8 รูปผ่าน `assertProductPhotoCapacity()` ตัวเดียวกับ API) → **ทีมที่เสนอ (ท้ายสุด)**
 - **อัปโหลดไฟล์จริง** — `lib/cases/document-upload.ts` (pure: ชนิด/ขนาด/ชื่อไฟล์/`storagePath()`/`sha256Hex()`) + `lib/cases/upload-client.ts` (browser: ขึ้น Supabase Storage bucket `case-documents` → `POST /api/cases/:id/documents` ด้วย `fileUrl` = path + `fileHash` SHA-256) · **อัปโหลดหลังบันทึกเคสสำเร็จ** เพราะ endpoint ต้องมี `case_id` — ไฟล์ที่ล้มเหลวรายงานเป็น toast เตือน ไม่ทำให้เคสหาย
 - **`<TeamSuggestionPanel>` (`38` §7.4)** — ทีมที่เสนอ 1 ทีมพร้อมป้าย "ระบบเสนอ" อัปเดต **real-time** ทันทีที่จังหวัดของที่อยู่ปัจจุบันเปลี่ยน (จับคู่ฝั่ง client ด้วย `matchTeamsByProvince()` pure ตัวเดียวกับ API — ไม่ยิง API ใหม่) · รายการทีมที่จังหวัดตรงแสดง **inline ทันที ไม่ใช่ dropdown** + toggle "ดูทีมอื่นทั้งหมด" (ซ่อน default) · **กล่องค่าใช้จ่ายทีมทุกใบในรายการ** จาก `describeTeamCost()` — น้ำมัน (PER_KM แสดงอัตรา+เพดาน / DAILY_FLAT แสดงเหมาจ่าย) · เบี้ยเลี้ยง · ค่าที่พัก · คอมมิชชั่น (สำเร็จ) · เบี้ยเสี่ยง (ไม่สำเร็จ) — **ไม่มีการคำนวณ/สรุปกำไร-ขาดทุนใดๆ** (มีเทสต์ยาม)
-- **`<CaseDetailModal>` — shared component (`38` §7.5)** modal เดียวใช้ทั้งดูและพิจารณา 4 โหมดตาม `caseDetailMode()`: `pending_review` (3 ปุ่ม: ไม่รับเคส/ขอข้อมูลเพิ่ม/รับเคส & ยืนยันทีม) · `closed_fail` (ขอรีไซเกิล) · `pending_recycle_review` (ไม่อนุมัติ/อนุมัติรีไซเกิล) · อื่น ๆ อ่านอย่างเดียว · เนื้อหาครบ §7.5: สรุปเคส + `tracking_round` ทุกสถานะ, จังหวัด/มูลหนี้, ช่องทางติดต่อ 4 ทาง (มือถือเป็นลิงก์ `tel:`), ผู้ติดต่ออื่น, **เอกสารแนบเปิดดูได้จริง** ผ่าน `<FileViewerModal>` (PDF ใน iframe / รูป lightbox / signed URL ต่อครั้ง), thumbnail grid รูปสินค้า, **กล่องประมาณการรายได้ติดกับกล่องทีม**, ช่องเหตุผล, **ประวัติรีไซเกิล** (แสดงเมื่อมีประวัติ ไม่ว่าสถานะปัจจุบันจะเป็นอะไร)
+- **`<CaseDetailModal>` — shared component (`38` §7.5)** modal เดียวใช้ทั้งดูและพิจารณา 4 โหมดตาม `caseDetailMode()`: `pending_review` (3 ปุ่ม: ไม่รับเคส/ขอข้อมูลเพิ่ม/รับเคส & ยืนยันทีม) · `closed_fail` (ขอรีไซเคิล) · `pending_recycle_review` (ไม่อนุมัติ/อนุมัติรีไซเคิล) · อื่น ๆ อ่านอย่างเดียว · เนื้อหาครบ §7.5: สรุปเคส + `tracking_round` ทุกสถานะ, จังหวัด/มูลหนี้, ช่องทางติดต่อ 4 ทาง (มือถือเป็นลิงก์ `tel:`), ผู้ติดต่ออื่น, **เอกสารแนบเปิดดูได้จริง** ผ่าน `<FileViewerModal>` (PDF ใน iframe / รูป lightbox / signed URL ต่อครั้ง), thumbnail grid รูปสินค้า, **กล่องประมาณการรายได้ติดกับกล่องทีม**, ช่องเหตุผล, **ประวัติรีไซเคิล** (แสดงเมื่อมีประวัติ ไม่ว่าสถานะปัจจุบันจะเป็นอะไร)
 - **เปลี่ยนทีมพร้อมเหตุผล** — กด "เลือกทีมนี้" (active เฉพาะคนที่กด `accept` ได้จริง) → `<ReasonConfirmModal>` → ส่ง `teamId` + `teamChangeReason` ไปกับ action `accept` (backend 2.3 บังคับเหตุผลอยู่แล้วที่ `assertStatusChange()`)
 - **`<CaseImportWizard>`** — เลือกไฟล์ → mapping คอลัมน์จาก `IMPORT_COLUMNS` (auto-map + แก้ทับได้ + ยามฟิลด์บังคับ/จับคู่ซ้ำ/คอลัมน์ที่จะถูกข้าม) → preview ด้วย `dryRun: true` → ยืนยัน + **ผลรายแถว** (แถว/เลขที่สัญญา/ผล/รายละเอียด error รายช่อง)
 - **`GET /api/cases/team-options`** (`45` §6.1 v1.4 — endpoint ที่ 41) + `lib/cases/team-options-queries.ts`
@@ -1473,11 +1473,11 @@ migration `20260816001500_report_query_indexes` — สำรวจ `lib/reports
 - **State machine (`38` §9/§10)** — `lib/cases/state-machine.ts` (pure): 8 action (`review`/`accept`/`reject`/`request_more_info`/`return_to_draft` + recycle 3 ตัว) พร้อมตารางกฎ (from/to/reason/readiness), `allowedActionsFrom()` สำหรับ UI, `CASE_ACTION_CAPABILITIES` ต่อ action (`38` §13) และ `caseEventsFor()` ตาม `38` §16/§17.2
 - **Routing (`38` §6.4/§7.4/§12)** — `lib/cases/team-suggestion.ts` (pure): จับคู่จาก `addr_province` ตัวเดียว, กรองทีมที่ไม่ `active`, คืนทีมที่ตรงทั้งหมด (UI มี toggle ดูทีมอื่น), ไม่ auto-assign · `GET /api/cases/:id/team-suggestion`
 - **Projected revenue (`38` §6.5)** — `lib/cases/projected-revenue.ts` (pure): FLAT/SUCCESS_FEE/HYBRID แบบ best-case 100% (ไม่สนใจ `charge_on_fail`) + `calculation_source` อ้าง template/version · คำนวณใหม่ทุกครั้งที่ `review`/`accept`/`approve_recycle`
-- **Service fee snapshot ตอน `approved` (`10` §9.2)** — เขียน 6 คอลัมน์ (`service_fee_template_id` + `model`/`base_satang`/`rate_pct`/`basis`/`charge_on_fail` snapshot) ที่ตัวเคส และ snapshot ใหม่ทุกครั้งที่อนุมัติรีไซเกิล (A3 `charge_per_tracking_round` — แต่ละรอบอิสระ)
+- **Service fee snapshot ตอน `approved` (`10` §9.2)** — เขียน 6 คอลัมน์ (`service_fee_template_id` + `model`/`base_satang`/`rate_pct`/`basis`/`charge_on_fail` snapshot) ที่ตัวเคส และ snapshot ใหม่ทุกครั้งที่อนุมัติรีไซเคิล (A3 `charge_per_tracking_round` — แต่ละรอบอิสระ)
 - **Recycle (`38` §6.6)** — `create_recycle_request` (เฉพาะ `closed_fail`) → `pending_recycle_review` → `approve_recycle` (`tracking_round` +1, ล้าง `outcome`/`closed_at`, ข้าม `pending_review` ตรงเข้า `approved`) / `reject_recycle` (กลับ `closed_fail` รอบไม่ขยับ) + เขียน `recycle_requests` (`previous_round`/`new_round`) ใน transaction เดียวกับ audit
 - **Import (`38` §8/§12)** — `lib/cases/import.ts` (pure): CSV parser ในตัว (BOM/CRLF/quote), `IMPORT_COLUMNS` 29 คอลัมน์รองรับหัวไทย/อังกฤษ/snake_case, แปลงบาท→สตางค์, สัญชาติ/ประเภทสินค้าเป็นคำไทยได้, validate ต่อแถวด้วย `caseCreateSchema` เดิม · `POST /api/cases/import` (รองรับ `rows` หรือ `csv`, มี `dryRun` สำหรับ preview) — **แถวผิดตกเฉพาะแถวนั้น**
 - Endpoint ใหม่ 3 ตัวครบ `45` §6.1 (8/8): `PATCH /api/cases/:id/status`, `GET /api/cases/:id/team-suggestion`, `POST /api/cases/import`
-- เทสต์: pure 4 ไฟล์ (state machine / team suggestion / projected revenue / import) + **เทสต์ระดับ DB จริง 11 เคส** (`case-workflow.db.test.ts`) ครอบ DoD: snapshot ไม่เปลี่ยนเมื่อบริษัทย้ายไปเทมเพลตใหม่, รีไซเกิล 3 รอบ → `tracking_round` = 4 + `recycle_history` 3 รายการ, gate เอกสาร, scope ข้ามบริษัท 404, สิทธิ์ accept 403, import สร้าง draft/ซ้ำในไฟล์/dryRun
+- เทสต์: pure 4 ไฟล์ (state machine / team suggestion / projected revenue / import) + **เทสต์ระดับ DB จริง 11 เคส** (`case-workflow.db.test.ts`) ครอบ DoD: snapshot ไม่เปลี่ยนเมื่อบริษัทย้ายไปเทมเพลตใหม่, รีไซเคิล 3 รอบ → `tracking_round` = 4 + `recycle_history` 3 รายการ, gate เอกสาร, scope ข้ามบริษัท 404, สิทธิ์ accept 403, import สร้าง draft/ซ้ำในไฟล์/dryRun
 
 ### การตัดสินใจระหว่างทาง
 - **recycle 3 action เดินผ่าน `PATCH /:id/status`** — `38` §17.1 และ `45` §6.1 ไม่มี endpoint แยกสำหรับ recycle แต่ทั้ง 3 action คือการเปลี่ยนสถานะตาม §10 จึงใช้ endpoint เดิมตาม contract (ไม่ต้องแก้ `45`)
