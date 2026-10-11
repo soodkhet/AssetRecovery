@@ -44,11 +44,6 @@ export interface ReconciliationAdjustment {
   invoiced: boolean
   /** มีใบลดหนี้/ใบเพิ่มหนี้ active อ้างถึงแล้ว */
   hasActiveNote: boolean
-  /**
-   * มติชั่วคราว M3 — ลดยอดที่อนุมัติก่อนรอบมีใบกำกับใบแรก ⇒ ใบกำกับออกจากยอดหลังปรับแล้ว:
-   * หักออกจาก "ยอดตามใบกำกับภาษี" ไม่นับเป็น "รอใบลดหนี้" · ไม่ส่ง = `false`
-   */
-  preInvoice?: boolean
 }
 
 /** ใบลดหนี้/ใบเพิ่มหนี้ active ของใบกำกับในรายงาน (ยอดก่อน VAT) */
@@ -68,18 +63,10 @@ export interface RevenueReconciliationInput {
 export const RECONCILIATION_TITLE = 'กระทบยอดกับใบกำกับภาษี (ยอดก่อน VAT)'
 
 export function buildRevenueReconciliation(input: RevenueReconciliationInput): ReportReconciliation {
-  // มติชั่วคราว M3 — ลดยอดก่อนออกใบกำกับของรอบที่ออกใบแล้ว = ส่วนที่ใบกำกับไม่ได้เรียกเก็บตั้งแต่ต้น
-  const preInvoiceInvoicedSatang = sumSatang(
-    input.adjustments
-      .filter((row) => row.invoiced && row.preInvoice === true && row.adjustmentType === 'decrease')
-      .map((row) => row.amountSatang),
-    'ลดยอดก่อนออกใบกำกับ',
+  const invoicedSatang = sumSatang(
+    input.revenues.filter((row) => row.invoiced).map((row) => row.grossSatang),
+    'ยอดตามใบกำกับภาษี',
   )
-  const invoicedSatang =
-    sumSatang(
-      input.revenues.filter((row) => row.invoiced).map((row) => row.grossSatang),
-      'ยอดตามใบกำกับภาษี',
-    ) - preInvoiceInvoicedSatang
   const uninvoicedSatang = sumSatang(
     input.revenues.filter((row) => !row.invoiced).map((row) => row.grossSatang),
     'รายได้ที่ยังไม่ออกใบกำกับ',
@@ -92,9 +79,7 @@ export function buildRevenueReconciliation(input: RevenueReconciliationInput): R
     input.notes.filter((row) => row.noteType === 'debit').map((row) => row.amountBeforeVatSatang),
     'ใบเพิ่มหนี้',
   )
-  const awaiting = input.adjustments.filter(
-    (row) => row.invoiced && !row.hasActiveNote && !(row.preInvoice === true && row.adjustmentType === 'decrease'),
-  )
+  const awaiting = input.adjustments.filter((row) => row.invoiced && !row.hasActiveNote)
   const awaitingCreditSatang = sumSatang(
     awaiting.filter((row) => row.adjustmentType === 'decrease').map((row) => row.amountSatang),
     'รอใบลดหนี้',

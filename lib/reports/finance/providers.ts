@@ -56,7 +56,6 @@ import { loadProfitEntries } from '@/lib/reports/queries'
 import { previousReportRange, type ReportRange } from '@/lib/reports/range'
 import type { ReportContext, ReportProvider } from '@/lib/reports/provider-types'
 import { getFinancePolicy } from '@/lib/settings/queries/finance-policy'
-import { loadPreInvoiceAdjustments } from '@/lib/portal/documented-amounts'
 
 /**
  * ตัวคำนวณของ **รายงานหมวด F (F1–F5)** — ชั้น DB ของ `96` §6-F
@@ -337,14 +336,13 @@ async function loadBatchLevelAdjustments(
   organizationId: string,
   batchIds: readonly string[],
 ): Promise<{
-  adjustments: (BatchLevelAdjustment & { id: string; hasActiveNote: boolean })[]
+  adjustments: (BatchLevelAdjustment & { hasActiveNote: boolean })[]
   members: BatchRevenueMember[]
 }> {
   if (batchIds.length === 0) return { adjustments: [], members: [] }
   const rows = await prisma.adjustment.findMany({
     where: { organizationId, status: 'approved', revenueId: null, billingBatchId: { in: [...batchIds] } },
     select: {
-      id: true,
       billingBatchId: true,
       adjustmentType: true,
       amountSatang: true,
@@ -357,7 +355,6 @@ async function loadBatchLevelAdjustments(
       ? []
       : [
           {
-            id: row.id,
             billingBatchId: row.billingBatchId,
             adjustmentType: row.adjustmentType,
             amountSatang: row.amountSatang,
@@ -452,13 +449,12 @@ export async function loadRevenueReconciliationInput(
   const isInvoiced = (batchId: string | null): boolean => batchId !== null && invoicedBatches.has(batchId)
   const revenueBatch = new Map(revenues.map((row) => [row.id, row.billingBatchId]))
 
-  const [adjustments, batchLevel, preInvoice] = await Promise.all([
+  const [adjustments, batchLevel] = await Promise.all([
     revenues.length === 0
       ? []
       : prisma.adjustment.findMany({
           where: { organizationId, status: 'approved', revenueId: { in: revenues.map((row) => row.id) } },
           select: {
-            id: true,
             adjustmentType: true,
             amountSatang: true,
             revenueId: true,
@@ -467,10 +463,7 @@ export async function loadRevenueReconciliationInput(
           },
         }),
     loadBatchLevelAdjustments(organizationId, batchIds),
-    // มติชั่วคราว M3 — ลดยอดก่อนออกใบกำกับ: ใบกำกับออกจากยอดหลังปรับแล้ว (ไม่ใช่ "รอใบลดหนี้")
-    loadPreInvoiceAdjustments(organizationId, batchIds),
   ])
-  const preInvoiceIds = new Set([...preInvoice.values()].flatMap((entry) => entry.adjustmentIds))
   // U69 — Adjustment ระดับรอบนับเฉพาะส่วนที่กระจายลงรายได้ในช่วงรายงาน (ตัวเดียวกับที่ F2 นับ) ⇒ กระทบยอดลงตัว
   const inRange = new Set(revenues.map((row) => row.id))
   const batchLevelInRange = batchLevel.adjustments.flatMap((row) => {
@@ -483,7 +476,6 @@ export async function loadRevenueReconciliationInput(
             amountSatang: share,
             invoiced: isInvoiced(row.billingBatchId),
             hasActiveNote: row.hasActiveNote,
-            preInvoice: preInvoiceIds.has(row.id),
           },
         ]
   })
@@ -496,7 +488,6 @@ export async function loadRevenueReconciliationInput(
         amountSatang: row.amountSatang,
         invoiced: isInvoiced(row.revenueId === null ? row.billingBatchId : (revenueBatch.get(row.revenueId) ?? null)),
         hasActiveNote: row.creditNotes.length > 0,
-        preInvoice: preInvoiceIds.has(row.id),
       })),
       ...batchLevelInRange,
     ],

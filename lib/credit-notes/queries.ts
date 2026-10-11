@@ -33,7 +33,7 @@ import { Prisma } from '@/lib/generated/prisma/client'
 import type { CreditNoteStatus, CreditNoteType } from '@/lib/generated/prisma/enums'
 import { formatBranch } from '@/lib/format/branch'
 import { fmtSatangSymbol } from '@/lib/format/money'
-import { documentedOutstandingByBatch, loadPreInvoiceAdjustments } from '@/lib/portal/documented-amounts'
+import { documentedOutstandingByBatch } from '@/lib/portal/documented-amounts'
 import { prisma } from '@/lib/prisma'
 import { syncBillingStatusWithDocuments } from '@/lib/revenue/billing-status-sync'
 import { SalesError } from '@/lib/sales/errors'
@@ -318,18 +318,13 @@ export async function listAdjustmentsAwaitingCreditNote(user: SessionUser): Prom
     select: { id: true, invoiceNumber: true, salesRecord: { select: { billingBatchId: true } } },
   })
   const invoiceByBatch = new Map(invoices.map((invoice) => [invoice.salesRecord.billingBatchId, invoice]))
-  const [outstandingByBatch, preInvoice] = await Promise.all([
-    billOutstandingByBatch(user.organizationId, batchIds),
-    loadPreInvoiceAdjustments(user.organizationId, batchIds),
-  ])
-  // มติชั่วคราว M3 — ลดยอดที่อนุมัติก่อนออกใบกำกับใบแรก: ใบกำกับออกจากยอดหลังปรับแล้ว ⇒ ไม่รอใบลดหนี้
-  const absorbed = new Set([...preInvoice.values()].flatMap((entry) => entry.adjustmentIds))
+  const outstandingByBatch = await billOutstandingByBatch(user.organizationId, batchIds)
 
   const awaiting: AwaitingCreditNoteDto[] = []
   for (const row of adjustments) {
     const batchId = row.billingBatchId ?? row.revenue?.billingBatchId ?? null
     const invoice = batchId === null ? undefined : invoiceByBatch.get(batchId)
-    if (batchId === null || invoice === undefined || absorbed.has(row.id)) continue
+    if (batchId === null || invoice === undefined) continue
     const noteType = awaitingNoteType({
       status: row.status,
       adjustmentType: row.adjustmentType,
@@ -455,14 +450,6 @@ async function assertAdjustment(
     invoice.salesRecord.billingBatchId,
     noteType,
   )
-  // มติชั่วคราว M3 — ลดยอดก่อนออกใบกำกับใบแรก: ใบกำกับออกจากยอดหลังปรับแล้ว ⇒ ออกใบลดหนี้ซ้ำไม่ได้ (กันหักสองครั้ง)
-  const preInvoice = await loadPreInvoiceAdjustments(user.organizationId, [invoice.salesRecord.billingBatchId])
-  if (preInvoice.get(invoice.salesRecord.billingBatchId)?.adjustmentIds.includes(adjustmentId) === true) {
-    throw new SalesError('CREDIT_NOTE_ADJUSTMENT_MISMATCH', {
-      detail: `adjustment=${adjustmentId} ลดยอดก่อนออกใบกำกับแล้ว`,
-      message: 'รายการปรับปรุงนี้ลดยอดของรอบวางบิลก่อนออกใบกำกับภาษีแล้ว (ใบกำกับออกจากยอดหลังปรับ) — ไม่ต้องออกใบลดหนี้',
-    })
-  }
   return { amountSatang: adjustment.amountSatang }
 }
 

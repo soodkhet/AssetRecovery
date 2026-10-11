@@ -1,10 +1,3 @@
-import {
-  isPreInvoiceDecrease,
-  preInvoiceAmounts,
-  preInvoiceSharesByRevenue,
-  type PreInvoiceAdjustmentAmount,
-  type PreInvoiceRevenue,
-} from '@/lib/adjustments/pre-invoice'
 import { sumCreditNotesByInvoice } from '@/lib/credit-notes/totals'
 import { arOutstandingSatang, type BillingBatchAmounts } from '@/lib/finance/ar-calc'
 import { allocateLargestRemainder } from '@/lib/finance/wht-calc'
@@ -18,8 +11,6 @@ import { prisma } from '@/lib/prisma'
  * ### กติกา
  * - พอร์ทัลแสดง**ยอดตามเอกสาร** (ใบกำกับภาษี/ใบลดหนี้) เท่านั้น — Adjustment ภายในที่ยังไม่มีใบลดหนี้
  *   **ไม่สะท้อน**ในพอร์ทัล (รายงานภายใน F1/F2/F3 ยังใช้ยอดหลัง Adjustment ตามเดิม — ไม่แตะ)
- *   **ยกเว้น** (มติชั่วคราว M3) Adjustment ลดยอดที่อนุมัติ**ก่อน**รอบมีใบกำกับ active ใบแรก — ลดยอดเรียกเก็บของรอบทันที
- *   (`preInvoiceAdjustments` · ใบกำกับที่ออกภายหลังคิดจากยอดหลังปรับ — `lib/adjustments/pre-invoice.ts`)
  * - ยอดหน้าใบกำกับ = snapshot ใน `sales_records` (สร้างตอนส่งบิล — ก่อน VAT/VAT/รวม ตัวเดียวกับที่พิมพ์ลงใบ)
  *   · ยังไม่มี `sales_records` (ยังไม่ออกใบ/sync ล้ม) ⇒ ยอดรวม = `billing_batches.total_satang` (ยอดใบวางบิลที่ส่งจริง)
  *     ส่วนก่อน VAT/VAT = ผลรวม snapshot ของ `revenues` ในรอบ (ตัวเดียวกับที่จะลงใบ)
@@ -54,9 +45,7 @@ export interface DocumentedBillingAmounts {
   creditNotes: DocumentAmounts
   /** ผลรวมใบเพิ่มหนี้ active ของรอบ (ไม่มี ⇒ 0 — U19) */
   debitNotes: DocumentAmounts
-  /** มติชั่วคราว M3 — Adjustment ลดยอดก่อนออกใบกำกับ (ไม่ต้องใช้ใบลดหนี้) · ไม่มี ⇒ 0 */
-  preInvoiceAdjustments: DocumentAmounts
-  /** ยอดตามเอกสาร = ใบกำกับ − ใบลดหนี้ + ใบเพิ่มหนี้ − Adjustment ลดยอดก่อนออกใบกำกับ (ยอดที่พอร์ทัลแสดง/นับ) */
+  /** ยอดตามเอกสาร = ใบกำกับ − ใบลดหนี้ + ใบเพิ่มหนี้ (ยอดที่พอร์ทัลแสดง/นับ) */
   documented: DocumentAmounts
 }
 
@@ -85,114 +74,7 @@ interface NoteTotalsByBatch {
  * · รอบที่ไม่มีเอกสารชนิดนั้นไม่มีคีย์ · ⚠️ ไม่ตรวจสิทธิ์/บริษัท — ผู้เรียกกรองรอบตาม scope มาแล้ว
  */
 /** client ที่อ่านยอดตามเอกสารได้ทั้ง `prisma` และ `tx` (มติ O75 — อ่านในธุรกรรมเดียวกับการบันทึกเอกสาร) */
-export type DocumentedReadClient = Pick<typeof prisma, 'billingBatch' | 'taxInvoice' | 'creditNote' | 'adjustment' | 'revenue'>
-
-/** Adjustment ลดยอดก่อนออกใบกำกับของรอบหนึ่ง (มติชั่วคราว M3) */
-export interface PreInvoiceAdjustmentsOfBatch {
-  amounts: DocumentAmounts
-  adjustmentIds: string[]
-  /** ส่วนลดก่อน VAT ต่อรายได้ (ระดับรอบกระจายแล้ว) — ฐานกราฟรายได้พอร์ทัล */
-  shares: { revenueId: string | null; amountSatang: number }[]
-}
-
-/**
- * มติชั่วคราว M3 — Adjustment ลดยอดที่อนุมัติก่อนรอบมีใบกำกับ active ใบแรก (`isPreInvoiceDecrease()`) ต่อรอบวางบิล
- * · รอบที่ไม่มีไม่มีคีย์ · ไม่มี Adjustment ลดยอดเลย = 1 query · ⚠️ ไม่ตรวจสิทธิ์ — ผู้เรียกกรองรอบมาแล้ว
- */
-export async function loadPreInvoiceAdjustments(
-  organizationId: string,
-  billingBatchIds: readonly string[],
-  client: DocumentedReadClient = prisma,
-  asOf?: Date,
-): Promise<Map<string, PreInvoiceAdjustmentsOfBatch>> {
-  const result = new Map<string, PreInvoiceAdjustmentsOfBatch>()
-  const ids = [...new Set(billingBatchIds)]
-  if (ids.length === 0) return result
-  const adjustments = await client.adjustment.findMany({
-    where: {
-      organizationId,
-      status: 'approved',
-      adjustmentType: 'decrease',
-      creditNoteWaivedAt: null,
-      creditNotes: { none: { status: 'active' } },
-      OR: [{ billingBatchId: { in: ids } }, { revenue: { billingBatchId: { in: ids } } }],
-    },
-    select: {
-      id: true,
-      status: true,
-      adjustmentType: true,
-      amountSatang: true,
-      approvedAt: true,
-      revenueId: true,
-      billingBatchId: true,
-      revenue: { select: { billingBatchId: true } },
-    },
-    orderBy: [{ approvedAt: 'asc' }, { id: 'asc' }],
-  })
-  if (adjustments.length === 0) return result
-  const batchIds = [
-    ...new Set(adjustments.flatMap((row) => {
-      const batchId = row.billingBatchId ?? row.revenue?.billingBatchId ?? null
-      return batchId === null || !ids.includes(batchId) ? [] : [batchId]
-    })),
-  ]
-  if (batchIds.length === 0) return result
-  const [revenues, invoices] = await Promise.all([
-    client.revenue.findMany({
-      where: { organizationId, billingBatchId: { in: batchIds }, deletedAt: null },
-      select: { id: true, billingBatchId: true, grossSatang: true, vatRatePctUsed: true },
-    }),
-    client.taxInvoice.findMany({
-      where: { organizationId, status: 'active', salesRecord: { billingBatchId: { in: batchIds } } },
-      select: { createdAt: true, salesRecord: { select: { billingBatchId: true } } },
-    }),
-  ])
-  const firstInvoiceAt = new Map<string, Date>()
-  for (const invoice of invoices) {
-    const batchId = invoice.salesRecord.billingBatchId
-    const current = firstInvoiceAt.get(batchId)
-    if (current === undefined || invoice.createdAt.getTime() < current.getTime()) firstInvoiceAt.set(batchId, invoice.createdAt)
-  }
-  const revenueRows: PreInvoiceRevenue[] = revenues.map((row) => ({
-    id: row.id,
-    billingBatchId: row.billingBatchId,
-    grossSatang: row.grossSatang,
-    vatRatePct: row.vatRatePctUsed.toNumber(),
-  }))
-  const byBatch = new Map<string, { ids: string[]; amounts: PreInvoiceAdjustmentAmount[] }>()
-  for (const row of adjustments) {
-    const batchId = row.billingBatchId ?? row.revenue?.billingBatchId ?? null
-    if (batchId === null || !batchIds.includes(batchId)) continue
-    const eligible = isPreInvoiceDecrease(
-      { status: row.status, adjustmentType: row.adjustmentType, approvedAt: row.approvedAt, hasActiveNote: false, waived: false },
-      firstInvoiceAt.get(batchId) ?? null,
-      asOf,
-    )
-    if (!eligible) continue
-    const entry = byBatch.get(batchId) ?? { ids: [], amounts: [] }
-    entry.ids.push(row.id)
-    entry.amounts.push({ amountSatang: row.amountSatang, revenueId: row.revenueId })
-    byBatch.set(batchId, entry)
-  }
-  for (const [batchId, entry] of byBatch) {
-    const amounts = preInvoiceAmounts(batchId, entry.amounts, revenueRows)
-    result.set(batchId, {
-      amounts: { beforeVatSatang: amounts.beforeVatSatang, vatSatang: amounts.vatSatang, totalSatang: amounts.totalSatang },
-      adjustmentIds: entry.ids,
-      shares: preInvoiceSharesByRevenue(batchId, entry.amounts, revenueRows),
-    })
-  }
-  return result
-}
-
-/** pure — หัก Adjustment ลดยอดก่อนออกใบกำกับออกจากยอดตามเอกสาร (มติชั่วคราว M3) */
-export function subtractPreInvoiceAdjustments(documented: DocumentAmounts, pre: DocumentAmounts): DocumentAmounts {
-  return {
-    beforeVatSatang: documented.beforeVatSatang - pre.beforeVatSatang,
-    vatSatang: documented.vatSatang - pre.vatSatang,
-    totalSatang: documented.totalSatang - pre.totalSatang,
-  }
-}
+export type DocumentedReadClient = Pick<typeof prisma, 'billingBatch' | 'taxInvoice' | 'creditNote'>
 
 async function loadCreditNoteTotals(
   organizationId: string,
@@ -245,7 +127,7 @@ export async function documentedAmountsForBatches(
   const result = new Map<string, DocumentedBillingAmounts>()
   if (billingBatchIds.length === 0) return result
   const ids = [...new Set(billingBatchIds)]
-  const [batches, notes, preInvoice] = await Promise.all([
+  const [batches, notes] = await Promise.all([
     client.billingBatch.findMany({
       where: { organizationId, id: { in: ids }, deletedAt: null },
       select: {
@@ -268,7 +150,6 @@ export async function documentedAmountsForBatches(
       },
     }),
     loadCreditNoteTotals(organizationId, ids, client, asOf),
-    loadPreInvoiceAdjustments(organizationId, ids, client, asOf),
   ])
 
   for (const batch of batches) {
@@ -283,15 +164,13 @@ export async function documentedAmountsForBatches(
           }
     const credit = notes.credit.get(batch.id) ?? ZERO_AMOUNTS
     const debit = notes.debit.get(batch.id) ?? ZERO_AMOUNTS
-    const pre = preInvoice.get(batch.id)?.amounts ?? ZERO_AMOUNTS
     result.set(batch.id, {
       billingBatchId: batch.id,
       taxInvoice: sales?.taxInvoices[0] ?? null,
       invoiced,
       creditNotes: credit,
       debitNotes: debit,
-      preInvoiceAdjustments: pre,
-      documented: subtractPreInvoiceAdjustments(applyCreditNotes(invoiced, credit, debit), pre),
+      documented: applyCreditNotes(invoiced, credit, debit),
     })
   }
   return result
@@ -427,7 +306,7 @@ export async function documentedRevenueAmounts(
   const result = new Map<string, number>()
   const ids = [...new Set(billingBatchIds)]
   if (ids.length === 0) return result
-  const [documented, revenues, creditNotes, preInvoice] = await Promise.all([
+  const [documented, revenues, creditNotes] = await Promise.all([
     documentedAmountsForBatches(organizationId, ids),
     prisma.revenue.findMany({
       where: { organizationId, billingBatchId: { in: ids }, deletedAt: null },
@@ -444,7 +323,6 @@ export async function documentedRevenueAmounts(
       },
       orderBy: [{ issueDate: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
     }),
-    loadPreInvoiceAdjustments(organizationId, ids),
   ])
   const byBatch = new Map<string, { id: string; grossSatang: number }[]>()
   for (const revenue of revenues) {
@@ -462,12 +340,6 @@ export async function documentedRevenueAmounts(
       revenueId: note.adjustment?.revenueId ?? null,
       noteType: note.noteType,
     })
-    notesByBatch.set(batchId, list)
-  }
-  // มติชั่วคราว M3 — Adjustment ลดยอดก่อนออกใบกำกับหักแบบเดียวกับใบลดหนี้ (ผลรวม = documented.beforeVatSatang)
-  for (const [batchId, pre] of preInvoice) {
-    const list = notesByBatch.get(batchId) ?? []
-    for (const share of pre.shares) list.push({ amountBeforeVatSatang: share.amountSatang, revenueId: share.revenueId, noteType: 'credit' })
     notesByBatch.set(batchId, list)
   }
   for (const [batchId, list] of byBatch) {
@@ -520,7 +392,6 @@ export async function documentedOutstandingByBatch(
 /**
  * Adjustment ภายในที่อนุมัติแล้วแต่ยังไม่มีใบลดหนี้/ใบเพิ่มหนี้ active อ้างถึง ต่อรอบวางบิล (U96 #11) —
  * ยอดลูกหนี้ตามเอกสาร**ยังไม่สะท้อน**รายการเหล่านี้ ⇒ หน้าลูกหนี้แสดงเป็นป้าย "รอใบลดหนี้/ใบเพิ่มหนี้"
- * · มติชั่วคราว M3 — ลดยอดที่อนุมัติ**ก่อน**รอบมีใบกำกับ active ใบแรก ไม่นับ (ลดยอดเรียกเก็บไปแล้ว ไม่ต้องใช้ใบลดหนี้)
  */
 export async function adjustmentsAwaitingNotesByBatch(
   organizationId: string,
@@ -529,24 +400,19 @@ export async function adjustmentsAwaitingNotesByBatch(
   const result = new Map<string, number>()
   const ids = [...new Set(billingBatchIds)]
   if (ids.length === 0) return result
-  const [rows, preInvoice] = await Promise.all([
-    prisma.adjustment.findMany({
-      where: {
-        organizationId,
-        status: 'approved',
-        adjustmentType: { in: ['decrease', 'increase'] },
-        creditNotes: { none: { status: 'active' } },
-        // staging E-016 — ปิดป้ายแล้ว (จัดการนอกระบบ) ไม่นับเป็นรายการรอเอกสาร
-        creditNoteWaivedAt: null,
-        OR: [{ billingBatchId: { in: ids } }, { revenue: { billingBatchId: { in: ids } } }],
-      },
-      select: { id: true, billingBatchId: true, revenue: { select: { billingBatchId: true } } },
-    }),
-    loadPreInvoiceAdjustments(organizationId, ids),
-  ])
-  const absorbed = new Set([...preInvoice.values()].flatMap((entry) => entry.adjustmentIds))
+  const rows = await prisma.adjustment.findMany({
+    where: {
+      organizationId,
+      status: 'approved',
+      adjustmentType: { in: ['decrease', 'increase'] },
+      creditNotes: { none: { status: 'active' } },
+      // staging E-016 — ปิดป้ายแล้ว (จัดการนอกระบบ) ไม่นับเป็นรายการรอเอกสาร
+      creditNoteWaivedAt: null,
+      OR: [{ billingBatchId: { in: ids } }, { revenue: { billingBatchId: { in: ids } } }],
+    },
+    select: { billingBatchId: true, revenue: { select: { billingBatchId: true } } },
+  })
   for (const row of rows) {
-    if (absorbed.has(row.id)) continue
     const batchId = row.billingBatchId ?? row.revenue?.billingBatchId ?? null
     if (batchId === null || !ids.includes(batchId)) continue
     result.set(batchId, (result.get(batchId) ?? 0) + 1)

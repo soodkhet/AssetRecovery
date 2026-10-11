@@ -11,7 +11,7 @@ import type {
   TaxInvoiceStatus,
   VatMode,
 } from '@/lib/generated/prisma/enums'
-import { documentedOutstandingByBatch, loadPreInvoiceAdjustments } from '@/lib/portal/documented-amounts'
+import { documentedOutstandingByBatch } from '@/lib/portal/documented-amounts'
 import { parseSellerProfileSnapshot, sellerProfileOf, sellerProfileSnapshotJson } from '@/lib/organization/profile'
 import { loadDocumentTemplateSnapshot } from '@/lib/settings/queries/tax-doc-templates'
 import { documentTemplateSnapshotJson, parseDocumentTemplateSnapshot } from '@/lib/settings/tax-doc-template'
@@ -555,12 +555,10 @@ async function planReceiptInvoice(
         where: { id: receipt.billingBatchId },
         select: { bankFeeWrittenOffSatang: true },
       })
-      // มติชั่วคราว M3 — Adjustment ลดยอดที่อนุมัติก่อนออกใบกำกับใบแรก ⇒ ฐานของใบ = ยอดใบแจ้งหนี้หลังปรับ (ไม่ใช้ใบลดหนี้)
-      const pre = (await loadPreInvoiceAdjustments(organizationId, [receipt.billingBatchId], tx)).get(receipt.billingBatchId)
       const computed = receiptInvoiceAmounts({
         basis: {
-          billedBeforeVatSatang: sales.totalBeforeVatSatang - (pre?.amounts.beforeVatSatang ?? 0),
-          billedVatSatang: sales.vatSatang - (pre?.amounts.vatSatang ?? 0),
+          billedBeforeVatSatang: sales.totalBeforeVatSatang,
+          billedVatSatang: sales.vatSatang,
           billedVatRatesPct: vat.rates,
         },
         prior: prior.map((row) => ({
@@ -903,16 +901,9 @@ export async function getTaxInvoiceDocSource(user: SessionUser, invoiceId: strin
   return docSourceOf(invoice, {
     periodLabel: sales.period.periodLabel,
     billingBatchNumber: sales.billingBatch.batchNumber,
-    // มติชั่วคราว M3 — ยอดคงค้างบนใบเทียบกับยอดใบแจ้งหนี้หลังหัก Adjustment ลดยอดก่อนออกใบกำกับ
-    billedTotalSatang: sales.totalSatang - (await preInvoiceTotalSatang(user.organizationId, sales.billingBatchId)),
+    billedTotalSatang: sales.totalSatang,
     siblings: sales.taxInvoices,
   })
-}
-
-/** มติชั่วคราว M3 — ยอดรวม (รวม VAT) ของ Adjustment ลดยอดก่อนออกใบกำกับของรอบ (ไม่มี = 0) */
-async function preInvoiceTotalSatang(organizationId: string, billingBatchId: string): Promise<number> {
-  const pre = await loadPreInvoiceAdjustments(organizationId, [billingBatchId])
-  return pre.get(billingBatchId)?.amounts.totalSatang ?? 0
 }
 
 /** ใบในรายการขายเดียวกัน — ใช้คิดลำดับการรับชำระบางส่วน (`receiptInstallmentOf()`) */
@@ -1022,7 +1013,6 @@ export async function taxInvoicesForPack(
       salesRecord: {
         select: {
           totalSatang: true,
-          billingBatchId: true,
           period: { select: { periodLabel: true } },
           billingBatch: { select: { period: true, batchNumber: true } },
           taxInvoices: {
@@ -1034,11 +1024,6 @@ export async function taxInvoicesForPack(
     },
   })
 
-  // มติชั่วคราว M3 — ยอดใบแจ้งหนี้หลังหัก Adjustment ลดยอดก่อนออกใบกำกับ (ข้อความรับชำระบางส่วน/ยอดคงค้าง)
-  const preInvoice = await loadPreInvoiceAdjustments(
-    organizationId,
-    rows.map((row) => row.salesRecord.billingBatchId),
-  )
   return rows.map((row) => {
     const { salesRecord: sales, replacedBy, ...invoice } = row
     const legacyReplacement =
@@ -1056,7 +1041,7 @@ export async function taxInvoicesForPack(
       source: docSourceOf(invoice, {
         periodLabel: sales.period.periodLabel,
         billingBatchNumber: sales.billingBatch.batchNumber,
-        billedTotalSatang: sales.totalSatang - (preInvoice.get(sales.billingBatchId)?.amounts.totalSatang ?? 0),
+        billedTotalSatang: sales.totalSatang,
         siblings: sales.taxInvoices,
       }),
       companyName: row.buyerName,
