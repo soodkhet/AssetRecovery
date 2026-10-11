@@ -34,7 +34,7 @@ import type {
   AdvanceSeparateReturnInput,
   AdvanceSettleInput,
 } from '@/lib/advances/schemas'
-import type { AdvanceDto, AdvanceReturnDto, AdvanceSettleResult } from '@/lib/advances/types'
+import type { AdvanceDto, AdvanceRejectResultDto, AdvanceReturnDto, AdvanceSettleResult } from '@/lib/advances/types'
 import { emitAudit } from '@/lib/audit/audit'
 import { AuthError } from '@/lib/auth/errors'
 import { hasCapability } from '@/lib/auth/permission'
@@ -510,7 +510,7 @@ export async function rejectAdvance(
   advanceId: string,
   input: AdvanceRejectInput,
   now: Date = new Date(),
-): Promise<AdvanceDto> {
+): Promise<AdvanceRejectResultDto> {
   const user = context.actor
   const reason = assertAdvanceRejectionReason(input.rejectionReason)
   const current = await findAdvance(user, advanceId)
@@ -570,7 +570,18 @@ export async function rejectAdvance(
     ),
   )
 
-  return toDto(updated, now)
+  // mytester2 DI2-01 — ผู้ขอยังมีเงินทดรองค้างเคลียร์ ⇒ ขอใหม่ไม่ได้ (ห้ามเบิกซ้อน) — ให้ toast บอกตามจริง
+  const uncleared = await prisma.advance.findMany({
+    where: {
+      organizationId: user.organizationId,
+      payeeId: updated.payeeId,
+      status: { in: [...UNCLEARED_ADVANCE_STATUSES] },
+      deletedAt: null,
+    },
+    select: { advanceNumber: true },
+    orderBy: { createdAt: 'asc' },
+  })
+  return { ...toDto(updated, now), requesterUnclearedRefs: uncleared.map((row) => row.advanceNumber) }
 }
 
 /**

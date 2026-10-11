@@ -62,6 +62,15 @@ export interface AdvanceDto {
   clearReviewedByName: string | null
 }
 
+/**
+ * ผลของ `PATCH /api/advances/:id/reject` — เงินทดรองที่ผู้ขอยังค้างเคลียร์ (`approved`/`overdue`) หลังปฏิเสธ
+ * (mytester2 DI2-01) ⇒ toast บอกตามจริงว่าขอเบิกใหม่ได้ทันทีหรือต้องเคลียร์รายการไหนก่อน
+ */
+export interface AdvanceRejectResultDto extends AdvanceDto {
+  /** เลขที่ใบเบิกที่ยังค้างเคลียร์ของผู้รับรายเดียวกัน (ว่าง = ขอใหม่ได้ทันที) */
+  requesterUnclearedRefs: string[]
+}
+
 /** 1 แถวของสมุดย่อย `advance_returns` (มติ PO U30) */
 export interface AdvanceReturnDto {
   id: string

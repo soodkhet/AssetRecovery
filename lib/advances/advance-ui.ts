@@ -98,6 +98,17 @@ export const ADVANCE_STATUS_FILTERS = [
 export type AdvanceStatusFilter = (typeof ADVANCE_STATUS_FILTERS)[number]['value']
 
 /**
+ * คำอธิบาย toast หลังปฏิเสธคำขอเงินทดรอง (mytester2 DI2-01) — ตามสถานะจริงของผู้ขอ:
+ * ยังมีเงินทดรองอนุมัติ/เลยกำหนดค้างเคลียร์ ⇒ ขอใหม่ไม่ได้จนกว่าจะเคลียร์ (กฎห้ามเบิกซ้อน) · ไม่มี ⇒ ขอใหม่ได้ทันที
+ */
+export function advanceRejectedToastText(requesterName: string, unclearedRefs: readonly string[] | null): string {
+  // ไม่รู้สถานะ (ผลตอบกลับไม่มีข้อมูล) ⇒ ไม่บอกว่าขอใหม่ได้ — กันข้อความขัดกฎห้ามเบิกซ้อน
+  if (unclearedRefs === null) return `${requesterName} — ระบบแจ้งเหตุผลให้ผู้ขอแล้ว`
+  if (unclearedRefs.length === 0) return `${requesterName} — ขอเบิกรอบใหม่ได้ทันที`
+  return `${requesterName} — ยังขอเบิกรอบใหม่ไม่ได้จนกว่าจะเคลียร์ยอด ${unclearedRefs.join(', ')}`
+}
+
+/**
  * ข้อความ error ของการ "ขอเงินทดรอง" ที่ผู้ขอ (พนักงานภาคสนาม) อ่านแล้วรู้ว่าต้องทำอะไรต่อ (UAT BUG-046)
  * — ใช้ข้อมูลประกอบที่ API แนบมา (`maxSatang` ของ `ADVANCE_EXCEEDS_MAX`) · code อื่นคืนข้อความจาก API ตรง ๆ
  */

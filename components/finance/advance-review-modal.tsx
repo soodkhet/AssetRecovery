@@ -2,8 +2,9 @@
 
 import { useState } from 'react'
 import { Button, Field, InlineAlert, Input, Modal, Textarea, useToast } from '@/components/ui'
-import type { AdvanceDto } from '@/lib/advances/types'
-import { callApi, jsonRequest } from '@/lib/api/types'
+import { advanceRejectedToastText } from '@/lib/advances/advance-ui'
+import type { AdvanceDto, AdvanceRejectResultDto } from '@/lib/advances/types'
+import { callApi, jsonRequest, type ApiCallResult } from '@/lib/api/types'
 import { fmtDate } from '@/lib/format/datetime'
 import { fmtSatangSymbol, parseBahtInput } from '@/lib/format/money'
 
@@ -48,13 +49,13 @@ export function AdvanceReviewModal({
   async function submit(): Promise<void> {
     if (advance === null) return
     setSaving(true)
-    const result =
+    const result: ApiCallResult<AdvanceDto | AdvanceRejectResultDto> =
       mode === 'approve'
-        ? await callApi(
+        ? await callApi<AdvanceDto>(
             `/api/advances/${advance.id}/approve`,
             jsonRequest('PATCH', { approvedSatang, note: note.trim() }),
           )
-        : await callApi(
+        : await callApi<AdvanceRejectResultDto>(
             `/api/advances/${advance.id}/reject`,
             jsonRequest('PATCH', { rejectionReason: reason.trim() }),
           )
@@ -69,7 +70,10 @@ export function AdvanceReviewModal({
       description:
         mode === 'approve'
           ? `${advance.requesterName} — เงินโอนในรอบจ่ายถัดไป · เคลียร์ยอดภายใน ${fmtDate(advance.dueClearDate)}`
-          : `${advance.requesterName} — ขอเบิกรอบใหม่ได้ทันที`,
+          : advanceRejectedToastText(
+              advance.requesterName,
+              result.data !== undefined && isRejectResult(result.data) ? result.data.requesterUnclearedRefs : null,
+            ),
     })
     onDone()
     close()
@@ -146,4 +150,8 @@ export function AdvanceReviewModal({
       </div>
     </Modal>
   )
+}
+
+function isRejectResult(data: AdvanceDto | AdvanceRejectResultDto): data is AdvanceRejectResultDto {
+  return 'requesterUnclearedRefs' in data && Array.isArray(data.requesterUnclearedRefs)
 }
