@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ModuleError } from '@/lib/api/errors'
 import { fieldEvidenceFiles, lotDocumentRule } from '@/lib/uploads/rules'
 import { toVerifiedUploadMap, uploadMapJson, verifyUploadedFile, verifyUploadedFiles } from '@/lib/uploads/verify'
-import { putFakeUpload, resetFakeUploads, sampleBytes, sha256Of } from '@/tests/helpers/fake-uploads'
+import { putFakeUpload, resetFakeUploads, sampleBytes, sha256Of, uploadTestState } from '@/tests/helpers/fake-uploads'
 
 vi.mock('@/lib/uploads/storage', async () => (await import('@/tests/helpers/fake-uploads')).fakeStorageModule())
 
@@ -55,6 +55,27 @@ describe('verifyUploadedFile', () => {
   it('hash จาก browser ไม่ตรง = UPLOAD_HASH_MISMATCH', async () => {
     putFakeUpload(path, sampleBytes('pdf'))
     expect(await codeOf(() => verifyUploadedFile(path, rule, sha256Of('อื่น')))).toBe('UPLOAD_HASH_MISMATCH')
+  })
+
+  it('เนื้อไฟล์ไม่ตรงชนิด = ลบไฟล์ออกจาก Storage ไม่ให้ค้าง (mytester A-14)', async () => {
+    putFakeUpload(path, sampleBytes('text'))
+    expect(await codeOf(() => verifyUploadedFile(path, rule))).toBe('UPLOAD_FILE_TYPE_INVALID')
+    expect(uploadTestState.removed).toEqual([path])
+  })
+
+  it('hash ไม่ตรง / path นอกขอบเขต = ไม่ลบไฟล์ (อาจเป็นไฟล์ที่ผูกอยู่แล้ว)', async () => {
+    putFakeUpload(path, sampleBytes('pdf'))
+    await codeOf(() => verifyUploadedFile(path, rule, sha256Of('อื่น')))
+    const outside = 'handover-lots/lot-2/signed-doc/k1.pdf'
+    putFakeUpload(outside, sampleBytes('text'))
+    expect(await codeOf(() => verifyUploadedFile(outside, rule))).toBe('UPLOAD_PATH_OUT_OF_SCOPE')
+    expect(uploadTestState.removed).toEqual([])
+  })
+
+  it('ลบไม่สำเร็จยังคืน error เดิมให้ผู้ใช้', async () => {
+    putFakeUpload(path, sampleBytes('text'))
+    uploadTestState.failRemove.add(path)
+    expect(await codeOf(() => verifyUploadedFile(path, rule))).toBe('UPLOAD_FILE_TYPE_INVALID')
   })
 })
 
