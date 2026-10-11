@@ -10,6 +10,7 @@ import {
   buildPayoutBatchName,
   duplicatePaymentFileWarning,
   nextPaymentFileVersion,
+  payoutBatchAmountSplit,
   nextPayoutBatchStatus,
   paymentFileName,
   paymentFileStoragePath,
@@ -258,5 +259,30 @@ describe('payoutItemTrackingRound (staging E-050)', () => {
   it('รายการไม่ผูกงาน ⇒ รอบปัจจุบันของเคส · ไม่มีเคส ⇒ 1', () => {
     expect(payoutItemTrackingRound({ assignment: null, case: { trackingRound: 3 } })).toBe(3)
     expect(payoutItemTrackingRound({ assignment: null, case: null })).toBe(1)
+  })
+})
+
+describe('payoutBatchAmountSplit — ค่าตอบแทนไม่รวมเงินทดรอง (mytester F-04 · รีวิวเฟส 4 ข้อ 2)', () => {
+  it('เงินทดรองแยกเป็น advancePaidSatang · ภาษีที่บริษัทออกให้ไม่นับเป็นค่าตอบแทน', () => {
+    const split = payoutBatchAmountSplit([
+      { grossSatang: 100_000, whtSatang: 3_000, netSatang: 97_000, whtCondition: 'withhold', isAdvance: false },
+      { grossSatang: 103_093, whtSatang: 3_093, netSatang: 100_000, whtCondition: 'pay_once', isAdvance: false },
+      { grossSatang: 50_000, whtSatang: 0, netSatang: 50_000, whtCondition: null, isAdvance: true },
+    ])
+    expect(split).toEqual({
+      compensationSatang: 200_000,
+      whtWithheldSatang: 3_000,
+      whtPaidByPayerSatang: 3_093,
+      advancePaidSatang: 50_000,
+    })
+  })
+
+  it('ไม่มีรายการ ⇒ ศูนย์ทุกช่อง', () => {
+    expect(payoutBatchAmountSplit([])).toEqual({
+      compensationSatang: 0,
+      whtWithheldSatang: 0,
+      whtPaidByPayerSatang: 0,
+      advancePaidSatang: 0,
+    })
   })
 })

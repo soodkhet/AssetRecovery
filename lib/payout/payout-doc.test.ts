@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { sumPayoutTaxSplit } from '@/lib/finance/wht-calc'
 import { PayoutError } from '@/lib/payout/errors'
+import { payoutBatchAmountSplit } from '@/lib/payout/payout'
 import {
   assertPayoutDocReady,
   assertVoucherReady,
@@ -65,8 +65,8 @@ function batch(items: readonly PayoutBatchItemDto[], overrides: Partial<PayoutBa
     netSatang: gross - wht,
     advanceOffsetSatang: 0,
     transferSatang: gross - wht,
-    ...sumPayoutTaxSplit(items),
-    advancePaidSatang: items.reduce((total, row) => (row.source === 'advance' ? total + row.grossSatang : total), 0),
+    // รีวิวเฟส 4 ข้อ 2 — นิยามเดียวกับ API: ค่าตอบแทนไม่รวมเงินทดรอง (F-04)
+    ...payoutBatchAmountSplit(items.map((row) => ({ ...row, isAdvance: row.source === 'advance' }))),
     itemCount: items.length,
     bankAccountId: 'acc-1',
     bankAccountLabel: 'ธนาคารกสิกรไทย xxx-x-x9876-x',

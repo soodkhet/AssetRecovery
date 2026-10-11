@@ -8,7 +8,7 @@ import type { RequestMeta } from '@/lib/auth/request-meta'
 import type { SessionUser } from '@/lib/auth/types'
 import { EXPENSE_TYPE_LABEL } from '@/lib/field/expense-ui'
 import { endOfBangkokDay } from '@/lib/format/datetime'
-import { calculatePayeeBatchWht, sumPayoutTaxSplit, type PayeeBatchWhtLine } from '@/lib/finance/wht-calc'
+import { calculatePayeeBatchWht, type PayeeBatchWhtLine } from '@/lib/finance/wht-calc'
 import {
   advanceReturnOutstandingSatang,
   allocatePayeeAdvanceOffset,
@@ -50,7 +50,7 @@ import {
   paymentFileName,
   missingPayeeBankFields,
   paymentFileStoragePath,
-  payoutAdvancePaidSatang,
+  payoutBatchAmountSplit,
   payoutItemTrackingRound,
   resolvePayoutSide,
   whtFallbackWarning,
@@ -214,11 +214,7 @@ function batchAmountSplit(items: BatchRow['items']): {
   whtPaidByPayerSatang: number
   advancePaidSatang: number
 } {
-  const split = sumPayoutTaxSplit(items)
-  const advancePaidSatang = payoutAdvancePaidSatang(
-    items.map((item) => ({ isAdvance: item.advanceId !== null, grossSatang: item.grossSatang })),
-  )
-  return { ...split, compensationSatang: split.compensationSatang - advancePaidSatang, advancePaidSatang }
+  return payoutBatchAmountSplit(items.map((item) => ({ ...item, isAdvance: item.advanceId !== null })))
 }
 
 function toBatchDto(row: BatchRow): PayoutBatchDto {

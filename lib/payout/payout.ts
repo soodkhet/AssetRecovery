@@ -1,4 +1,5 @@
 import type { ApiWarning } from '@/lib/api/envelope'
+import { sumPayoutTaxSplit, type payoutItemTaxSplit, type PayoutTaxSplit } from '@/lib/finance/wht-calc'
 import { fmtDate, fmtDateTime } from '@/lib/format/datetime'
 import type { PayoutBatchSide, PayoutBatchStatus, RoleGroup, TeamSide } from '@/lib/generated/prisma/enums'
 import { PayoutError } from '@/lib/payout/errors'
@@ -310,6 +311,18 @@ export function payoutItemTrackingRound(row: {
  */
 export function payoutAdvancePaidSatang(items: ReadonlyArray<{ isAdvance: boolean; grossSatang: number }>): number {
   return items.reduce((sum, item) => (item.isAdvance ? sum + item.grossSatang : sum), 0)
+}
+
+/**
+ * ยอดแยกของทั้งรอบจ่าย (U109) โดย **`compensationSatang` ไม่รวมเงินทดรองจ่าย** (mytester F-04 · รีวิวเฟส 4 ข้อ 2)
+ * — นิยามเดียวกับ `PayoutBatchDto.compensationSatang` · เงินทดรองแยกเป็น `advancePaidSatang`
+ */
+export function payoutBatchAmountSplit(
+  items: ReadonlyArray<Parameters<typeof payoutItemTaxSplit>[0] & { isAdvance: boolean }>,
+): PayoutTaxSplit & { advancePaidSatang: number } {
+  const split = sumPayoutTaxSplit(items)
+  const advancePaidSatang = payoutAdvancePaidSatang(items)
+  return { ...split, compensationSatang: split.compensationSatang - advancePaidSatang, advancePaidSatang }
 }
 
 /**

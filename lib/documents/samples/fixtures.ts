@@ -1,11 +1,11 @@
 import type { AdvanceDocSource, AdvanceReturnDocSource } from '@/lib/advances/advance-doc'
-import { sumPayoutTaxSplit } from '@/lib/finance/wht-calc'
 import { monthLabelTH } from '@/lib/field/calendar'
 import { toBangkokParts } from '@/lib/format/datetime'
 import type { DocumentNumberType, TemplateDocumentType } from '@/lib/generated/prisma/enums'
 import { PACK_FILES } from '@/lib/exports/pack'
 import type { DocLetterhead } from '@/lib/organization/profile'
 import type { PayoutDocIssuer, PayoutPayeeDocInfo } from '@/lib/payout/payout-doc'
+import { payoutBatchAmountSplit } from '@/lib/payout/payout'
 import type { PayoutBatchDetailDto, PayoutBatchItemDto } from '@/lib/payout/types'
 import type { BillingInvoiceSource } from '@/lib/revenue/billing-invoice'
 import type { TaxInvoiceDocSource } from '@/lib/sales/sales'
@@ -333,8 +333,8 @@ export function samplePayoutBatch(context: DocumentSampleContext): PayoutBatchDe
     netSatang: sum('netSatang'),
     advanceOffsetSatang: sum('advanceOffsetSatang'),
     transferSatang: sum('transferSatang'),
-    ...sumPayoutTaxSplit(items),
-    advancePaidSatang: items.reduce((total, row) => (row.source === 'advance' ? total + row.grossSatang : total), 0),
+    // รีวิวเฟส 4 ข้อ 2 — นิยามเดียวกับ API: ค่าตอบแทนไม่รวมเงินทดรอง (F-04)
+    ...payoutBatchAmountSplit(items.map((row) => ({ ...row, isAdvance: row.source === 'advance' }))),
     itemCount: items.length,
     bankAccountId: SAMPLE_ID,
     bankAccountLabel: `${SAMPLE_BANK.bankName} xxx-x-x0000-x`,
