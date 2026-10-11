@@ -42,7 +42,16 @@ export function HandoverLotCard({
         ) : null}
       </button>
       {canDownload ? (
-        <div className="mt-4 border-t border-slate-100 pt-3">
+        <div className="mt-4 flex flex-col gap-2 border-t border-slate-100 pt-3">
+          {/* ใบส่งมอบ PDF ดาวน์โหลดได้ตั้งแต่สร้างล็อต — เข้าถึงจากการ์ดได้เลยไม่ต้องเปิดรายละเอียด (mytester PT-04) */}
+          <HandoverDownloadButton
+            kind="delivery_note"
+            lotId={lot.id}
+            docRef={lot.docRef}
+            downloadable
+            canDownload={canDownload}
+            block
+          />
           <HandoverDownloadButton
             lotId={lot.id}
             docRef={lot.docRef}

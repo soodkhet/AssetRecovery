@@ -495,6 +495,8 @@ suite('มติ U13 — ใบส่งมอบ PDF จากระบบ + �
       expect(response.status).toBe(200)
       expect(response.headers.get('content-type')).toBe('application/pdf')
       expect(response.headers.get('cache-control')).toBe('no-store')
+      // ชื่อไฟล์ = เลขที่ใบส่งมอบ ไม่ใช่เลขล็อต (mytester PT-04)
+      expect(decodeURIComponent(response.headers.get('content-disposition') ?? '')).not.toContain('LOT-')
       expect(Buffer.from(await response.arrayBuffer()).subarray(0, 4).toString('latin1')).toBe('%PDF')
       expect((await exportAudit(id))?.afterData).toMatchObject({ channel: 'portal', document: 'delivery_note' })
     }

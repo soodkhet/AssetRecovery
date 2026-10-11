@@ -9,10 +9,12 @@ import { Card, CardHeader, EmptyState, LoadingState, TBody, THead, Table, Td, Th
 import { fmtDate } from '@/lib/format/datetime'
 import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
 import {
+  PORTAL_AR_AGING_DESCRIPTION,
   PORTAL_REVENUE_BASIS_LABEL,
   PORTAL_REVENUE_BASIS_NOTE,
   portalAgingBucketTone,
   portalAlertTextClass,
+  portalArAgingEmptyState,
   portalRevenueChartAxis,
   portalShortMonthLabel,
 } from '@/lib/portal/finance-ui'
@@ -112,14 +114,15 @@ export function PortalArAgingCard({ state }: { state: LoadState<PortalArAgingDto
     <Card>
       <CardHeader
         title="อายุหนี้ (ยอดค้างชำระแยกตามจำนวนวัน)"
-        description="ยอดที่ยังค้างชำระ นับจากวันที่วางบิลจนถึงวันนี้ ยิ่งอยู่คอลัมน์ขวายิ่งค้างนาน"
+        description={PORTAL_AR_AGING_DESCRIPTION}
         action={state.data === null ? undefined : <span className="text-xs text-slate-500">ณ วันที่ {fmtDate(state.data.asOf)}</span>}
         className="mb-4"
       />
       <StateOr state={state}>
-        {(data) =>
-          data.totalOutstandingSatang === 0 ? (
-            <EmptyState title="ไม่มียอดค้างชำระ" description="ทุกรอบวางบิลที่ส่งถึงบริษัทของท่านชำระครบแล้ว" />
+        {(data) => {
+          const empty = portalArAgingEmptyState(data)
+          return empty !== null ? (
+            <EmptyState title={empty.title} description={empty.description} />
           ) : (
             <>
               <div className="mb-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -142,7 +145,7 @@ export function PortalArAgingCard({ state }: { state: LoadState<PortalArAgingDto
               </div>
             </>
           )
-        }
+        }}
       </StateOr>
     </Card>
   )

@@ -97,6 +97,16 @@ export function portalCasesLastPage(total: number, limit = PORTAL_CASES_PAGE_SIZ
   return Math.max(1, Math.ceil(total / limit))
 }
 
+/**
+ * หน้าที่ขอเกินจำนวนหน้าจริง (เช่นลิงก์เก่า `?page=999` หรือรายการลดลงหลังเปิดค้างไว้) — mytester PT-03
+ * มีรายการแต่หน้านี้ว่าง ⇒ คืนหน้าสุดท้ายที่มีข้อมูลให้พากลับไป · ปกติ/ไม่มีรายการเลย ⇒ `null`
+ */
+export function portalCasesOverflowPage(page: number, limit: number, itemCount: number, total: number): number | null {
+  if (itemCount > 0 || total === 0) return null
+  const lastPage = portalCasesLastPage(total, limit)
+  return page > lastPage ? lastPage : null
+}
+
 /** ช่วงแถวที่แสดง เช่น "21–40 จาก 57" — `null` เมื่อไม่มีแถว */
 export function portalCasesRange(page: number, limit: number, itemCount: number, total: number): string | null {
   if (itemCount === 0 || total === 0) return null

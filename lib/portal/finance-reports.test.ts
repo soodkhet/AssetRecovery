@@ -106,7 +106,7 @@ describe('serializePortalArAging', () => {
       buckets: [30, 60, 90],
       asOf,
     })
-    const dto = serializePortalArAging(report, asOf)
+    const dto = serializePortalArAging(report, asOf, batches.length)
     const expected = summarizeArAging(batches, [30, 60, 90], asOf)
 
     expect(dto.asOf).toBe('2026-08-15')
@@ -117,13 +117,15 @@ describe('serializePortalArAging', () => {
     expect(dto.over60Satang).toBe(50_000)
     expect(dto.over90Satang).toBe(50_000)
     expect(dto.batchCount).toBe(3)
+    expect(dto.billedBatchCount).toBe(4)
     expect(JSON.stringify(dto)).not.toContain('ไฟแนนซ์หนึ่ง')
     expect(JSON.stringify(dto)).not.toContain('co-1')
   })
 
   it('ไม่มีบิลค้าง ⇒ ยอด 0 ทุกช่วง (ช่วงยังครบตามค่าตั้ง)', () => {
-    const dto = serializePortalArAging(buildArAgingReport({ companies: [], buckets: [30, 60, 90], asOf }), asOf)
+    const dto = serializePortalArAging(buildArAgingReport({ companies: [], buckets: [30, 60, 90], asOf }), asOf, 0)
     expect(dto.totalOutstandingSatang).toBe(0)
+    expect(dto.billedBatchCount).toBe(0)
     expect(dto.buckets).toHaveLength(4)
     expect(dto.buckets.every((bucket) => bucket.outstandingSatang === 0)).toBe(true)
   })

@@ -9,7 +9,7 @@ import {
   portalHasCustomerWht,
   portalRevenueChartAxis,
 } from '@/lib/portal/finance-ui'
-import { PORTAL_LOT_DOCUMENTS, portalLotDocumentApiUrl } from '@/lib/portal/handover-view'
+import { PORTAL_LOT_DOCUMENTS, portalDeliveryNoteFileName, portalLotDocumentApiUrl } from '@/lib/portal/handover-view'
 import { portalKpiCards } from '@/lib/portal/nav'
 
 /** มติ PO 05/10/2569 U11/U13/U14 + BUG-146/BUG-149 — ตัวช่วยฝั่ง UI ของพอร์ทัล (pure) */
@@ -70,5 +70,7 @@ describe('U13 — เอกสารของล็อต', () => {
     expect(portalLotDocumentApiUrl(id, 'delivery_note')).toBe(`/api/portal/handover-lots/${id}/delivery-note`)
     expect(portalLotDocumentApiUrl(id, 'delivery_proof')).toBe(`/api/portal/handover-lots/${id}/delivery-proof`)
     expect(PORTAL_LOT_DOCUMENTS.delivery_note.label).toContain('ใบส่งมอบ')
+    // ชื่อไฟล์ใบส่งมอบ = เลขที่เอกสาร DLV (mytester PT-04)
+    expect(portalDeliveryNoteFileName('DLV-2569-001')).toBe('DLV-2569-001.pdf')
   })
 })

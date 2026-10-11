@@ -87,6 +87,25 @@ export function portalBillingSummary(rows: readonly PortalBillingRowLike[], toda
   return { outstandingSatang, batchCount: rows.length, openCount, overdueCount, overdueSatang }
 }
 
+/**
+ * ข้อความของการ์ดอายุหนี้เมื่อไม่มียอดค้าง (mytester PT-02) — ยังไม่เคยมีรอบวางบิล ≠ ชำระครบแล้ว
+ * มียอดค้าง ⇒ `null` (แสดงช่วงอายุหนี้ตามปกติ)
+ */
+export function portalArAgingEmptyState(data: {
+  totalOutstandingSatang: number
+  billedBatchCount: number
+}): { title: string; description: string } | null {
+  if (data.totalOutstandingSatang !== 0) return null
+  if (data.billedBatchCount === 0) {
+    return { title: 'ยังไม่มีรอบวางบิล', description: 'เมื่อมีการส่งบิลถึงบริษัทของท่าน ยอดค้างชำระจะแสดงที่นี่' }
+  }
+  return { title: 'ไม่มียอดค้างชำระ', description: 'ทุกรอบวางบิลที่ส่งถึงบริษัทของท่านชำระครบแล้ว' }
+}
+
+/** คำอธิบายการ์ดอายุหนี้ — นับจากวันครบกำหนดชำระ ตรงกับวิธีคิดจริงและหน้าภายใน (mytester G-08) */
+export const PORTAL_AR_AGING_DESCRIPTION =
+  'ยอดที่ยังค้างชำระ แยกตามจำนวนวันนับจากวันครบกำหนดชำระจนถึงวันนี้ ยิ่งอยู่คอลัมน์ขวายิ่งค้างนาน'
+
 // ── สีตามค่า (BUG-149) ───────────────────────────────────────────────────────
 
 /**

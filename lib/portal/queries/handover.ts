@@ -8,6 +8,7 @@ import { endOfBangkokDay, startOfBangkokDay } from '@/lib/format/datetime'
 import type { Prisma } from '@/lib/generated/prisma/client'
 import { HandoverLotStatus, type HandoverType } from '@/lib/generated/prisma/enums'
 import { portalViewAsAuditFields, rejectPortalRow, requirePortalRow, type PortalContext } from '@/lib/portal/guard'
+import { portalDeliveryNoteFileName } from '@/lib/portal/handover-view'
 import {
   serializePortalLotDetail,
   serializePortalLotListItem,
@@ -24,7 +25,7 @@ import { prisma } from '@/lib/prisma'
 import { renderHandoverNote } from '@/components/pdf/handover-note'
 import { handoverLetterhead, handoverTemplate } from '@/lib/organization/letterhead'
 import { downloadUploadedFile } from '@/lib/uploads/storage'
-import { buildHandoverDoc, handoverFileName } from '@/lib/warehouse/handover-doc'
+import { buildHandoverDoc } from '@/lib/warehouse/handover-doc'
 import { documentExtension, lotDocumentMime } from '@/lib/warehouse/lot-documents'
 import { getHandoverDocSourceForCompany } from '@/lib/warehouse/queries'
 
@@ -305,7 +306,7 @@ export async function getPortalLotDeliveryNote(
   )
   await auditLotExport(ctx, lot, 'delivery_note', request)
 
-  return { bytes: new Uint8Array(pdf), contentType: 'application/pdf', fileName: handoverFileName(source.lot, 'pdf') }
+  return { bytes: new Uint8Array(pdf), contentType: 'application/pdf', fileName: portalDeliveryNoteFileName(source.lot.docRef) }
 }
 
 /** ล็อตเราส่งที่ยังไม่มีไฟล์หลักฐานการจัดส่งให้อ่าน — ข้อความสำหรับฝั่งบริษัท */
