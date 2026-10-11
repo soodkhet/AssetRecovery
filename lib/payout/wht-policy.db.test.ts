@@ -148,6 +148,8 @@ async function reset(): Promise<void> {
     `DELETE FROM wht_filing_summaries WHERE organization_id = '${ORG_ID}'`,
     `DELETE FROM expense_records WHERE organization_id = '${ORG_ID}'`,
     `DELETE FROM exceptions WHERE organization_id = '${ORG_ID}'`,
+    // mytester2 F2-04 — เงินทดรองผูก payout_batch_item ⇒ ลบก่อนรายการในรอบ
+    `DELETE FROM advances WHERE organization_id = '${ORG_ID}'`,
     `DELETE FROM payout_batch_items WHERE organization_id = '${ORG_ID}'`,
     `DELETE FROM payout_batches WHERE organization_id = '${ORG_ID}'`,
     `DELETE FROM expenses WHERE organization_id = '${ORG_ID}'`,
@@ -572,6 +574,24 @@ suite('ใบ 50 ทวิ ต่อผู้รับต่อรอบ vs ต�
     expect(all.filter((row) => row.status === 'active')).toHaveLength(1)
 
     const doc = await wht.getWhtCertificateDocSource(finance, replacement!.id)
+    expect(doc.coverage).toEqual({ payoutBatchName: batch.name, itemCount: 4 })
+  })
+
+  it('mytester2 F2-04 — หมายเหตุ "(n รายการ)" บนใบต่อรอบไม่นับแถวเงินทดรอง (ไม่ใช่เงินได้)', async () => {
+    await seedIn1()
+    await db().$executeRawUnsafe(`
+      INSERT INTO advances (id, organization_id, payee_id, requested_satang, approved_satang, purpose,
+                            due_clear_date, status, approved_at, created_by)
+      VALUES ('00000000-0000-4000-8000-0000000057f1', '${ORG_ID}', '${PAYEE_IN_ID}', 400000, 400000,
+              'สำรองค่าเดินทาง', '2026-10-30', 'approved', '2026-10-01T03:00:00Z', '${FINANCE_ID}')
+    `)
+    const { batch } = await payout.createPayoutBatch(ctx, { side: 'inhouse', cutoffDate: CUTOFF, name: null })
+    expect(batch.items.some((row) => row.source === 'advance')).toBe(true)
+    await completeAndSync(batch.id)
+
+    const [certificate] = (await wht.listWhtCertificates(finance, {})).items
+    expect(certificate).toMatchObject({ grossSatang: 135_000, whtSatang: 4050 })
+    const doc = await wht.getWhtCertificateDocSource(finance, certificate!.id)
     expect(doc.coverage).toEqual({ payoutBatchName: batch.name, itemCount: 4 })
   })
 

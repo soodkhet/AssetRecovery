@@ -287,3 +287,17 @@ describe('whtFilingDeadlineNote (staging E-055)', () => {
     expect(whtFilingDeadlineNote([])).toContain('ตามวิธียื่นของแต่ละรอบ')
   })
 })
+
+describe('whtCertificateIssueNote (mytester2 F2-04)', () => {
+  it('ข้อความตามโหมดออกใบของใบที่แสดงจริง — ต่อผู้รับต่อรอบ / ต่อรายการ / ปนกันหรือยังไม่มีใบ', async () => {
+    const { whtCertificateIssueNote } = await import('@/lib/wht/wht')
+    const perBatch = whtCertificateIssueNote(['per_payee_batch', 'per_payee_batch'])
+    expect(perBatch).toContain('1 ใบต่อผู้รับต่อรอบจ่าย')
+    expect(perBatch).not.toContain('ต่อรายการ')
+    expect(whtCertificateIssueNote(['per_item'])).toContain('1 ใบต่อรายการจ่ายที่มีการหักภาษี')
+    for (const note of [whtCertificateIssueNote([]), whtCertificateIssueNote(['per_item', 'per_payee_batch'])]) {
+      expect(note).toContain('1 ใบต่อผู้รับต่อรอบจ่าย หรือ 1 ใบต่อรายการ')
+    }
+    expect(perBatch).not.toMatch(/§|ไฟล์ \d/)
+  })
+})
