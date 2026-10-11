@@ -200,6 +200,17 @@ describe('bankAccountCreateSchema (§6.3)', () => {
     expect(bankAccountCreateSchema.safeParse({ ...base, accountNumber: '12345678AB' }).success).toBe(false)
   })
 
+  it('mytester A-03 — ข้อความตรงเหตุ: ไม่เลือกธนาคาร / เลขบัญชีมีตัวอักษร / สั้น', () => {
+    const messageOf = (input: Record<string, unknown>, path: string): string | undefined => {
+      const result = bankAccountCreateSchema.safeParse({ ...base, ...input })
+      return result.success ? undefined : result.error.issues.find((issue) => issue.path[0] === path)?.message
+    }
+    expect(messageOf({ bankName: '' }, 'bankName')).toBe('กรุณาเลือกธนาคาร')
+    expect(messageOf({ accountNumber: 'abc-12' }, 'accountNumber')).toBe('เลขบัญชีต้องเป็นตัวเลข (มี - หรือช่องว่างคั่นได้)')
+    expect(messageOf({ accountNumber: '123-4567' }, 'accountNumber')).toBe('เลขบัญชีต้องมีตัวเลขอย่างน้อย 8 หลัก')
+    expect(messageOf({ accountNumber: '' }, 'accountNumber')).toBe('กรุณาระบุเลขบัญชี')
+  })
+
   it('usage นอก enum = ไม่ผ่าน (`02` §3)', () => {
     expect(bankAccountCreateSchema.safeParse({ ...base, usage: 'payout' }).success).toBe(false)
   })

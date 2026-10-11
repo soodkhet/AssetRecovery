@@ -83,6 +83,8 @@ describe('organizationProfileUpdateSchema — Zod ชุดเดียว FE/BE
     [{ addressPostalCode: '1033' }, 'addressPostalCode'],
     [{ addressProvince: '' }, 'addressProvince'],
     [{ phone: '' }, 'phone'],
+    [{ phone: '12' }, 'phone'],
+    [{ phone: '02-111-abcd' }, 'phone'],
     [{ email: 'not-email' }, 'email'],
     [{ website: 'ไม่ใช่ เว็บ' }, 'website'],
     [{ name: '' }, 'name'],
