@@ -595,6 +595,38 @@ suite('มติ PO U41 — เงินรับรอตรวจสอบ', (
     expect(audits.at(-1)?.reason).toBe('คืนเงินผู้โอน — คืนตามคำขอพร้อมสำเนาสลิป')
   })
 
+  it('รีวิว H2-02 — บันทึกคืนเงินล้มหลังอัปโหลดสลิป ⇒ สลิปถูกลบ · path นอกรายการ/สลิปที่ผูกแล้วไม่ถูกลบ', async () => {
+    const txId = await importOne('21/08/2569,โอนเข้าผิดบัญชี,KBANK-H22-1,300.00,', 'refund-cleanup.csv')
+    await recon.moveToSuspense(ctx, txId, { reason: 'ผู้โอนแจ้งว่าโอนผิดบัญชี' })
+    const tomorrow = new Date(`${toInputDate(new Date(Date.now() + 86_400_000))}T00:00:00Z`)
+
+    // วันที่โอนคืนเกินวันนี้ ⇒ ล้ม ⇒ สลิปที่เพิ่งอัปโหลดถูกลบ
+    const orphan = refundFile(txId)
+    await expectCode(
+      () => recon.refundSuspense(ctx, txId, { refundDate: tomorrow, reason: 'คืนล่วงหน้า', filePath: orphan }),
+      'REQUIRED_MISSING',
+    )
+    expect(uploadTestState.removed).toEqual([orphan])
+
+    // path ของเอกสารอื่น (นอก prefix ของรายการนี้) ⇒ ไม่ลบแม้คำขอล้ม
+    const foreign = 'bank-transactions/00000000-0000-4000-8000-000000000000/refund/other.pdf'
+    putFakeUpload(foreign, sampleBytes('pdf', 'other'))
+    await expectCode(
+      () => recon.refundSuspense(ctx, txId, { refundDate: tomorrow, reason: 'คืนล่วงหน้า', filePath: foreign }),
+      'REQUIRED_MISSING',
+    )
+    expect(uploadTestState.removed).toEqual([orphan])
+
+    // สำเร็จ ⇒ ไม่ลบ · ส่งซ้ำด้วยสลิปที่ผูกแล้ว (ล้มเพราะสถานะ) ⇒ ไม่ลบสลิปที่เป็นหลักฐานอยู่
+    const bound = refundFile(txId)
+    await recon.refundSuspense(ctx, txId, { refundDate: new Date('2026-08-22T00:00:00Z'), reason: 'คืนแล้ว', filePath: bound })
+    await expectCode(
+      () => recon.refundSuspense(ctx, txId, { refundDate: new Date('2026-08-22T00:00:00Z'), reason: 'ซ้ำ', filePath: bound }),
+      'BANK_TRANSACTION_INVALID_STATUS',
+    )
+    expect(uploadTestState.removed).toEqual([orphan])
+  })
+
   it('Readiness: เงินรับรอตรวจสอบไม่บล็อก แต่เตือน · 50 ทวิ ค้างเตือน', async () => {
     await seedWithheldReceipt()
     const txId = await importOne('07/08/2569,โอนเข้าไม่ระบุ,KBANK-U41-5,123.45,', 'r.csv')

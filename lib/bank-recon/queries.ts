@@ -80,6 +80,8 @@ import { assertOrgWideReadable } from '@/lib/auth/scope'
 import { createPendingCustomerWht, releaseCustomerWhtForReceipt } from '@/lib/customer-wht/queries'
 import { bankRefundFileRule } from '@/lib/uploads/rules'
 import { verifyUploadedFile } from '@/lib/uploads/verify'
+import { assertUploadPathInScope } from '@/lib/uploads/inspect'
+import { removeStoredFiles } from '@/lib/uploads/storage'
 
 /**
  * กระทบยอดธนาคาร (ไฟล์ 35) — ชั้น DB (`27` §6.14)
@@ -1375,6 +1377,44 @@ export async function refundSuspense(
 ): Promise<BankTransactionDto> {
   assertOrgWideReadable(ctx.actor, 'bank-transactions')
   const before = await loadTransaction(ctx.actor.organizationId, transactionId)
+  try {
+    return await refundLoadedSuspense(ctx, before, input)
+  } catch (error) {
+    await removeUnboundRefundUpload(ctx.actor.organizationId, before.id, input.filePath)
+    throw error
+  }
+}
+
+/**
+ * รีวิว H2-02 — บันทึกคืนเงินล้ม (สถานะ/วันที่/งวดปิด/ไฟล์ไม่ผ่าน ฯลฯ) หลังหน้าจออัปโหลดสลิปแล้ว ⇒ ลบสลิปนั้นทิ้ง ไม่ให้ค้างใน Storage
+ * · ลบเฉพาะ path ใต้ prefix หลักฐานคืนเงินของ**รายการนี้** (ผ่าน `assertUploadPathInScope` — ส่ง path ของเอกสารอื่นมาลบไม่ได้)
+ * · และเฉพาะเมื่อรายการยังไม่ได้ผูกไฟล์นั้น (อ่านสถานะล่าสุดหลังล้ม — กดซ้ำพร้อมกันแล้วอีกคำขอสำเร็จด้วย path เดียวกัน ⇒ ไม่ลบ)
+ * · ลบไม่สำเร็จต้องไม่บัง error เดิม (กลไกเดียวกับไฟล์ที่ตัวตรวจปฏิเสธ — mytester A-14)
+ */
+async function removeUnboundRefundUpload(organizationId: string, transactionId: string, filePath: string): Promise<void> {
+  try {
+    assertUploadPathInScope(filePath, bankRefundFileRule(transactionId).prefix)
+  } catch {
+    return
+  }
+  try {
+    const current = await prisma.bankTransaction.findFirst({
+      where: { id: transactionId, organizationId },
+      select: { matchStatus: true, refundFilePath: true },
+    })
+    if (current === null || current.matchStatus === 'suspense_refunded' || current.refundFilePath === filePath) return
+    const { failed } = await removeStoredFiles([filePath])
+    if (failed.length > 0) console.error('[bank-recon] ลบสลิปคืนเงินที่ไม่ได้ใช้ไม่สำเร็จ', { path: filePath })
+  } catch (removeError: unknown) {
+    console.error('[bank-recon] ลบสลิปคืนเงินที่ไม่ได้ใช้ไม่สำเร็จ', { path: filePath, error: removeError })
+  }
+}
+
+async function refundLoadedSuspense(
+  ctx: AccountingMutationContext,
+  before: Awaited<ReturnType<typeof loadTransaction>>,
+  input: RefundSuspenseInput,
+): Promise<BankTransactionDto> {
   const status = nextBankMatchStatus(before.matchStatus, 'refund_suspense')
   if (status === null) {
     throw new BankReconError('BANK_TRANSACTION_INVALID_STATUS', {

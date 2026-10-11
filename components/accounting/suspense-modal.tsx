@@ -61,6 +61,7 @@ export function SuspenseModal({
         showToast({ tone: 'error', title: 'แนบหลักฐานไม่สำเร็จ', description: message })
         return
       }
+      // บันทึกคืนเงินล้มหลังอัปโหลด ⇒ server ลบสลิปที่ยังไม่ผูกนี้ให้เอง (รีวิว H2-02) — หน้าจอไม่ต้องสั่งลบ
       body = { ...body, refundDate, filePath }
     }
 
