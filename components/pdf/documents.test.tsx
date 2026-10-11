@@ -361,6 +361,20 @@ describe('ใบส่งมอบทรัพย์ — ตามแบบ (ม
     save('03c-handover-note-long-case-ref', pdf)
     expect(pdf.subarray(0, 5).toString()).toBe('%PDF-')
   })
+
+  it('mytester2 E2-01 — หมายเหตุสภาพตัดบรรทัดโดยไม่เติมขีดที่ผู้ใช้ไม่ได้พิมพ์', async () => {
+    const base = lot(2)
+    const note = 'จอร้าวมุมขวาบน ฝาหลังมีรอยบุบ (MT2-1011)'
+    const damaged = {
+      ...base,
+      assets: base.assets.map((item) => ({ ...item, condition: 'damaged' as const, conditionNote: note })),
+    }
+    const pdf = await renderHandoverNote(buildHandoverDoc(damaged, HANDOVER_ISSUER, HANDOVER_RECIPIENT), LETTERHEAD)
+    save('03d-handover-note-condition-note', pdf)
+    const text = textOf(pdf)
+    expect(text).not.toContain('(-')
+    expect(count(text, note)).toBe(4)
+  })
 })
 
 // ── ใบสำคัญจ่าย / สลิป / สรุปรอบจ่าย ───────────────────────────────────
