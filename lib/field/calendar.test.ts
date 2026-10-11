@@ -5,6 +5,7 @@ import {
   daysInMonth,
   monthLabelTH,
   monthOf,
+  pickedDayPhrase,
   shiftMonth,
   toDateIso,
   weekdayIndex,
@@ -110,5 +111,15 @@ describe('ปฏิทินของ Calendar Picker (`41` §7.4)', () => {
 
   it('toDateIso เติมศูนย์หน้าเสมอ', () => {
     expect(toDateIso(2026, 1, 5)).toBe('2026-01-05')
+  })
+})
+
+describe('pickedDayPhrase (mytester DO-06)', () => {
+  it('วันเดียวกับวันนี้ ⇒ "วันนี้"', () => {
+    expect(pickedDayPhrase('2026-10-11', '2026-10-11', fmtDate('2026-10-11'))).toBe('วันนี้')
+  })
+
+  it('วันอื่น ⇒ ระบุวันที่ พ.ศ. ไม่ใช้คำว่า "วันนี้"', () => {
+    expect(pickedDayPhrase('2026-10-12', '2026-10-11', fmtDate('2026-10-12'))).toBe('วันที่ 12/10/2569')
   })
 })

@@ -66,3 +66,28 @@ export function panCenter(center: MapPoint, zoom: number, dxPixels: number, dyPi
 export function formatCoordinates(point: MapPoint): string {
   return `${clampLatitude(point.latitude).toFixed(6)}, ${wrapLongitude(point.longitude).toFixed(6)}`
 }
+
+/** ทิศ 8 ทาง (เริ่มทิศเหนือ วนตามเข็มนาฬิกา) — ใช้บอกทิศที่หมุดขยับไประหว่างลาก */
+const COMPASS_LABELS = ['เหนือ', 'ตะวันออกเฉียงเหนือ', 'ตะวันออก', 'ตะวันออกเฉียงใต้', 'ใต้', 'ตะวันตกเฉียงใต้', 'ตะวันตก', 'ตะวันตกเฉียงเหนือ'] as const
+
+/** ลากน้อยกว่านี้ (พิกเซล) ถือว่าแตะเฉย ๆ ไม่ขยับหมุด — ค่าเดียวกับที่ฟอร์มปิดงานใช้ตัดสินว่าจะบันทึกหรือไม่ */
+export const DRAG_THRESHOLD_PX = 4
+
+/**
+ * ข้อความบอกว่าหมุดจะขยับไปไกลแค่ไหน/ทางไหน ระหว่างลากพื้นตาราง (mytester DI-02) — ไม่มีรูปแผนที่ (UAT BUG-062)
+ * พนักงานจึงต้องเห็นระยะจริงแทนการกะจากภาพ · คืน `null` เมื่อยังลากไม่ถึงเกณฑ์
+ *
+ * ทิศของหมุด = ตรงข้ามกับทิศที่ลากพื้น (เหมือน {@link panCenter}): ลากลง ⇒ หมุดไปทางเหนือ · ลากขวา ⇒ หมุดไปทางตะวันตก
+ */
+export function dragShiftLabel(center: MapPoint, zoom: number, dxPixels: number, dyPixels: number): string | null {
+  if (Math.abs(dxPixels) < DRAG_THRESHOLD_PX && Math.abs(dyPixels) < DRAG_THRESHOLD_PX) return null
+  const mpp = metersPerPixel(center.latitude, zoom)
+  const east = -dxPixels * mpp
+  const north = dyPixels * mpp
+  const meters = Math.hypot(east, north)
+  // มุมจากทิศเหนือ วนตามเข็มนาฬิกา (0–360)
+  const bearing = ((Math.atan2(east, north) * 180) / Math.PI + 360) % 360
+  const direction = COMPASS_LABELS[Math.round(bearing / 45) % 8]
+  const distance = meters < 1000 ? `${Math.max(10, Math.round(meters / 10) * 10)} ม.` : `${(meters / 1000).toFixed(1)} กม.`
+  return `หมุดขยับ ~${distance} ไปทาง${direction}`
+}

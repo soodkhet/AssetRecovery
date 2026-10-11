@@ -28,7 +28,7 @@ import {
   closeCasePayload,
   closeDraftPayload,
   closeFormFromDetail,
-  closeFormMissing,
+  closeFormBlockers,
   closeFormMode,
   closeMissingSummary,
   hasCloseFormRevision,
@@ -48,7 +48,7 @@ import {
 import { closeExpenseToastDescription } from '@/lib/field/expense-ui'
 import { currentPosition, GeolocationError } from '@/lib/field/geolocation'
 import { mapsPointHref } from '@/lib/field/field-ui'
-import { formatCoordinates, panCenter } from '@/lib/field/map-pan'
+import { DRAG_THRESHOLD_PX, dragShiftLabel, formatCoordinates, panCenter } from '@/lib/field/map-pan'
 import {
   FIELD_MEDIA_ACCEPT,
   FIELD_MEDIA_CAPTURE,
@@ -487,6 +487,12 @@ export function CloseCaseModal({
   const [submitting, setSubmitting] = useState(false)
   /** กำลังส่งปิดงาน — autosave ที่ค้างหยุดทันที ไม่สร้าง draft ใหม่หลังปิดงาน (mytester DO-01 · server ตรวจซ้ำใต้ล็อกด้วย) */
   const closingRef = useRef(false)
+  const checkinInFlightRef = useRef(false)
+  /**
+   * บันทึกอะไรลง server ไปแล้วในรอบเปิดนี้ (จุดเริ่มเดินทางอัตโนมัติ/draft/เช็คอิน) — ปิดหน้าต่างด้วย X ก็ต้องให้รายการ
+   * รีโหลด ไม่งั้นการ์ดยังเป็น "เริ่มงาน" ไม่มีป้าย Draft จนรีเฟรชเอง (mytester DI-01)
+   */
+  const savedRef = useRef(false)
   const [showMissing, setShowMissing] = useState(false)
   const [originError, setOriginError] = useState<string | null>(null)
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number } | null>(null)
@@ -531,7 +537,10 @@ export function CloseCaseModal({
           apiPath('field.closeDraft', { id: caseId }),
           jsonRequest('POST', closeDraftPayload(payloadForm)),
         )
-        if (response.error === undefined) return !dropped
+        if (response.error === undefined) {
+          savedRef.current = true
+          return !dropped
+        }
         // ปิดงานไปแล้วระหว่างรอ autosave (server ปฏิเสธเพราะสถานะเปลี่ยน) ⇒ เงียบ ไม่โชว์ error ทับ toast ปิดงานสำเร็จ
         if (closingRef.current) return true
         const cleaned = dropRejectedUpload(payloadForm, response.error)
@@ -589,6 +598,7 @@ export function CloseCaseModal({
           setOriginError(saved.error?.message ?? 'บันทึกจุดเริ่มเดินทางไม่สำเร็จ')
           return
         }
+        savedRef.current = true
         setDetail({ ...loaded, travelOrigin: saved.data.travelOrigin })
       } catch (error) {
         if (cancelled) return
@@ -603,7 +613,8 @@ export function CloseCaseModal({
   }, [caseId, loadAttempt])
 
   const mode = detail === null ? null : closeFormMode(detail)
-  const missing = detail === null ? [] : closeFormMissing(form, detail)
+  // รวมเหตุ "ยังไม่ได้แก้หลักฐาน" ของโหมดตีกลับ ⇒ กดส่งแล้วเห็นเหตุค้างบนฟอร์มเสมอ ไม่ใช่แค่ toast (mytester DO-04)
+  const missing = detail === null ? [] : closeFormBlockers(form, detail)
   const missingSummary = closeMissingSummary(missing)
   const canSubmit = detail !== null && canSubmitCloseForm(form, detail)
 
@@ -687,7 +698,9 @@ export function CloseCaseModal({
 
   /** เช็คอิน = พิกัดจากอุปกรณ์จริงเท่านั้น บันทึกทันทีและล็อกตลอด (`41` §6.4 · §11) */
   async function addCheckin(): Promise<void> {
-    if (detail === null) return
+    // แตะซ้ำก่อนปุ่มทัน disable (เน็ตช้า/GPS ช้า) ⇒ ไม่ยิงซ้ำและไม่ขึ้นข้อความแจ้งซ้อน (mytester DO-05)
+    if (detail === null || checkinInFlightRef.current) return
+    checkinInFlightRef.current = true
     setBusy(true)
     try {
       const position = await currentPosition()
@@ -708,6 +721,7 @@ export function CloseCaseModal({
         })
         return
       }
+      savedRef.current = true
       const checkin = response.data.checkin
       setDetail((latest) => (latest === null ? latest : { ...latest, checkins: [...latest.checkins, checkin] }))
       setShowMissing(false)
@@ -719,6 +733,7 @@ export function CloseCaseModal({
         description: error instanceof GeolocationError ? error.message : 'ดึงพิกัดจากอุปกรณ์ไม่สำเร็จ',
       })
     } finally {
+      checkinInFlightRef.current = false
       setBusy(false)
     }
   }
@@ -744,6 +759,7 @@ export function CloseCaseModal({
         })
         return
       }
+      savedRef.current = true
       const travelOrigin = response.data.travelOrigin
       setDetail((latest) => (latest === null ? latest : { ...latest, travelOrigin }))
       setOriginError(null)
@@ -838,21 +854,32 @@ export function CloseCaseModal({
   const origin = detail?.travelOrigin ?? null
   const originCenter = origin === null ? null : { latitude: origin.latitude, longitude: origin.longitude }
 
+  const dragLabel =
+    dragOffset === null || originCenter === null
+      ? null
+      : dragShiftLabel(originCenter, ORIGIN_MAP_ZOOM, dragOffset.x, dragOffset.y)
+
   function endDrag(): void {
     const start = dragStart.current
     dragStart.current = null
     const offset = dragOffset
     setDragOffset(null)
     if (start === null || offset === null || originCenter === null) return
-    if (Math.abs(offset.x) < 4 && Math.abs(offset.y) < 4) return
+    if (Math.abs(offset.x) < DRAG_THRESHOLD_PX && Math.abs(offset.y) < DRAG_THRESHOLD_PX) return
     const next = panCenter(originCenter, ORIGIN_MAP_ZOOM, offset.x, offset.y)
     void saveTravelOrigin({ latitude: next.latitude, longitude: next.longitude }, 'manual_adjusted')
+  }
+
+  /** ปิดด้วย X/พื้นหลัง — มีการบันทึกไปแล้ว ⇒ ให้รายการรีโหลดก่อน (DI-01) */
+  function dismiss(): void {
+    if (savedRef.current) onDone()
+    onClose()
   }
 
   return (
     <Modal
       open
-      onClose={onClose}
+      onClose={dismiss}
       size="lg"
       // อัปโหลดสื่อ/check-in/บันทึกต้นทางอยู่ ⇒ ห้ามปิด (ไฟล์จะค้างโดยไม่ผูกเคส) แต่ยังแก้โน้ต/ผลลัพธ์ต่อได้ — R2-005
       lockClose={busy}
@@ -967,11 +994,14 @@ export function CloseCaseModal({
                           dragOffset === null ? '0 0' : `${dragOffset.x}px ${dragOffset.y}px`,
                       }}
                     />
+                    {/* mytester DI-02 — ไม่มีรูปแผนที่ให้กะตำแหน่ง ⇒ ไม่ชวนลากหาจุดบนพื้นว่าง แต่บอกระยะ/ทิศที่หมุดขยับจริงระหว่างลาก */}
                     <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1.5">
                       <IconMapPin className="h-7 w-7 text-blue-600" />
-                      <span className="rounded-full bg-white/90 px-2.5 py-1 text-[11px] font-extrabold text-slate-700 shadow">
-                        ลากเพื่อปรับตำแหน่ง
-                      </span>
+                      {dragLabel !== null && (
+                        <span className="rounded-full bg-white/90 px-2.5 py-1 text-[11px] font-extrabold text-slate-700 shadow">
+                          {dragLabel}
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-2.5 p-3">
@@ -998,13 +1028,14 @@ export function CloseCaseModal({
                       disabled={busy}
                       className="focus-ring rounded-lg bg-blue-50 px-2.5 py-1.5 text-[11px] font-extrabold text-blue-600 disabled:opacity-50 pointer-coarse:min-h-11"
                     >
-                      ดึง GPS ใหม่
+                      ใช้ตำแหน่งปัจจุบัน
                     </button>
                   </div>
                 </div>
               )}
               <p className="mt-1.5 text-[11px] text-slate-400">
-                จุดนี้ใช้คำนวณระยะทางเท่านั้น ไม่ใช่หลักฐานปิดงาน — ปรับให้ตรงจุดออกเดินทางจริงได้เสมอ
+                จุดนี้ใช้คำนวณระยะทางเท่านั้น ไม่ใช่หลักฐานปิดงาน — ถ้าไม่ตรงจุดออกเดินทางจริง ให้ไปยืนที่จุดนั้นแล้วกด
+                &quot;ใช้ตำแหน่งปัจจุบัน&quot; หรือลากกรอบด้านบนเพื่อขยับหมุดทีละน้อย (ระบบบอกระยะที่ขยับ) แล้วตรวจด้วยลิงก์ Google Maps
               </p>
             </div>
           )}

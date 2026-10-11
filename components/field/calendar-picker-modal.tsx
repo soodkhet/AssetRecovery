@@ -15,6 +15,7 @@ import {
   countCasesByDate,
   monthLabelTH,
   monthOf,
+  pickedDayPhrase,
   shiftMonth,
   withWeekdayPrefix,
   type CalendarMonth,
@@ -101,6 +102,8 @@ export function CalendarPickerModal({
     () => (pickedDate === null ? [] : casesScheduledOn(items, pickedDate)),
     [items, pickedDate],
   )
+  /** "วันนี้" เฉพาะเมื่อเลือกวันปัจจุบันจริง — วันอื่นระบุวันที่ (mytester DO-06) */
+  const pickedPhrase = pickedDate === null ? '' : pickedDayPhrase(pickedDate, todayIso, fmtDate(pickedDate))
 
   /** ลำดับที่เคสนี้จะได้ = ต่อท้ายเสมอ — ใช้ฟังก์ชันเดียวกับที่ BE คิด (`41` §8) */
   const nextOrder = nextScheduleOrder(casesOnPickedDate.map((item) => item.scheduleOrder))
@@ -250,7 +253,7 @@ export function CalendarPickerModal({
             {casesOnPickedDate.length > 0 ? (
               <>
                 <div className="mb-1.5 text-xs font-extrabold text-slate-500">
-                  เคสที่จัดไว้วันนี้แล้ว ({casesOnPickedDate.length})
+                  เคสที่จัดไว้{pickedPhrase}แล้ว ({casesOnPickedDate.length})
                 </div>
                 <div className="mb-3 max-h-[180px] space-y-1.5 overflow-y-auto">
                   {casesOnPickedDate.map((item, index) => (
@@ -264,11 +267,11 @@ export function CalendarPickerModal({
                 </div>
               </>
             ) : (
-              <div className="mb-3 text-sm text-slate-400 italic">วันนี้ยังไม่มีเคสจัดไว้</div>
+              <div className="mb-3 text-sm text-slate-400 italic">{pickedPhrase}ยังไม่มีเคสจัดไว้</div>
             )}
 
             <p className="mb-3 text-xs text-slate-500">
-              ยืนยันจัดเคส <strong>{target?.debtorName ?? '—'}</strong> ลงวันนี้
+              ยืนยันจัดเคส <strong>{target?.debtorName ?? '—'}</strong> ลง{pickedPhrase}
               {casesOnPickedDate.length > 0 && <> (จะเป็นลำดับที่ {nextOrder})</>}?
             </p>
 
@@ -283,7 +286,7 @@ export function CalendarPickerModal({
                   void confirmSchedule()
                 }}
               >
-                ยืนยันเลือกวันนี้
+                ยืนยันเลือก{pickedPhrase}
               </Button>
             </div>
           </div>
