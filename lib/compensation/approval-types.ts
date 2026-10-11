@@ -132,8 +132,12 @@ export const compensationBulkPreviewQuerySchema = z.object({
 export interface CompensationBulkPreviewDto {
   count: number
   grossSatang: number
+  /** ภาษีที่หักจากรายการที่เลือก */
   whtDeductedSatang: number
+  /** ยอดสุทธิของรายการที่เลือก (ไม่ติดลบ) */
   netSatang: number
+  /** ภาษีที่รายการอนุมัติแล้วรอเข้ารอบของผู้รับเดียวกันถูกหักเพิ่ม เพราะชุดที่เลือกดันยอดรวมถึงเกณฑ์ขั้นต่ำ */
+  existingWhtIncreaseSatang: number
 }
 
 export type CompensationApprovalListQuery = z.infer<typeof compensationListQuerySchema>

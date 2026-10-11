@@ -239,20 +239,29 @@ export interface ApprovalSelectionInput extends ApprovalWhtQueueInput {
 export interface ApprovalSelectionTotals {
   count: number
   grossSatang: number
-  /** ยอดภาษีที่หักจากผู้รับเพิ่มขึ้นเพราะชุดที่เลือก (= gross − net) · บริษัทออกภาษีให้ (2)/(3) ไม่นับ */
+  /**
+   * ภาษีที่หักจาก**รายการที่เลือก**เอง (ส่วนแบ่งของรายการเหล่านี้ในภาษีของกลุ่มผู้รับเดียวกันในรอบถัดไป)
+   * · บริษัทออกภาษีให้ (2)/(3) ไม่นับ · ไม่เกินยอดของรายการที่เลือก
+   */
   whtDeductedSatang: number
-  /** ยอดสุทธิที่รอบจ่ายถัดไปเพิ่มขึ้นเพราะชุดที่เลือก */
+  /** ยอดสุทธิของรายการที่เลือก (= gross − ภาษีของรายการที่เลือก) — ไม่ติดลบ */
   netSatang: number
+  /**
+   * ภาษีที่เพิ่มขึ้นกับรายการที่**อนุมัติแล้วรอเข้ารอบ**ของผู้รับเดียวกัน เพราะชุดที่เลือกดันฐานรวมข้ามเกณฑ์ขั้นต่ำ
+   * (ก่อนหน้านี้ไม่ถูกหัก) — ไม่ใช่ภาษีของรายการที่เลือก แสดงแยกให้ผู้อนุมัติเห็น
+   */
+  existingWhtIncreaseSatang: number
 }
 
 /**
  * **pure** — ยอดสรุปของหน้าต่าง "อนุมัติที่เลือก (N)" (mytester2 F2-01) คิดแบบรอบจ่ายถัดไป:
  * รายการที่เลือก**ทั้งชุด**รวมกลุ่มต่อผู้รับกับรายการ `approved` ที่ยังไม่เข้ารอบ (+ ยอดสะสมของเดือน — `22` §6.9 E-054)
- * แล้วเทียบเกณฑ์ขั้นต่ำครั้งเดียวด้วย `approvalWhtPreviews()` (สูตรเดียวกับรอบจ่าย ห้ามคิดซ้ำ)
+ * แล้วเทียบเกณฑ์ขั้นต่ำครั้งเดียวด้วย `approvalWhtPreviews()` (สูตรเดียวกับรอบจ่าย `calculatePayeeBatchWht()` ห้ามคิดซ้ำ)
  *
- * ยอดสุทธิของชุดที่เลือก = ยอดสุทธิรวมของ (อนุมัติแล้ว + ที่เลือก) − ยอดสุทธิของ (อนุมัติแล้ว) เพียงลำพัง
- * ⇒ ส่วนที่รอบจ่ายเพิ่มขึ้นจริงเมื่ออนุมัติชุดนี้ (รวมกรณีชุดที่เลือกดันฐานรวมข้ามเกณฑ์จนรายการเดิมโดนหักด้วย)
- * · เดิมรวมยอดสุทธิรายแถว (แต่ละแถวคิดกับรายการอนุมัติแล้วโดยไม่รวมแถวที่เลือกอื่น) ⇒ หักน้อยกว่ารอบจริง
+ * แยกยอดเป็น 2 ส่วน (รีวิว F2-01 — เดิม net = netOf(เดิม+เลือก) − netOf(เดิม) ติดลบได้เมื่อชุดที่เลือกดันฐานข้ามเกณฑ์
+ * เช่น อนุมัติแล้ว ฿990 + เลือก ฿20 ⇒ ภาษี ฿30.30 > ยอดที่เลือก ฿20):
+ * - ภาษี/ยอดสุทธิของ**รายการที่เลือก** = ส่วนแบ่งต่อรายการในกลุ่มรวม (สูตรกระจายตามสัดส่วนฐาน) ⇒ ไม่เกินยอดของรายการ
+ * - ภาษีที่**รายการเดิมถูกหักเพิ่ม** = ภาษีของรายการเดิมในกลุ่มรวม − ภาษีของรายการเดิมเมื่อคิดลำพัง
  * · ยังเป็น**ประมาณการ** — รายการที่ยังเหลือขั้นอนุมัติ/วันตัดรอบ ทำให้รายการที่เข้ารอบจริงต่างจากชุดนี้ได้
  */
 export function approvalWhtSelectionTotals(
@@ -262,12 +271,33 @@ export function approvalWhtSelectionTotals(
   const selected = inputs.filter((input) => input.selected)
   const pendingBase = inputs.filter((input) => !input.selected && input.approved && input.payoutItem === null)
   const pendingSelected = selected.filter((input) => input.payoutItem === null)
-  const netOf = (group: readonly ApprovalWhtGroupInput[]): number =>
-    group.length === 0 ? 0 : approvalWhtPreviews(group, options).reduce((sum, preview) => sum + preview.netSatang, 0)
+  /** ภาษีที่หักจากผู้รับ (ยอดรายการ − ยอดสุทธิ) ต่อแถว · (2)/(3) บริษัทออกให้ ⇒ 0 */
+  const deducted = (input: ApprovalWhtGroupInput, preview: ApprovalWhtPreview): number =>
+    input.grossSatang - preview.netSatang
+  const previewsOf = (group: readonly ApprovalWhtGroupInput[]): ApprovalWhtPreview[] =>
+    group.length === 0 ? [] : approvalWhtPreviews(group, options)
+
+  const combined = previewsOf([...pendingBase, ...pendingSelected])
+  const baseAlone = previewsOf(pendingBase)
+  const baseWhtAlone = pendingBase.reduce((sum, input, index) => sum + deducted(input, baseAlone[index]!), 0)
+  const baseWhtCombined = pendingBase.reduce((sum, input, index) => sum + deducted(input, combined[index]!), 0)
+  const selectedWht = pendingSelected.reduce(
+    (sum, input, index) => sum + deducted(input, combined[pendingBase.length + index]!),
+    0,
+  )
 
   // รายการที่เลือกแต่เข้ารอบแล้ว (ไม่ควรเกิด — คิวเลือกได้เฉพาะรายการรออนุมัติ) ⇒ ยอดของรอบ (snapshot)
-  const snapshotNet = selected.reduce((sum, input) => sum + (input.payoutItem?.netSatang ?? 0), 0)
+  const snapshotWht = selected.reduce(
+    (sum, input) => sum + (input.payoutItem === null ? 0 : input.grossSatang - input.payoutItem.netSatang),
+    0,
+  )
   const grossSatang = selected.reduce((sum, input) => sum + input.grossSatang, 0)
-  const netSatang = netOf([...pendingBase, ...pendingSelected]) - netOf(pendingBase) + snapshotNet
-  return { count: selected.length, grossSatang, whtDeductedSatang: grossSatang - netSatang, netSatang }
+  const whtDeductedSatang = selectedWht + snapshotWht
+  return {
+    count: selected.length,
+    grossSatang,
+    whtDeductedSatang,
+    netSatang: grossSatang - whtDeductedSatang,
+    existingWhtIncreaseSatang: Math.max(0, baseWhtCombined - baseWhtAlone),
+  }
 }

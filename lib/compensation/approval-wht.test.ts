@@ -198,17 +198,43 @@ describe('mytester2 F2-01 — หน้าต่าง "อนุมัติท
     // รอบจ่ายที่สร้างจากชุดเดียวกัน = ฐาน 1,200 บาท × 3%
     const batchNet = approvalWhtPreviews([a, b]).reduce((sum, preview) => sum + preview.netSatang, 0)
     expect(batchNet).toBe(120_000 - 3_600)
-    expect(approvalWhtSelectionTotals([a, b])).toEqual({ count: 2, grossSatang: 120_000, whtDeductedSatang: 3_600, netSatang: 116_400 })
+    expect(approvalWhtSelectionTotals([a, b])).toEqual({
+      count: 2,
+      grossSatang: 120_000,
+      whtDeductedSatang: 3_600,
+      netSatang: 116_400,
+      existingWhtIncreaseSatang: 0,
+    })
   })
 
   it('รวมกับรายการอนุมัติแล้วที่ยังไม่เข้ารอบ — ยอดสุทธิ = ส่วนที่รอบจ่ายเพิ่มขึ้น (รายการเดิมที่ถูกดันข้ามเกณฑ์ถูกหักด้วย)', () => {
     const approved = { ...input({ grossSatang: 80_000 }), payeeId: 'p4', approved: true, selected: false }
     const picked = { ...input({ grossSatang: 40_000 }), payeeId: 'p4', approved: false, selected: true }
     const totals = approvalWhtSelectionTotals([approved, picked])
-    const withBoth = approvalWhtPreviews([approved, picked]).reduce((sum, preview) => sum + preview.netSatang, 0)
-    expect(totals.netSatang).toBe(withBoth - 80_000)
-    expect(totals.whtDeductedSatang).toBe(3_600)
-    expect(totals.count).toBe(1)
+    // ฐานรวม 1,200 บาท × 3% = ฿36 กระจายตามสัดส่วน: รายการที่เลือก ฿12 · รายการเดิมถูกหักเพิ่ม ฿24 (แสดงแยก)
+    const [approvedLine, pickedLine] = approvalWhtPreviews([approved, picked])
+    expect(totals.whtDeductedSatang).toBe(pickedLine!.whtSatang)
+    expect(totals).toMatchObject({ count: 1, grossSatang: 40_000, whtDeductedSatang: 1_200, netSatang: 38_800 })
+    expect(totals.existingWhtIncreaseSatang).toBe(approvedLine!.whtSatang)
+    expect(totals.whtDeductedSatang + totals.existingWhtIncreaseSatang).toBe(3_600)
+  })
+
+  it('รีวิว F2-01: อนุมัติแล้ว ฿990 + เลือก ฿20 ⇒ ยอดสุทธิของชุดที่เลือกไม่ติดลบ · ภาษีที่รายการเดิมถูกหักเพิ่มแยกบรรทัด', () => {
+    const approved = { ...input({ grossSatang: 99_000 }), payeeId: 'p9', approved: true, selected: false }
+    const picked = { ...input({ grossSatang: 2_000 }), payeeId: 'p9', approved: false, selected: true }
+    const totals = approvalWhtSelectionTotals([approved, picked])
+    // ทั้งก้อน ฿1,010 × 3% = ฿30.30 — เดิมยอดทั้งหมดถูกนับเป็นของรายการที่เลือก ⇒ net −10.30
+    expect(totals.netSatang).toBeGreaterThanOrEqual(0)
+    expect(totals.whtDeductedSatang).toBeLessThanOrEqual(totals.grossSatang)
+    expect(totals.whtDeductedSatang).toBe(60)
+    expect(totals.netSatang).toBe(1_940)
+    expect(totals.existingWhtIncreaseSatang).toBe(2_970)
+    expect(totals.whtDeductedSatang + totals.existingWhtIncreaseSatang).toBe(3_030)
+  })
+
+  it('ไม่มีรายการเดิมรอเข้ารอบ ⇒ ภาษีที่รายการเดิมถูกหักเพิ่ม = 0', () => {
+    const a = { ...input({ grossSatang: 120_000 }), payeeId: 'p10', approved: false, selected: true }
+    expect(approvalWhtSelectionTotals([a]).existingWhtIncreaseSatang).toBe(0)
   })
 
   it('ผู้รับต่างกันไม่ปนกลุ่ม · ยอดสะสมของเดือนนับด้วย · แถวที่ไม่เลือกและยังไม่อนุมัติไม่นับ', () => {

@@ -822,6 +822,36 @@ suite('Phase 3.2 — Compensation Approval หลายขั้น (`16`)', () 
     expect(managerView?.viewerCanAct).toBe(false)
   })
 
+  it('รีวิว F2-01 — ยอดสรุป "อนุมัติที่เลือก" นับเฉพาะรายการที่ผู้เรียกอนุมัติได้: ทีมอื่น/superseded/รอคลัง/ตีกลับ ⇒ ไม่นับ', async () => {
+    const payeeId = await seedPayee(AGENT_ID)
+    const mine = await seedPendingExpense(payeeId, 200_000)
+    const superseded = await seedPendingExpense(payeeId, 300_000)
+    const warehouse = await seedPendingExpense(payeeId, 400_000)
+    const revision = await seedPendingExpense(payeeId, 500_000)
+    await db().$executeRawUnsafe(`UPDATE expenses SET status = 'superseded' WHERE id = '${superseded}'`)
+    await db().$executeRawUnsafe(`UPDATE expenses SET status = 'pending_warehouse_confirm' WHERE id = '${warehouse}'`)
+    await db().$executeRawUnsafe(`UPDATE expenses SET status = 'needs_revision' WHERE id = '${revision}'`)
+
+    const preview = await approvals.previewCompensationBulkApproval(manager, { ids: [mine, superseded, warehouse, revision] })
+    expect(preview).toMatchObject({ count: 1, grossSatang: 200_000 })
+
+    // ผู้จัดการทีมอื่นส่ง id ของทีมนี้ ⇒ count 0 (ไม่ leak ยอด)
+    const otherManager = sessionUser({
+      ...manager,
+      id: FINANCE_2_ID,
+      scope: { kind: 'team', teamIds: [OTHER_TEAM_ID], companyId: null, userId: FINANCE_2_ID },
+    })
+    expect(await approvals.previewCompensationBulkApproval(otherManager, { ids: [mine] })).toEqual({
+      count: 0,
+      grossSatang: 0,
+      whtDeductedSatang: 0,
+      netSatang: 0,
+      existingWhtIncreaseSatang: 0,
+    })
+    // การเงินยังไม่ถึงขั้นของตน (รอผู้จัดการ) ⇒ ไม่นับ
+    expect((await approvals.previewCompensationBulkApproval(finance, { ids: [mine] })).count).toBe(0)
+  })
+
   /**
    * R6-6 (ตีความ UAT Q14) — หลักฐานปิดงานของเคส **ไม่สำเร็จ** ผ่านอัตโนมัติเมื่อค่าตอบแทนของเคส
    * **อนุมัติครบทุกรายการที่ยังมีผล** ไม่ใช่ตั้งแต่รายการแรกที่ผ่านครบขั้น

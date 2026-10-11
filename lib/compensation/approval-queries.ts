@@ -682,9 +682,13 @@ export async function listCompensationApprovals(
 /**
  * `GET /api/compensation/bulk-preview` (mytester2 F2-01) — ยอดสรุปของหน้าต่าง "อนุมัติที่เลือก (N)" คิดแบบรอบจ่ายถัดไป:
  * ชุดที่เลือกรวมกลุ่มต่อผู้รับกับรายการ `approved` ที่ยังไม่เข้ารอบ + ยอดสะสมของเดือน (`approvalWhtSelectionTotals()`)
- * · scope/ขั้นที่เห็นเหมือนคิว (`approvalScopeFilter` + `isApprovalItemVisibleTo`) — id ที่มองไม่เห็นถูกตัดทิ้งเงียบ ๆ ไม่ leak
+ * · scope เหมือนคิว (`approvalScopeFilter`) + นับเฉพาะรายการที่ผู้เรียกอนุมัติได้ในขั้นที่รออยู่ (`canActOnApprovalStep`)
+ *   — id ที่มองไม่เห็น/อนุมัติไม่ได้ถูกตัดทิ้งเงียบ ๆ ไม่ leak
  * · อ่านอย่างเดียว ไม่มี mutation
  */
+/** สถานะที่ "อนุมัติที่เลือก" อนุมัติได้ (รอผู้อนุมัติขั้นใดขั้นหนึ่ง) */
+const BULK_PREVIEW_STATUSES: readonly ExpenseStatus[] = ['pending_approval', 'pending_finance_approval']
+
 export async function previewCompensationBulkApproval(
   user: SessionUser,
   query: CompensationBulkPreviewQuery,
@@ -692,19 +696,21 @@ export async function previewCompensationBulkApproval(
   const found = await prisma.expense.findMany({
     where: {
       AND: [
-        { organizationId: user.organizationId, deletedAt: null, id: { in: query.ids } },
+        // รีวิว F2-01 — นับเฉพาะรายการที่ "อนุมัติที่เลือก" อนุมัติได้จริง (รอผู้อนุมัติ) — draft/superseded/อนุมัติแล้ว ฯลฯ ไม่นับ
+        { organizationId: user.organizationId, deletedAt: null, id: { in: query.ids }, status: { in: [...BULK_PREVIEW_STATUSES] } },
         approvalScopeFilter(user),
       ],
     },
     select: expenseSelect,
   })
   const candidates = found.length === 0 ? null : await loadMatrixCandidates(user.organizationId)
+  // เกณฑ์เดียวกับปุ่ม/ช่องเลือกของคิว (`viewerCanAct` → `bulkApprovableIds()`) — ขั้นที่รายการรออยู่ต้องเป็นของผู้เรียก
   const rows = found.filter((row) => {
     if (candidates === null) return false
     const flow = flowOf(row, candidates)
-    return isApprovalItemVisibleTo(user, { status: row.status, approvalStepCurrent: row.approvalStepCurrent, steps: flow.steps })
+    return canActOnApprovalStep(user, { status: row.status, approvalStepCurrent: row.approvalStepCurrent, steps: flow.steps })
   })
-  if (rows.length === 0) return { count: 0, grossSatang: 0, whtDeductedSatang: 0, netSatang: 0 }
+  if (rows.length === 0) return { count: 0, grossSatang: 0, whtDeductedSatang: 0, netSatang: 0, existingWhtIncreaseSatang: 0 }
 
   const payeeIds = [...new Set(rows.map((row) => row.payee.id))]
   const settings = await currentWhtPolicy(user.organizationId, payeeIds)
