@@ -21,7 +21,7 @@ export function NoReceiptToggle({
   hint: string
 }) {
   return (
-    <label className="flex items-start gap-2.5 rounded-lg border border-slate-200 px-3 py-2.5 text-sm text-slate-700">
+    <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-slate-200 px-3 py-2.5 text-sm text-slate-700 pointer-coarse:min-h-11">
       <input
         type="checkbox"
         className="focus-ring mt-0.5 h-5 w-5 shrink-0 rounded border-slate-300"
