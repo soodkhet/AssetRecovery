@@ -394,7 +394,8 @@ export function taxProfileHelp(values: {
       { label: 'ฐาน: ยอดรวมทั้งสิ้น', effect: 'คิดจากยอดรวม VAT — ไม่ใช่วิธีปกติ ใช้เมื่อสำนักงานบัญชีสั่งเท่านั้น' },
       {
         label: 'ยอดขั้นต่ำที่ต้องหัก',
-        effect: 'นับรวมทุกรายการของผู้รับคนเดียวในรอบจ่ายเดียว ถ้ารวมแล้วต่ำกว่าเกณฑ์จะไม่หักเลย',
+        // mytester A-02 — วิธีนับ (ต่อรอบ/สะสมต่อเดือน) เป็นค่าตั้งของแท็บภาษีหัก ณ ที่จ่าย ไม่ใช่ของ Tax Profile
+        effect: `นับรวมทุกรายการของผู้รับคนเดียว ตามวิธีนับที่ตั้งในแท็บภาษีหัก ณ ที่จ่าย (ค่าเริ่มต้น: ${WHT_THRESHOLD_SCOPE_LABEL.monthly_cumulative} — รวมรอบจ่ายก่อนหน้าในเดือนเดียวกัน) ถ้ารวมแล้วต่ำกว่าเกณฑ์จะไม่หัก`,
       },
       { label: 'แบบนำส่ง', effect: 'ระบบเลือกตามชนิดผู้รับจริง — บุคคลธรรมดา ภ.ง.ด.3 · นิติบุคคล ภ.ง.ด.53 · 40(1)/40(2) ภ.ง.ด.1' },
     ],
@@ -408,7 +409,7 @@ export function taxProfileHelp(values: {
         ],
       },
       {
-        title: `เกณฑ์ขั้นต่ำ ${money(threshold)} (ยอดรวมของผู้รับในรอบจ่าย)`,
+        title: `เกณฑ์ขั้นต่ำ ${money(threshold)} (ยอดรวมของผู้รับตามวิธีนับที่ตั้งไว้)`,
         lines: [
           line(`ยอด ${money(SAMPLE_BELOW_THRESHOLD_SATANG)}`, below.belowThreshold ? 'ไม่หัก (ต่ำกว่าเกณฑ์)' : `หัก ${money(below.whtSatang)}`),
           line(`ยอด ${money(SAMPLE_ABOVE_THRESHOLD_SATANG)}`, above.belowThreshold ? 'ไม่หัก (ต่ำกว่าเกณฑ์)' : `หัก ${money(above.whtSatang)}`),

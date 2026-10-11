@@ -395,3 +395,13 @@ describe('ข้อความที่ผู้ใช้เห็น', () => {
     expect(withNumbers.length).toBeGreaterThanOrEqual(28)
   })
 })
+
+describe('mytester A-02 — คำอธิบายเกณฑ์ WHT ไม่ผูกกับ "ต่อรอบจ่าย"', () => {
+  it('Tax Profile อธิบายว่าวิธีนับมาจากค่าตั้ง (ค่าเริ่มต้นสะสมต่อเดือน)', () => {
+    const help = taxProfileHelp({ whtPct: 3, whtBasis: 'before_vat', thresholdSatang: 100_000 })
+    const threshold = help.options?.find((option) => option.label === 'ยอดขั้นต่ำที่ต้องหัก')
+    expect(threshold?.effect).toContain('สะสมต่อผู้รับต่อเดือน')
+    expect(threshold?.effect).not.toContain('ในรอบจ่ายเดียว')
+    expect(help.examples?.[1]?.title).not.toContain('ในรอบจ่าย')
+  })
+})
