@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { CLIENT_PORTAL_PATH, DASHBOARD_PATH, LOGIN_PATH } from '@/lib/auth/constants'
-import { isCompanyActive, loadCompanyStatus } from '@/lib/auth/company-status'
+import { loadCompanyStatus } from '@/lib/auth/company-status'
+import { LOGIN_REASON_COMPANY_NOT_LINKED, portalCompanyDenyCode } from '@/lib/auth/errors'
 import { requireSessionPage } from '@/lib/auth/page-guard'
 import { isPortalOnlyUser } from '@/lib/auth/permission'
 import type { SessionUser } from '@/lib/auth/types'
@@ -22,7 +23,10 @@ export async function requirePortalPage(section?: PortalSection): Promise<Sessio
   if (!isPortalOnlyUser(user)) redirect(DASHBOARD_PATH)
 
   const companyStatus = await loadCompanyStatus(user.organizationId, user.companyId)
-  if (!isCompanyActive(companyStatus)) redirect(`${LOGIN_PATH}?reason=COMPANY_SUSPENDED`)
+  // ยังไม่ผูกบริษัท ≠ บริษัทถูกระงับ (mytester A-07)
+  const denyCode = portalCompanyDenyCode(user.companyId, companyStatus)
+  if (denyCode === 'USER_NOT_PROVISIONED') redirect(`${LOGIN_PATH}?reason=${LOGIN_REASON_COMPANY_NOT_LINKED}`)
+  if (denyCode === 'COMPANY_SUSPENDED') redirect(`${LOGIN_PATH}?reason=COMPANY_SUSPENDED`)
 
   if (section !== undefined && !canAccess(section, user.capabilities)) redirect(deniedHref(CLIENT_PORTAL_PATH, section))
   return user

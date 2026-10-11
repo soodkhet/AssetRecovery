@@ -21,3 +21,22 @@ export function tacJobFinishedNotice(
     description: `TAC ${fmtCount(next.tacCount)} รายการ · แบรนด์ ${fmtCount(next.brandCount)} แบรนด์ — ดูรายละเอียดที่แท็บประวัติการอัปเดต`,
   }
 }
+
+/**
+ * mytester A-13 — ข้อความตารางว่างของรายการแบรนด์/TAC: ระหว่างมีงานนำเข้า ⇒ บอกว่ากำลังนำเข้า (ห้ามชวนกดอัปเดตซ้ำ)
+ * · มีคำค้น/ตัวกรอง ⇒ ให้เปลี่ยนเงื่อนไข · ว่างจริง ⇒ ชวนอัปเดต/เพิ่มเอง
+ */
+export function catalogEmptyDescription(input: { pendingJob: boolean; filtered: boolean; unit: string }): string {
+  if (input.pendingJob) return 'กำลังนำเข้าฐาน TAC อยู่เบื้องหลัง — รายการจะขึ้นเองเมื่อเสร็จ (ครั้งแรกใช้เวลาไม่กี่นาที)'
+  if (input.filtered) return `ไม่พบ${input.unit}ที่ตรงกับคำค้นหรือตัวกรอง — ลองเปลี่ยนเงื่อนไข`
+  return 'ยังไม่มีข้อมูล — กด “อัปเดตตอนนี้” ด้านบน หรือเพิ่มเอง'
+}
+
+/** ช่อง "นำเข้าสำเร็จล่าสุด" — ระหว่างงานแรกยังไม่จบ ไม่บอกว่า "ยังไม่เคย" (mytester A-13) */
+export function tacImportedAtText(
+  summary: Pick<DeviceCatalogSummaryDto, 'pendingJob' | 'tacImportedAt'>,
+  formatDateTime: (iso: string) => string,
+): string {
+  if (summary.tacImportedAt !== null) return formatDateTime(summary.tacImportedAt)
+  return summary.pendingJob ? 'กำลังนำเข้าครั้งแรก…' : 'ยังไม่เคย'
+}

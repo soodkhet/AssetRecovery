@@ -42,7 +42,7 @@ const MESSAGES: Record<ServiceFeeErrorCode, ErrorMessage> = {
   },
   INVALID_RATE_RANGE: {
     title: 'อัตราค่าความสำเร็จไม่ถูกต้อง',
-    message: 'อัตราค่าความสำเร็จ (rate) ต้องอยู่ระหว่าง 0-100 เปอร์เซ็นต์',
+    message: 'อัตราค่าความสำเร็จต้องอยู่ระหว่าง 0-100 เปอร์เซ็นต์',
   },
 }
 

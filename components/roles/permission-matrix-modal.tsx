@@ -177,12 +177,12 @@ export function PermissionMatrixModal({
             <InlineAlert tone="warning">
               {role.name === 'Superadmin'
                 ? 'Superadmin มีสิทธิ์ทุกรายการโดยนิยาม (ไม่เก็บ record) จึงแก้ไม่ได้'
-                : 'บทบาทนี้ถูกกำหนดสิทธิ์ตายตามสเปค แก้ไขไม่ได้'}
+                : 'สิทธิ์ของบทบาทนี้เป็นค่าตายตัวของระบบ แก้ไขไม่ได้'}
             </InlineAlert>
           )}
 
           {partiallyEditable && (
-            <InlineAlert tone="info">บทบาทนี้แก้ได้เฉพาะสิทธิ์หมวดพอร์ทัลบริษัทไฟแนนซ์ — สิทธิ์อื่นถูกกำหนดตายตามสเปค</InlineAlert>
+            <InlineAlert tone="info">บทบาทนี้แก้ได้เฉพาะสิทธิ์หมวดพอร์ทัลบริษัทไฟแนนซ์ — สิทธิ์อื่นเป็นค่าตายตัวของระบบ</InlineAlert>
           )}
 
           {sections.map((section) => (

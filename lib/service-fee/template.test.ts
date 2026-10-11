@@ -7,6 +7,8 @@ import {
   normalizeTemplateValues,
   pickCurrentTemplateVersion,
   planNextTemplateVersion,
+  rateRangeFieldError,
+  serviceFeeBaseLabel,
   toServiceFeeSnapshot,
   type ServiceFeeTemplateValues,
   type ServiceFeeTemplateVersion,
@@ -56,6 +58,20 @@ describe('assertRateRange (`12` §11 · `24` §6.1)', () => {
       expect((error as ServiceFeeError).code).toBe('INVALID_RATE_RANGE')
       expect((error as ServiceFeeError).status).toBe(400)
     }
+  })
+
+  it('mytester A-11 — ข้อความใต้ช่องอัตรา: เกินช่วง = ข้อความไทยไม่มีรหัส · ในช่วง = null', () => {
+    expect(rateRangeFieldError(150)).toBe('อัตราค่าความสำเร็จต้องอยู่ระหว่าง 0-100 เปอร์เซ็นต์')
+    expect(rateRangeFieldError(Number.NaN)).not.toBeNull()
+    expect(rateRangeFieldError(10)).toBeNull()
+  })
+})
+
+describe('serviceFeeBaseLabel (mytester A-15)', () => {
+  it('FLAT = ค่าบริการเหมาต่อเคส (ไม่ใช่ค่าเปิดเคส) · HYBRID = ส่วนคงที่', () => {
+    expect(serviceFeeBaseLabel('FLAT')).toBe('ค่าบริการเหมาต่อเคส')
+    expect(serviceFeeBaseLabel('HYBRID')).toBe('ค่าบริการส่วนคงที่')
+    expect(serviceFeeBaseLabel('FLAT')).not.toMatch(/เปิดเคส|BASE/i)
   })
 })
 

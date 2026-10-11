@@ -25,7 +25,7 @@ export const serviceFeeBasisSchema = z.enum(['debt_amount'])
 const templateFieldsSchema = z.object({
   name: z.string().trim().min(2, 'ชื่อเทมเพลตสั้นเกินไป').max(120, 'ชื่อเทมเพลตยาวเกินไป'),
   model: serviceFeeModelSchema,
-  baseSatang: satangSchema('ค่าบริการตั้งต้น (base)'),
+  baseSatang: satangSchema('ค่าบริการตั้งต้น'),
   ratePct: z
     .number({ message: 'อัตราค่าความสำเร็จต้องเป็นตัวเลข' })
     .refine(
@@ -46,14 +46,14 @@ function refineByModel(value: ServiceFeeTemplateFields, ctx: z.RefinementCtx): v
     ctx.addIssue({
       code: 'custom',
       path: ['baseSatang'],
-      message: `model ${value.model} ต้องระบุค่าบริการตั้งต้น (base)`,
+      message: value.model === 'FLAT' ? 'กรุณาระบุค่าบริการเหมาต่อเคสมากกว่า 0 บาท' : 'กรุณาระบุค่าบริการตั้งต้นมากกว่า 0 บาท',
     })
   }
   if (!needsBase && value.baseSatang !== 0) {
     ctx.addIssue({
       code: 'custom',
       path: ['baseSatang'],
-      message: 'model SUCCESS_FEE ไม่มีค่าบริการตั้งต้น (ต้องเป็น 0)',
+      message: 'แบบคิดตามเปอร์เซ็นต์ความสำเร็จไม่มีค่าบริการตั้งต้น (ต้องเป็น 0)',
     })
   }
 
@@ -61,14 +61,14 @@ function refineByModel(value: ServiceFeeTemplateFields, ctx: z.RefinementCtx): v
     ctx.addIssue({
       code: 'custom',
       path: ['ratePct'],
-      message: `model ${value.model} ต้องระบุอัตราค่าความสำเร็จ`,
+      message: 'กรุณาระบุอัตราค่าความสำเร็จมากกว่า 0%',
     })
   }
   if (!needsRate && value.ratePct !== 0) {
     ctx.addIssue({
       code: 'custom',
       path: ['ratePct'],
-      message: 'model FLAT ไม่คิดตามเปอร์เซ็นต์ (อัตราต้องเป็น 0)',
+      message: 'แบบเหมาจ่ายไม่คิดตามเปอร์เซ็นต์ (อัตราต้องเป็น 0)',
     })
   }
 
@@ -76,7 +76,7 @@ function refineByModel(value: ServiceFeeTemplateFields, ctx: z.RefinementCtx): v
     ctx.addIssue({ code: 'custom', path: ['basis'], message: 'ต้องเลือกฐานคำนวณเมื่อมีอัตราค่าความสำเร็จ' })
   }
   if (!needsRate && value.basis != null) {
-    ctx.addIssue({ code: 'custom', path: ['basis'], message: 'model FLAT ไม่ใช้ฐานคำนวณ' })
+    ctx.addIssue({ code: 'custom', path: ['basis'], message: 'แบบเหมาจ่ายไม่ใช้ฐานคำนวณ' })
   }
 
   // มติ U165 — ติ๊ก "เรียกเก็บกรณีไม่สำเร็จ" แล้วต้องกรอกยอด > 0 (ไม่เก็บ = ส่ง null)

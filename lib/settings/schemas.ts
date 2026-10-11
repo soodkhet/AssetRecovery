@@ -263,17 +263,32 @@ export const assignmentPolicyFieldsSchema = assignmentPolicyFields
 export const assignmentPolicyUpdateSchema = assignmentPolicyFields.extend({ reason: reasonSchema })
 
 // ── §6.3 บัญชีธนาคารบริษัท ─────────────────────────────────────────────
+
+/**
+ * เลขบัญชีธนาคาร — ตรวจ "ต้องเป็นตัวเลข" **ก่อน** ความยาว (mytester A-03: กรอก "abc-12" ต้องบอกว่า
+ * ต้องเป็นตัวเลข ไม่ใช่ "สั้นเกินไป") · นับความยาวจากตัวเลขล้วน ไม่นับขีด/ช่องว่างคั่น
+ */
+export const bankAccountNumberSchema = z
+  .string()
+  .trim()
+  .min(1, 'กรุณาระบุเลขบัญชี')
+  .superRefine((value, ctx) => {
+    if (value === '') return
+    if (!/^[\d\s-]+$/.test(value)) {
+      ctx.addIssue({ code: 'custom', message: 'เลขบัญชีต้องเป็นตัวเลข (มี - หรือช่องว่างคั่นได้)' })
+      return
+    }
+    const digits = value.replace(/\D/g, '').length
+    if (digits < 8) ctx.addIssue({ code: 'custom', message: 'เลขบัญชีต้องมีตัวเลขอย่างน้อย 8 หลัก' })
+    else if (value.length > 30) ctx.addIssue({ code: 'custom', message: 'เลขบัญชียาวเกินไป' })
+  })
 export const bankAccountUsageSchema = z.enum(['receive', 'pay', 'both'])
 
 const bankAccountFields = z.object({
-  bankName: nameSchema,
+  /** ฟอร์มเป็นรายการเลือก — ว่าง = ยังไม่เลือก (mytester A-03: ห้ามขึ้น "ชื่อสั้นเกินไป") */
+  bankName: z.string().trim().min(1, 'กรุณาเลือกธนาคาร').max(120, 'ชื่อธนาคารยาวเกินไป'),
   accountName: nameSchema,
-  accountNumber: z
-    .string()
-    .trim()
-    .min(8, 'เลขบัญชีสั้นเกินไป')
-    .max(30, 'เลขบัญชียาวเกินไป')
-    .regex(/^[\d\s-]+$/, 'เลขบัญชีต้องเป็นตัวเลข (มี - หรือช่องว่างคั่นได้)'),
+  accountNumber: bankAccountNumberSchema,
   accountType: z.enum(ACCOUNT_TYPE_VALUES),
   usage: bankAccountUsageSchema,
   /** อ้างรูปแบบด้วย id (มติ PO U147) — ชนิด statement/payment ตรวจที่ชั้น DB */

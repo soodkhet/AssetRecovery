@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { reasonSchema } from '@/lib/api/validation'
 import { normalizeTaxId } from '@/lib/finance-companies/company'
 import { BRANCH_CODE_PATTERN } from '@/lib/format/branch'
+import { isThaiPhone } from '@/lib/format/phone'
 import { PLACEHOLDER_TAX_ID } from '@/lib/organization/profile'
 import { MAX_STORAGE_PATH_LENGTH } from '@/lib/uploads/targets'
 
@@ -52,7 +53,11 @@ export const organizationProfileFormSchema = z.object({
     .string({ error: () => 'กรุณากรอกรหัสไปรษณีย์' })
     .trim()
     .refine((value) => /^\d{5}$/.test(value), 'รหัสไปรษณีย์ต้องเป็นตัวเลข 5 หลัก'),
-  phone: requiredText('เบอร์โทรสำนักงาน', 20),
+  // mytester A-04 — พิมพ์บนหัวใบกำกับภาษี ต้องเป็นเบอร์ที่โทรได้จริง
+  phone: requiredText('เบอร์โทรสำนักงาน', 20).refine(
+    (value) => isThaiPhone(value),
+    'เบอร์โทรไม่ถูกต้อง — กรอกเบอร์ 9–10 หลัก ขึ้นต้นด้วย 0 (เช่น 02-111-2233)',
+  ),
   email: z.preprocess(
     blankToNull,
     z.string().trim().max(255, 'อีเมลยาวเกินไป').email('รูปแบบอีเมลไม่ถูกต้อง').nullable().default(null),

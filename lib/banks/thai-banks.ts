@@ -59,6 +59,26 @@ export function thaiBankByCode(code: string | null | undefined): BankCodeEntry |
   return THAI_BANK_CODES.find((entry) => entry.code === code.trim()) ?? null
 }
 
+/**
+ * mytester A-16 — ตัวเลือกช่อง "ธนาคาร" ของข้อมูลรับเงินผู้รับ (เก็บเป็น**ชื่อธนาคาร**เหมือนเดิม — คอลัมน์ข้อความ)
+ * · ใส่เฉพาะธนาคารที่ชื่อแปลงกลับเป็นรหัสของตัวเองได้ตรง (ไฟล์โอนใช้ `resolveBankCode()` กับชื่อนี้) — ธนาคารธนชาต
+ *   (065) รวมกิจการเข้าทหารไทยธนชาตแล้ว ชื่อจึงถูกอ่านเป็น 011 ⇒ ไม่ให้เลือก กันรหัสในไฟล์ไม่ตรงกับที่ผู้ใช้เห็น
+ * · ค่าเดิมที่พิมพ์เอง (ไม่ตรงชื่อมาตรฐาน) แสดงเป็นตัวเลือกแรกให้คงค่าไว้ได้ พร้อมบอกว่าระบบอ่านเป็นธนาคารอะไร
+ *   หรืออ่านไม่ออก (ไฟล์โอนจะบล็อก — ต้องเลือกใหม่)
+ */
+export function payeeBankOptions(current: string): { value: string; label: string }[] {
+  const options = THAI_BANK_CODES.filter((entry) => resolveBankCode(entry.name) === entry.code).map((entry) => ({
+    value: entry.name,
+    label: entry.name,
+  }))
+  const value = current.trim()
+  if (value === '' || options.some((option) => option.value === value)) return options
+  const known = thaiBankByCode(resolveBankCode(value))
+  const label =
+    known === null ? `${value} (ไม่อยู่ในรายการ — กรุณาเลือกใหม่)` : `${value} (ค่าเดิม — ระบบอ่านเป็น${known.name})`
+  return [{ value: current, label }, ...options]
+}
+
 /** ตัวเลือก dropdown ธนาคาร (เรียงตามรหัส BOT) */
 export function thaiBankOptions(): { value: string; label: string }[] {
   return THAI_BANK_CODES.map((entry) => ({ value: entry.code, label: `${entry.name} (${entry.code})` }))

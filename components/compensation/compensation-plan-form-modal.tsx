@@ -372,7 +372,7 @@ export function CompensationPlanFormModal({
             id="plan-wht"
             label="หัก ณ ที่จ่าย (%)"
             required
-            hint="ใช้เมื่อ payee ไม่มี tax profile — Payee-level ชนะเสมอ"
+            hint="ใช้เมื่อผู้รับเงินยังไม่ได้ตั้งกติกาภาษีของตัวเอง — ถ้าผู้รับเงินตั้งไว้แล้ว ระบบใช้ของผู้รับเงินเสมอ"
             error={errors.whtPct}
           >
             <Input

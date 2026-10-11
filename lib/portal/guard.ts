@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server'
 import { emitAudit } from '@/lib/audit/audit'
 import { loadCompanyStatus } from '@/lib/auth/company-status'
-import { AuthError, toAuthErrorResponse } from '@/lib/auth/errors'
+import { AuthError, COMPANY_NOT_LINKED_MESSAGE, toAuthErrorResponse } from '@/lib/auth/errors'
 import { isSessionExpired } from '@/lib/auth/permission'
 import { getRequestMeta } from '@/lib/auth/request-meta'
 import { getRawSessionUser } from '@/lib/auth/session'
@@ -85,7 +85,7 @@ export const PORTAL_AUDIT_TARGET = 'portal'
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-type PortalDenyCode = 'PERMISSION_DENIED' | 'ACCOUNT_INACTIVE' | 'COMPANY_SUSPENDED'
+type PortalDenyCode = 'PERMISSION_DENIED' | 'ACCOUNT_INACTIVE' | 'COMPANY_SUSPENDED' | 'USER_NOT_PROVISIONED'
 
 interface DenyDetail {
   section: PortalSection
@@ -144,7 +144,11 @@ async function denyPortal(
     // audit ล้มต้องไม่ทำให้คำตอบ 403 กลายเป็น 500 (ผู้เรียกยังต้องถูกปฏิเสธ)
     console.error('[portal] access_denied audit failed', error)
   }
-  throw new AuthError(code, `portal:${detail.section} ${detail.cause} user=${user.id}`)
+  throw new AuthError(
+    code,
+    `portal:${detail.section} ${detail.cause} user=${user.id}`,
+    code === 'USER_NOT_PROVISIONED' ? COMPANY_NOT_LINKED_MESSAGE : undefined,
+  )
 }
 
 function toViewer(user: SessionUser): PortalViewer {
@@ -175,6 +179,10 @@ export async function requirePortalAccess(
 
   const companyStatus = await loadCompanyStatus(user.organizationId, user.companyId)
   const gate = evaluatePortalGate({ viewer, userStatus: user.status, companyStatus }, section, { download })
+  // ยังไม่ผูกบริษัท ≠ บริษัทถูกระงับ (mytester A-07)
+  if (!gate.ok && gate.code === 'COMPANY_SUSPENDED' && user.companyId === null) {
+    return denyPortal(user, 'USER_NOT_PROVISIONED', { section, download, cause: 'company_missing' }, options.request)
+  }
   if (!gate.ok) {
     const cause =
       gate.code === 'ACCOUNT_INACTIVE'
@@ -192,7 +200,7 @@ export async function requirePortalAccess(
 
   // isPortalViewer + company active ⇒ companyId ไม่เป็น null (loadCompanyStatus คืน null เมื่อไม่มีบริษัท)
   if (user.companyId === null) {
-    return denyPortal(user, 'COMPANY_SUSPENDED', { section, download, cause: 'company_missing' }, options.request)
+    return denyPortal(user, 'USER_NOT_PROVISIONED', { section, download, cause: 'company_missing' }, options.request)
   }
 
   return { user, companyId: user.companyId, capabilities: user.capabilities, section }

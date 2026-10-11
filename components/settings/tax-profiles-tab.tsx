@@ -254,7 +254,7 @@ export function TaxProfilesTab() {
       </div>
 
       <InlineAlert tone="warning" title="การแก้ Tax Profile กระทบยอดภาษีทุกรายการที่ใช้ profile นี้">
-        ระบบบันทึก audit log พร้อมเหตุผลทุกครั้ง — รายการที่จ่ายไปแล้วยังอ้างค่าที่ snapshot ไว้ตอนตั้งรอบจ่าย
+        ระบบบันทึกประวัติการแก้ไขพร้อมเหตุผลทุกครั้ง — รายการที่จ่ายไปแล้วยังใช้ค่าที่บันทึกไว้ตอนตั้งรอบจ่าย
       </InlineAlert>
 
       <SettingHelp className="mt-3" help={taxProfileHelp({ whtPct: null, whtBasis: 'before_vat', thresholdSatang: null })} />

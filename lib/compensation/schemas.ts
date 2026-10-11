@@ -52,14 +52,14 @@ function refineFuelRule(value: CompensationPlanFields, ctx: z.RefinementCtx): vo
       ctx.addIssue({
         code: 'custom',
         path: ['fuelRatePerKmSatang'],
-        message: 'โหมด PER_KM ต้องระบุอัตราค่าน้ำมันต่อกิโลเมตร',
+        message: 'แบบคิดตามระยะทางต้องระบุอัตราค่าน้ำมันต่อกิโลเมตร (มากกว่า 0)',
       })
     }
     if (value.fuelDailyFlatSatang != null) {
       ctx.addIssue({
         code: 'custom',
         path: ['fuelDailyFlatSatang'],
-        message: 'โหมด PER_KM ตั้งค่าเหมาจ่ายรายวันไม่ได้ (เลือกได้โหมดเดียว)',
+        message: 'แบบคิดตามระยะทางตั้งค่าเหมาจ่ายรายวันไม่ได้ (เลือกได้แบบเดียว)',
       })
     }
     return
@@ -69,21 +69,21 @@ function refineFuelRule(value: CompensationPlanFields, ctx: z.RefinementCtx): vo
     ctx.addIssue({
       code: 'custom',
       path: ['fuelDailyFlatSatang'],
-      message: 'โหมด DAILY_FLAT ต้องระบุค่าน้ำมันเหมาจ่ายรายวัน',
+      message: 'แบบเหมาจ่ายรายวันต้องระบุค่าน้ำมันเหมาจ่ายรายวัน (มากกว่า 0)',
     })
   }
   if (value.fuelRatePerKmSatang != null) {
     ctx.addIssue({
       code: 'custom',
       path: ['fuelRatePerKmSatang'],
-      message: 'โหมด DAILY_FLAT ตั้งค่าอัตราต่อกิโลเมตรไม่ได้ (เลือกได้โหมดเดียว)',
+      message: 'แบบเหมาจ่ายรายวันตั้งค่าอัตราต่อกิโลเมตรไม่ได้ (เลือกได้แบบเดียว)',
     })
   }
   if (value.fuelMaxPerCaseSatang != null) {
     ctx.addIssue({
       code: 'custom',
       path: ['fuelMaxPerCaseSatang'],
-      message: 'เพดานต่อเคสใช้กับโหมด PER_KM เท่านั้น',
+      message: 'เพดานต่อเคสใช้กับแบบคิดตามระยะทางเท่านั้น',
     })
   }
 }

@@ -19,13 +19,14 @@ interface LoginError {
   message: string
 }
 
-export function LoginForm({ reason, nextPath }: { reason?: AuthErrorCode; nextPath?: string }) {
+/** `reason` = ข้อความที่แปลงจาก `?reason=` แล้ว (`loginReasonMessage()`) */
+export function LoginForm({ reason, nextPath }: { reason?: LoginError; nextPath?: string }) {
   const router = useRouter()
   const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<LoginError | null>(reason ? authErrorMessage(reason) : null)
+  const [error, setError] = useState<LoginError | null>(reason ?? null)
   const [shake, setShake] = useState(false)
 
   function fail(next: LoginError) {
@@ -57,8 +58,8 @@ export function LoginForm({ reason, nextPath }: { reason?: AuthErrorCode; nextPa
       const body: unknown = await response.json()
 
       if (!response.ok) {
-        const code = extractErrorCode(body)
-        fail(authErrorMessage(code))
+        // ข้อความจากเซิร์ฟเวอร์มาก่อน — บาง code มีข้อความเฉพาะกรณี (เช่น บัญชียังไม่ได้ผูกบริษัท · mytester A-07)
+        fail(extractErrorMessage(body) ?? authErrorMessage(extractErrorCode(body)))
         return
       }
 
@@ -204,6 +205,16 @@ function extractErrorCode(body: unknown): AuthErrorCode {
     }
   }
   return 'INVALID_CREDENTIALS'
+}
+
+function extractErrorMessage(body: unknown): LoginError | null {
+  if (typeof body !== 'object' || body === null || !('error' in body)) return null
+  const error = (body as { error: unknown }).error
+  if (typeof error !== 'object' || error === null) return null
+  const { title, message } = error as { title?: unknown; message?: unknown }
+  return typeof title === 'string' && typeof message === 'string' && title !== '' && message !== ''
+    ? { title, message }
+    : null
 }
 
 function extractRedirect(body: unknown): string | null {

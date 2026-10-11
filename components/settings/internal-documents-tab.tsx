@@ -59,7 +59,7 @@ export function InternalDocumentsTab() {
   return (
     <Card>
       <div className="mb-4">
-        <h2 className="text-sm font-bold text-slate-900">รูปแบบเอกสารภายใน (Internal Document Templates)</h2>
+        <h2 className="text-sm font-bold text-slate-900">รูปแบบเอกสารภายใน</h2>
         <p className="mt-0.5 text-xs text-slate-500">
           เอกสารที่ระบบสร้างให้อัตโนมัติในแต่ละขั้นของงาน — ใช้ภายในบริษัท ไม่ใช่เอกสารภาษีทางการ
         </p>
@@ -77,12 +77,11 @@ export function InternalDocumentsTab() {
             <Tr>
               <Th>เอกสาร</Th>
               <Th>ใช้เมื่อ</Th>
-              <Th>รหัสอ้างอิง</Th>
             </Tr>
           </THead>
           {/* `TableState` เรนเดอร์ `<tbody>` ของตัวเอง — วางเป็นพี่น้องกับ `TBody` */}
           <TableState
-            colSpan={3}
+            colSpan={2}
             loading={loading}
             error={error}
             isEmpty={items.length === 0}
@@ -110,9 +109,6 @@ export function InternalDocumentsTab() {
                   </Td>
                   <Td>
                     <span className="text-xs text-slate-600">{item.usage}</span>
-                  </Td>
-                  <Td>
-                    <span className="font-mono text-[10px] text-slate-400">{item.code}</span>
                   </Td>
                 </Tr>
               ))}

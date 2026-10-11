@@ -106,6 +106,11 @@ export function TaxProfileDefaultsCard() {
     setForm(next)
     setErrors({})
     setFormOpen(true)
+    // mytester A-12 — Tax Profile ที่เพิ่งสร้างในการ์ดข้าง ๆ ต้องเลือกได้ทันที (ไม่ต้องโหลดหน้าใหม่)
+    void (async () => {
+      const [, profilesResult] = await fetchAll()
+      if (profilesResult.error === undefined) setProfiles(profilesResult.data ?? [])
+    })()
   }
 
   function setSlot(slot: TaxProfileDefaultSlot, value: string): void {

@@ -9,6 +9,8 @@ import { serviceFeeTemplateCreateSchema } from '@/lib/service-fee/schemas'
 import {
   SERVICE_FEE_BASIS_LABEL,
   SERVICE_FEE_MODEL_LABEL,
+  rateRangeFieldError,
+  serviceFeeBaseLabel,
   type ServiceFeeBasis,
   type ServiceFeeModel,
 } from '@/lib/service-fee/template'
@@ -112,6 +114,12 @@ export function ServiceFeeFormModal({
       setErrors(fields)
       return
     }
+    // mytester A-11 — อัตราเกิน 0-100 ต้องขึ้นใต้ช่องทันที ไม่ปล่อยไปเป็น toast จากเซิร์ฟเวอร์
+    const rateError = usesRate ? rateRangeFieldError(parsed.data.ratePct) : null
+    if (rateError !== null) {
+      setErrors({ ratePct: rateError })
+      return
+    }
 
     setErrors({})
     setSaving(true)
@@ -121,6 +129,9 @@ export function ServiceFeeFormModal({
         jsonRequest(isEdit ? 'PATCH' : 'POST', parsed.data),
       )
       if (result.error !== undefined) {
+        // error รายช่องจากเซิร์ฟเวอร์ขึ้นใต้ช่องด้วย ไม่ใช่ toast อย่างเดียว (mytester A-11)
+        if (result.error.fields !== undefined) setErrors(result.error.fields)
+        else if (result.error.code === 'INVALID_RATE_RANGE') setErrors({ ratePct: result.error.message })
         showToast({ tone: 'error', title: result.error.title, description: result.error.message })
         return
       }
@@ -193,7 +204,7 @@ export function ServiceFeeFormModal({
 
         {usesBase && (
           <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <Field id="sf-base" label="ค่าดำเนินการคงที่ (Base Fee) — บาท" required error={errors.baseSatang}>
+            <Field id="sf-base" label={`${serviceFeeBaseLabel(form.model)} — บาท`} required error={errors.baseSatang}>
               <Input
                 id="sf-base"
                 numeric

@@ -13,7 +13,12 @@ import { parseBrandListText } from '@/lib/device-catalog/catalog'
 import { NOT_SPECIFIED_IN_CONTRACT, parseAttributeOptionsText } from '@/lib/device-catalog/device-attributes'
 import { deviceCatalogSettingsSchema } from '@/lib/device-catalog/schemas'
 import { TAC_SOURCE_ATTRIBUTION, TAC_SOURCE_REPO_URL } from '@/lib/device-catalog/tac'
-import { shouldPollTacSummary, TAC_POLL_INTERVAL_MS, tacJobFinishedNotice } from '@/lib/device-catalog/tac-polling'
+import {
+  shouldPollTacSummary,
+  TAC_POLL_INTERVAL_MS,
+  tacImportedAtText,
+  tacJobFinishedNotice,
+} from '@/lib/device-catalog/tac-polling'
 import type {
   DeviceBrandDto,
   DeviceCatalogSettingsDto,
@@ -210,7 +215,12 @@ export function DeviceCatalogTab() {
           ระบบยังจำรุ่นจากงานจริง และผู้ดูแลผูก TAC เองได้ในแท็บ TAC
         </InlineAlert>
       )}
-      {summary !== null && summary.tacCount === 0 && (
+      {summary !== null && summary.pendingJob && (
+        <InlineAlert tone="info" title="กำลังอัปเดตฐาน TAC">
+          ระบบกำลังนำเข้าข้อมูลอยู่เบื้องหลัง (ครั้งแรกใช้เวลาไม่กี่นาที) — ตัวเลขและรายการจะอัปเดตเองเมื่อเสร็จ ไม่ต้องกดซ้ำ
+        </InlineAlert>
+      )}
+      {summary !== null && summary.tacCount === 0 && !summary.pendingJob && (
         <InlineAlert tone="info" title="ยังไม่ได้นำเข้าฐาน TAC">
           กด “อัปเดตตอนนี้” เพื่อดึงฐาน TAC ครั้งแรก (ไฟล์ประมาณ 12 MB · ใช้เวลาสักครู่) — ระหว่างนี้เลือก/ระบุรุ่นเองได้ตามปกติ
         </InlineAlert>
@@ -236,7 +246,7 @@ export function DeviceCatalogTab() {
           </div>
           <div className="rounded-lg border border-slate-200 p-3">
             <div className="text-slate-500">นำเข้าสำเร็จล่าสุด</div>
-            <div className="mt-1 text-slate-800">{summary.tacImportedAt === null ? 'ยังไม่เคย' : fmtDateTime(summary.tacImportedAt)}</div>
+            <div className="mt-1 text-slate-800">{tacImportedAtText(summary, fmtDateTime)}</div>
             <div className="mt-0.5 text-slate-500">
               ไฟล์ต้นทางแก้ล่าสุด: {summary.sourceUpdatedAt === null ? 'ไม่ทราบ' : fmtDateTime(summary.sourceUpdatedAt)}
             </div>
@@ -263,6 +273,7 @@ export function DeviceCatalogTab() {
 
       {view === 'brands' && (
         <DeviceBrandList
+          pendingJob={summary?.pendingJob === true}
           refreshKey={refreshKey}
           onChanged={changed}
           onOpenModels={(next) => {
@@ -274,7 +285,7 @@ export function DeviceCatalogTab() {
       {view === 'models' && (
         <DeviceModelList brand={brand} refreshKey={refreshKey} onClearBrand={() => setBrand(null)} onChanged={changed} />
       )}
-      {view === 'tac' && <DeviceTacList refreshKey={refreshKey} onChanged={changed} />}
+      {view === 'tac' && <DeviceTacList pendingJob={summary?.pendingJob === true} refreshKey={refreshKey} onChanged={changed} />}
       {view === 'history' && <DeviceTacHistory refreshKey={refreshKey} />}
       {view === 'filter' && <DeviceCatalogSettingsForm canManage={canManage} onSaved={changed} />}
 

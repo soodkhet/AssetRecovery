@@ -77,6 +77,7 @@
 | v4.50 | 10/10/2569 | **staging E-015 (มติ PO 10/10/2569)**: ขยาย §6.7 `PERIOD_NOT_ENDED` ให้ครอบ `PATCH /api/accounting/wht-filing-summary/:id/mark-filed` ก่อนงวดสิ้นเดือน (`33` §9) — ไม่มี code ใหม่ |
 | v4.51 | 10/10/2569 | **staging E-012 (มติ PO 10/10/2569)**: เติม §6.4 `ADVANCE_CLEAR_NOT_REOPENABLE` (400) — ตรวจแล้วไม่ซ้ำกับ code เดิม (§7) · ไม่ใช่ warning-only |
 | v4.52 | 11/10/2569 | **staging E-016 (มติ PO 10/10/2569)** — เติม §6.8 `CREDIT_NOTE_WAIVE_NOT_ALLOWED` (400): ปิดป้าย "รอใบลดหนี้" ด้วยเหตุผล "จัดการนอกระบบ" ได้เฉพาะ Adjustment ลดยอดที่รอใบลดหนี้ของบิลที่ยอดค้างตามเอกสาร = 0 (ออกใบลดหนี้ในระบบไม่ได้ตาม U171) · ตรวจแล้วไม่ซ้ำ code เดิม (§7) · ไม่ใช่ warning-only |
+| v4.53 | 11/10/2569 | **mytester A-07** — ขยายความ `USER_NOT_PROVISIONED` (§6.9 · ไม่เพิ่ม code): ครอบ **ผู้ใช้กลุ่มบริษัทไฟแนนซ์ที่ยังไม่ได้ผูกบริษัท** (`users.company_id` ว่าง) ทั้งตอน login และทุก request ของพอร์ทัล — เดิมตกไป `COMPANY_SUSPENDED` ("บริษัทถูกระงับ") ทั้งที่ไม่มีบริษัทให้ระงับ · ข้อความผู้ใช้ "บัญชียังไม่ได้ผูกบริษัท — ติดต่อผู้ดูแลระบบ" · `COMPANY_SUSPENDED` คงใช้กับบริษัทที่ผูกอยู่แต่ไม่ `active`/ถูกลบ · ไม่ใช่ warning-only |
 
 ขอบเขตเอกสารนี้: รวม Error Code และเงื่อนไขการ validate ทั้งหมดของระบบไว้จุดเดียว เพื่อให้ frontend/backend ใช้ code เดียวกันสม่ำเสมอ และนักพัฒนาเช็คได้ว่ามี code ซ้ำ/ขัดแย้งกันหรือไม่
 
@@ -315,7 +316,7 @@
 | INVALID_CREDENTIALS | อีเมล/username หรือรหัสผ่านไม่ถูกต้อง — รวมกรณีไม่พบผู้ใช้หรือยังไม่มีบัญชี Auth (ข้อความห้าม leak ว่ามีตัวตนนี้ในระบบหรือไม่) | 05 |
 | ACCOUNT_INACTIVE | user ที่ `status ≠ active` พยายาม login หรือใช้งานต่อ (`05` §10, §16) | 05, 08 |
 | COMPANY_SUSPENDED | ผู้ใช้บริษัทไฟแนนซ์เรียกพอร์ทัลขณะบริษัทของตนถูกระงับ (`finance_companies.status ≠ active`) — ตรวจทุก request (403) · ผู้ใช้ที่ถูกปิดใช้งานเองใช้ `ACCOUNT_INACTIVE` | 97, 10 |
-| USER_NOT_PROVISIONED | auth user ของ Supabase ยังไม่ถูกผูกกับ `users.supabase_uid` ในระบบ | 05 |
+| USER_NOT_PROVISIONED | auth user ของ Supabase ยังไม่ถูกผูกกับ `users.supabase_uid` ในระบบ · หรือผู้ใช้กลุ่มบริษัทไฟแนนซ์ที่ยังไม่ได้ผูกบริษัท (`users.company_id` ว่าง — login/พอร์ทัล 403 พร้อมข้อความ "ยังไม่ได้ผูกบริษัท" · v4.53) | 05, 97 |
 | PERMISSION_DENIED | ไม่มีสิทธิ์ทำ action (403) — UI hide/disable + API reject เสมอ | 05, 07, 25 |
 | LAST_SUPERADMIN_REMOVAL | ถอด role หรือปิดใช้งาน Superadmin คนสุดท้ายที่ยัง active | 07 |
 | PASSWORD_CHANGE_REQUIRED | ผู้ดูแลตั้ง/รีเซ็ตรหัสผ่านให้แล้ว (`users.must_change_password`) ผู้ใช้ต้องเปลี่ยนรหัสเองที่ `/auth/change-password` ก่อนเรียก endpoint ที่ต้องมีสิทธิ์ (403 — DEC-010) | 05, 08 |

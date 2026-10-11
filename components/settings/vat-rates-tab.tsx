@@ -181,7 +181,7 @@ export function VatRatesTab() {
         <div>
           <h2 className="text-sm font-bold text-slate-900">อัตรา VAT (Effective-dated)</h2>
           <p className="mt-0.5 text-xs text-slate-500">
-            ระบบเลือกอัตราตามวันที่ของรายได้แต่ละรายการแล้ว snapshot ไว้ในเอกสาร — ไม่มีการ hardcode 7% ที่ใดในระบบ
+            ระบบเลือกอัตราตามวันที่ของรายได้แต่ละรายการแล้วบันทึกไว้ในเอกสาร — ไม่ได้ตายตัวที่ 7%
           </p>
         </div>
         <Can action="manage" resource={MANAGE_TAX_PROFILES}>
@@ -350,8 +350,7 @@ export function VatRatesTab() {
           <SettingHelp defaultOpen help={vatRateHelp(pctFromInput(form.ratePct))} />
 
           <InlineAlert tone="warning" title="อัตรานี้กระทบยอดภาษีทั้งระบบ">
-            เอกสารที่ออกไปแล้วยังอ้างอัตราที่ snapshot ไว้ (<span className="font-mono">vat_rate_used</span>) —
-            การแก้ที่นี่ไม่คำนวณย้อนหลัง
+            เอกสารที่ออกไปแล้วยังใช้อัตราที่บันทึกไว้ตอนออกเอกสาร — การแก้ที่นี่ไม่คำนวณย้อนหลัง
           </InlineAlert>
         </div>
       </Modal>

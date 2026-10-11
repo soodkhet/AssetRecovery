@@ -9,7 +9,9 @@
  */
 
 export interface InternalDocumentTemplate {
+  /** รหัสภายใน — ใช้เป็น key เท่านั้น ห้ามแสดงบนจอ (mytester A-06) */
   code: string
+  /** ชื่อภาษาไทยที่ผู้ใช้เห็น */
   name: string
   /** ใช้เมื่อไหร่ (`13` §6.7) */
   usage: string
@@ -20,31 +22,31 @@ export interface InternalDocumentTemplate {
 export const INTERNAL_DOCUMENT_TEMPLATES: readonly InternalDocumentTemplate[] = [
   {
     code: 'internal_billing_summary',
-    name: 'Internal Billing Summary',
+    name: 'สรุปยอดวางบิลภายใน',
     usage: 'สรุปยอดวางบิลภายใน ก่อนออกเอกสารทางการ',
     sourceFile: '28',
   },
   {
     code: 'payout_batch_summary',
-    name: 'Payout Batch Summary',
+    name: 'สรุปรอบจ่ายเงิน',
     usage: 'สรุปรอบจ่ายเงินก่อนโอน',
     sourceFile: '28',
   },
   {
     code: 'payment_voucher',
-    name: 'Payment Voucher ภายใน',
+    name: 'ใบสำคัญจ่ายภายใน',
     usage: 'หลังจ่ายเงินสำเร็จ — เก็บเป็นหลักฐานภายใน',
     sourceFile: '28',
   },
   {
     code: 'compensation_statement',
-    name: 'Compensation Statement / Payslip',
+    name: 'ใบสรุปค่าตอบแทน (สลิป)',
     usage: 'สรุปค่าตอบแทนต่อพนักงาน/รอบ',
     sourceFile: '28',
   },
   {
     code: 'accounting_pack_cover',
-    name: 'Accounting Pack Cover Sheet',
+    name: 'ใบปะหน้าชุดเอกสารส่งสำนักงานบัญชี',
     usage: 'หน้าปกชุดเอกสารส่งสำนักงานบัญชีรายเดือน',
     sourceFile: '28',
   },
