@@ -33,6 +33,26 @@ export function ExpenseDetailModal({ item, onClose }: { item: CompensationApprov
       <dl className="space-y-3 text-sm">
         <Row label="วันที่เกิดรายการ">{fmtDate(item.expenseDate)}</Row>
         <Row label="อ้างอิงเคส">{item.caseRef === null ? '— ไม่ผูกเคส' : <RefText>{item.caseRef}</RefText>}</Row>
+        {/* mytester DO-08 — ค่าที่พัก: เคสที่ระบบจับคู่ตามช่วงวันพัก (ใช้ตรวจสอบเท่านั้น ไม่มีผลต่อยอด) */}
+        {item.matchedCases !== undefined && (
+          <Row label="เคสในช่วงวันพัก">
+            {item.matchedCases.length === 0 ? (
+              <span className="text-slate-400">ไม่มีเคสที่จัดวันไว้ในช่วงวันพัก</span>
+            ) : (
+              <ul className="space-y-0.5">
+                {item.matchedCases.map((matched) => (
+                  <li key={matched.caseId}>
+                    <RefText>{matched.caseRef}</RefText>
+                    <span className="ml-1.5 text-[11px] text-slate-500">{fmtDate(matched.scheduledDate)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <span className="mt-0.5 block text-[11px] text-slate-400">
+              ระบบจับคู่ให้อัตโนมัติเพื่อใช้ตรวจสอบเท่านั้น ไม่มีผลต่อยอดเบิก
+            </span>
+          </Row>
+        )}
         <Row label="ยอดเบิก">
           <span className="font-semibold">{fmtSatangSymbol(item.grossSatang)}</span>
           <span className="block text-[11px] text-slate-500">{item.basisText}</span>

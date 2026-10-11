@@ -62,6 +62,7 @@ import { dispatchNotification } from '@/lib/notifications/dispatch'
 import { expenseApprovedMessage, expenseRejectedMessage } from '@/lib/notifications/messages'
 import { loadPayeeInfoGaps } from '@/lib/payees/queries'
 import { prisma } from '@/lib/prisma'
+import { loadHotelMatchedCases } from '@/lib/field/hotel-matched-cases-db'
 import type { RoutePoint } from '@/lib/field/field-ui'
 import { toInputDate } from '@/lib/format/datetime'
 import {
@@ -632,11 +633,23 @@ export async function listCompensationApprovals(
   if (rows.length === 0) return []
 
   const payeeIds = [...new Set(rows.map((row) => row.payee.id))]
-  const [candidates, policy, payeeGaps, fuelRoutes] = await Promise.all([
+  const [candidates, policy, payeeGaps, fuelRoutes, hotelMatches] = await Promise.all([
     loadMatrixCandidates(user.organizationId),
     currentWhtPolicy(user.organizationId, payeeIds),
     loadPayeeInfoGaps(user.organizationId, payeeIds),
     loadFuelRoutes(user.organizationId, rows),
+    // mytester DO-08 — ค่าที่พัก (เบิกแยก ไม่ผูกเคส): เคสที่จับคู่อัตโนมัติตามช่วงวันพัก ให้ผู้อนุมัติใช้ตรวจสอบ
+    loadHotelMatchedCases(
+      user.organizationId,
+      rows
+        .filter((row) => row.expenseType === 'hotel' && row.caseId === null)
+        .map((row) => ({
+          id: row.id,
+          agentUserId: row.payee.userId,
+          checkInDate: row.expenseDate.toISOString().slice(0, 10),
+          nights: row.hotelNights,
+        })),
+    ),
   ])
   const [whtById, previousRejectReasons] = await Promise.all([
     whtPreviewsFor(user.organizationId, rows, policy),
@@ -656,6 +669,7 @@ export async function listCompensationApprovals(
           {
             ...toDto(row, flow, user, policy, payeeGaps, whtById.get(row.id)!, previousRejectReasons),
             fuelRoute: fuelRoutes.get(row.id) ?? [],
+            ...(hotelMatches.has(row.id) ? { matchedCases: hotelMatches.get(row.id) } : {}),
           },
         ]
       : []

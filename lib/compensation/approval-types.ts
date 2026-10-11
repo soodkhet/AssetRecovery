@@ -31,6 +31,11 @@ export interface CompensationApprovalDto {
   distanceKm: string | null
   /** staging E-044 — ค่าน้ำมันตามกิโลเมตร: จุดเริ่มเดินทาง + จุดเช็คอินของวันนั้น (ตามลำดับ) · ไม่มี = ว่าง/ไม่ระบุ */
   fuelRoute?: readonly { label: string; latitude: number; longitude: number }[]
+  /**
+   * mytester DO-08 — ค่าที่พักที่ไม่ผูกเคส: เคสของผู้เบิกที่จัดวันอยู่ในช่วงวันพัก (auto-mapping ใช้ตรวจสอบเท่านั้น
+   * ไม่มีผลต่อยอด) · `scheduledDate` = `YYYY-MM-DD` · รายการชนิดอื่น = ไม่มีฟิลด์นี้
+   */
+  matchedCases?: readonly { caseId: string; caseRef: string; scheduledDate: string }[]
   calculationSource: string | null
   /**
    * ข้อความ "สูตร / ฐานคิด" ที่ตารางแสดง (`16` §8 — เช่น "128.50 กม. × 3.50 บาท/กม.")
