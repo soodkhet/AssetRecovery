@@ -244,6 +244,17 @@ export function LotTab({
     onChanged()
   }
 
+  /**
+   * mytester2 V2-01 — ปิดหน้าต่างแนบเอกสารโดยไม่ยืนยัน: ไฟล์ที่แนบไปแล้วอยู่บน server
+   * ⇒ โหลดการ์ด + ล็อตที่เปิดอยู่ใหม่ ไม่ให้ค้าง "รอแนบ" จนกว่าจะ reload หน้า
+   */
+  function afterAttachClosed(): void {
+    const lotId = attachLot?.id
+    setAttachLot(null)
+    reload()
+    if (lotId !== undefined && openLot?.id === lotId) void loadLot(lotId, setOpenLot)
+  }
+
   const modals = (
     <>
       {attachLot !== null && (
@@ -251,7 +262,7 @@ export function LotTab({
           key={attachLot.id}
           open
           lot={attachLot}
-          onClose={() => setAttachLot(null)}
+          onClose={afterAttachClosed}
           onConfirmed={afterConfirmed}
           onConfirmedElsewhere={afterConfirmed}
         />
