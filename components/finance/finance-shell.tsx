@@ -83,7 +83,7 @@ export function FinanceShell({ initialTab }: { initialTab: string }) {
                   <Link
                     key={item.id}
                     href={item.href}
-                    className="focus-ring-inset border-b-2 border-transparent py-2.5 text-sm font-semibold whitespace-nowrap text-slate-500 transition-colors hover:text-slate-800"
+                    className="focus-ring-inset border-b-2 border-transparent py-2.5 text-sm font-semibold whitespace-nowrap text-slate-500 transition-colors hover:text-slate-800 pointer-coarse:min-h-11"
                   >
                     {item.label}
                   </Link>
@@ -95,7 +95,7 @@ export function FinanceShell({ initialTab }: { initialTab: string }) {
                   <span
                     key={item.id}
                     title={UNDER_DEVELOPMENT_TEXT}
-                    className="cursor-not-allowed border-b-2 border-transparent py-2.5 text-sm font-semibold whitespace-nowrap text-slate-300"
+                    className="cursor-not-allowed border-b-2 border-transparent py-2.5 text-sm font-semibold whitespace-nowrap text-slate-300 pointer-coarse:min-h-11"
                   >
                     {item.label}
                   </span>
@@ -109,8 +109,9 @@ export function FinanceShell({ initialTab }: { initialTab: string }) {
                   type="button"
                   onClick={() => changeTab(item.id)}
                   aria-current={active ? 'page' : undefined}
+                  // จอสัมผัส: สูง ≥44px (ทดสอบซ้ำ local L-07) — เฉพาะ pointer-coarse ⇒ desktop ที่ใช้เมาส์หน้าตาเดิม
                   className={cn(
-                    'focus-ring-inset border-b-2 py-2.5 text-sm font-semibold whitespace-nowrap transition-colors',
+                    'focus-ring-inset border-b-2 py-2.5 text-sm font-semibold whitespace-nowrap transition-colors pointer-coarse:min-h-11',
                     active
                       ? 'border-slate-900 text-slate-900'
                       : 'border-transparent text-slate-500 hover:text-slate-800',

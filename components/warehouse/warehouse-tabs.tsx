@@ -48,8 +48,9 @@ export function WarehouseTabs({
             role="tab"
             aria-selected={active}
             onClick={() => onTabChange(item)}
+            // จอสัมผัส: สูง ≥44px (ทดสอบซ้ำ local L-07) — เฉพาะ pointer-coarse ⇒ desktop ที่ใช้เมาส์หน้าตาเดิม
             className={cn(
-              'focus-ring-inset flex items-center gap-1.5 border-b-2 py-2.5 text-[13px] font-medium whitespace-nowrap transition-colors sm:text-sm',
+              'focus-ring-inset flex items-center gap-1.5 border-b-2 py-2.5 text-[13px] font-medium whitespace-nowrap transition-colors sm:text-sm pointer-coarse:min-h-11',
               active ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-800',
             )}
           >
