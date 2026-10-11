@@ -9,6 +9,8 @@ import {
   subdistrictOptions,
   isValidPostalCode,
   lookupPostalCode,
+  postalAreaMismatch,
+  type PostalAreaMismatch,
   type PostalCodeArea,
 } from '@/lib/address/thai-address'
 import type { AddressValue } from '@/lib/address/address-value'
@@ -26,6 +28,10 @@ import { digitsOnly } from '@/lib/cases/case'
  * - จังหวัดที่ยังไม่มี master data อำเภอ/ตำบล (Open Item `38` §22 ข้อ 5) สลับเป็นช่องพิมพ์เอง
  *   ส่วนจังหวัดที่มีข้อมูลใช้ `<datalist>` ช่วยเลือกแบบ cascading
  * - เปลี่ยนจังหวัด = ล้างอำเภอ/ตำบลเสมอ (กันค่าค้างข้ามจังหวัด) · เปลี่ยนอำเภอ = ล้างตำบล
+ * - mytester2 LR-03 — หลังค้นรหัสได้ ตัวเลือกอำเภอ/ตำบลจำกัดเฉพาะพื้นที่ของรหัสนั้น และถ้าพิมพ์/เลือกพื้นที่
+ *   ที่ไม่อยู่ในรหัส (เช่น 10110 + เขตบางนา) ขึ้นคำเตือนสีเหลืองใต้ช่อง — **เตือน ไม่ block** เพราะฟอร์มนี้ใช้ร่วม
+ *   เคส/องค์กร/ผู้รับเงิน/บริษัทไฟแนนซ์ และที่อยู่เดิมที่บันทึกไว้ต้องเปิดแก้/บันทึกต่อได้เสมอ
+ *   (ตรวจเฉพาะเมื่อค้นรหัสแล้ว — เปิดที่อยู่เดิมโดยไม่แตะรหัสไปรษณีย์จะไม่ถูกตรวจ)
  *
  * ⚠️ ไม่มี `useEffect` ในไฟล์นี้โดยตั้งใจ — ทุกการเปลี่ยนค่าเกิดจาก event ของผู้ใช้เท่านั้น
  * (กับดัก `react-hooks/set-state-in-effect` ใน REUSE_INDEX)
@@ -44,6 +50,13 @@ const LOOKUP_HINT: Readonly<Record<LookupState, string>> = {
   multiple: 'รหัสไปรษณีย์นี้ครอบคลุมหลายตำบล — เลือกตำบล/แขวงจากรายการด้านล่าง หรือพิมพ์เองในช่องตำบล',
   notfound: 'ไม่พบรหัสไปรษณีย์นี้ในระบบ — กรุณาเลือกจังหวัด/อำเภอ/ตำบลเอง',
   error: 'โหลดข้อมูลรหัสไปรษณีย์ไม่สำเร็จ — กรุณาเลือกจังหวัด/อำเภอ/ตำบลเอง',
+}
+
+/** คำเตือนเมื่อพื้นที่ที่เลือกไม่อยู่ในรหัสไปรษณีย์ (mytester2 LR-03) — เตือนเท่านั้น ไม่ block การบันทึก */
+const POSTAL_MISMATCH_HINT: Readonly<Record<PostalAreaMismatch, (code: string) => string>> = {
+  province: (code) => `จังหวัดที่เลือกไม่ตรงกับรหัสไปรษณีย์ ${code} — ตรวจรหัสไปรษณีย์หรือจังหวัดอีกครั้ง`,
+  district: (code) => `อำเภอ/เขตที่เลือกไม่อยู่ในรหัสไปรษณีย์ ${code} — ตรวจรหัสไปรษณีย์หรือเลือกอำเภอ/เขตจากรายการ`,
+  subdistrict: (code) => `ตำบล/แขวงที่เลือกไม่อยู่ในรหัสไปรษณีย์ ${code} — ตรวจรหัสไปรษณีย์หรือเลือกตำบล/แขวงจากรายการ`,
 }
 
 export interface AddressFieldsProps {
@@ -76,12 +89,15 @@ export function AddressFields({
   const isRequired = (field: keyof AddressValue): boolean => requiredFields.includes(field)
   const [lookup, setLookup] = useState<LookupState>('idle')
   const [choices, setChoices] = useState<readonly PostalCodeArea[]>([])
+  /** ทุกพื้นที่ของรหัสที่ค้นล่าสุด (รวมกรณีพบพื้นที่เดียว) — ใช้จำกัดตัวเลือกและตรวจความสอดคล้อง */
+  const [codeAreas, setCodeAreas] = useState<readonly PostalCodeArea[]>([])
   /** รหัสล่าสุดที่สั่งค้น — กันผลค้นเก่าทับของใหม่ และกัน blur ค้นซ้ำทับตำบลที่ผู้ใช้เลือกไว้แล้ว */
   const lastLookupCode = useRef<string | null>(null)
 
   // staging E-017 — รวมพื้นที่จากรหัสไปรษณีย์ (ข้อมูลจริงทั้งประเทศ) เข้ากับชุดตัวอย่าง
-  const districts = districtOptions(value.province, choices)
-  const subdistricts = subdistrictOptions(value.province, value.district, choices)
+  const districts = districtOptions(value.province, codeAreas)
+  const subdistricts = subdistrictOptions(value.province, value.district, codeAreas)
+  const mismatch = codeAreas[0]?.postalCode === value.postalCode ? postalAreaMismatch(value, codeAreas) : null
 
   function patch(next: Partial<AddressValue>): void {
     onChange({ ...value, ...next })
@@ -92,6 +108,7 @@ export function AddressFields({
     if (!isValidPostalCode(code)) {
       lastLookupCode.current = null
       setChoices([])
+      setCodeAreas([])
       setLookup('idle')
       return
     }
@@ -105,12 +122,14 @@ export function AddressFields({
       if (lastLookupCode.current !== code) return
       lastLookupCode.current = null // ให้ลองใหม่ได้ตอน blur/พิมพ์ใหม่
       setChoices([])
+      setCodeAreas([])
       setLookup('error')
       return
     }
     if (lastLookupCode.current !== code) return // ผู้ใช้เปลี่ยนรหัสระหว่างรอ — ทิ้งผลเก่า
     if (areas.length === 0) {
       setChoices([])
+      setCodeAreas([])
       setLookup('notfound')
       return
     }
@@ -118,6 +137,7 @@ export function AddressFields({
     const current = areas.find((area) => areaKey(area) === areaKey(value))
     const fill = current ?? commonPostalArea(areas)
     setChoices(areas.length > 1 ? areas : [])
+    setCodeAreas(areas)
     setLookup(areas.length > 1 && current === undefined ? 'multiple' : 'found')
     onChange({
       ...value,
@@ -143,6 +163,7 @@ export function AddressFields({
     } else {
       lastLookupCode.current = null
       if (choices.length > 0) setChoices([])
+      if (codeAreas.length > 0) setCodeAreas([])
       if (lookup !== 'idle') setLookup('idle')
     }
   }
@@ -287,6 +308,12 @@ export function AddressFields({
           )}
         </Field>
       </div>
+
+      {mismatch !== null && (
+        <p role="alert" className="mt-2 text-[11px] font-semibold text-amber-600">
+          {POSTAL_MISMATCH_HINT[mismatch](value.postalCode)}
+        </p>
+      )}
 
       <p
         className={

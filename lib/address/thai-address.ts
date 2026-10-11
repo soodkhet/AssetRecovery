@@ -248,17 +248,47 @@ export function commonPostalArea(
 }
 
 /**
- * staging E-017 — ตัวเลือกอำเภอ/ตำบลของช่องกรอก: ชุดตัวอย่างเดิม (`DISTRICT_DATA`) **รวมกับ**พื้นที่จากรหัสไปรษณีย์ที่ค้นได้
+ * staging E-017 — ตัวเลือกอำเภอ/ตำบลของช่องกรอก: ชุดตัวอย่างเดิม (`DISTRICT_DATA`) หรือพื้นที่จากรหัสไปรษณีย์ที่ค้นได้
  * (ข้อมูลจริงทั้งประเทศ) ⇒ จังหวัดนอกชุดตัวอย่างก็มีรายการตำบลให้เลือกหลังกรอกรหัสไปรษณีย์ · ไม่ซ้ำ คงลำดับ
+ *
+ * mytester2 LR-03 — ถ้ารหัสไปรษณีย์มีพื้นที่ในจังหวัด/อำเภอนั้น ⇒ เสนอ**เฉพาะ**พื้นที่ของรหัสนั้น
+ * (เดิมรวมชุดตัวอย่างด้วย จึงเลือก "บางนา" คู่รหัส 10110 ได้) · รหัสไม่ครอบจังหวัด/อำเภอนั้น = ใช้ชุดตัวอย่างเดิม
  */
 export function districtOptions(province: string, areas: readonly PostalCodeArea[]): string[] {
   const fromPostal = areas.filter((area) => area.province === province.trim()).map((area) => area.district)
-  return [...new Set([...getDistricts(province), ...fromPostal])]
+  return [...new Set(fromPostal.length > 0 ? fromPostal : getDistricts(province))]
 }
 
 export function subdistrictOptions(province: string, district: string, areas: readonly PostalCodeArea[]): string[] {
   const fromPostal = areas
     .filter((area) => area.province === province.trim() && area.district === district.trim())
     .map((area) => area.subdistrict)
-  return [...new Set([...getSubDistricts(province, district), ...fromPostal])]
+  return [...new Set(fromPostal.length > 0 ? fromPostal : getSubDistricts(province, district))]
+}
+
+/** ระดับแรกที่ไม่ตรงรหัสไปรษณีย์ — ใช้แสดงคำเตือนในฟอร์มที่อยู่ */
+export type PostalAreaMismatch = 'province' | 'district' | 'subdistrict'
+
+/**
+ * mytester2 LR-03 — จังหวัด/อำเภอ/ตำบลที่กรอกอยู่ในพื้นที่ของรหัสไปรษณีย์หรือไม่ (เทียบทีละระดับ ช่องว่างข้าม)
+ *
+ * `areas` = ผลค้นของรหัสปัจจุบัน — ว่าง (ไม่พบรหัส/ยังไม่ค้น) ⇒ ตรวจไม่ได้ คืน `null` (ไม่เตือน ไม่ block)
+ * คืนระดับแรกที่ไม่ตรง เช่น 10110 + เขตบางนา ⇒ `'district'`
+ */
+export function postalAreaMismatch(
+  value: { province: string; district: string; subdistrict: string },
+  areas: readonly PostalCodeArea[],
+): PostalAreaMismatch | null {
+  if (areas.length === 0) return null
+  const province = value.province.trim()
+  const district = value.district.trim()
+  const subdistrict = value.subdistrict.trim()
+  if (province === '') return null
+  const inProvince = areas.filter((area) => area.province === province)
+  if (inProvince.length === 0) return 'province'
+  if (district === '') return null
+  const inDistrict = inProvince.filter((area) => area.district === district)
+  if (inDistrict.length === 0) return 'district'
+  if (subdistrict === '') return null
+  return inDistrict.some((area) => area.subdistrict === subdistrict) ? null : 'subdistrict'
 }

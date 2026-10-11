@@ -11,6 +11,7 @@ import {
   isThaiProvince,
   isValidPostalCode,
   lookupPostalCode,
+  postalAreaMismatch,
 } from '@/lib/address/thai-address'
 import { PROVINCE_DATA } from '@/lib/teams/provinces'
 import postalTable from '@/lib/address/data/thai-postal.json'
@@ -171,5 +172,41 @@ describe('ตัวเลือกอำเภอ/ตำบลจากรหั
   })
   it('ไม่มีพื้นที่จากรหัส ⇒ ใช้ชุดตัวอย่างเดิม', () => {
     expect(subdistrictOptions('ไม่มีจังหวัดนี้', 'x', [])).toEqual([])
+  })
+})
+
+describe('รหัสไปรษณีย์ต้องสอดคล้องกับพื้นที่ที่เลือก (mytester2 LR-03)', () => {
+  const BKK = 'กรุงเทพมหานคร'
+
+  it('รหัส 10110 ⇒ ตัวเลือกอำเภอ/เขตมีเฉพาะเขตของรหัสนี้ ไม่มีบางนาจากชุดตัวอย่าง', async () => {
+    const areas = await lookupPostalCode('10110')
+    const districts = districtOptions(BKK, areas)
+    expect(districts).toEqual(expect.arrayContaining(['คลองเตย', 'วัฒนา']))
+    expect(districts).not.toContain('บางนา')
+    expect(subdistrictOptions(BKK, 'วัฒนา', areas)).not.toContain('คลองเตย')
+  })
+
+  it('10110 + เขตบางนา แขวงบางนา ⇒ เตือนที่ระดับอำเภอ/เขต', async () => {
+    const areas = await lookupPostalCode('10110')
+    expect(postalAreaMismatch({ province: BKK, district: 'บางนา', subdistrict: 'บางนา' }, areas)).toBe('district')
+  })
+
+  it('จังหวัดหรือตำบลไม่ตรง ⇒ เตือนระดับนั้น · ตรงทุกระดับ ⇒ ไม่เตือน', async () => {
+    const areas = await lookupPostalCode('10260')
+    expect(postalAreaMismatch({ province: 'นนทบุรี', district: 'บางนา', subdistrict: '' }, areas)).toBe('province')
+    expect(postalAreaMismatch({ province: BKK, district: 'บางนา', subdistrict: 'บางจาก' }, areas)).toBe('subdistrict')
+    expect(postalAreaMismatch({ province: BKK, district: 'บางนา', subdistrict: 'บางนาใต้' }, areas)).toBeNull()
+  })
+
+  it('ช่องที่ยังว่างไม่ถูกตรวจ และไม่มีผลค้นรหัส (ที่อยู่เดิม/ไม่พบรหัส) ⇒ ไม่เตือน ไม่ block', async () => {
+    const areas = await lookupPostalCode('10260')
+    expect(postalAreaMismatch({ province: BKK, district: 'บางนา', subdistrict: '' }, areas)).toBeNull()
+    expect(postalAreaMismatch({ province: '', district: '', subdistrict: '' }, areas)).toBeNull()
+    expect(postalAreaMismatch({ province: BKK, district: 'บางนา', subdistrict: 'บางนา' }, [])).toBeNull()
+  })
+
+  it('รหัสไม่ครอบจังหวัดที่เลือก ⇒ ตัวเลือกกลับไปใช้ชุดตัวอย่างเดิม', async () => {
+    const areas = await lookupPostalCode('10110')
+    expect(districtOptions('เชียงใหม่', areas)).toEqual([...getDistricts('เชียงใหม่')])
   })
 })
