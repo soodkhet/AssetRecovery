@@ -294,6 +294,18 @@ describe('portal serializers — เนื้อหา', () => {
     expect(serializePortalCaseDetail(caseRow('pending_review', { serviceFeeModelSnapshot: null })).serviceFee).toBeNull()
   })
 
+  it('มติชั่วคราว M9 — closedFail ตามสถานะ "ติดตามไม่สำเร็จ" · รายได้จริงรวม VAT + ป้าย', () => {
+    const failed = serializePortalCaseDetail(caseRow('closed_fail', { assignmentStatus: 'closed_fail' })).serviceFee
+    expect(failed).toMatchObject({ closedFail: true, actualRevenueSatang: null, actualRevenueVatLabel: null })
+    expect(serializePortalCaseDetail(caseRow('active')).serviceFee?.closedFail).toBe(false)
+    const withRevenue = serializePortalCaseDetail(
+      caseRow('closed_fail', { assignmentStatus: 'closed_fail', revenue: { totalSatang: 21_400, vatSatang: 1_400 } }),
+    ).serviceFee
+    expect(withRevenue).toMatchObject({ actualRevenueSatang: 21_400, actualRevenueVatLabel: 'รวม VAT แล้ว' })
+    const noVat = serializePortalCaseDetail(caseRow('closed_success', { revenue: { totalSatang: 20_000, vatSatang: 0 } })).serviceFee
+    expect(noVat?.actualRevenueVatLabel).toBe('ไม่มี VAT')
+  })
+
   it('รูปทรัพย์เฉพาะ "ติดตามสำเร็จ" (ไม่ถูกตีกลับ)', () => {
     expect(serializePortalCaseDetail(caseRow('closed_success')).assetPhotos).toEqual({
       assetId: 'asset-1',

@@ -119,6 +119,8 @@ export interface PortalCaseServiceFeeSource {
   projectedRevenueSatang: number | null
   /** staging E-073 — โหมด VAT **ปัจจุบัน**ของบริษัท (ใช้เป็นป้ายของยอดค่าบริการ) · ไม่ส่ง = ไม่ติดป้าย */
   companyVatMode?: VatMode | null
+  /** มติชั่วคราว M9 — รายได้จริงของเคส (แถวที่ยังไม่ถูกลบ) · ไม่ส่ง/`null` = ยังไม่เกิดรายได้ */
+  revenue?: { totalSatang: number; vatSatang: number } | null
 }
 
 /** staging E-073 (`97` §17) — ป้าย VAT ของยอดค่าบริการในพอร์ทัล (ภาษาไทย ไม่ส่ง enum) */
@@ -156,6 +158,12 @@ export interface PortalServiceFeeDto {
   projectedRevenueSatang: number | null
   /** staging E-073 — "ก่อน VAT" / "รวม VAT แล้ว" / "ไม่มี VAT" ตามโหมดปัจจุบันของบริษัท · `null` = ไม่ทราบ */
   vatLabel: string | null
+  /** มติชั่วคราว M9 (PT-01) — เคสปิดไม่สำเร็จ ⇒ ยอดประมาณการใช้ค่าบริการกรณีไม่สำเร็จ (ไม่ใช่ยอดกรณีสำเร็จ) */
+  closedFail: boolean
+  /** มติชั่วคราว M9 — รายได้จริงของเคส (รวม VAT · ยอดตอนเกิดรายได้) · `null` = ยังไม่เกิดรายได้ */
+  actualRevenueSatang: number | null
+  /** ป้าย VAT ของยอดจริง ("รวม VAT แล้ว"/"ไม่มี VAT") · `null` เมื่อไม่มียอดจริง */
+  actualRevenueVatLabel: string | null
 }
 
 export interface PortalAssetPhotosDto {
@@ -178,8 +186,9 @@ export interface PortalCaseDetailDto extends PortalCaseListItemDto {
   assetPhotos: PortalAssetPhotosDto | null
 }
 
-function serializeServiceFee(row: PortalCaseServiceFeeSource): PortalServiceFeeDto | null {
+function serializeServiceFee(row: PortalCaseServiceFeeSource, closedFail: boolean): PortalServiceFeeDto | null {
   if (row.serviceFeeModelSnapshot === null) return null
+  const revenue = row.revenue ?? null
   const basis = row.serviceFeeBasisSnapshot
   return {
     model: row.serviceFeeModelSnapshot,
@@ -191,6 +200,10 @@ function serializeServiceFee(row: PortalCaseServiceFeeSource): PortalServiceFeeD
     failFeeSatang: row.serviceFeeFailFeeSatang,
     projectedRevenueSatang: row.projectedRevenueSatang,
     vatLabel: row.companyVatMode == null ? null : PORTAL_VAT_MODE_LABEL[row.companyVatMode],
+    closedFail,
+    actualRevenueSatang: revenue === null ? null : revenue.totalSatang,
+    actualRevenueVatLabel:
+      revenue === null ? null : revenue.vatSatang > 0 ? PORTAL_VAT_MODE_LABEL.include_vat : PORTAL_VAT_MODE_LABEL.no_vat,
   }
 }
 
@@ -214,7 +227,7 @@ export function serializePortalCaseDetail(row: PortalCaseDetailSource): PortalCa
   return {
     ...base,
     deviceText: portalCaseDeviceText(row),
-    serviceFee: serializeServiceFee(row),
+    serviceFee: serializeServiceFee(row, base.statusDisplay.code === 'not_recovered'),
     assetPhotos:
       base.statusDisplay.code === 'recovered' && asset !== null
         ? {

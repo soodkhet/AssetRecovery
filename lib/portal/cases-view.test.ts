@@ -135,7 +135,29 @@ describe('portalServiceFeeRows — ค่าบริการใน drawer', ()
     failFeeSatang: 50000,
     projectedRevenueSatang: 350000,
     vatLabel: null,
+    closedFail: false,
+    actualRevenueSatang: null,
+    actualRevenueVatLabel: null,
   }
+
+  it('มติชั่วคราว M9 (PT-01): เคสไม่สำเร็จ ⇒ ประมาณการ = ค่าบริการกรณีไม่สำเร็จ · ไม่ตั้ง = ไม่เรียกเก็บ', () => {
+    expect(portalServiceFeeRows({ ...base, closedFail: true, vatLabel: 'รวม VAT แล้ว' })?.at(-1)).toEqual({
+      label: 'ค่าบริการโดยประมาณ',
+      value: '฿500.00 (รวม VAT แล้ว)',
+    })
+    expect(portalServiceFeeRows({ ...base, closedFail: true, failFeeSatang: null })?.at(-1)).toEqual({
+      label: 'ค่าบริการโดยประมาณ',
+      value: 'ไม่เรียกเก็บ',
+    })
+  })
+
+  it('มติชั่วคราว M9: เกิดรายได้แล้ว ⇒ แสดงยอดจริงแทนประมาณการ (ทั้งเคสสำเร็จ/ไม่สำเร็จ)', () => {
+    for (const closedFail of [false, true]) {
+      const rows = portalServiceFeeRows({ ...base, closedFail, actualRevenueSatang: 21400, actualRevenueVatLabel: 'รวม VAT แล้ว' })
+      expect(rows?.at(-1)).toEqual({ label: 'ค่าบริการ (ยอดจริง)', value: '฿214.00 (รวม VAT แล้ว)' })
+      expect(rows?.some((row) => row.label === 'ค่าบริการโดยประมาณ')).toBe(false)
+    }
+  })
 
   it('staging E-073 — ค่าบริการโดยประมาณติดป้าย VAT ตามโหมดของบริษัท', () => {
     expect(portalServiceFeeRows({ ...base, vatLabel: 'ก่อน VAT' })?.at(-1)).toEqual({

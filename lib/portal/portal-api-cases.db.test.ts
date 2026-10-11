@@ -437,6 +437,27 @@ suite('Portal-P4 — GET /api/portal/cases/:id (`97` §6.1/§6.6 v4.1 · §12 ·
     expect(review.serviceFee).toBeNull()
   })
 
+  it('มติชั่วคราว M9 (PT-01) — เคสติดตามไม่สำเร็จ → serviceFee.closedFail = true · ยังไม่มีรายได้จริง', async () => {
+    getRawSessionUserMock.mockResolvedValue(portalUser(co1, FULL_CAPS))
+    const failedId = await insertCase({
+      company: co1,
+      ref: `P4A-${RUN}-F`,
+      status: 'closed_fail',
+      assignment: 'closed_fail',
+      approved: true,
+    })
+    try {
+      const dto = dataOf<Record<string, unknown>>((await json(await call(failedId))).body)
+      expect(dto.statusDisplay).toMatchObject({ code: 'not_recovered' })
+      expect(dto.serviceFee).toMatchObject({ closedFail: true, failFeeSatang: 50000, actualRevenueSatang: null })
+      const recovered = dataOf<Record<string, unknown>>((await json(await call(caseIds.recovered))).body)
+      expect(recovered.serviceFee).toMatchObject({ closedFail: false })
+    } finally {
+      await db().$executeRawUnsafe(`DELETE FROM case_assignments WHERE case_id = '${failedId}'`)
+      await db().$executeRawUnsafe(`DELETE FROM cases WHERE id = '${failedId}'`)
+    }
+  })
+
   it('id ของ CO2 → 403 PERMISSION_DENIED + audit access_denied (cause cross_company)', async () => {
     getRawSessionUserMock.mockResolvedValue(portalUser(co1, FULL_CAPS))
     const { status, body } = await json(await call(caseIds.other))

@@ -142,9 +142,19 @@ export function portalServiceFeeRows(fee: PortalServiceFeeDto | null): PortalSer
     rows.push({ label: 'อัตราค่าบริการเมื่อสำเร็จ', value: `${fmtPercent(fee.ratePct)}${basis}` })
   }
   rows.push({ label: 'เมื่อติดตามไม่สำเร็จ', value: failFeeText(fee) })
-  if (fee.projectedRevenueSatang !== null) {
-    // staging E-073 — บอกว่าเป็นยอดก่อน/รวม VAT ตามโหมดปัจจุบันของบริษัท
-    const vat = fee.vatLabel === null ? '' : ` (${fee.vatLabel})`
+  // staging E-073 — บอกว่าเป็นยอดก่อน/รวม VAT ตามโหมดปัจจุบันของบริษัท
+  const vat = fee.vatLabel === null ? '' : ` (${fee.vatLabel})`
+  if (fee.actualRevenueSatang !== null) {
+    // มติชั่วคราว M9 (PT-01) — เกิดรายได้แล้ว ⇒ แสดงยอดจริงแทนยอดประมาณการ
+    const actualVat = fee.actualRevenueVatLabel === null ? '' : ` (${fee.actualRevenueVatLabel})`
+    rows.push({ label: 'ค่าบริการ (ยอดจริง)', value: `${fmtSatangSymbol(fee.actualRevenueSatang)}${actualVat}` })
+  } else if (fee.closedFail) {
+    // มติชั่วคราว M9 — เคสไม่สำเร็จ ⇒ ประมาณการ = ค่าบริการกรณีไม่สำเร็จ (ไม่มี = ไม่เรียกเก็บ)
+    rows.push({
+      label: 'ค่าบริการโดยประมาณ',
+      value: fee.failFeeSatang === null ? 'ไม่เรียกเก็บ' : `${fmtSatangSymbol(fee.failFeeSatang)}${vat}`,
+    })
+  } else if (fee.projectedRevenueSatang !== null) {
     rows.push({ label: 'ค่าบริการโดยประมาณ', value: `${fmtSatangSymbol(fee.projectedRevenueSatang)}${vat}` })
   }
   return rows

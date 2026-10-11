@@ -168,6 +168,8 @@ export async function findPortalCaseDetail(ctx: PortalContext, id: string): Prom
       assetCapacity: true,
       assetColor: true,
       company: { select: { vatMode: true } },
+      // มติชั่วคราว M9 — รายได้จริงของเคส (1 เคส = 1 รายได้)
+      revenues: { where: { deletedAt: null }, select: { totalSatang: true, vatSatang: true }, take: 1 },
     },
   })
   if (row === null) return null
@@ -181,6 +183,7 @@ export async function findPortalCaseDetail(ctx: PortalContext, id: string): Prom
       assignmentStatus: row.assignments[0]?.status ?? null,
       asset,
       companyVatMode: row.company.vatMode,
+      revenue: row.revenues[0] ?? null,
     }),
   }
 }
