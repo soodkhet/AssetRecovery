@@ -1,5 +1,5 @@
 import { fmtPercent, fmtSatangSymbol } from '@/lib/format/money'
-import type { BillingBatchStatus, RevenueStatus, VatMode } from '@/lib/generated/prisma/enums'
+import type { BillingBatchStatus, RevenueStatus, ServiceFeeModel, VatMode } from '@/lib/generated/prisma/enums'
 import { canTransitionBillingBatch } from '@/lib/revenue/revenue'
 import type { BillingBatchDto } from '@/lib/revenue/types'
 import type { StatusBadgeGroup } from '@/lib/ui/status-badge'
@@ -89,7 +89,7 @@ export const VAT_MODE_LABEL: Readonly<Record<VatMode, string>> = {
 }
 
 /** mytester G-11 — รูปแบบค่าบริการบนหน้ารายได้ (ภาษาไทยล้วน — ป้ายหน้าตั้งค่าคงวงเล็บศัพท์เดิม) */
-export const REVENUE_FEE_MODEL_LABEL: Readonly<Record<'SUCCESS_FEE' | 'FLAT' | 'HYBRID', string>> = {
+export const REVENUE_FEE_MODEL_LABEL: Readonly<Record<ServiceFeeModel, string>> = {
   SUCCESS_FEE: 'คิดตามความสำเร็จ (%)',
   FLAT: 'เหมาจ่ายรายเคส',
   HYBRID: 'แบบผสม',
