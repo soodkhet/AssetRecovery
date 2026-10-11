@@ -4,6 +4,7 @@ import { emitAudit } from '@/lib/audit/audit'
 import type { RequestMeta } from '@/lib/auth/request-meta'
 import { clearSessionCache } from '@/lib/auth/session-cache'
 import type { SessionUser } from '@/lib/auth/types'
+import { withCatalogText } from '@/lib/roles/capability-catalog'
 import { RoleError } from '@/lib/roles/errors'
 import type { PermissionChange } from '@/lib/roles/guards'
 import { countGrantedLevels, type CapabilityInfo, type MatrixLevel } from '@/lib/roles/matrix'
@@ -34,7 +35,7 @@ export async function listCapabilities(): Promise<CapabilityInfo[]> {
     select: { code: true, label: true, module: true, functionalGroup: true, description: true },
     orderBy: [{ functionalGroup: 'asc' }, { code: 'asc' }],
   })
-  return rows
+  return withCatalogText(rows)
 }
 
 /** รายการ role ทั้งหมดขององค์กร พร้อมจำนวนผู้ใช้และจำนวนสิทธิ์ (`07` §8) */

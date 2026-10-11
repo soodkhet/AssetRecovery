@@ -140,6 +140,8 @@ const TARGET_TYPE_LABEL: Readonly<Record<string, string>> = {
   revenue: 'รายได้',
   expense: 'รายการเบิก',
   billing_batch: 'รอบวางบิล',
+  // ไม่ใช่ตาราง — การเปิดดู/ดาวน์โหลดผ่านพอร์ทัลลูกค้า (mytester2 J2-02: ตัวกรองโชว์ "portal" ดิบ)
+  portal: 'พอร์ทัลลูกค้า',
 }
 
 export function auditTargetLabel(targetType: string): string {

@@ -167,8 +167,8 @@ export function AdjustmentFormModal({
     >
       <div className="space-y-4">
         <InlineAlert tone="info">
-          Adjustment ไม่แก้ source record — สร้างรายการชดเชยใหม่เสมอ ·
-          ระดับอนุมัติขึ้นกับ<b>สถานะรอบบัญชีของรายการต้นทาง</b> ที่ระบบ snapshot ให้ตอนสร้าง
+          Adjustment ไม่แก้รายการต้นทาง — สร้างรายการชดเชยใหม่เสมอ ·
+          ระดับอนุมัติขึ้นกับ<b>สถานะรอบบัญชีของรายการต้นทาง</b> ที่ระบบบันทึกไว้ตอนสร้าง
         </InlineAlert>
 
         <Field label="ประเภทรายการต้นทาง" required>

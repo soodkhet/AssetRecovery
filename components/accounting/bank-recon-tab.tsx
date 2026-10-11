@@ -153,7 +153,7 @@ export function BankReconTab() {
             error={error}
             isEmpty={data.items.length === 0}
             emptyTitle="ยังไม่มีรายการเดินบัญชีตามตัวกรองนี้"
-            emptyDescription="กด “นำเข้ารายการเดินบัญชี” เพื่อนำเข้าไฟล์รายการเดินบัญชี (statement) ของบัญชีธนาคารบริษัท"
+            emptyDescription="กด “นำเข้ารายการเดินบัญชี” เพื่อนำเข้าไฟล์รายการเดินบัญชีของบัญชีธนาคารบริษัท"
             colSpan={8}
           />
           <TBody>

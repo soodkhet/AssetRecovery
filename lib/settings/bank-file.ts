@@ -73,7 +73,7 @@ export const REQUIRED_BANK_FILE_COLUMNS: readonly BankFileColumn[] = [
 export const BANK_FILE_PURPOSES = ['statement', 'payment'] as const satisfies readonly BankFilePurpose[]
 
 export const BANK_FILE_PURPOSE_LABEL: Readonly<Record<BankFilePurpose, string>> = {
-  statement: 'ไฟล์ statement (นำเข้ากระทบยอด)',
+  statement: 'ไฟล์รายการเดินบัญชี (นำเข้ากระทบยอด)',
   payment: 'ไฟล์โอนเงิน (ส่งธนาคาร)',
 }
 
@@ -230,8 +230,8 @@ function runPaymentFileTest(values: BankFileFormatValues, columns: string[]): Ba
 function runStatementFileTest(values: BankFileFormatValues, columns: string[]): BankFileTestResult {
   const issues = commonIssues(values, columns)
   // ตัวนำเข้าอ่านไฟล์เป็นข้อความ CSV UTF-8 (หรือ .xlsx) — TXT fixed-width / TIS-620 อ่านไม่ได้
-  if (values.fileType !== 'CSV') issues.push('ตัวนำเข้า statement อ่านไฟล์ CSV (หรือ Excel) เท่านั้น — เลือกชนิดไฟล์ CSV')
-  if (values.encoding !== 'UTF_8') issues.push('ตัวนำเข้า statement อ่านไฟล์ UTF-8 เท่านั้น — เลือก encoding UTF-8')
+  if (values.fileType !== 'CSV') issues.push('ตัวนำเข้ารายการเดินบัญชีอ่านไฟล์ CSV (หรือ Excel) เท่านั้น — เลือกชนิดไฟล์ CSV')
+  if (values.encoding !== 'UTF_8') issues.push('ตัวนำเข้ารายการเดินบัญชีอ่านไฟล์ UTF-8 เท่านั้น — เลือกการเข้ารหัส UTF-8')
 
   const known = columns.filter((column): column is StatementColumn => isColumnOfPurpose('statement', column))
   if (!isUsableStatementMapping(known)) {

@@ -28,7 +28,7 @@ export interface DashboardKpiMeta {
 }
 
 export const DASHBOARD_KPI_META: readonly DashboardKpiMeta[] = [
-  { id: 'pending_approval', label: 'เงินรออนุมัติ (Claim)', tone: 'amber', source: 'ไฟล์ 15/16' },
+  { id: 'pending_approval', label: 'ยอดเบิกรออนุมัติ', tone: 'amber', source: 'ไฟล์ 15/16' },
   { id: 'pending_payout', label: 'เงินรอจ่าย (Payout)', tone: 'blue', source: 'ไฟล์ 17' },
   { id: 'ar_outstanding', label: 'ยอดค้างรับ (AR)', tone: 'red', source: 'ไฟล์ 19' },
   { id: 'gross_profit', label: 'กำไรขั้นต้นเดือนนี้', tone: 'emerald', source: 'ไฟล์ 21' },

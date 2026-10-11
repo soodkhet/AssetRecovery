@@ -7,6 +7,7 @@ import {
   resolveIncomeCategory,
   usesPerPayeeWhtRate,
   WHT_INCOME_CATEGORY_LABEL,
+  type WhtIncomeCategory,
   type WhtPolicyValues,
 } from '@/lib/settings/wht-policy'
 import type { TeamSide } from '@/lib/teams/team'
@@ -54,9 +55,11 @@ export function teamTaxRuleLines(
   side: TeamSide,
   policy: Pick<WhtPolicyValues, 'incomeTypeMode' | 'inhouseIncomeCategory' | 'outsourceIncomeCategory'>,
   defaults: TaxProfileDefaults<TeamTaxRuleProfile>,
+  /** ประเภทเงินได้รายคนของผู้รับ (`payee_profiles.income_category_override`) — ฟอร์มทีมไม่ส่ง (ตามค่าองค์กร) */
+  incomeOverride: WhtIncomeCategory | null = null,
 ): TeamTaxRuleLine[] {
   return PAYEE_TYPES.map((payeeType) => {
-    const category = resolveIncomeCategory(policy, side, payeeType)
+    const category = resolveIncomeCategory(policy, side, payeeType, incomeOverride)
     const base = { payeeType, payeeTypeLabel: PAYEE_TYPE_LABEL[payeeType] }
     if (usesPerPayeeWhtRate(category)) {
       return { ...base, kind: 'per_payee_rate', incomeLabel: WHT_INCOME_CATEGORY_LABEL[category], profile: null }
@@ -81,9 +84,26 @@ export function payeeDefaultTaxRule(
   payeeType: PayeeType,
   policy: Parameters<typeof teamTaxRuleLines>[1],
   defaults: TaxProfileDefaults<TeamTaxRuleProfile>,
+  /**
+   * ประเภทเงินได้รายคน (staging E-021) — **ชนะค่าองค์กร** แบบเดียวกับรอบจ่าย (`resolveIncomeCategory()`)
+   * · เดิมไม่ส่งต่อ ผู้รับ outsource ที่ตั้งรายคนเป็น 40(2) จึงขึ้น Tax Profile ค่าเริ่มต้น (ภ.ง.ด.3) แทนอัตรารายคน
+   *   ทั้งที่รอบจ่ายหักตามอัตรารายคน/ภ.ง.ด.1 (mytester2 A2-04)
+   */
+  incomeOverride: WhtIncomeCategory | null = null,
 ): TeamTaxRuleLine | null {
-  if (side === null) return null
-  return teamTaxRuleLines(side, policy, defaults).find((line) => line.payeeType === payeeType) ?? null
+  if (side === null) {
+    // ไม่มีฝั่ง ⇒ ไม่มีค่าเริ่มต้นตามประเภท — แต่ประเภทเงินได้รายคน 40(1)/40(2) ของบุคคลธรรมดายังหักตามอัตรารายคนได้
+    const category = resolveIncomeCategory(policy, null, payeeType, incomeOverride)
+    if (incomeOverride === null || !usesPerPayeeWhtRate(category)) return null
+    return {
+      payeeType,
+      payeeTypeLabel: PAYEE_TYPE_LABEL[payeeType],
+      kind: 'per_payee_rate',
+      incomeLabel: WHT_INCOME_CATEGORY_LABEL[category],
+      profile: null,
+    }
+  }
+  return teamTaxRuleLines(side, policy, defaults, incomeOverride).find((line) => line.payeeType === payeeType) ?? null
 }
 
 const SIDE_LABEL: Record<TeamSide, string> = { inhouse: 'Inhouse', outsource: 'Outsource' }

@@ -1,3 +1,9 @@
+import {
+  EMPTY_ADDRESS,
+  formatThaiAddressLine,
+  parseThaiAddressLine,
+  type AddressValue,
+} from '@/lib/address/address-value'
 import { FinanceCompanyError } from '@/lib/finance-companies/errors'
 
 /**
@@ -186,4 +192,60 @@ export function toCompanyAuditPayload(
     status: state.status,
     suspended_reason: state.suspendedReason,
   }
+}
+
+// ── ที่อยู่ตามที่จดทะเบียน (mytester2 A2-03) ────────────────────────────────
+
+/**
+ * ฟอร์มบริษัทใช้ `<AddressFields>` ชุดเดียวกับข้อมูลองค์กร/ผู้รับเงิน (เลือกจังหวัด/อำเภอ/ตำบล/รหัสไปรษณีย์)
+ * แต่ `finance_companies.address` ยังเป็นคอลัมน์เดียว (ไม่แก้ schema) ⇒ ประกอบเป็นบรรทัดเดียวด้วย
+ * `formatThaiAddressLine()` ตอนบันทึก และย้อนกลับด้วย `parseThaiAddressLine()` ตอนเปิดแก้ไข
+ * · ที่อยู่ผู้ซื้อพิมพ์บนใบกำกับภาษี ⇒ ต้องครบทุกช่อง
+ */
+export const COMPANY_REQUIRED_ADDRESS_FIELDS = [
+  'detail',
+  'postalCode',
+  'province',
+  'district',
+  'subdistrict',
+] as const satisfies readonly (keyof AddressValue)[]
+
+export interface CompanyAddressForm {
+  value: AddressValue
+  /** ที่อยู่เดิมพิมพ์เองแบบข้อความอิสระ แยกช่องไม่ได้ ⇒ อยู่ในช่องบ้านเลขที่ทั้งก้อน (ไม่เดาแยก) */
+  legacyText: string | null
+}
+
+/** ค่าที่อยู่ในฟอร์มจากข้อความที่เก็บไว้ */
+export function companyAddressFormOf(address: string | null): CompanyAddressForm {
+  const text = (address ?? '').trim()
+  if (text === '') return { value: EMPTY_ADDRESS, legacyText: null }
+  const parsed = parseThaiAddressLine(text)
+  return parsed === null
+    ? { value: { ...EMPTY_ADDRESS, detail: text }, legacyText: text }
+    : { value: parsed, legacyText: null }
+}
+
+/**
+ * ช่องที่ยังขาด — ว่าง = บันทึกได้ · ที่อยู่เก่าแบบข้อความอิสระที่ไม่ได้แตะเลยบันทึกต่อได้ (แก้ช่องอื่นของบริษัทเดิม
+ * ไม่ถูกบังคับกรอกที่อยู่ใหม่) — แตะเมื่อไหร่ต้องกรอกครบตามช่อง
+ */
+export function missingCompanyAddressFields(form: CompanyAddressForm): (keyof AddressValue)[] {
+  const { value, legacyText } = form
+  const untouchedLegacy =
+    legacyText !== null &&
+    value.detail.trim() === legacyText &&
+    value.postalCode.trim() === '' &&
+    value.province.trim() === '' &&
+    value.district.trim() === '' &&
+    value.subdistrict.trim() === ''
+  if (untouchedLegacy) return []
+  return COMPANY_REQUIRED_ADDRESS_FIELDS.filter((field) =>
+    field === 'postalCode' ? !/^\d{5}$/.test(value.postalCode.trim()) : value[field].trim() === '',
+  )
+}
+
+/** ข้อความที่บันทึกลง `finance_companies.address` (ที่อยู่เก่าที่ไม่ได้แตะ = ข้อความเดิมทุกตัวอักษร) */
+export function companyAddressLine(value: AddressValue): string {
+  return formatThaiAddressLine(value) ?? ''
 }

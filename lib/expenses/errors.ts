@@ -35,7 +35,7 @@ const MESSAGES: Record<ExpenseRecordErrorCode, ErrorMessage> = {
   EDIT_AMOUNT_DIRECTLY: {
     title: 'แก้ยอดเงินที่นี่ไม่ได้',
     message:
-      'ยอด Gross/WHT/Net เป็นข้อมูล snapshot จากรอบจ่ายเงินจริง แก้ตรงไม่ได้ — ถ้ายอดผิดต้องสร้าง Adjustment',
+      'ยอด Gross/WHT/Net เป็นยอดที่บันทึกไว้จากรอบจ่ายเงินจริง แก้ตรงไม่ได้ — ถ้ายอดผิดต้องสร้าง Adjustment',
   },
   COST_CENTER_AUTO_EDIT: {
     title: 'รายการนี้ map ศูนย์ต้นทุนอัตโนมัติ',

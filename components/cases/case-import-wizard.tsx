@@ -191,7 +191,7 @@ export function CaseImportWizard({
           {step === 'preview' && result?.dryRun === true && (
             <>
               <Button variant="secondary" disabled={busy} onClick={() => setStep('mapping')}>
-                ย้อนกลับไปแก้ mapping
+                ย้อนกลับไปแก้การจับคู่คอลัมน์
               </Button>
               <Button loading={busy} disabled={result.totalRows === 0} onClick={() => void runImport(false)}>
                 ยืนยันนำเข้า {result.totalRows - result.failedCount} รายการ

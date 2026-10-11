@@ -116,7 +116,7 @@ export function ExpensesTab() {
       )}
 
       {data.summary.unmappedCount > 0 && (
-        <InlineAlert tone="warning" title={`ยังไม่ได้ map Cost Center ${fmtCount(data.summary.unmappedCount)} รายการ`}>
+        <InlineAlert tone="warning" title={`ยังไม่ได้ระบุศูนย์ต้นทุน ${fmtCount(data.summary.unmappedCount)} รายการ`}>
           บัญชีต้องเลือกศูนย์ต้นทุนให้ครบก่อนรวมเข้าชุดเอกสารส่งสำนักงานบัญชี
         </InlineAlert>
       )}
@@ -143,7 +143,7 @@ export function ExpensesTab() {
               <Th numeric>Gross</Th>
               <Th numeric>WHT</Th>
               <Th numeric>Net</Th>
-              <Th>Cost Center</Th>
+              <Th>ศูนย์ต้นทุน</Th>
               <Th>เอกสาร</Th>
               <Th className="text-right">จัดการ</Th>
             </Tr>

@@ -355,11 +355,11 @@ export function RevenueTab() {
             <THead>
               <Tr>
                 <Th>บริษัท</Th>
-                <Th>Case Ref</Th>
+                <Th>เลขเคส</Th>
                 <Th>วันที่รายได้</Th>
-                <Th>Model</Th>
+                <Th>รูปแบบค่าบริการ</Th>
                 <Th numeric>ยอดก่อน VAT</Th>
-                <Th>VAT Flag</Th>
+                <Th>การคิด VAT</Th>
                 <Th>รอบที่ถูกรวม</Th>
                 <Th>สถานะ</Th>
               </Tr>

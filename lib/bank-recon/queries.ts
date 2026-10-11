@@ -782,7 +782,7 @@ export async function importStatement(
               match_status: 'unmatched',
               source_file: input.fileName,
             },
-            reason: `นำเข้า statement ${input.fileName} ของบัญชี ${bankAccountLabel(account)}`,
+            reason: `นำเข้ารายการเดินบัญชี ${input.fileName} ของบัญชี ${bankAccountLabel(account)}`,
             ipAddress: ctx.meta.ipAddress,
             userAgent: ctx.meta.userAgent,
           },

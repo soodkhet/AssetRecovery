@@ -90,9 +90,9 @@ export function PeriodLockTab() {
       </div>
 
       {/* banner เหลืองต้องแสดง**เสมอ** ตาม `13` §7 — แม้ตอนโหลดยังไม่เสร็จก็ใช้ข้อความสเปคเป็นค่าตั้งต้น */}
-      <InlineAlert tone="warning" title="Policy">
-        {payload?.banner ?? 'เมื่อรอบบัญชีถูกรับรองส่งมอบแล้ว ห้ามแก้ source record โดยตรง'} — ต้องสร้าง Adjustment
-        ผ่าน workflow แทนเท่านั้น
+      <InlineAlert tone="warning" title="นโยบาย">
+        {payload?.banner ?? 'เมื่อรอบบัญชีถูกรับรองส่งมอบแล้ว ห้ามแก้รายการต้นทางโดยตรง'} — ต้องสร้าง Adjustment
+        ผ่านขั้นตอนอนุมัติแทนเท่านั้น
       </InlineAlert>
 
       <SettingHelp className="mt-3" help={periodLockHelp()} />

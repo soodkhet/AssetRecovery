@@ -134,7 +134,7 @@ export function ApprovalTab() {
     <div className="space-y-6">
       <div className={cn('grid grid-cols-1 gap-4', canViewAdvances && 'sm:grid-cols-3')}>
         <StatCard
-          label="เงินรออนุมัติ (Claim)"
+          label="ยอดเบิกรออนุมัติ"
           value={kpiValue(claimsReady ? pendingClaimTotalSatang(claims.items) : null, fmtSatangSymbol)}
           hint={`${kpiValue(
             claimsReady

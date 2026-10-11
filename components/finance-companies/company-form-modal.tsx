@@ -1,17 +1,23 @@
 'use client'
 
 import { useState } from 'react'
+import { AddressFields } from '@/components/address/address-fields'
 import { SettingHelp } from '@/components/settings/setting-help'
 import { useCurrentVatRate } from '@/components/settings/use-current-vat-rate'
 import { toFieldErrors } from '@/lib/api/validation'
 import { Button, Field, InlineAlert, Input, Modal, Select, Textarea, useToast } from '@/components/ui'
+import { EMPTY_ADDRESS, type AddressValue } from '@/lib/address/address-value'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import {
   branchCodeFromForm,
   branchKindOf,
+  COMPANY_REQUIRED_ADDRESS_FIELDS,
+  companyAddressFormOf,
+  companyAddressLine,
   DEFAULT_CUSTOMER_WHT_PCT,
   DEFAULT_VAT_MODE,
   isHeadOfficeBranch,
+  missingCompanyAddressFields,
   VAT_MODE_OPTIONS,
   type BranchKind,
   type InvoiceDeliveryFormat,
@@ -52,7 +58,8 @@ interface FormState {
   branchKind: BranchKind
   /** เลขสาขา 5 หลัก — ใช้เมื่อ `branchKind = 'branch'` เท่านั้น */
   branchNumber: string
-  address: string
+  /** ที่อยู่ 5 ช่อง — บันทึกเป็นบรรทัดเดียวลง `finance_companies.address` (mytester2 A2-03 · ไม่แก้ schema) */
+  address: AddressValue
   phone: string
   email: string
   contactName: string
@@ -76,7 +83,7 @@ function emptyForm(defaultTemplateId: string, defaultCycleId: string): FormState
     taxId: '',
     branchKind: 'head_office',
     branchNumber: '',
-    address: '',
+    address: EMPTY_ADDRESS,
     phone: '',
     email: '',
     contactName: '',
@@ -99,7 +106,7 @@ function formOf(company: FinanceCompanyDto): FormState {
     taxId: company.taxId,
     branchKind: branchKindOf(company.branchCode),
     branchNumber: isHeadOfficeBranch(company.branchCode) ? '' : company.branchCode,
-    address: company.address ?? '',
+    address: companyAddressFormOf(company.address).value,
     phone: company.phone ?? '',
     email: company.email ?? '',
     contactName: company.contactName ?? '',
@@ -127,7 +134,7 @@ function payloadOf(form: FormState): Record<string, unknown> {
     shortName: form.shortName.trim(),
     taxId: form.taxId,
     branchCode: branchCodeFromForm(form.branchKind, form.branchNumber),
-    address: form.address,
+    address: companyAddressLine(form.address),
     phone: form.phone,
     email: form.email,
     contactName: form.contactName,
@@ -173,6 +180,8 @@ export function CompanyFormModal({
   const [saving, setSaving] = useState(false)
 
   const isEdit = company !== null
+  /** ที่อยู่เดิมแบบข้อความอิสระ (แยกช่องไม่ได้) — ไม่แตะ = บันทึกต่อได้ตามเดิม */
+  const legacyAddress = company === null ? null : companyAddressFormOf(company.address).legacyText
   /** U108 — อัตรา VAT ที่มีผลวันนี้ สำหรับตัวอย่างตัวเลขเท่านั้น (ไม่ใช้ค่าคงที่) */
   const vatRatePct = useCurrentVatRate(open)
 
@@ -181,10 +190,15 @@ export function CompanyFormModal({
   }
 
   async function save(): Promise<void> {
+    const missingAddress = missingCompanyAddressFields({ value: form.address, legacyText: legacyAddress })
     const parsed = financeCompanyCreateSchema.safeParse(payloadOf(form))
-    if (!parsed.success) {
+    if (!parsed.success || missingAddress.length > 0) {
       // ตัวแปลงกลาง — ข้อความ default ภาษาอังกฤษของ Zod ถูกแปลงเป็นไทยที่เดียว (UAT BUG-138)
-      setErrors(toFieldErrors(parsed.error))
+      const next = parsed.success ? {} : toFieldErrors(parsed.error)
+      for (const field of missingAddress) {
+        next[`address.${field}`] = field === 'postalCode' ? 'กรอกรหัสไปรษณีย์ 5 หลัก' : 'กรุณากรอกช่องนี้'
+      }
+      setErrors(next)
       return
     }
 
@@ -210,6 +224,12 @@ export function CompanyFormModal({
     } finally {
       setSaving(false)
     }
+  }
+
+  const addressErrors: Partial<Record<keyof AddressValue, string>> = {}
+  for (const field of COMPANY_REQUIRED_ADDRESS_FIELDS) {
+    const message = errors[`address.${field}`]
+    if (message !== undefined) addressErrors[field] = message
   }
 
   return (
@@ -305,9 +325,22 @@ export function CompanyFormModal({
         </div>
         <SettingHelp help={companyBranchHelp()} />
 
-        <Field id="co-address" label="ที่อยู่ตามที่จดทะเบียน (ใช้ออกเอกสารทางการ)" required error={errors.address}>
-          <Textarea maxLength={500} id="co-address" value={form.address} onChange={(event) => set('address', event.target.value)} />
-        </Field>
+        <div>
+          <AddressFields
+            label="ที่อยู่ตามที่จดทะเบียน (ใช้ออกเอกสารทางการ)"
+            value={form.address}
+            onChange={(next) => set('address', next)}
+            requiredFields={COMPANY_REQUIRED_ADDRESS_FIELDS}
+            errors={addressErrors}
+          />
+          {legacyAddress !== null && (
+            <p className="mt-1 text-[11px] text-slate-500">
+              ที่อยู่เดิมบันทึกเป็นข้อความเดียว จึงอยู่ในช่องบ้านเลขที่ทั้งหมด — ถ้าแก้ที่อยู่ ให้แยกกรอกรหัสไปรษณีย์/จังหวัด/อำเภอ/ตำบล
+              ให้ครบ
+            </p>
+          )}
+          {errors.address !== undefined && <p className="mt-1 text-xs text-red-600">{errors.address}</p>}
+        </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field id="co-contact" label="ผู้ติดต่อประจำวัน" error={errors.contactName}>
@@ -345,7 +378,7 @@ export function CompanyFormModal({
 
         {isEdit && company.serviceFeeTemplateId !== form.serviceFeeTemplateId && (
           <InlineAlert tone="info" title="เปลี่ยนเทมเพลตค่าบริการ">
-            เคสที่อนุมัติ (approved) ไปแล้วใช้ตัวเลขที่ snapshot ไว้ที่ตัวเคส — ยอดเดิมไม่เปลี่ยน · เคสที่ยังไม่อนุมัติจะคิดตามเทมเพลตใหม่
+            เคสที่อนุมัติไปแล้วใช้ตัวเลขที่บันทึกไว้ที่ตัวเคส — ยอดเดิมไม่เปลี่ยน · เคสที่ยังไม่อนุมัติจะคิดตามเทมเพลตใหม่
           </InlineAlert>
         )}
 

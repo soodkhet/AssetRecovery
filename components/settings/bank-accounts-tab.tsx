@@ -482,8 +482,8 @@ export function BankAccountsTab() {
             {/* เลือกจากแท็บ "รูปแบบไฟล์ธนาคาร" เฉพาะชนิดตรงช่อง · เก็บเป็น id (มติ PO U147) */}
             <Field
               id="bank-account-statement"
-              label="รูปแบบไฟล์ statement"
-              hint="ใช้เรียงคอลัมน์ตอนนำเข้า statement ของบัญชีนี้"
+              label="รูปแบบไฟล์รายการเดินบัญชี"
+              hint="ใช้เรียงคอลัมน์ตอนนำเข้ารายการเดินบัญชีของบัญชีนี้"
               error={errors.statementFormatId}
             >
               <Select

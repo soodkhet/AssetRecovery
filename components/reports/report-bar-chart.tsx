@@ -22,6 +22,15 @@ const NEGATIVE = '#dc2626'
 /** สีของชุดที่สอง (ค่าที่ "ไม่ดี" เช่น เคสไม่สำเร็จ) — โทนเดียวกับ statusBadge กลุ่ม danger */
 const SECONDARY = '#f87171'
 
+/**
+ * โดเมนแกนค่าของกราฟแท่งต้องรวม 0 เสมอ — แท่งวาดจากเส้นฐาน 0 ถ้าทุกค่าติดลบ (F1 เจาะลึกรายเคสที่ขาดทุนทุกเคส)
+ * แล้วปล่อยให้ Recharts คำนวณโดเมนเอง แกนจะไม่ครอบ 0 และแท่งไม่ถูกวาดเลย (mytester2 J2-01)
+ */
+export const VALUE_AXIS_DOMAIN: [(dataMin: number) => number, (dataMax: number) => number] = [
+  (dataMin) => Math.min(0, dataMin),
+  (dataMax) => Math.max(0, dataMax),
+]
+
 export function ReportBarChart({
   title,
   rows,
@@ -72,6 +81,7 @@ export function ReportBarChart({
                 textAnchor={(xAxis?.angle ?? -15) <= -30 ? 'end' : 'middle'}
               />
               <YAxis
+                domain={VALUE_AXIS_DOMAIN}
                 tick={{ fontSize: 11, fill: '#64748b' }}
                 width={80}
                 tickFormatter={(value: number) => formatCellText(value, valueType)}

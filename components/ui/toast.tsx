@@ -1,8 +1,20 @@
 'use client'
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from 'react'
 import { cn } from '@/components/ui/cn'
+import { hasOpenModal, subscribeModalStack } from '@/components/ui/modal-stack'
 import { findDuplicateToast } from '@/components/ui/toast-dedupe'
+import { toastViewportPositionClass } from '@/components/ui/toast-position'
 import { SESSION_EXPIRED_EVENT } from '@/lib/api/session-expiry'
 
 /**
@@ -126,6 +138,9 @@ function ToastViewport({
   onDismiss: (id: number) => void
   aboveBottomNav: boolean
 }) {
+  // modal เปิดอยู่ ⇒ toast ขึ้นมุมบน ไม่ทับปุ่มท้าย modal (mytester2 G2-02)
+  const modalOpen = useSyncExternalStore(subscribeModalStack, hasOpenModal, () => false)
+
   if (toasts.length === 0) return null
 
   return (
@@ -133,7 +148,7 @@ function ToastViewport({
     <div
       className={cn(
         'pointer-events-none fixed right-4 left-4 z-[60] flex flex-col gap-2 sm:left-auto sm:w-full sm:max-w-sm',
-        aboveBottomNav ? 'bottom-[calc(5rem+env(safe-area-inset-bottom))] lg:bottom-4' : 'bottom-4',
+        toastViewportPositionClass({ modalOpen, aboveBottomNav }),
       )}
     >
       {toasts.map((toast) => (

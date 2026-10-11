@@ -104,3 +104,28 @@ export function formatThaiAddressLine(address: AddressDtoLike | null | undefined
 export function formatThaiAddressLineFull(address: AddressDtoLike | null | undefined): string | null {
   return formatAddressLine(address, 'full')
 }
+
+const PROVINCIAL_LINE = /^(.*\S)\s+ต\.(\S+)\s+อ\.(\S+)\s+จ\.(\S+)\s+(\d{5})$/
+const BANGKOK_LINE = /^(.*\S)\s+แขวง(\S+)\s+เขต(\S+)\s+กรุงเทพมหานคร\s+(\d{5})$/
+
+/**
+ * ย้อนข้อความบรรทัดเดียวที่ {@link formatThaiAddressLine} สร้าง กลับเป็น 5 ช่อง — ใช้กับตารางที่เก็บที่อยู่เป็น
+ * คอลัมน์เดียว (บริษัทไฟแนนซ์ — mytester2 A2-03) ให้ฟอร์มแก้ไขเปิดช่องเลือกจังหวัด/อำเภอ/ตำบลได้อีก
+ * · ต้องครบ 5 ช่อง **และ** จัดรูปกลับแล้วได้ข้อความเดิมทุกตัวอักษร ⇒ ไม่เช่นนั้น `null` (ข้อความพิมพ์เองแบบเก่า
+ *   ผู้เรียกต้องเก็บไว้ทั้งก้อน ห้ามเดาแยก)
+ */
+export function parseThaiAddressLine(line: string): AddressValue | null {
+  const text = line.trim()
+  const provincial = PROVINCIAL_LINE.exec(text)
+  const bangkok = provincial === null ? BANGKOK_LINE.exec(text) : null
+  let value: AddressValue | null = null
+  if (provincial !== null) {
+    const [, detail = '', subdistrict = '', district = '', province = '', postalCode = ''] = provincial
+    value = { detail, subdistrict, district, province, postalCode }
+  } else if (bangkok !== null) {
+    const [, detail = '', subdistrict = '', district = '', postalCode = ''] = bangkok
+    value = { detail, subdistrict, district, province: 'กรุงเทพมหานคร', postalCode }
+  }
+  if (value === null || BANGKOK_PROVINCES.has(value.province) !== (bangkok !== null)) return null
+  return formatThaiAddressLine(value) === text ? value : null
+}

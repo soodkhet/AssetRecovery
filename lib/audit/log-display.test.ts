@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import {
   auditFieldLabel,
@@ -49,6 +49,24 @@ describe('ป้ายของ audit log', () => {
     expect(missing).toEqual([])
     expect(auditTargetLabel('cash_receipts')).toBe('รายการรับเงิน')
     expect(auditTargetLabel('jobs')).toBe('งานเบื้องหลังของระบบ')
+  })
+
+  /** mytester2 J2-02 — เป้าหมายที่ไม่ใช่ตาราง (เช่น `portal`) ก็ต้องมีป้ายไทยในตัวกรอง */
+  it('ทุก targetType ที่โค้ดเขียนลง audit มีป้ายไทย', () => {
+    const files = ['lib', 'app'].flatMap((dir) =>
+      (readdirSync(path.join(process.cwd(), dir), { recursive: true }) as string[])
+        .filter((file) => /\.ts$/.test(file) && !/\.test\.ts$/.test(file) && !file.includes('generated'))
+        .map((file) => path.join(process.cwd(), dir, file)),
+    )
+    const targets = new Set(
+      files.flatMap((file) => [...readFileSync(file, 'utf8').matchAll(/(?:targetType: |_AUDIT_TARGET = )'([a-z_]+)'/g)].map((m) => m[1] ?? '')),
+    )
+    expect(targets.has('portal')).toBe(true)
+    const missing = [...targets]
+      .filter((target) => target !== 'asc' && target !== 'desc') // orderBy: { targetType: 'asc' }
+      .filter((target) => auditTargetLabel(target) === target)
+    expect(missing).toEqual([])
+    expect(auditTargetLabel('portal')).toBe('พอร์ทัลลูกค้า')
   })
 
   /** UAT BUG-127 — audit แยกของการอนุมัติ Adjustment งวดล็อก ไม่ใช่ "ปลดล็อกงวด" */

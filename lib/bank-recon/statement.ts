@@ -278,10 +278,10 @@ export function parseStatementCsv(input: StatementParseInput): StatementParseRes
   let columns: (StatementColumn | null)[] = useConfigured ? [...configured] : []
   let startIndex = 0
 
-  if (lines.length === 0) throw new StatementParseError('ไฟล์ statement ว่างเปล่า')
+  if (lines.length === 0) throw new StatementParseError('ไฟล์รายการเดินบัญชีว่างเปล่า')
 
   const firstNonEmpty = lines.findIndex((line) => line.trim() !== '')
-  if (firstNonEmpty === -1) throw new StatementParseError('ไฟล์ statement ว่างเปล่า')
+  if (firstNonEmpty === -1) throw new StatementParseError('ไฟล์รายการเดินบัญชีว่างเปล่า')
 
   const firstCells = splitCsvLine(lines[firstNonEmpty] ?? '')
   if (useConfigured) {
@@ -295,7 +295,7 @@ export function parseStatementCsv(input: StatementParseInput): StatementParseRes
   const effective = columns.filter((column): column is StatementColumn => column !== null)
   if (!isUsableStatementMapping(effective)) {
     throw new StatementParseError(
-      'อ่านคอลัมน์ของไฟล์ statement ไม่ได้ — ต้องมีอย่างน้อยคอลัมน์วันที่และจำนวนเงิน (ตั้งรูปแบบไฟล์ที่หน้าตั้งค่าการเงิน)',
+      'อ่านคอลัมน์ของไฟล์รายการเดินบัญชีไม่ได้ — ต้องมีอย่างน้อยคอลัมน์วันที่และจำนวนเงิน (ตั้งรูปแบบไฟล์ที่หน้าตั้งค่าการเงิน)',
     )
   }
 
@@ -391,7 +391,7 @@ const STATEMENT_COLUMN_TEMPLATE: Record<StatementColumn, { header: string; forma
   },
   description: {
     header: 'รายละเอียด',
-    format: 'ข้อความจาก statement',
+    format: 'ข้อความจากรายการเดินบัญชี',
     examples: ['รับโอนจาก บจก. ตัวอย่างไฟแนนซ์', 'โอนจ่ายค่าตอบแทนทีมภาคสนาม'],
   },
   reference: { header: 'เลขที่อ้างอิง', format: 'เลขอ้างอิงของธนาคาร', examples: ['REF0000001', 'REF0000002'] },
