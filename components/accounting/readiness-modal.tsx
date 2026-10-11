@@ -168,7 +168,7 @@ export function ReadinessModal({
               {data.openPayoutBatches.map((item) => (
                 <div key={item.id} className="border-t border-red-100 px-3 py-2 text-xs text-slate-700">
                   <span className="font-semibold">{item.name}</span> · {PAYOUT_STATUS_LABEL_SHORT[item.status]} · สร้างเมื่อ{' '}
-                  {fmtDate(item.createdAt)} · ยอดสุทธิ {fmtSatangSymbol(item.netSatang)}
+                  {fmtDate(item.createdAt)} · โอนสุทธิ {fmtSatangSymbol(item.transferSatang)}
                 </div>
               ))}
             </div>

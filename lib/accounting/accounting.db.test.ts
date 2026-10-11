@@ -588,6 +588,8 @@ suite('Phase 4.1 — Readiness Check + ปิด/ปลดล็อกงวด 
     const periodId = await seedPeriod()
     // 01/08/2569 00:30 น. ไทย = 31/07 ค.ศ. UTC — ต้องนับเป็นงวด ส.ค. (ปฏิทินไทย)
     const open = await seedPayoutBatch('รอบจ่ายค้าง ส.ค.', 'file_generated', '2026-07-31T17:30:00Z')
+    // ทดสอบซ้ำ local L-04 — ยอดที่แสดงต้องเท่า "โอนสุทธิ" ของหน้ารอบจ่าย (หักคืนเงินทดรองแล้ว)
+    await db().$executeRawUnsafe(`UPDATE payout_batches SET advance_offset_satang = 55000 WHERE id = '${open}'`)
     // รอบที่จ่ายแล้ว/ยกเลิก/อยู่งวดอื่น ไม่บล็อก
     await seedPayoutBatch('รอบจ่ายสำเร็จ', 'completed', '2026-08-10T03:00:00Z')
     await seedPayoutBatch('รอบงวด ก.ย.', 'draft', '2026-08-31T17:00:00Z')
@@ -596,6 +598,7 @@ suite('Phase 4.1 — Readiness Check + ปิด/ปลดล็อกงวด 
     expect(readiness.ready).toBe(false)
     expect(readiness.checks.find((check) => check.key === 'no_open_payouts')).toMatchObject({ passed: false })
     expect(readiness.openPayoutBatches.map((batch) => batch.name)).toEqual(['รอบจ่ายค้าง ส.ค.'])
+    expect(readiness.openPayoutBatches[0]?.transferSatang).toBe(150000 - 55000)
     await expectCode(() => accounting.sendPeriod(ctx(), periodId, reason, after), 'PERIOD_HAS_OPEN_PAYOUTS')
 
     await db().$executeRawUnsafe(`UPDATE payout_batches SET status = 'completed' WHERE id = '${open}'`)

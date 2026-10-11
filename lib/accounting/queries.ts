@@ -67,6 +67,7 @@ import { periodLockPolicyFor } from '@/lib/settings/period-lock'
 import { assertOrgWideReadable } from '@/lib/auth/scope'
 import { fmtDate } from '@/lib/format/datetime'
 import { ACCRUED_EXPENSE_STATUSES } from '@/lib/exports/pack'
+import { payoutTransferSatang } from '@/lib/finance/advance-offset-calc'
 
 /**
  * รอบบัญชี (ไฟล์ 30) + ข้อยกเว้น (ไฟล์ 34) — ชั้น DB (`27` §6.13 · §6.16)
@@ -470,7 +471,7 @@ async function draftBillingBatchSummary(organizationId: string, periodEnd: Date)
  */
 async function openPayoutBatchesOf(organizationId: string, key: PeriodKey): Promise<OpenPayoutBatch[]> {
   const range = periodRangeOf(key)
-  return prisma.payoutBatch.findMany({
+  const rows = await prisma.payoutBatch.findMany({
     where: {
       organizationId,
       deletedAt: null,
@@ -478,8 +479,24 @@ async function openPayoutBatchesOf(organizationId: string, key: PeriodKey): Prom
       createdAt: { gte: range.start, lt: range.end },
     },
     orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-    select: { id: true, name: true, status: true, netSatang: true, createdAt: true },
+    select: {
+      id: true,
+      name: true,
+      status: true,
+      netSatang: true,
+      advanceOffsetSatang: true,
+      recoveryOffsetSatang: true,
+      createdAt: true,
+    },
   })
+  // ทดสอบซ้ำ local L-04 — ยอดเดียวกับคอลัมน์ "โอนสุทธิ" ของหน้ารอบจ่าย (หักคืนเงินทดรอง/ยอดเรียกคืนแล้ว)
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    status: row.status,
+    transferSatang: payoutTransferSatang(row.netSatang, row.advanceOffsetSatang, row.recoveryOffsetSatang),
+    createdAt: row.createdAt,
+  }))
 }
 
 /** ประกอบข้อมูลสด 3 เงื่อนไขแล้วส่งให้ตัวตัดสิน pure (`30` §6.2) */

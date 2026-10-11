@@ -316,7 +316,8 @@ export interface OpenPayoutBatch {
   id: string
   name: string
   status: PayoutBatchStatus
-  netSatang: number
+  /** ยอดโอนสุทธิ (สุทธิหลัง WHT − หักคืนเงินทดรอง/ยอดเรียกคืน) — นิยามเดียวกับหน้ารอบจ่าย (`payoutTransferSatang` · ทดสอบซ้ำ local L-04) */
+  transferSatang: number
   createdAt: Date
 }
 

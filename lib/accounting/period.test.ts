@@ -424,7 +424,7 @@ describe('มติ PO U112 — รอบจ่ายค้างบล็อก
     id: name,
     name,
     status: 'checking' as const,
-    netSatang: 100,
+    transferSatang: 100,
     createdAt: new Date('2026-08-10T03:00:00Z'),
   })
   const base = { criticalOpen: [], warningOpenCount: 0, unmatchedBankCount: 0, billingMismatches: [] }
