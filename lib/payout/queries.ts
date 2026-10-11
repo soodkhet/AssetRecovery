@@ -48,6 +48,7 @@ import {
   nextPaymentFileVersion,
   nextPayoutBatchStatus,
   paymentFileName,
+  missingPayeeBankFields,
   paymentFileStoragePath,
   payoutAdvancePaidSatang,
   payoutItemTrackingRound,
@@ -1396,7 +1397,7 @@ export async function generatePaymentFile(
       throw new PayeeError('REQUIRED_MISSING', {
         detail: `payee=${payeeId} bank_name=${payee.bankName ?? ''}`,
         context: {
-          fields: ['bank_name', 'account_number'],
+          fields: missingPayeeBankFields({ bankCode, accountNumber: payee.accountNumber }),
           payees: [legalName],
         },
       })

@@ -9,6 +9,7 @@ import {
   matchCandidateOptionText,
   matchSuccessToast,
   mismatchCompareAmounts,
+  mismatchNoteExample,
   suspenseMatchRequiresNote,
 } from '@/lib/bank-recon/matching'
 import type { BankTransactionDto, MatchCandidateDto, MatchResultDto } from '@/lib/bank-recon/types'
@@ -99,7 +100,7 @@ export function ManualMatchModal({
     <Modal
       open
       onClose={onClose}
-      title="จับคู่รายการธนาคาร Manual (Bank Reconciliation)"
+      title="จับคู่รายการเดินบัญชีด้วยตนเอง"
       description={MATCH_TARGET_LABEL[kind]}
       footer={
         <>
@@ -115,7 +116,7 @@ export function ManualMatchModal({
       <div className="space-y-4">
         <div className="flex items-center justify-between rounded-lg border border-blue-200 bg-blue-50 p-4">
           <div>
-            <div className="mb-1 text-[10px] font-bold text-blue-800 uppercase">Bank Statement Transaction</div>
+            <div className="mb-1 text-[10px] font-bold text-blue-800">รายการเดินบัญชีธนาคาร</div>
             <div className="font-bold text-slate-900">{transaction.description}</div>
             <div className="mt-0.5 font-mono text-xs text-slate-500">
               {fmtDate(transaction.transactionDate)} · {transaction.bankAccountLabel}
@@ -160,7 +161,10 @@ export function ManualMatchModal({
 
         {selected?.alreadyMatchedWith != null && (
           <InlineAlert tone="warning" title="รอบจ่ายนี้จับคู่ไปแล้ว">
-            จับคู่แล้วกับ{selected.alreadyMatchedWith} — จับคู่เพิ่มได้เมื่อโอนรอบเดียวแยกหลายรายการ{' '}
+            จับคู่แล้วกับ{selected.alreadyMatchedWith}
+            {selected.remainingAmountSatang !== null &&
+              ` · ยอดรอบ ${fmtSatangSymbol(selected.amountSatang)} ยังไม่จับคู่ ${fmtSatangSymbol(selected.remainingAmountSatang)}`}{' '}
+            — จับคู่เพิ่มได้เมื่อโอนรอบเดียวแยกหลายรายการ{' '}
             <b>ต้องกรอกหมายเหตุยืนยัน</b>
           </InlineAlert>
         )}
@@ -169,13 +173,18 @@ export function ManualMatchModal({
           <InlineAlert tone="warning" title="ยอดไม่ตรงกันเป๊ะ">
             {(() => {
               const compare = mismatchCompareAmounts(selected)
+              // mytester G-07 — รอบจ่ายที่จับคู่ไปบางส่วน: บอกยอดรอบ + ยอดที่ยังไม่จับคู่ (กันจับคู่เกินยอดรอบ)
+              const payoutPartial = kind === 'payout' && selected.remainingAmountSatang !== null
               return (
                 <>
-                  {compare.label} {fmtSatangSymbol(compare.amountSatang)}
+                  {payoutPartial
+                    ? `ยอดรอบ ${fmtSatangSymbol(selected.amountSatang)} · ยังไม่จับคู่`
+                    : compare.label}{' '}
+                  {fmtSatangSymbol(compare.amountSatang)}
                   {compare.afterWhtSatang !== null &&
                     ` (คาดรับหลังลูกค้าหัก ณ ที่จ่าย ${fmtSatangSymbol(compare.afterWhtSatang)})`}{' '}
                   · ยอดที่ธนาคารบันทึก {fmtSatangSymbol(Math.abs(transaction.amountSatang))} —{' '}
-                  <b>ต้องกรอกหมายเหตุชี้แจง</b> เช่น ลูกค้าหักค่าธรรมเนียม/ภาษี ณ ที่จ่ายก่อนโอน
+                  <b>ต้องกรอกหมายเหตุชี้แจง</b> {mismatchNoteExample(kind)}
                 </>
               )
             })()}

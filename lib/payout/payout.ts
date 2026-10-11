@@ -311,3 +311,17 @@ export function payoutItemTrackingRound(row: {
 export function payoutAdvancePaidSatang(items: ReadonlyArray<{ isAdvance: boolean; grossSatang: number }>): number {
   return items.reduce((sum, item) => (item.isAdvance ? sum + item.grossSatang : sum), 0)
 }
+
+/**
+ * mytester F-08 (ชื่อฟิลด์ใน toast) — ช่องบัญชีผู้รับที่ยังขาดตอนสร้างไฟล์โอน ในรูป `fields: { ช่อง: ข้อความไทย }`
+ * (array ของชื่อช่องถูกต่อท้าย toast เป็นชื่อฟิลด์ภายใน "bank_name · account_number")
+ */
+export function missingPayeeBankFields(input: {
+  bankCode: string | null
+  accountNumber: string | null
+}): Record<string, string> {
+  return {
+    ...(input.bankCode === null ? { bank_name: 'ยังไม่ได้ระบุธนาคารของผู้รับ (หรือธนาคารที่ระบุไม่รองรับในไฟล์โอน)' } : {}),
+    ...(input.accountNumber === null ? { account_number: 'ยังไม่ได้กรอกเลขบัญชีของผู้รับ' } : {}),
+  }
+}

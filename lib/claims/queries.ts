@@ -79,7 +79,8 @@ export async function createManualClaim(
     throw new FieldError('REQUIRED_MISSING', {
       message: 'ต้องแนบใบเสร็จ หรือติ๊ก "ไม่มีใบเสร็จ" แล้วกรอกรายการ',
       detail: 'manual claim without receipt or substitute receipt',
-      context: { fields: ['receiptFileUrl'] },
+      // mytester F-08 — fields เป็น { ช่อง: ข้อความไทย } (array ทำให้ toast ต่อท้ายชื่อฟิลด์ภายใน)
+      context: { fields: { receiptFileUrl: 'ยังไม่ได้แนบใบเสร็จหรือใบรับรองแทนใบเสร็จ' } },
     })
   }
   const receipt =

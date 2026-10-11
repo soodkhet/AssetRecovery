@@ -3,6 +3,9 @@ import {
   PROPOSAL_MATCH_NOTE,
   allowedTargetKind,
   alreadyMatchedWithText,
+  billingMatchUnavailableMessage,
+  mismatchNoteExample,
+  payoutUnmatchedSatang,
   matchSuccessToast,
   mismatchCompareAmounts,
   suspenseRefundCloseNote,
@@ -453,5 +456,29 @@ describe('staging E-067 — ปิดรายการโอนคืนขอ�
     expect(suspenseRefundCloseNote(refunded)).toBe(
       'โอนคืนของเงินรับรอตรวจสอบ 01/08/2569 ฿1,234.00 (โอนเข้าไม่ทราบที่มา) · คืนเมื่อ 10/08/2569 · อ้างอิง TRF-889',
     )
+  })
+})
+
+describe('mytester G-07 — รอบจ่ายที่จับคู่ไปบางส่วน', () => {
+  const tx = (id: string, amount: number) => ({ id, transactionDate: new Date('2026-10-11T03:00:00Z'), amountSatang: amount })
+
+  it('ยอดที่ยังไม่จับคู่ = ยอดรอบ − รายการอื่นที่จับคู่แล้ว (ไม่นับรายการที่กำลังจับคู่ · ไม่ติดลบ)', () => {
+    expect(payoutUnmatchedSatang(842_923, [tx('a', -297_370)], 'current')).toBe(545_553)
+    expect(payoutUnmatchedSatang(842_923, [tx('current', -297_370)], 'current')).toBeNull()
+    expect(payoutUnmatchedSatang(842_923, undefined, 'current')).toBeNull()
+    expect(payoutUnmatchedSatang(100, [tx('a', -500)], 'current')).toBe(0)
+  })
+
+  it('ตัวอย่างเหตุผลตามฝั่งเงิน — เงินออกไม่พูดถึงลูกค้า', () => {
+    expect(mismatchNoteExample('billing')).toContain('ลูกค้า')
+    expect(mismatchNoteExample('payout')).not.toContain('ลูกค้า')
+  })
+})
+
+describe('mytester G-13 — จับคู่กับรอบวางบิลที่จับคู่ไม่ได้บอกเหตุจริง', () => {
+  it('ชำระครบ / ยังเป็นร่าง ⇒ ข้อความเฉพาะ · สถานะอื่น ⇒ null', () => {
+    expect(billingMatchUnavailableMessage('paid', 'BL-2569-001')?.message).toContain('รับชำระครบแล้ว')
+    expect(billingMatchUnavailableMessage('draft', 'BL-2569-001')?.message).toContain('ฉบับร่าง')
+    expect(billingMatchUnavailableMessage('sent', 'BL-2569-001')).toBeNull()
   })
 })

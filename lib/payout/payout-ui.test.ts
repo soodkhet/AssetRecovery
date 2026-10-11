@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { PayoutBatchDto } from '@/lib/payout/types'
+import { withFieldsSuffix } from '@/lib/api/types'
+import { missingPayeeBankFields } from '@/lib/payout/payout'
 import {
   payoutWhtThresholdNote,
   payoutWhtCertificateLinks,
@@ -189,5 +191,18 @@ describe('หน้าต่างสร้างไฟล์โอน — บ�
     )
     expect(paymentFileBankMismatchText({ bankName: 'ไทยพาณิชย์' }, { bankName: 'ธนาคารไทยพาณิชย์' })).toBeNull()
     expect(paymentFileBankMismatchText(undefined, { bankName: 'ธนาคารกสิกรไทย' })).toBeNull()
+  })
+})
+
+describe('mytester F-08 — ชื่อฟิลด์ใน toast ตอนบัญชีผู้รับไม่ครบ', () => {
+  it('ส่งเป็น { ช่อง: ข้อความไทย } เฉพาะช่องที่ขาด · toast ไม่มีชื่อฟิลด์ภายใน', () => {
+    const fields = missingPayeeBankFields({ bankCode: null, accountNumber: null })
+    expect(Object.keys(fields)).toEqual(['bank_name', 'account_number'])
+    expect(missingPayeeBankFields({ bankCode: '014', accountNumber: null })).toEqual({
+      account_number: 'ยังไม่ได้กรอกเลขบัญชีของผู้รับ',
+    })
+    const toast = withFieldsSuffix('ข้อมูลไม่ครบ', fields)
+    expect(toast).not.toMatch(/bank_name|account_number/)
+    expect(toast).toContain('เลขบัญชี')
   })
 })
