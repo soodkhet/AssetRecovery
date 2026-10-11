@@ -17,6 +17,9 @@ import {
   queueCountText,
   queueKpiItems,
   reportAsOfText,
+  buildSetupChecklist,
+  queueAsOfText,
+  DASHBOARD_SETUP_STEPS,
   showFieldTrackerShortcut,
   visibleDashboardQueues,
   type DashboardQueueItemDto,
@@ -265,13 +268,48 @@ describe('reportAsOfText — staging E-062', () => {
   it('บอกเวลาที่คำนวณเป็น พ.ศ. · รีเฟรชถี่เกินบอกเวลาที่กดได้อีกครั้ง', () => {
     expect(
       reportAsOfText({ computedAt: '2026-10-10T21:42:00Z', refreshThrottled: false, refreshAvailableAt: null }),
-    ).toBe('ข้อมูล ณ 11/10/2569 04:42')
+    ).toBe('ตัวเลขคำนวณเมื่อ 11/10/2569 04:42')
     expect(
       reportAsOfText({
         computedAt: '2026-10-10T21:42:00Z',
         refreshThrottled: true,
         refreshAvailableAt: '2026-10-10T21:47:00Z',
       }),
-    ).toBe('ข้อมูล ณ 11/10/2569 04:42 · รีเฟรชได้อีกครั้งหลัง 11/10/2569 04:47')
+    ).toBe('ตัวเลขคำนวณเมื่อ 11/10/2569 04:42 · รีเฟรชได้อีกครั้งหลัง 11/10/2569 04:47')
+  })
+})
+
+describe('แดชบอร์ดระบบว่าง (mytester A-05)', () => {
+  const EMPTY = { organizationIssues: 2, companies: 0, teams: 0, compensationPlans: 0, payees: 0 }
+
+  it('ระบบว่าง ⇒ ทุกขั้นยังไม่เสร็จ เรียงตามลำดับการตั้งค่า พร้อมลิงก์', () => {
+    const setup = buildSetupChecklist(EMPTY)
+    expect(setup?.doneCount).toBe(0)
+    expect(setup?.steps.map((step) => step.id)).toEqual([
+      'organization',
+      'companies',
+      'teams',
+      'compensationPlans',
+      'payees',
+    ])
+    expect(setup?.steps.every((step) => step.href.startsWith('/settings/'))).toBe(true)
+  })
+
+  it('ทำไปบางขั้น ⇒ นับขั้นที่เสร็จ · ครบทุกขั้น ⇒ ไม่แสดงการ์ด', () => {
+    const partial = buildSetupChecklist({ ...EMPTY, organizationIssues: 0, companies: 2 })
+    expect(partial?.doneCount).toBe(2)
+    expect(partial?.steps.find((step) => step.id === 'teams')?.done).toBe(false)
+    expect(
+      buildSetupChecklist({ organizationIssues: 0, companies: 1, teams: 1, compensationPlans: 1, payees: 1 }),
+    ).toBeNull()
+  })
+
+  it('ข้อความไม่มีเลขอ้างอิงสเปค', () => {
+    const texts = DASHBOARD_SETUP_STEPS.flatMap((step) => [step.label, step.description]).join(' ')
+    expect(texts).not.toMatch(/§|ไฟล์ \d/)
+  })
+
+  it('เวลาของคิวงาน (นับสด) ใช้คำต่างจากเวลาของ KPI (แคช)', () => {
+    expect(queueAsOfText('2026-10-10T18:23:00Z')).toBe('นับล่าสุดเมื่อ 11/10/2569 01:23')
   })
 })

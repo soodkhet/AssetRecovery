@@ -488,6 +488,88 @@ export function showFieldTrackerShortcut(user: SessionUser): boolean {
   return !user.isSuperadmin && hasCapability(user, 'view', 'perform_field_work')
 }
 
+// ── เริ่มต้นใช้งานระบบ (mytester A-05) ─────────────────────────────────────────
+
+/**
+ * ขั้นตั้งค่าเริ่มต้นที่ระบบต้องมีก่อนเริ่มรับเคส/จ่ายเงิน — ลำดับตามการพึ่งพา (ข้อมูลองค์กรอยู่บนหัวเอกสารทุกใบ ·
+ * เคสต้องมีบริษัทไฟแนนซ์ · มอบหมายต้องมีทีม · ค่าตอบแทนต้องมีแผน · จ่ายเงินต้องมีผู้รับเงิน)
+ * หน้าเป้าหมายทุกหน้าเป็นของ Superadmin ⇒ แสดงเฉพาะ Superadmin ({@link canSeeSetupChecklist})
+ */
+export const DASHBOARD_SETUP_STEPS = [
+  {
+    id: 'organization',
+    label: 'ข้อมูลองค์กร',
+    description: 'ชื่อ เลขประจำตัวผู้เสียภาษี และที่อยู่ที่จะพิมพ์บนหัวเอกสารทุกใบ',
+    href: '/settings/organization',
+  },
+  {
+    id: 'companies',
+    label: 'บริษัทไฟแนนซ์',
+    description: 'ลูกค้าที่ส่งเคสเข้ามา พร้อมรูปแบบ VAT และเครดิตเทอม',
+    href: '/settings/companies',
+  },
+  {
+    id: 'teams',
+    label: 'ทีมติดตามทรัพย์',
+    description: 'ทีมภาคสนามที่จะรับมอบหมายเคส',
+    href: '/settings/teams',
+  },
+  {
+    id: 'compensationPlans',
+    label: 'แผนค่าตอบแทน',
+    description: 'อัตราค่าตอบแทนของทีมเมื่อปิดเคส',
+    href: '/settings/compensation',
+  },
+  {
+    id: 'payees',
+    label: 'ผู้รับเงิน',
+    description: 'บัญชีธนาคารและข้อมูลภาษีของผู้ที่จะได้รับเงินค่าตอบแทน',
+    href: '/settings/finance?tab=payee',
+  },
+] as const
+
+export type DashboardSetupStepId = (typeof DASHBOARD_SETUP_STEPS)[number]['id']
+
+export interface DashboardSetupStepDto {
+  id: DashboardSetupStepId
+  label: string
+  description: string
+  href: string
+  done: boolean
+}
+
+export interface DashboardSetupDto {
+  steps: DashboardSetupStepDto[]
+  doneCount: number
+}
+
+/** สถานะการตั้งค่าที่นับจากฐาน — `organizationIssues` = จำนวนข้อที่ข้อมูลองค์กรยังเป็นค่าตัวอย่าง/ว่าง */
+export interface DashboardSetupCounts {
+  organizationIssues: number
+  companies: number
+  teams: number
+  compensationPlans: number
+  payees: number
+}
+
+export function canSeeSetupChecklist(user: SessionUser): boolean {
+  return user.isSuperadmin
+}
+
+/** รายการขั้นตั้งค่าเริ่มต้น — ครบทุกขั้นแล้ว ⇒ `null` (การ์ดหายไปเอง ไม่รกแดชบอร์ดของระบบที่ใช้งานแล้ว) */
+export function buildSetupChecklist(counts: DashboardSetupCounts): DashboardSetupDto | null {
+  const done: Readonly<Record<DashboardSetupStepId, boolean>> = {
+    organization: counts.organizationIssues === 0,
+    companies: counts.companies > 0,
+    teams: counts.teams > 0,
+    compensationPlans: counts.compensationPlans > 0,
+    payees: counts.payees > 0,
+  }
+  const steps = DASHBOARD_SETUP_STEPS.map((step) => ({ ...step, done: done[step.id] }))
+  const doneCount = steps.filter((step) => step.done).length
+  return doneCount === steps.length ? null : { steps, doneCount }
+}
+
 // ── DTO ของ `GET /api/dashboard` ─────────────────────────────────────────────
 
 export interface DashboardOverviewDto {
@@ -499,6 +581,8 @@ export interface DashboardOverviewDto {
   /** `null` = ไม่มีสิทธิ์เห็นเคส */
   caseBoard: CaseBoardDto | null
   fieldTracker: boolean
+  /** การ์ด "เริ่มต้นใช้งานระบบ" — `null` = ไม่ใช่ Superadmin หรือตั้งค่าครบแล้ว (A-05) */
+  setup: DashboardSetupDto | null
   computedAt: string
 }
 
@@ -507,9 +591,15 @@ export interface DashboardOverviewDto {
  * (Preview ไม่มี cron ล้างแคช — ตัวเลขอาจค้างจากรอบก่อน) · กดรีเฟรชถี่เกิน ⇒ บอกเวลาที่กดได้อีกครั้ง
  */
 export function reportAsOfText(cache: Pick<ReportCacheInfo, 'computedAt' | 'refreshThrottled' | 'refreshAvailableAt'>): string {
-  const base = `ข้อมูล ณ ${fmtDateTime(cache.computedAt)}`
+  // mytester A-05 — คนละเวลากับคิวงาน (นับสด) ได้ตามปกติ ⇒ บอกว่าเป็นตัวเลขที่คำนวณไว้ ไม่ใช่ "ข้อมูล ณ" เหมือนกัน
+  const base = `ตัวเลขคำนวณเมื่อ ${fmtDateTime(cache.computedAt)}`
   if (cache.refreshThrottled && cache.refreshAvailableAt !== null) {
     return `${base} · รีเฟรชได้อีกครั้งหลัง ${fmtDateTime(cache.refreshAvailableAt)}`
   }
   return base
+}
+
+/** เวลาของคิวงาน (นับสดทุกครั้งที่โหลด) — คู่กับ {@link reportAsOfText} ของแถว KPI ที่มาจากแคช (mytester A-05) */
+export function queueAsOfText(computedAt: string): string {
+  return `นับล่าสุดเมื่อ ${fmtDateTime(computedAt)}`
 }

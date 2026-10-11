@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { momComparison, momLabel, momToneClass, ratioPct } from '@/lib/reports/kpi'
+import { kpiValueText, momComparison, momLabel, momToneClass, ratioPct } from '@/lib/reports/kpi'
 
 describe('momComparison (`96` §11)', () => {
   it('เพิ่มขึ้น/ลดลง/เท่าเดิม คิดเป็น % ทศนิยม 1 ตำแหน่ง', () => {
@@ -43,5 +43,17 @@ describe('ratioPct', () => {
     expect(ratioPct(1, 3)).toBe(33.33)
     expect(ratioPct(0, 5)).toBe(0)
     expect(ratioPct(5, 0)).toBeNull()
+  })
+})
+
+describe('kpiValueText (mytester A-05)', () => {
+  it('เงินมี ฿ นำหน้าเสมอ รวมยอด 0', () => {
+    expect(kpiValueText({ value: 0, type: 'money' })).toBe('฿0.00')
+    expect(kpiValueText({ value: 259_623, type: 'money' })).toBe('฿2,596.23')
+  })
+
+  it('ชนิดอื่น/ค่าว่าง ใช้รูปแบบเดียวกับตาราง', () => {
+    expect(kpiValueText({ value: null, type: 'percent' })).toBe(kpiValueText({ value: null, type: 'percent' }))
+    expect(kpiValueText({ value: 12, type: 'number' })).toBe('12')
   })
 })
