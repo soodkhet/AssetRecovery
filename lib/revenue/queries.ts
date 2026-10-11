@@ -134,6 +134,15 @@ function scopeWhere(user: SessionUser, companyId?: string): { companyId?: string
   return { companyId }
 }
 
+/**
+ * where ของ `finance_companies` แถวที่ผู้ใช้เลือกได้ — บริษัทนอก scope = ไม่มีทางแมตช์ (404 ไม่ leak)
+ * · รีวิวเฟส 4 ข้อ 3: เดิม spread `scopeWhere(user)` (คีย์ `companyId` ของตารางรายได้) ลง `finance_companies`
+ *   ⇒ ผู้ใช้ scope บริษัทได้ error ของ Prisma (ไม่มีคอลัมน์ `companyId`) แทน 404
+ */
+function financeCompanyScopeWhere(user: SessionUser, companyId: string): Prisma.FinanceCompanyWhereInput {
+  return 'companyId' in scopeWhere(user, companyId) ? { id: companyId } : { id: { in: [] } }
+}
+
 // ── select / mapper ─────────────────────────────────────────────────────────
 
 const revenueSelect = {
@@ -426,7 +435,7 @@ export async function createBillingBatch(
 ): Promise<BillingBatchDetailDto> {
   const user = context.actor
   const company = await prisma.financeCompany.findFirst({
-    where: { id: input.companyId, organizationId: user.organizationId, deletedAt: null, ...scopeWhere(user) },
+    where: { organizationId: user.organizationId, deletedAt: null, ...financeCompanyScopeWhere(user, input.companyId) },
     select: { id: true, name: true },
   })
   if (company === null) throw new FinanceCompanyError('COMPANY_NOT_FOUND', { detail: `company=${input.companyId}` })
@@ -970,7 +979,7 @@ export async function applyBillingReceipt(input: {
  */
 export async function previewBillingBatch(user: SessionUser, input: BillingBatchPreviewQuery): Promise<BillingBatchPreviewDto> {
   const company = await prisma.financeCompany.findFirst({
-    where: { id: input.companyId, organizationId: user.organizationId, deletedAt: null, ...scopeWhere(user) },
+    where: { organizationId: user.organizationId, deletedAt: null, ...financeCompanyScopeWhere(user, input.companyId) },
     select: { id: true },
   })
   if (company === null) throw new FinanceCompanyError('COMPANY_NOT_FOUND', { detail: `company=${input.companyId}` })
