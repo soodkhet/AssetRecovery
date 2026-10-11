@@ -231,6 +231,36 @@ suite('Phase 2.3 — state machine + snapshot + recycle (DB จริง)', () =
     expect((await caseRow(caseId))?.status).toBe('draft')
   })
 
+  it('mytester B-02 — รับเคสพร้อมเปลี่ยนทีม: audit มีเหตุผลการเปลี่ยนทีม (ทั้ง reason และ after)', async () => {
+    const OTHER_TEAM = '00000000-0000-4000-8000-0000000023b9'
+    await db().$executeRawUnsafe(`
+      INSERT INTO teams (id, organization_id, name, side, provinces, status, created_by)
+      VALUES ('${OTHER_TEAM}', '${ORG_ID}', 'ทีมที่ระบบเสนอ B-02', 'outsource', ARRAY[]::text[], 'active', '${USER_ID}')
+      ON CONFLICT (id) DO NOTHING
+    `)
+    const caseId = await seedCase('SF-2026-2399', { withDocuments: true })
+    try {
+      await service.changeCaseStatus(actor, caseId, change({ action: 'review' }), { actor, meta })
+      await db().$executeRawUnsafe(`UPDATE cases SET suggested_team_id = '${OTHER_TEAM}' WHERE id = '${caseId}'`)
+      await service.changeCaseStatus(
+        actor,
+        caseId,
+        change({ action: 'accept', teamId: TEAM_ID, teamChangeReason: 'ลูกหนี้ย้ายมาอยู่พื้นที่ทีมนี้' }),
+        { actor, meta },
+      )
+      const audit = await db().auditLog.findFirstOrThrow({
+        where: { organizationId: ORG_ID, targetType: 'cases', targetId: caseId, afterData: { path: ['assignedTeamId'], equals: TEAM_ID } },
+        orderBy: { createdAt: 'desc' },
+      })
+      expect(audit.reason).toContain('ลูกหนี้ย้ายมาอยู่พื้นที่ทีมนี้')
+      expect(audit.reason).toContain('snapshot ค่าบริการ')
+      expect((audit.afterData as Record<string, unknown>)['teamChangeReason']).toBe('ลูกหนี้ย้ายมาอยู่พื้นที่ทีมนี้')
+    } finally {
+      await db().$executeRawUnsafe(`UPDATE cases SET suggested_team_id = NULL WHERE suggested_team_id = '${OTHER_TEAM}'`)
+      await db().$executeRawUnsafe(`DELETE FROM teams WHERE id = '${OTHER_TEAM}'`)
+    }
+  })
+
   it('accept → approved + **snapshot ค่าบริการ** และไม่เปลี่ยนเมื่อบริษัทย้ายไปเทมเพลตใหม่ (`10` §9.2)', async () => {
     const caseId = await seedCase('SF-2026-2303', { withDocuments: true })
     await service.changeCaseStatus(actor, caseId, change({ action: 'review' }), { actor, meta })

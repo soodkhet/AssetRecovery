@@ -277,12 +277,17 @@ export async function changeCaseStatus(
       auditBefore.assignedTeamId = row.assignedTeamId
       auditAfter.assignedTeamId = confirmedTeamId
       auditAfter.teamChanged = teamChanged
+      // mytester B-02 — เหตุผลการเปลี่ยนทีมต้องอยู่ใน audit (เดิมช่อง reason ถูกใช้กับข้อความ snapshot ค่าบริการ)
+      if (teamChanged) auditAfter.teamChangeReason = teamChangeReason
 
       // **snapshot ค่าบริการตอน approved** (`10` §9.2) — ตัวเลขจริงลงที่เคส ไม่ใช่แค่ template_id
       Object.assign(data, serviceFeeSnapshotData(template))
       Object.assign(auditBefore, serviceFeeSnapshotAudit(row))
       Object.assign(auditAfter, serviceFeeSnapshotData(template))
-      auditReason = auditReason ?? snapshotReason(template.templateName, template.templateVersion)
+      auditReason = joinAuditReasons(
+        teamChanged ? `เปลี่ยนทีมจากที่ระบบเสนอ: ${teamChangeReason}` : null,
+        auditReason ?? snapshotReason(template.templateName, template.templateVersion),
+      )
     }
   }
 
@@ -456,6 +461,12 @@ function serviceFeeSnapshotAudit(row: CaseDetailRow) {
  * แต่ `38` ไม่ได้บังคับให้ผู้พิจารณากรอกเหตุผลตอน "รับเคส" — การ snapshot เป็นผลอัตโนมัติตามสเปค
  * จึงเติมเหตุผลเชิงระบบที่ระบุ template/version ที่ใช้ (ยัง trace กลับได้ว่าใช้เงื่อนไขไหน)
  */
+/** **pure** — รวมเหตุผลหลายส่วนของ audit แถวเดียว (ข้ามค่าว่าง) */
+export function joinAuditReasons(...parts: readonly (string | null)[]): string | null {
+  const kept = parts.map((part) => part?.trim() ?? '').filter((part) => part !== '')
+  return kept.length === 0 ? null : kept.join(' · ')
+}
+
 function snapshotReason(templateName: string, version: number): string {
   return `snapshot ค่าบริการอัตโนมัติตอนอนุมัติเคส — เทมเพลต "${templateName}" v${version}`
 }
