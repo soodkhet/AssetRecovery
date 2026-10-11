@@ -18,6 +18,7 @@ vi.mock('@/lib/auth/session', () => ({ requireSession: requireSessionMock }))
 const prismaMock = vi.hoisted(() => {
   const model = () => ({
     count: vi.fn(async () => 0),
+    findMany: vi.fn(async (): Promise<unknown[]> => []),
     groupBy: vi.fn(async () => []),
     findUnique: vi.fn(async (): Promise<unknown> => null),
   })
