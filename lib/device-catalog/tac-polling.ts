@@ -25,10 +25,17 @@ export function tacJobFinishedNotice(
 /**
  * mytester A-13 — ข้อความตารางว่างของรายการแบรนด์/TAC: ระหว่างมีงานนำเข้า ⇒ บอกว่ากำลังนำเข้า (ห้ามชวนกดอัปเดตซ้ำ)
  * · มีคำค้น/ตัวกรอง ⇒ ให้เปลี่ยนเงื่อนไข · ว่างจริง ⇒ ชวนอัปเดต/เพิ่มเอง
+ * · `catalogEmpty` = ในระบบยังไม่มีรายการชนิดนี้เลย ⇒ "ยังไม่มีข้อมูล" แม้ตัวกรองค่าเริ่มต้นจะเปิดอยู่
+ *   (เดิมรายการแบรนด์กรอง "แสดง" ไว้ตั้งแต่ต้น ฐานว่างจึงขึ้น "ไม่ตรงตัวกรอง" — mytester2 A2-02)
  */
-export function catalogEmptyDescription(input: { pendingJob: boolean; filtered: boolean; unit: string }): string {
+export function catalogEmptyDescription(input: {
+  pendingJob: boolean
+  filtered: boolean
+  unit: string
+  catalogEmpty?: boolean
+}): string {
   if (input.pendingJob) return 'กำลังนำเข้าฐาน TAC อยู่เบื้องหลัง — รายการจะขึ้นเองเมื่อเสร็จ (ครั้งแรกใช้เวลาไม่กี่นาที)'
-  if (input.filtered) return `ไม่พบ${input.unit}ที่ตรงกับคำค้นหรือตัวกรอง — ลองเปลี่ยนเงื่อนไข`
+  if (input.filtered && input.catalogEmpty !== true) return `ไม่พบ${input.unit}ที่ตรงกับคำค้นหรือตัวกรอง — ลองเปลี่ยนเงื่อนไข`
   return 'ยังไม่มีข้อมูล — กด “อัปเดตตอนนี้” ด้านบน หรือเพิ่มเอง'
 }
 

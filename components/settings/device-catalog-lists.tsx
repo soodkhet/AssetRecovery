@@ -25,6 +25,7 @@ import { toFieldErrors } from '@/lib/api/validation'
 import { DEVICE_CATALOG_SOURCE_LABEL, type DeviceAssetKind, type DeviceCatalogStatusCode } from '@/lib/device-catalog/catalog'
 import { deviceBrandCreateSchema, deviceModelCreateSchema } from '@/lib/device-catalog/schemas'
 import { catalogEmptyDescription } from '@/lib/device-catalog/tac-polling'
+import { isAwaitingRequest, listRequestKey } from '@/lib/ui/latest-request'
 import type {
   DeviceBrandDto,
   DeviceBrandListDto,
@@ -149,12 +150,15 @@ export function Pager({
 
 export function DeviceBrandList({
   pendingJob = false,
+  catalogEmpty = false,
   refreshKey,
   onChanged,
   onOpenModels,
 }: {
   /** มีงานนำเข้าฐาน TAC ค้าง — ตารางว่างต้องบอกว่ากำลังนำเข้า (mytester A-13) */
   pendingJob?: boolean
+  /** ในระบบยังไม่มีแบรนด์เลย — ตารางว่างบอก "ยังไม่มีข้อมูล" ไม่ใช่ "ไม่ตรงตัวกรอง" (mytester2 A2-02) */
+  catalogEmpty?: boolean
   refreshKey: number
   onChanged: () => void
   onOpenModels: (brand: DeviceBrandDto) => void
@@ -168,7 +172,6 @@ export function DeviceBrandList({
   const [visibility, setVisibility] = useState<Visibility>('visible')
   const [page, setPage] = useState(1)
   const [data, setData] = useState<DeviceBrandListDto>({ items: [], total: 0, page: 1, pageSize: PAGE_SIZE })
-  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<{ title: string; message: string } | null>(null)
   const [savingId, setSavingId] = useState<string | null>(null)
   const [addOpen, setAddOpen] = useState(false)
@@ -190,19 +193,28 @@ export function DeviceBrandList({
       setData(result.data ?? { items: [], total: 0, page: 1, pageSize: PAGE_SIZE })
       setError(null)
     }
-    setLoading(false)
   }, [])
+
+  // "กำลังโหลด" อนุมานจากคำขอ — ผลที่แสดงยังไม่ใช่ของคำขอปัจจุบัน (mytester2 A2-02: เดิมตั้ง loading เองก่อนเปลี่ยนค่า
+  // แล้วหวังให้ effect รัน · โหลดซ้ำจากหลายทางพร้อมกันจึงค้าง "กำลังโหลดข้อมูล..." ทั้งที่ข้อมูลมาแล้ว)
+  // โหลดใหม่เอง (หลังบันทึก/ลองใหม่) = เพิ่ม `searchNonce` ให้คีย์เปลี่ยน
+  const requestKey = listRequestKey([visibility, page, search, refreshKey, searchNonce])
+  const [loadedKey, setLoadedKey] = useState<string | null>(null)
+  const loading = isAwaitingRequest(loadedKey, requestKey)
+  const reload = (): void => setSearchNonce((value) => value + 1)
 
   useEffect(() => {
     let cancelled = false
     void (async () => {
       const result = await fetchItems()
-      if (!cancelled) apply(result)
+      if (cancelled) return
+      apply(result)
+      setLoadedKey(requestKey)
     })()
     return () => {
       cancelled = true
     }
-  }, [apply, fetchItems, refreshKey, searchNonce])
+  }, [apply, fetchItems, requestKey])
 
   async function setManual(brand: DeviceBrandDto, manualStatus: DeviceCatalogStatusCode | null): Promise<void> {
     setSavingId(brand.id)
@@ -213,8 +225,7 @@ export function DeviceBrandList({
         return
       }
       showToast({ tone: 'success', title: `บันทึกการแสดงแบรนด์ ${brand.name} แล้ว` })
-      setLoading(true)
-      apply(await fetchItems())
+      reload()
       onChanged()
     } finally {
       setSavingId(null)
@@ -237,8 +248,7 @@ export function DeviceBrandList({
       showToast({ tone: 'success', title: `เพิ่มแบรนด์ ${addName.trim()} แล้ว` })
       setAddOpen(false)
       setAddName('')
-      setLoading(true)
-      apply(await fetchItems())
+      reload()
       onChanged()
     } finally {
       setAdding(false)
@@ -252,7 +262,6 @@ export function DeviceBrandList({
           className="flex flex-wrap items-center gap-2"
           onSubmit={(event) => {
             event.preventDefault()
-            setLoading(true)
             setPage(1)
             setSearch(q.trim())
             // ค้นหาซ้ำคำเดิม ⇒ ค่าไม่เปลี่ยน effect ไม่รัน ตารางค้าง "กำลังโหลด" (preship R3-011) — บังคับโหลดใหม่
@@ -267,7 +276,6 @@ export function DeviceBrandList({
               aria-label="กรองการแสดง"
               value={visibility}
               onChange={(event) => {
-                setLoading(true)
                 setPage(1)
                 setVisibility(event.target.value as Visibility)
               }}
@@ -293,8 +301,7 @@ export function DeviceBrandList({
               conditionText={conditionText(visibility, search)}
               disabled={loading || error !== null}
               onDone={() => {
-                setLoading(true)
-                void fetchItems().then(apply)
+                reload()
                 onChanged()
               }}
             />
@@ -325,14 +332,13 @@ export function DeviceBrandList({
           loading={loading}
           error={error}
           isEmpty={data.items.length === 0}
-          emptyTitle="ไม่พบแบรนด์"
-          emptyDescription={catalogEmptyDescription({ pendingJob, filtered: visibility !== 'all' || search !== '', unit: 'แบรนด์' })}
+          emptyTitle={catalogEmpty && !pendingJob ? 'ยังไม่มีแบรนด์ในระบบ' : 'ไม่พบแบรนด์'}
+          emptyDescription={catalogEmptyDescription({ pendingJob, catalogEmpty, filtered: visibility !== 'all' || search !== '', unit: 'แบรนด์' })}
           onRetry={
             <Button
               variant="secondary"
               onClick={() => {
-                setLoading(true)
-                void fetchItems().then(apply)
+                reload()
               }}
             >
               ลองใหม่
@@ -391,7 +397,6 @@ export function DeviceBrandList({
         shown={data.items.length}
         loading={loading}
         onPage={(next) => {
-          setLoading(true)
           setPage(next)
         }}
       />
@@ -424,11 +429,16 @@ export function DeviceBrandList({
 
 export function DeviceModelList({
   brand,
+  pendingJob = false,
+  catalogEmpty = false,
   refreshKey,
   onClearBrand,
   onChanged,
 }: {
   brand: DeviceBrandDto | null
+  pendingJob?: boolean
+  /** ในระบบยังไม่มีรุ่นเลย — ตารางว่างบอก "ยังไม่มีข้อมูล" (mytester2 A2-02) */
+  catalogEmpty?: boolean
   refreshKey: number
   onClearBrand: () => void
   onChanged: () => void
@@ -442,7 +452,6 @@ export function DeviceModelList({
   const [assetKind, setAssetKind] = useState<'all' | DeviceAssetKind>('all')
   const [page, setPage] = useState(1)
   const [data, setData] = useState<DeviceModelListDto>({ items: [], total: 0, page: 1, pageSize: PAGE_SIZE })
-  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<{ title: string; message: string } | null>(null)
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
   const [saving, setSaving] = useState(false)
@@ -467,23 +476,31 @@ export function DeviceModelList({
       setError(null)
     }
     setSelected(new Set())
-    setLoading(false)
   }, [])
+
+  // "กำลังโหลด" อนุมานจากคำขอ — ผลที่แสดงยังไม่ใช่ของคำขอปัจจุบัน (mytester2 A2-02: เดิมตั้ง loading เองก่อนเปลี่ยนค่า
+  // แล้วหวังให้ effect รัน · โหลดซ้ำจากหลายทางพร้อมกันจึงค้าง "กำลังโหลดข้อมูล..." ทั้งที่ข้อมูลมาแล้ว)
+  // โหลดใหม่เอง (หลังบันทึก/ลองใหม่) = เพิ่ม `searchNonce` ให้คีย์เปลี่ยน
+  const requestKey = listRequestKey([visibility, assetKind, page, search, brandId, refreshKey, searchNonce])
+  const [loadedKey, setLoadedKey] = useState<string | null>(null)
+  const loading = isAwaitingRequest(loadedKey, requestKey)
 
   useEffect(() => {
     let cancelled = false
     void (async () => {
       const result = await fetchItems()
-      if (!cancelled) apply(result)
+      if (cancelled) return
+      apply(result)
+      setLoadedKey(requestKey)
     })()
     return () => {
       cancelled = true
     }
-  }, [apply, fetchItems, refreshKey, searchNonce])
+  }, [apply, fetchItems, requestKey])
 
-  async function reload(): Promise<void> {
-    setLoading(true)
-    apply(await fetchItems())
+  /** โหลดรายการนี้ใหม่ + แจ้งหน้าแม่ให้โหลดสรุปใหม่ */
+  function reload(): void {
+    setSearchNonce((value) => value + 1)
     onChanged()
   }
 
@@ -500,7 +517,7 @@ export function DeviceModelList({
         return
       }
       showToast({ tone: 'success', title: `บันทึกการแสดง ${result.data?.updated ?? 0} รุ่น` })
-      await reload()
+      reload()
     } finally {
       setSaving(false)
     }
@@ -530,7 +547,7 @@ export function DeviceModelList({
       showToast({ tone: 'success', title: `เพิ่มรุ่น ${brand.name} ${payload.name} แล้ว` })
       setAddOpen(false)
       setAddForm({ name: '', assetKind: 'smartphone', releaseYear: '' })
-      await reload()
+      reload()
     } finally {
       setSaving(false)
     }
@@ -563,7 +580,6 @@ export function DeviceModelList({
           className="flex flex-wrap items-center gap-2"
           onSubmit={(event) => {
             event.preventDefault()
-            setLoading(true)
             setPage(1)
             setSearch(q.trim())
             // ค้นหาซ้ำคำเดิม ⇒ ค่าไม่เปลี่ยน effect ไม่รัน ตารางค้าง "กำลังโหลด" (preship R3-011) — บังคับโหลดใหม่
@@ -583,7 +599,6 @@ export function DeviceModelList({
               aria-label="กรองประเภททรัพย์"
               value={assetKind}
               onChange={(event) => {
-                setLoading(true)
                 setPage(1)
                 setAssetKind(event.target.value as 'all' | DeviceAssetKind)
               }}
@@ -601,7 +616,6 @@ export function DeviceModelList({
               aria-label="กรองการแสดง"
               value={visibility}
               onChange={(event) => {
-                setLoading(true)
                 setPage(1)
                 setVisibility(event.target.value as Visibility)
               }}
@@ -635,7 +649,7 @@ export function DeviceModelList({
                 assetKindLabel: assetKind === 'all' ? null : (ASSET_TYPE_LABEL[assetKind] ?? assetKind),
               })}
               disabled={loading || error !== null || saving}
-              onDone={() => void reload()}
+              onDone={reload}
             />
             <span className="text-xs text-slate-500">เลือก {selected.size} รายการ:</span>
             <Button variant="secondary" size="sm" disabled={selected.size === 0 || saving} onClick={() => void setManual([...selected], 'active')}>
@@ -686,10 +700,15 @@ export function DeviceModelList({
           loading={loading}
           error={error}
           isEmpty={data.items.length === 0}
-          emptyTitle="ไม่พบรุ่น"
-          emptyDescription="ลองเปลี่ยนคำค้นหรือตัวกรอง"
+          emptyTitle={catalogEmpty && !pendingJob ? 'ยังไม่มีรุ่นในระบบ' : 'ไม่พบรุ่น'}
+          emptyDescription={catalogEmptyDescription({
+            pendingJob,
+            catalogEmpty,
+            filtered: visibility !== 'all' || assetKind !== 'all' || search !== '' || brandId !== null,
+            unit: 'รุ่น',
+          })}
           onRetry={
-            <Button variant="secondary" onClick={() => void reload()}>
+            <Button variant="secondary" onClick={reload}>
               ลองใหม่
             </Button>
           }
@@ -748,7 +767,6 @@ export function DeviceModelList({
         shown={data.items.length}
         loading={loading}
         onPage={(next) => {
-          setLoading(true)
           setPage(next)
         }}
       />

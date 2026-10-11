@@ -274,6 +274,7 @@ export function DeviceCatalogTab() {
       {view === 'brands' && (
         <DeviceBrandList
           pendingJob={summary?.pendingJob === true}
+          catalogEmpty={summary?.brandCount === 0}
           refreshKey={refreshKey}
           onChanged={changed}
           onOpenModels={(next) => {
@@ -283,7 +284,14 @@ export function DeviceCatalogTab() {
         />
       )}
       {view === 'models' && (
-        <DeviceModelList brand={brand} refreshKey={refreshKey} onClearBrand={() => setBrand(null)} onChanged={changed} />
+        <DeviceModelList
+          brand={brand}
+          pendingJob={summary?.pendingJob === true}
+          catalogEmpty={summary?.modelCount === 0}
+          refreshKey={refreshKey}
+          onClearBrand={() => setBrand(null)}
+          onChanged={changed}
+        />
       )}
       {view === 'tac' && <DeviceTacList pendingJob={summary?.pendingJob === true} refreshKey={refreshKey} onChanged={changed} />}
       {view === 'history' && <DeviceTacHistory refreshKey={refreshKey} />}

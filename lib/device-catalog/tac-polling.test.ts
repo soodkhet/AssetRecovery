@@ -27,6 +27,15 @@ describe('สถานะระหว่างนำเข้าฐาน TAC (m
     expect(catalogEmptyDescription({ pendingJob: false, filtered: false, unit: 'แบรนด์' })).toContain('อัปเดตตอนนี้')
   })
 
+  it('ฐานยังว่างทั้งระบบ ⇒ "ยังไม่มีข้อมูล" แม้ตัวกรองค่าเริ่มต้นเปิดอยู่ (mytester2 A2-02)', () => {
+    const text = catalogEmptyDescription({ pendingJob: false, filtered: true, catalogEmpty: true, unit: 'แบรนด์' })
+    expect(text).toContain('ยังไม่มีข้อมูล')
+    expect(text).not.toContain('ตรงกับคำค้น')
+    // ระหว่างนำเข้ายังบอก "กำลังนำเข้า" ก่อน · มีข้อมูลแล้วแต่ไม่ตรงตัวกรอง ⇒ ข้อความเดิม
+    expect(catalogEmptyDescription({ pendingJob: true, filtered: true, catalogEmpty: true, unit: 'รุ่น' })).toContain('กำลังนำเข้า')
+    expect(catalogEmptyDescription({ pendingJob: false, filtered: true, catalogEmpty: false, unit: 'รุ่น' })).toContain('ไม่พบรุ่นที่ตรง')
+  })
+
   it('นำเข้าสำเร็จล่าสุด: ระหว่างงานแรก ⇒ "กำลังนำเข้าครั้งแรก…" ไม่ใช่ "ยังไม่เคย"', () => {
     const fmt = (iso: string) => `F(${iso})`
     expect(tacImportedAtText({ pendingJob: true, tacImportedAt: null }, fmt)).toBe('กำลังนำเข้าครั้งแรก…')
