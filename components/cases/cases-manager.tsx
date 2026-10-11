@@ -19,7 +19,9 @@ import {
   Badge,
   Button,
   Card,
+  ConfirmModal,
   Input,
+  Modal,
   PageHeader,
   RefText,
   Select,
@@ -39,6 +41,14 @@ import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
 import { THAI_PROVINCES } from '@/lib/address/thai-address'
 import { isCaseEditable, readinessGapText } from '@/lib/cases/case'
 import { caseRowActions, caseRowOpensReview, type CaseActionButton } from '@/lib/cases/case-actions'
+import {
+  BULK_SUBMIT_ACTION,
+  bulkSubmitSummary,
+  bulkSubmittableIds,
+  runBulkSubmit,
+  type BulkSubmitAttempt,
+  type BulkSubmitResult,
+} from '@/lib/cases/bulk-submit'
 import { CASE_EDIT_CAPABILITIES, CASE_WRITE_CAPABILITY } from '@/lib/cases/permissions'
 import { CASE_STATUSES } from '@/lib/cases/state-machine'
 import {
@@ -103,6 +113,7 @@ export function CasesManager({
   initialDetailCaseId?: string | null
 }) {
   const { showToast } = useToast()
+  const { can } = usePermission()
 
   const [result, setResult] = useState<CaseListResultDto | null>(null)
   const [loading, setLoading] = useState(true)
@@ -157,6 +168,11 @@ export function CasesManager({
   const [importOpen, setImportOpen] = useState(false)
   /** เคสที่กำลังเปลี่ยนสถานะจากปุ่มบนแถว (ส่งตรวจสอบ / กลับไปแก้ไข) */
   const [rowBusyId, setRowBusyId] = useState<string | null>(null)
+  /** staging E-029 — ส่งตรวจหลายเคส: ที่เลือก · กล่องยืนยัน · ความคืบหน้า · ผลต่อแถว */
+  const [bulkSelected, setBulkSelected] = useState<ReadonlySet<string>>(() => new Set())
+  const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false)
+  const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null)
+  const [bulkResults, setBulkResults] = useState<BulkSubmitResult[] | null>(null)
   /** เปลี่ยนทุกครั้งที่เปิดฟอร์ม — บังคับให้ modal เริ่มจากค่าเปล่า/ค่าเคสล่าสุดเสมอ (กันค่าค้างจากรอบก่อน) */
   const [formKey, setFormKey] = useState(0)
 
@@ -302,6 +318,59 @@ export function CasesManager({
   const items = result?.items ?? []
   const total = result?.total ?? 0
   const lastPage = Math.max(1, Math.ceil(total / PAGE_SIZE))
+  // staging E-029 / mytester B-01 — ติ๊กเลือกได้เฉพาะแถวที่ปุ่มส่งตรวจแสดง · ที่เลือกไว้แต่ไม่อยู่ในหน้านี้แล้วไม่นับ
+  const submittableIds = bulkSubmittableIds(items, (capability) => can('manage', capability))
+  const selectedIds = submittableIds.filter((id) => bulkSelected.has(id))
+  const allSubmittableSelected = submittableIds.length > 0 && selectedIds.length === submittableIds.length
+  const showSelect = submittableIds.length > 0
+
+  function toggleSelected(id: string): void {
+    setBulkSelected((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  async function submitSelected(): Promise<void> {
+    const targets = items
+      .filter((item) => selectedIds.includes(item.id))
+      .map((item) => ({ id: item.id, caseRef: item.caseRef }))
+    setBulkProgress({ done: 0, total: targets.length })
+    const results = await runBulkSubmit(
+      targets,
+      async (target): Promise<BulkSubmitAttempt> => {
+        const response = await callApi<CaseStatusChangeResultDto>(
+          apiPath('case.changeStatus', { id: target.id }),
+          jsonRequest('PATCH', { action: BULK_SUBMIT_ACTION }),
+        )
+        if (response.error !== undefined || response.data === undefined) {
+          return {
+            ok: false,
+            message:
+              readinessGapText(response.error?.payload) ?? response.error?.message ?? response.error?.title ?? 'ส่งตรวจไม่สำเร็จ',
+          }
+        }
+        return {
+          ok: true,
+          statusLabel: caseStatusLabel(response.data.case.status),
+          warning: response.data.case.activeAssetImeiWarning,
+        }
+      },
+      (done, count) => setBulkProgress({ done, total: count }),
+    )
+    setBulkProgress(null)
+    setBulkConfirmOpen(false)
+    setBulkSelected(new Set())
+    setBulkResults(results)
+    showToast({
+      tone: results.every((result) => result.ok) ? 'success' : 'warning',
+      title: bulkSubmitSummary(results),
+    })
+    setLoading(true)
+    await reload()
+  }
 
   return (
     <>
@@ -390,11 +459,42 @@ export function CasesManager({
           </div>
         </div>
 
+        {showSelect && !loading && error === null && (
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs text-slate-600">
+            <span>
+              {selectedIds.length === 0
+                ? `ติ๊กเลือกเคสร่างเพื่อส่งตรวจพร้อมกัน (ส่งได้ ${submittableIds.length} เคสในหน้านี้)`
+                : `เลือกแล้ว ${selectedIds.length} เคส`}
+            </span>
+            <div className="flex gap-2">
+              {selectedIds.length > 0 && (
+                <Button variant="ghost" size="sm" onClick={() => setBulkSelected(new Set())}>
+                  ล้างที่เลือก
+                </Button>
+              )}
+              <Button size="sm" disabled={selectedIds.length === 0} onClick={() => setBulkConfirmOpen(true)}>
+                ส่งตรวจที่เลือก ({selectedIds.length})
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* จอ md ขึ้นไป = ตาราง */}
         <div className="hidden md:block">
           <Table>
             <THead>
               <Tr>
+                {showSelect && (
+                  <Th className="w-8">
+                    <input
+                      type="checkbox"
+                      aria-label="เลือกเคสร่างทั้งหมดในหน้านี้"
+                      checked={allSubmittableSelected}
+                      onChange={() => setBulkSelected(allSubmittableSelected ? new Set() : new Set(submittableIds))}
+                      className="focus-ring h-4 w-4 rounded border-slate-300"
+                    />
+                  </Th>
+                )}
                 <Th>เลขที่สัญญา / รอบ</Th>
                 <Th>ไฟแนนซ์ / ช่องทาง</Th>
                 <Th>ลูกหนี้ / จังหวัด</Th>
@@ -408,7 +508,7 @@ export function CasesManager({
             </THead>
             {/* `TableState` เรนเดอร์ `<tbody>` ของตัวเอง — วางเป็นพี่น้องกับ `TBody` */}
             <TableState
-              colSpan={9}
+              colSpan={showSelect ? 10 : 9}
               loading={loading}
               error={error === null ? null : { title: error.title, message: error.message }}
               isEmpty={items.length === 0}
@@ -431,6 +531,19 @@ export function CasesManager({
                 error === null &&
                 items.map((item) => (
                   <Tr key={item.id}>
+                    {showSelect && (
+                      <Td>
+                        {submittableIds.includes(item.id) && (
+                          <input
+                            type="checkbox"
+                            aria-label={`เลือกส่งตรวจ ${item.caseRef}`}
+                            checked={bulkSelected.has(item.id)}
+                            onChange={() => toggleSelected(item.id)}
+                            className="focus-ring h-4 w-4 rounded border-slate-300"
+                          />
+                        )}
+                      </Td>
+                    )}
                     <Td>
                       <RefText className="font-bold">{item.caseRef}</RefText>
                       <div className="mt-0.5 text-[11px] text-slate-500">รอบที่ {item.trackingRound}</div>
@@ -502,9 +615,20 @@ export function CasesManager({
             items.map((item) => (
               <div key={item.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                 <div className="mb-2 flex items-start justify-between gap-2">
+                  <div className="flex items-start gap-2">
+                    {submittableIds.includes(item.id) && (
+                      <input
+                        type="checkbox"
+                        aria-label={`เลือกส่งตรวจ ${item.caseRef}`}
+                        checked={bulkSelected.has(item.id)}
+                        onChange={() => toggleSelected(item.id)}
+                        className="focus-ring mt-0.5 h-5 w-5 rounded border-slate-300"
+                      />
+                    )}
                   <div>
                     <RefText className="font-bold">{item.caseRef}</RefText>
                     <div className="text-[11px] text-slate-500">รอบที่ {item.trackingRound}</div>
+                  </div>
                   </div>
                   <StatusBadge group={caseStatusBadgeGroup(item.status)} label={caseStatusLabel(item.status)} />
                 </div>
@@ -580,6 +704,55 @@ export function CasesManager({
           </div>
         )}
       </Card>
+
+      <ConfirmModal
+        open={bulkConfirmOpen}
+        onClose={() => {
+          if (bulkProgress === null) setBulkConfirmOpen(false)
+        }}
+        onConfirm={() => void submitSelected()}
+        title={`ส่งตรวจ ${selectedIds.length} เคส`}
+        description="ระบบส่งทีละเคส เคสที่ข้อมูลหรือเอกสารยังไม่ครบจะไม่ถูกส่ง และแจ้งรายการที่ขาดให้ทีละเคส"
+        confirmLabel={
+          bulkProgress === null ? `ยืนยันส่งตรวจ ${selectedIds.length} เคส` : `กำลังส่ง ${bulkProgress.done}/${bulkProgress.total}`
+        }
+        confirmVariant="primary"
+        loading={bulkProgress !== null}
+      >
+        <ul className="max-h-48 space-y-0.5 overflow-y-auto text-xs text-slate-700">
+          {items
+            .filter((item) => selectedIds.includes(item.id))
+            .map((item) => (
+              <li key={item.id}>
+                <RefText>{item.caseRef}</RefText> · {item.debtorName ?? '—'}
+              </li>
+            ))}
+        </ul>
+      </ConfirmModal>
+
+      <Modal
+        open={bulkResults !== null}
+        onClose={() => setBulkResults(null)}
+        title={bulkResults === null ? 'ผลการส่งตรวจ' : bulkSubmitSummary(bulkResults)}
+        footer={
+          <Button variant="secondary" onClick={() => setBulkResults(null)}>
+            ปิดหน้าต่าง
+          </Button>
+        }
+      >
+        <ul className="space-y-2 text-xs">
+          {(bulkResults ?? []).map((row) => (
+            <li key={row.id} className="rounded-lg border border-slate-200 p-2">
+              <div className="flex items-center justify-between gap-2">
+                <RefText className="font-bold">{row.caseRef}</RefText>
+                <StatusBadge group={row.ok ? 'success' : 'critical'} label={row.ok ? 'ส่งตรวจแล้ว' : 'ส่งไม่สำเร็จ'} />
+              </div>
+              <div className={row.ok ? 'mt-1 text-slate-500' : 'mt-1 text-red-700'}>{row.message}</div>
+              {row.warning !== null && <div className="mt-1 text-amber-700">{row.warning}</div>}
+            </li>
+          ))}
+        </ul>
+      </Modal>
 
       <CaseFormModal
         key={formKey}
