@@ -349,6 +349,39 @@ suite('ใบเบิกค่าที่พัก "ไม่มีใบเ�
       'HOTEL_CLAIM_FIELD_REQUIRED',
     )
   })
+
+  it('มติชั่วคราว M2 (DO-02): แผนทีมบังคับใบเสร็จค่าที่พัก ⇒ ใช้ใบรับรองแทนใบเสร็จไม่ได้ · ปิดค่าตั้ง = ใช้ได้', async () => {
+    const planId = '00000000-0000-4000-8000-00000000c7d2'
+    await db().$executeRawUnsafe(`
+      INSERT INTO compensation_plans
+        (id, organization_id, name, side, fuel_mode, fuel_rate_per_km_satang, allowance_satang, commission_satang,
+         no_success_fee_satang, hotel_receipt_required, version, effective_from, is_current, created_by)
+      VALUES ('${planId}', '${ORG_ID}', 'แผน M2', 'outsource', 'PER_KM', 300, 20000, 50000, 10000, true, 1,
+              DATE '2026-01-01', true, '${FINANCE_ID}')
+    `)
+    await db().$executeRawUnsafe(`UPDATE teams SET compensation_plan_id = '${planId}' WHERE id = '${TEAM_ID}'`)
+    const claim = (amountSatang: number) => ({
+      expenseDate: new Date('2026-10-06T00:00:00Z'),
+      amountSatang,
+      receiptFileUrl: null,
+      substituteReceipt: { lines: [line(amountSatang)] },
+      sharedWithUserId: null,
+      note: null,
+    })
+    try {
+      const error = await fieldExpenses.submitHotelClaim(agent, claim(3_000), { actor: agent, meta }).catch((e: unknown) => e)
+      expect(codeOf(error)).toBe('HOTEL_CLAIM_FIELD_REQUIRED')
+      expect((error as { userMessage?: string }).userMessage).toContain('ใช้ใบรับรองแทนใบเสร็จไม่ได้')
+
+      await db().$executeRawUnsafe(`UPDATE compensation_plans SET hotel_receipt_required = false WHERE id = '${planId}'`)
+      const created = await fieldExpenses.submitHotelClaim(agent, claim(3_100), { actor: agent, meta })
+      expect(created.substituteReceipt).toMatchObject({ status: 'pending_signature', totalSatang: 3_100 })
+    } finally {
+      await db().$executeRawUnsafe(`UPDATE teams SET compensation_plan_id = NULL WHERE id = '${TEAM_ID}'`)
+      await db().$executeRawUnsafe(`UPDATE expenses SET comp_plan_id = NULL WHERE comp_plan_id = '${planId}'`)
+      await db().$executeRawUnsafe(`DELETE FROM compensation_plans WHERE id = '${planId}'`)
+    }
+  })
 })
 
 suite('อัปโหลดฉบับเซ็น + ยามอนุมัติ', () => {

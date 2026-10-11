@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { FieldError } from '@/lib/field/errors'
 import {
   assertHotelClaimWithinCap,
+  assertHotelReceiptPolicy,
   hotelCapExceededMessage,
   hotelClaimCapSatang,
   isHotelClaimOverCap,
@@ -222,5 +223,17 @@ describe('ใบเสร็จค่าที่พักในนามบร�
   it('ป้ายแสดงผล', () => {
     expect(receiptInCompanyNameText(true)).toBe('ใบเสร็จในนามบริษัท')
     expect(receiptInCompanyNameText(false)).toBe('ใบเสร็จไม่ได้ออกในนามบริษัท')
+  })
+})
+
+describe('assertHotelReceiptPolicy (มติชั่วคราว M2 DO-02)', () => {
+  it('แผนบังคับใบเสร็จ + ใช้ใบรับรองแทน ⇒ HOTEL_CLAIM_FIELD_REQUIRED', () => {
+    expect(() => assertHotelReceiptPolicy({ hasSubstituteReceipt: true, receiptRequired: true })).toThrow(
+      expect.objectContaining({ code: 'HOTEL_CLAIM_FIELD_REQUIRED' }),
+    )
+  })
+  it('แผนไม่บังคับ หรือแนบใบเสร็จจริง ⇒ ผ่าน', () => {
+    expect(() => assertHotelReceiptPolicy({ hasSubstituteReceipt: true, receiptRequired: false })).not.toThrow()
+    expect(() => assertHotelReceiptPolicy({ hasSubstituteReceipt: false, receiptRequired: true })).not.toThrow()
   })
 })
