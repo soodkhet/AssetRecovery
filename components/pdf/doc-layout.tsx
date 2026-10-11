@@ -170,7 +170,8 @@ const PRINTABLE_ASCII = /^[\x20-\x7E]*$/
  * ข้อความที่มีอักษรอื่นปนใช้ฟอนต์ไทยตามปกติ ⇒ ไม่มีทางพิมพ์อักษรหาย
  */
 export function monoStyle(value: string): Style {
-  return PRINTABLE_ASCII.test(value) ? { fontFamily: MONO_FONT, fontSize: 8.6 } : {}
+  // `\n` จาก `wrapReference()` (แบ่งเลขยาวเป็นหลายบรรทัด) ไม่ทำให้หลุดจากฟอนต์ mono
+  return PRINTABLE_ASCII.test(value.replaceAll('\n', '')) ? { fontFamily: MONO_FONT, fontSize: 8.6 } : {}
 }
 
 export function Mono({ children, style }: { children: string; style?: Style | Style[] }): React.JSX.Element {

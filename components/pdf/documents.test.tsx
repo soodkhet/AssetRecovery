@@ -352,6 +352,15 @@ describe('ใบส่งมอบทรัพย์ — ตามแบบ (ม
     expect(count(text, 'IMEI / Serial')).toBe(pages)
     expect(text).toContain('45 เครื่อง')
   })
+
+  it('mytester WH-01 — เลขสัญญายาวไม่ล้นคอลัมน์ (ขึ้นบรรทัดหลังขีด)', async () => {
+    const base = lot(4)
+    const longRefs = { ...base, assets: base.assets.map((item, index) => ({ ...item, caseRef: `MTJ-HP-6810-MT1011-${String(index + 1).padStart(2, '0')}` })) }
+    const doc = buildHandoverDoc(longRefs, HANDOVER_ISSUER, HANDOVER_RECIPIENT)
+    const pdf = await renderHandoverNote(doc, LETTERHEAD)
+    save('03c-handover-note-long-case-ref', pdf)
+    expect(pdf.subarray(0, 5).toString()).toBe('%PDF-')
+  })
 })
 
 // ── ใบสำคัญจ่าย / สลิป / สรุปรอบจ่าย ───────────────────────────────────

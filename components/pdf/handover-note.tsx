@@ -22,6 +22,7 @@ import type { DocLetterhead } from '@/lib/organization/profile'
 import type { HandoverDocModel } from '@/lib/warehouse/handover-doc'
 import { EMPTY_DOC_VALUE } from '@/lib/warehouse/handover-doc'
 import { NO_DOC_TEMPLATE, TEMPLATE_COUNTERPARTY_SLOT, type DocTemplateRender } from '@/lib/settings/tax-doc-template'
+import { wrapReference } from '@/lib/format/ref-wrap'
 
 /**
  * **ใบส่งมอบสินทรัพย์คืน** (`44` §6.4 · เลย์เอาต์ตามแบบที่อนุมัติ มติ PO U100/U101)
@@ -32,6 +33,9 @@ import { NO_DOC_TEMPLATE, TEMPLATE_COUNTERPARTY_SLOT, type DocTemplateRender } f
  */
 
 const SIGNERS: readonly string[] = ['ผู้ส่งมอบ', 'ผู้รับมอบ']
+
+/** ตัวอักษร Courier ต่อบรรทัดที่พอดีคอลัมน์เลขสัญญา (20% ของ A4) — เกินนี้ขึ้นบรรทัดหลัง `-`/`/` (mytester WH-01) */
+const CASE_REF_LINE_CHARS = 16
 
 const COLUMNS: readonly DocColumn[] = [
   { label: 'ลำดับ', width: '7%', align: 'center' },
@@ -95,7 +99,7 @@ function HandoverCopy({
             columns={COLUMNS}
             cells={[
               { main: String(row.no) },
-              { main: row.caseRef, mono: true, detail: row.debtorName },
+              { main: wrapReference(row.caseRef, CASE_REF_LINE_CHARS), mono: true, detail: row.debtorName },
               { main: row.deviceDesc, detail: row.colorCapacityMismatch },
               {
                 main: row.identifier,
