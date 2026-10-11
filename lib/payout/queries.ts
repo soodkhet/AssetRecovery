@@ -277,7 +277,8 @@ function toItemDto(row: ItemRow): PayoutBatchItemDto {
     source,
     sourceId: (row.expenseId ?? row.advanceId) as string,
     payeeId: row.payeeId,
-    payeeName: row.payee.user.fullName,
+    // mytester2 F2-02 — นิติบุคคลแสดงชื่อตามหนังสือรับรอง (ชื่อเดียวกับ PDF สรุปรอบ/สลิป/50 ทวิ)
+    payeeName: payeeLegalName({ payeeType: row.payee.payeeType, legalName: row.payee.legalName, userFullName: row.payee.user.fullName }),
     teamName: row.payee.user.team?.name ?? null,
     description:
       source === 'expense'

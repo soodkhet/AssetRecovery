@@ -167,7 +167,7 @@ async function reset(): Promise<void> {
   await tx.$executeRawUnsafe(`DELETE FROM advances WHERE organization_id = '${ORG_ID}'`)
   // คืนทั้ง `is_verified` และ `tax_profile_id` — เทสต์ WHT fallback ถอด Tax Profile ออกชั่วคราว
   await tx.$executeRawUnsafe(
-    `UPDATE payee_profiles SET is_verified = true, tax_profile_id = '${TAX_PROFILE_ID}' WHERE organization_id = '${ORG_ID}'`,
+    `UPDATE payee_profiles SET is_verified = true, tax_profile_id = '${TAX_PROFILE_ID}', payee_type = 'individual', legal_name = NULL WHERE organization_id = '${ORG_ID}'`,
   )
   await tx.$executeRawUnsafe(
     `UPDATE bank_file_formats SET test_status = 'passed' WHERE id = '${FORMAT_OK_ID}'`,
@@ -376,6 +376,17 @@ suite('batch builder (`17` §9)', () => {
     expect(batch.itemCount).toBe(3)
     expect(batch.whtSatang).toBe(0)
     expect(batch.netSatang).toBe(370_000)
+  })
+
+  it('mytester2 F2-02 — รายการในรอบของผู้รับนิติบุคคลแสดงชื่อตามหนังสือรับรอง (legal name) ไม่ใช่ชื่อผู้ใช้', async () => {
+    await db().$executeRawUnsafe(
+      `UPDATE payee_profiles SET payee_type = 'corporate', legal_name = 'บริษัท สมพรรับเหมาติดตาม จำกัด' WHERE id = '${PAYEE_OUT_ID}'`,
+    )
+    await seedExpense({ id: '00000000-0000-4000-8000-0000000034ca', payeeId: PAYEE_OUT_ID, grossSatang: 500_000 })
+
+    const { batch } = await payout.createPayoutBatch(ctx, { side: 'outsource', cutoffDate: CUTOFF, name: null })
+
+    expect(batch.items[0]?.payeeName).toBe('บริษัท สมพรรับเหมาติดตาม จำกัด')
   })
 
   it('เงินทดรองเข้ารอบจ่ายได้ และไม่ถูกหัก WHT (A4 — ไม่ใช่เงินได้)', async () => {

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { PayoutError } from '@/lib/payout/errors'
 import { payoutBatchAmountSplit } from '@/lib/payout/payout'
 import {
+  ADVANCE_PAID_LINE_LABEL,
   assertPayoutDocReady,
   assertVoucherReady,
   buildPaymentVoucherDocs,
@@ -484,5 +485,20 @@ describe('สรุปรอบจ่าย: แยกเงินทดรอ�
     const doc = buildPayoutSummaryDoc(batch([item()]), ISSUER, new Date('2026-10-11T03:00:00Z'), payees)
     expect(doc.rows[0]?.payeeName).toBe('บริษัท สมพรรับเหมาติดตาม จำกัด')
     expect(buildPayoutSummaryDoc(batch([item()]), ISSUER).rows[0]?.payeeName).toBe('ประยุทธ์ บุญมี')
+  })
+
+  it('mytester2 F2-02 — สลิป/ใบสำคัญจ่าย: "รวมค่าตอบแทนก่อนหักภาษี" ไม่รวมเงินทดรอง · เงินทดรองแยกบรรทัด · ยอดโอนเท่าเดิม', () => {
+    const [slip] = buildPayslipDocs(batch([item(), advance]), ISSUER)
+    expect(slip?.grossText).toBe('8,500.00')
+    expect(slip?.advancePaidLine).toEqual({ label: ADVANCE_PAID_LINE_LABEL, amountText: '4,000.00' })
+    expect(slip?.netText).toBe('12,245.00')
+
+    const [voucher] = buildPaymentVoucherDocs(batch([item(), advance]), ISSUER)
+    expect(voucher?.grossText).toBe('8,500.00')
+    expect(voucher?.advancePaidLine?.amountText).toBe('4,000.00')
+    expect(voucher?.netText).toBe('12,245.00')
+
+    // ไม่มีเงินทดรอง ⇒ ไม่มีบรรทัด
+    expect(buildPayslipDocs(batch([item()]), ISSUER)[0]?.advancePaidLine).toBeNull()
   })
 })

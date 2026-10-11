@@ -81,6 +81,10 @@ export function PaymentVoucherPage({ doc, letterhead }: { doc: PaymentVoucherDoc
         {doc.payerTaxLine === null ? null : (
           <SummaryRow columns={COLUMNS} tone="sub" label={doc.payerTaxLine.label} value={doc.payerTaxLine.amountText} />
         )}
+        {/* mytester2 F2-02 — เงินทดรองจ่ายไม่ใช่เงินได้: แยกจากค่าตอบแทน บวกเข้ายอดโอน */}
+        {doc.advancePaidLine === null ? null : (
+          <SummaryRow columns={COLUMNS} label={doc.advancePaidLine.label} value={doc.advancePaidLine.amountText} />
+        )}
         {doc.offsetLines.map((line) => (
           <SummaryRow
             key={line.label}
