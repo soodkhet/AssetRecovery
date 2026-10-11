@@ -42,6 +42,7 @@
 | v3.25 | 11/10/2569 | **staging E-016** — §6.10 เพิ่ม `POST /api/accounting/credit-notes/awaiting/:adjustmentId/waive` (`31` §14) · `AwaitingCreditNoteDto` + `billOutstandingSatang`/`canWaive` · `AdjustmentDto` + `targetBillFullyPaid`/`creditNoteWaivedAt`/`creditNoteWaiveReason` |
 | v3.26 | 11/10/2569 | **staging E-057/E-064/E-069** — §6.16 เพิ่ม `POST /api/accounting/periods/:id/readiness` (บันทึกผลตรวจ) · `AccountingPeriodDto` + `lastReadinessPassedCount`/`lastReadinessTotalCount` · `MatchCandidateDto` + `remainingAltAmountSatang`/`alreadyMatchedWith` |
 | v3.27 | 11/10/2569 | **staging E-049** — §6.6 เพิ่ม `GET /api/payout-batches/preview` (สรุปจำนวน/ยอดรายการที่วันตัดรอบนี้จะดึงเข้ารอบ ก่อนกดสร้าง · สิทธิ์เดียวกับสร้างรอบ) |
+| v3.28 | 11/10/2569 | **mytester G-05** — §6.7 เพิ่ม `GET /api/billing-batches/preview?companyId=&cutoffDate=` (สรุปจำนวน/ยอดรายได้ที่วันตัดรอบนี้จะดึงเข้ารอบวางบิล + รายได้ที่อยู่หลังวันตัดรอบ · manage `manage_billing` · อ่านอย่างเดียว ไม่ลง audit) |
 
 ขอบเขตเอกสารนี้: รวม API Endpoint ทั้งหมดของโมดูล Finance/Accounting เป็นรายการเดียว จัดกลุ่มตาม resource เพื่อให้ backend implement ตาม REST convention เดียวกันทั้งระบบ
 
@@ -165,6 +166,7 @@ POST   /api/payout-batches/:id/cancel                (v3.10 — ยกเลิ�
 GET    /api/revenues
 GET    /api/billing-batches
 POST   /api/billing-batches
+GET    /api/billing-batches/preview?companyId=&cutoffDate=   (mytester G-05 — สรุปรายได้/ยอดที่จะดึงเข้ารอบ + ยอดหลังวันตัดรอบ · manage_billing · อ่านอย่างเดียว)
 GET    /api/billing-batches/:id                         (v3.3 — รายละเอียดรอบ + รายการรายได้ในรอบ)
 DELETE /api/billing-batches/:id                         (v3.3 — ลบได้เฉพาะ draft · `19` §10)
 PATCH  /api/billing-batches/:id/send

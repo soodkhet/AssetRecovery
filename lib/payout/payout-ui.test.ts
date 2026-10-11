@@ -4,6 +4,8 @@ import {
   payoutWhtThresholdNote,
   payoutWhtCertificateLinks,
   canCancelPayout,
+  defaultPayoutBankAccountId,
+  paymentFileBankMismatchText,
   canCompletePayout,
   canDownloadPaymentFile,
   canGeneratePaymentFile,
@@ -159,5 +161,33 @@ describe('payoutWhtThresholdNote — staging E-054', () => {
   it('ข้อความตามวิธีนับที่ตั้งไว้', () => {
     expect(payoutWhtThresholdNote('monthly_cumulative')).toContain('ทั้งเดือน')
     expect(payoutWhtThresholdNote('per_batch')).toContain('ในรอบจ่ายนี้เท่านั้น')
+  })
+})
+
+describe('หน้าต่างสร้างไฟล์โอน — บัญชีจ่ายเริ่มต้น/เตือนธนาคารไม่ตรง (mytester F-06)', () => {
+  const kbank = { id: 'kbank', isPrimary: true, paymentFileFormatId: null }
+  const scb = { id: 'scb', isPrimary: false, paymentFileFormatId: 'fmt-scb' }
+
+  it('เลือกบัญชีที่ผูกรูปแบบไฟล์โอนก่อนบัญชีหลักที่ไม่ผูก', () => {
+    expect(defaultPayoutBankAccountId([kbank, scb], null)).toBe('scb')
+  })
+
+  it('สร้างซ้ำ ⇒ ใช้บัญชีเดิมของรอบ', () => {
+    expect(defaultPayoutBankAccountId([kbank, scb], 'kbank')).toBe('kbank')
+    // บัญชีเดิมถูกปิดใช้แล้ว ⇒ กลับไปกติกาปกติ
+    expect(defaultPayoutBankAccountId([kbank, scb], 'gone')).toBe('scb')
+  })
+
+  it('ไม่มีบัญชีผูกรูปแบบ ⇒ บัญชีหลัก · ไม่มีบัญชีเลย ⇒ ค่าว่าง', () => {
+    expect(defaultPayoutBankAccountId([{ ...scb, paymentFileFormatId: null }, kbank], null)).toBe('kbank')
+    expect(defaultPayoutBankAccountId([], null)).toBe('')
+  })
+
+  it('เตือนเมื่อธนาคารของรูปแบบไฟล์ไม่ตรงบัญชี (ไม่สนคำว่า "ธนาคาร" นำหน้า)', () => {
+    expect(paymentFileBankMismatchText({ bankName: 'ธนาคารไทยพาณิชย์' }, { bankName: 'ธนาคารกสิกรไทย' })).toContain(
+      'ธนาคารอาจไม่รับไฟล์',
+    )
+    expect(paymentFileBankMismatchText({ bankName: 'ไทยพาณิชย์' }, { bankName: 'ธนาคารไทยพาณิชย์' })).toBeNull()
+    expect(paymentFileBankMismatchText(undefined, { bankName: 'ธนาคารกสิกรไทย' })).toBeNull()
   })
 })

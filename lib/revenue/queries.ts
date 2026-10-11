@@ -34,12 +34,14 @@ import {
   billingPeriodLabel,
   resolveBillingStatusAfterReceipt,
   summarizeBillingBatch,
+  summarizeBillingPreview,
   toBangkokDateOnly,
 } from '@/lib/revenue/revenue'
 import type {
   BillingBatchCreateInput,
   BillingBatchDeleteInput,
   BillingBatchListQuery,
+  BillingBatchPreviewQuery,
   BillingBatchSendInput,
   ArAgingQuery,
   RevenueListQuery,
@@ -49,6 +51,7 @@ import type {
   ArAgingReportDto,
   BillingBatchDetailDto,
   BillingBatchDto,
+  BillingBatchPreviewDto,
   RevenueDto,
 } from '@/lib/revenue/types'
 import { cycleCoversCompany, resolveDueDate } from '@/lib/settings/cycles'
@@ -955,5 +958,40 @@ export async function applyBillingReceipt(input: {
       whtWithheldByCustomerSatang: whtSatang,
       bankFeeWrittenOffSatang: bankFeeSatang,
     }),
+  }
+}
+
+// ── GET /api/billing-batches/preview (staging E-049 · mytester G-05) ─────────
+
+/**
+ * สรุปก่อนกดสร้างรอบวางบิล — รายได้ `ready_for_billing` ที่ยังไม่ผูกรอบของบริษัท แยก "ถึงวันตัดรอบ" (จะถูกดึง)
+ * กับ "หลังวันตัดรอบ" · ตัวคัดเดียวกับ `createBillingBatch()` · อ่านอย่างเดียว ไม่ล็อก ไม่ audit
+ */
+export async function previewBillingBatch(user: SessionUser, input: BillingBatchPreviewQuery): Promise<BillingBatchPreviewDto> {
+  const company = await prisma.financeCompany.findFirst({
+    where: { id: input.companyId, organizationId: user.organizationId, deletedAt: null, ...scopeWhere(user) },
+    select: { id: true },
+  })
+  if (company === null) throw new FinanceCompanyError('COMPANY_NOT_FOUND', { detail: `company=${input.companyId}` })
+
+  const rows = await prisma.revenue.findMany({
+    where: {
+      organizationId: user.organizationId,
+      companyId: company.id,
+      deletedAt: null,
+      status: 'ready_for_billing',
+      billingBatchId: null,
+    },
+    select: { revenueDate: true, grossSatang: true, vatSatang: true, totalSatang: true },
+  })
+  const preview = summarizeBillingPreview(rows, input.cutoffDate)
+  const limit = input.cutoffDate.getTime()
+  const laterDates = rows.filter((row) => row.revenueDate.getTime() > limit).map((row) => row.revenueDate.getTime())
+  return {
+    revenueCount: preview.billable.revenueCount,
+    totalSatang: preview.billable.totalSatang,
+    laterRevenueCount: preview.later.revenueCount,
+    laterTotalSatang: preview.later.totalSatang,
+    laterLatestRevenueDate: laterDates.length === 0 ? null : toDateOnlyIso(new Date(Math.max(...laterDates))),
   }
 }

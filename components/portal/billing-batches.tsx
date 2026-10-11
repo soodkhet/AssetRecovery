@@ -28,6 +28,7 @@ import {
   filterPortalBillingRows,
   isPortalBillingOverdue,
   PORTAL_CUSTOMER_WHT_NOTICE,
+  portalNeedsCustomerWhtCertificate,
   portalAlertTone,
   portalBillingFilterOptions,
   portalHasCustomerWht,
@@ -111,7 +112,8 @@ export function PortalBillingBatches({ canDownload = false }: { canDownload?: bo
                 <BillingCards rows={filtered} today={today} canDownload={canDownload} />
                 {portalHasCustomerWht(filtered) && (
                   <InlineAlert tone="info" className="mt-4" title="ภาษีหัก ณ ที่จ่ายที่บริษัทของท่านหักไว้">
-                    {PORTAL_CUSTOMER_WHT_NOTICE} · ยอดรวม = ชำระแล้ว + ภาษีหัก ณ ที่จ่าย + ค้างชำระ
+                    {portalNeedsCustomerWhtCertificate(filtered) ? `${PORTAL_CUSTOMER_WHT_NOTICE} · ` : ''}ยอดรวม =
+                    ชำระแล้ว + ภาษีหัก ณ ที่จ่าย + ค้างชำระ
                   </InlineAlert>
                 )}
               </>

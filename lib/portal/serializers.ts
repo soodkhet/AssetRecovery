@@ -247,6 +247,8 @@ export interface PortalBillingBatchSource {
   sentAt: Date | null
   /** จำนวนรายการรายได้ (= เคส) ในรอบ — 1 เคส 1 รายการรายได้ (มติ U62) */
   caseCount: number
+  /** mytester G-04 — มีหนังสือ 50 ทวิ ที่ยังรอจากลูกค้า (สถานะ pending) · ไม่ระบุ = ไม่มี */
+  customerWhtCertificatePending?: boolean
 }
 
 export interface PortalBillingBatchDto {
@@ -267,6 +269,8 @@ export interface PortalBillingBatchDto {
   statusDisplay: PortalStatusDisplay<PortalBillingStatusCode>
   /** มติ O74 — รับชำระครบแล้วแต่ยังค้างจากใบเพิ่มหนี้ ⇒ หน้าจอแสดงป้ายเสริม "มีใบเพิ่มหนี้ค้าง" */
   debitNoteOutstanding: boolean
+  /** mytester G-04 — ยังรอหนังสือ 50 ทวิ จากบริษัท (บันทึกรับแล้ว/ไม่หักภาษี = `false`) */
+  customerWhtCertificatePending: boolean
 }
 
 /** `draft` → `null` (ห้ามแสดงในพอร์ทัล — `97` §6.2) */
@@ -296,6 +300,7 @@ export function serializePortalBillingBatch(row: PortalBillingBatchSource): Port
     sentAt: isoOrNull(row.sentAt),
     statusDisplay,
     debitNoteOutstanding: hasDebitNoteOutstanding(row.status, outstandingSatang),
+    customerWhtCertificatePending: row.whtWithheldByCustomerSatang > 0 && row.customerWhtCertificatePending === true,
   }
 }
 

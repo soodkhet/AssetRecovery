@@ -10,6 +10,7 @@ import {
   ClosedPeriodsUnavailableNote,
   useClosedPeriods,
 } from '@/components/finance/closed-period-cutoff-alert'
+import { BillingPreview } from '@/components/finance/billing-preview'
 import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
 import type { FinanceCompanyDto } from '@/lib/finance-companies/types'
 import { fmtDate, toInputDate } from '@/lib/format/datetime'
@@ -133,7 +134,7 @@ export function CreateBillingModal({
       open
       onClose={onClose}
       title="สร้างรอบวางบิล"
-      description="ระบบรวม Revenue ที่รอวางบิลของบริษัทนั้นในงวดให้อัตโนมัติ"
+      description="ระบบรวมรายได้ที่รอวางบิลของบริษัทนั้นให้อัตโนมัติ"
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
@@ -195,7 +196,7 @@ export function CreateBillingModal({
         )}
 
         <Field
-          label="วันตัดรอบ (Cut-off Date)"
+          label="วันตัดรอบ"
           required
           hint={
             dueDatePreview === null
@@ -206,6 +207,16 @@ export function CreateBillingModal({
           <Input type="date" value={cutoffDate} onChange={(event) => setCutoffOverride(event.target.value)} />
           {closedPeriods.status === 'error' && <ClosedPeriodsUnavailableNote />}
         </Field>
+
+        {/* staging E-049 / mytester G-05 — สรุปจำนวน/ยอดที่จะดึงเข้ารอบก่อนกดสร้าง */}
+        {cycle !== null && (
+          <BillingPreview
+            companyId={companyId}
+            cutoffDate={cutoffDate}
+            today={toInputDate(new Date())}
+            onUseToday={setCutoffOverride}
+          />
+        )}
 
         {((closedCutoff !== null && closedCutoff === cutoffDate) || isCutoffInClosedPeriod(cutoffDate, isPeriodClosed)) && (
           <ClosedPeriodCutoffAlert onUseToday={setCutoffOverride} />

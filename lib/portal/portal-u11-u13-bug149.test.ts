@@ -7,6 +7,7 @@ import {
   portalAlertTextClass,
   portalAlertTone,
   portalHasCustomerWht,
+  portalNeedsCustomerWhtCertificate,
   portalRevenueChartAxis,
 } from '@/lib/portal/finance-ui'
 import { PORTAL_LOT_DOCUMENTS, portalLotDocumentApiUrl } from '@/lib/portal/handover-view'
@@ -44,6 +45,11 @@ describe('U11 — ภาษีหัก ณ ที่จ่ายที่ลู
   it('แสดงหมายเหตุเฉพาะเมื่อมีรอบที่ลูกค้าหักไว้', () => {
     expect(portalHasCustomerWht([{ customerWhtSatang: 0 }])).toBe(false)
     expect(portalHasCustomerWht([{ customerWhtSatang: 0 }, { customerWhtSatang: 1_119_000 }])).toBe(true)
+    // mytester G-04 — บันทึกรับหนังสือครบแล้ว ⇒ ไม่ขอซ้ำ
+    expect(portalNeedsCustomerWhtCertificate([{ customerWhtCertificatePending: false }])).toBe(false)
+    expect(
+      portalNeedsCustomerWhtCertificate([{ customerWhtCertificatePending: false }, { customerWhtCertificatePending: true }]),
+    ).toBe(true)
     expect(PORTAL_CUSTOMER_WHT_NOTICE).toContain('50 ทวิ')
     expect(PORTAL_CUSTOMER_WHT_NOTICE).not.toMatch(/§|ไฟล์ \d/)
   })

@@ -284,9 +284,15 @@ export interface BillingInvoiceDoc {
 }
 
 export const BILLING_INVOICE_SIGNERS = ['ผู้วางบิล / ผู้ให้บริการ', 'ผู้รับวางบิล / ลูกค้า'] as const
-export const BILLING_INVOICE_FOOTNOTE =
-  'ภาษีมูลค่าเพิ่มเกิดเมื่อได้รับชำระเงิน — อัตราและยอดจริงจะแสดงในใบเสร็จรับเงิน/ใบกำกับภาษี · ' +
-  'โปรดส่งหนังสือรับรองการหักภาษี ณ ที่จ่ายมาพร้อมการโอน'
+const BILLING_INVOICE_VAT_NOTE =
+  'ภาษีมูลค่าเพิ่มเกิดเมื่อได้รับชำระเงิน — อัตราและยอดจริงจะแสดงในใบเสร็จรับเงิน/ใบกำกับภาษี'
+const BILLING_INVOICE_WHT_REQUEST = 'โปรดส่งหนังสือรับรองการหักภาษี ณ ที่จ่ายมาพร้อมการโอน'
+export const BILLING_INVOICE_FOOTNOTE = `${BILLING_INVOICE_VAT_NOTE} · ${BILLING_INVOICE_WHT_REQUEST}`
+
+/** mytester G-04 — ขอหนังสือ 50 ทวิ เฉพาะลูกค้าที่หักภาษี ณ ที่จ่าย (ไม่หัก = เหลือแค่หมายเหตุ VAT) */
+export function billingInvoiceFootnote(customerWithholds: boolean): string {
+  return customerWithholds ? BILLING_INVOICE_FOOTNOTE : BILLING_INVOICE_VAT_NOTE
+}
 
 /** BUG-165 — แถวภาษีที่ลูกค้าหัก: สูตรอยู่ `estimateCustomerWhtForBilling()` (`22` §6.16) ที่นี่แค่จัดข้อความ */
 export function billingCustomerWhtLines(input: {
@@ -354,6 +360,15 @@ export function buildBillingInvoiceDoc(source: BillingInvoiceSource): BillingInv
   const amounts = summarizeSalesAmounts(
     source.lines.map((line) => ({ grossSatang: line.grossSatang, vatSatang: line.vatSatang, totalSatang: line.totalSatang })),
   )
+  const customerWht =
+    source.customerWhtPct === undefined
+      ? null
+      : billingCustomerWhtLines({
+          amountBeforeVatSatang: amounts.totalBeforeVatSatang,
+          totalSatang: amounts.totalSatang,
+          recordedWhtSatang: source.recordedCustomerWhtSatang ?? 0,
+          whtPct: source.customerWhtPct,
+        })
   return {
     title: BILLING_INVOICE_TITLE,
     titleEn: BILLING_INVOICE_TITLE_EN,
@@ -379,21 +394,14 @@ export function buildBillingInvoiceDoc(source: BillingInvoiceSource): BillingInv
     totalText: fmtSatang(amounts.totalSatang),
     totalInWordsText: bahtInWords(amounts.totalSatang),
     notTaxInvoiceNote: BILLING_INVOICE_NOT_TAX_NOTE,
-    customerWht:
-      source.customerWhtPct === undefined
-        ? null
-        : billingCustomerWhtLines({
-            amountBeforeVatSatang: amounts.totalBeforeVatSatang,
-            totalSatang: amounts.totalSatang,
-            recordedWhtSatang: source.recordedCustomerWhtSatang ?? 0,
-            whtPct: source.customerWhtPct,
-          }),
+    customerWht,
     paymentChannelText:
       source.receivingAccount === undefined || source.receivingAccount === null
         ? null
         : `โอนเข้าบัญชี ${bankAccountLine(source.receivingAccount)}`,
     signers: BILLING_INVOICE_SIGNERS,
-    footnote: BILLING_INVOICE_FOOTNOTE,
+    // mytester G-04 — ลูกค้าไม่หักภาษี (ไม่มีแถวภาษีที่ลูกค้าหัก) ⇒ ไม่ขอหนังสือ 50 ทวิ
+    footnote: billingInvoiceFootnote(customerWht !== null),
     fileName: `${source.batchNumber}.pdf`,
   }
 }

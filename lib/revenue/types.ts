@@ -109,3 +109,15 @@ export interface ArAgingReportDto {
   companies: ArAgingCompanyDto[]
   totalOutstandingSatang: number
 }
+
+/** `GET /api/billing-batches/preview` (staging E-049 · mytester G-05) — สรุปก่อนกดสร้างรอบวางบิล */
+export interface BillingBatchPreviewDto {
+  /** รายได้ที่จะถูกดึงเข้ารอบ (revenue_date ≤ วันตัดรอบ) */
+  revenueCount: number
+  totalSatang: number
+  /** รายได้ที่รอวางบิลแต่อยู่หลังวันตัดรอบ (ยังไม่ถูกดึง — เลื่อนวันตัดรอบเพื่อรวม) */
+  laterRevenueCount: number
+  laterTotalSatang: number
+  /** `YYYY-MM-DD` วันที่รายได้ล่าสุดที่อยู่หลังวันตัดรอบ · ไม่มี = `null` */
+  laterLatestRevenueDate: string | null
+}

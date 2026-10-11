@@ -131,6 +131,11 @@ export function portalHasCustomerWht(rows: readonly { customerWhtSatang: number 
   return rows.some((row) => row.customerWhtSatang > 0)
 }
 
+/** mytester G-04 — ขอหนังสือ 50 ทวิ เฉพาะเมื่อยังมีรอบที่รอหนังสืออยู่ (บันทึกรับครบแล้ว = ไม่ขอ) */
+export function portalNeedsCustomerWhtCertificate(rows: readonly { customerWhtCertificatePending: boolean }[]): boolean {
+  return rows.some((row) => row.customerWhtCertificatePending)
+}
+
 // ── ใบกำกับภาษี / ไฟล์ดาวน์โหลด ─────────────────────────────────────────────
 
 /**

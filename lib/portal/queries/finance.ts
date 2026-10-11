@@ -69,12 +69,22 @@ export async function listPortalBillingBatches(ctx: PortalContext): Promise<Port
       dueDate: true,
       sentAt: true,
       // จำนวนเคสในรอบ (มติ U62) = รายการรายได้ที่ผูกรอบนี้ (1 เคส 1 รายการ — trigger idempotent ต่อเคส)
-      _count: { select: { revenues: { where: { deletedAt: null } } } },
+      // mytester G-04 — หนังสือ 50 ทวิ ที่ยังรอจากบริษัท (บันทึกรับแล้ว = ไม่ขอซ้ำ)
+      _count: {
+        select: {
+          revenues: { where: { deletedAt: null } },
+          customerWhtCertificates: { where: { deletedAt: null, status: 'pending' } },
+        },
+      },
     },
     orderBy: [{ dueDate: 'desc' }, { createdAt: 'desc' }],
     take: LIST_LIMIT,
   })
-  const withCounts = rows.map(({ _count, ...row }) => ({ ...row, caseCount: _count.revenues }))
+  const withCounts = rows.map(({ _count, ...row }) => ({
+    ...row,
+    caseCount: _count.revenues,
+    customerWhtCertificatePending: _count.customerWhtCertificates > 0,
+  }))
   return serializePortalBillingBatches(await withDocumentedTotals(ctx, withCounts))
 }
 
