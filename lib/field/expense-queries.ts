@@ -1107,7 +1107,12 @@ export async function resubmitFieldExpense(
       ? null
       : newReceiptPath === current.receiptFileUrl && current.receiptFileHash !== null
         ? current.receiptFileHash
-        : (await verifyUploadedFile(newReceiptPath, expenseReceiptRule(user.id))).sha256
+        : // รีวิวเฟส 4 ข้อ 1 — ใบเสร็จเดิมของใบเบิกนี้ (เช่นข้อมูลเก่าที่ไม่ผ่านการตรวจ) ถูกปฏิเสธก็ไม่ลบ
+          (
+            await verifyUploadedFile(newReceiptPath, expenseReceiptRule(user.id), null, {
+              boundPaths: [current.receiptFileUrl],
+            })
+          ).sha256
   const updated = await prisma.$transaction(async (tx) => {
     // preship R3-004 — ใบเสร็จ (ใหม่หรือเดิม) ต้องไม่ถูกใช้กับใบเบิกอื่นที่ยังมีผล — ระหว่างถูกตีกลับ ใบเสร็จเดิมอาจถูก
     // นำไปเบิกใบใหม่แล้ว ⇒ ตรวจทุกครั้งที่ส่งใหม่ ไม่ใช่เฉพาะตอนแนบไฟล์ใหม่

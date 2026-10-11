@@ -1,6 +1,7 @@
 import type { Prisma } from '@/lib/generated/prisma/client'
 import { UploadError } from '@/lib/uploads/errors'
 import { assertUploadPathInScope, inspectUploadedBytes, type UploadRule, type VerifiedUpload } from '@/lib/uploads/inspect'
+import { isUploadPathReferenced } from '@/lib/uploads/references'
 import { downloadUploadedFile, removeStoredFiles } from '@/lib/uploads/storage'
 
 /**
@@ -14,10 +15,19 @@ import { downloadUploadedFile, removeStoredFiles } from '@/lib/uploads/storage'
 /** path → ข้อมูลที่ตรวจแล้ว — เก็บเป็น JSONB (`file_hashes` / `photo_hashes`) คู่กับรายการ path */
 export type VerifiedUploadMap = Record<string, VerifiedUpload>
 
+export interface VerifyUploadOptions {
+  /**
+   * path ของไฟล์ที่ผูกกับ record ที่กำลังแก้อยู่แล้ว (เช่นใบเสร็จเดิมของใบเบิกที่ส่งใหม่) — ไม่ใช่ไฟล์ใหม่ของคำขอนี้
+   * ⇒ ถูกปฏิเสธก็ห้ามลบ (รีวิวเฟส 4 ข้อ 1) · ผู้เรียกที่แก้ record ที่มีไฟล์เดิมต้องส่งเสมอ
+   */
+  boundPaths?: ReadonlyArray<string | null | undefined>
+}
+
 export async function verifyUploadedFile(
   path: string,
   rule: UploadRule,
   claimedSha256?: string | null,
+  options: VerifyUploadOptions = {},
 ): Promise<VerifiedUpload> {
   try {
     assertUploadPathInScope(path, rule.prefix)
@@ -26,7 +36,7 @@ export async function verifyUploadedFile(
     try {
       return inspectUploadedBytes(bytes, rule, claimedSha256)
     } catch (error) {
-      await removeRejectedUpload(path, error)
+      await removeRejectedUpload(path, error, options)
       throw error
     }
   } catch (error) {
@@ -35,16 +45,28 @@ export async function verifyUploadedFile(
 }
 
 /**
- * ไฟล์ที่เนื้อไม่ตรงชนิดที่รับ ไม่มีทางเป็นไฟล์ที่เคยผูกกับ record ได้ (ทุกไฟล์ที่ผูกแล้วผ่านการตรวจเดียวกันมาก่อน)
- * ⇒ ลบทิ้งทันทีไม่ให้ค้างใน Storage (mytester A-14) · เฉพาะ path ที่ผ่าน prefix ของผู้เรียกแล้วเท่านั้น
+ * ไฟล์ที่เนื้อไม่ตรงชนิดที่รับ ⇒ ลบทิ้งไม่ให้ค้างใน Storage (mytester A-14) · เฉพาะ path ที่ผ่าน prefix ของผู้เรียกแล้ว
  * · hash ไม่ตรง/ไฟล์ใหญ่เกิน **ไม่ลบ** (อาจเป็นไฟล์เดิมที่ผูกอยู่แล้วถูกส่งซ้ำด้วยค่าผิด หรือเกณฑ์ขนาดเปลี่ยน)
+ * · ชนิดไม่ตรงก็อาจเป็นไฟล์ที่ผูกอยู่แล้ว (ข้อมูลเก่าที่ไม่เคยผ่านการตรวจ — `receipt_file_unverified`/
+ *   `id_document_unverified`) ⇒ ลบได้เฉพาะไฟล์ที่ "เพิ่งอัปโหลดในคำขอนี้" ดู {@link removeRejectedUpload}
  */
 export function shouldRemoveRejectedUpload(error: unknown): boolean {
   return error instanceof UploadError && error.code === 'UPLOAD_FILE_TYPE_INVALID'
 }
 
-async function removeRejectedUpload(path: string, error: unknown): Promise<void> {
+/**
+ * ลบเฉพาะไฟล์ใหม่ของคำขอนี้ (รีวิวเฟส 4 ข้อ 1): ไม่ใช่ไฟล์เดิมของ record ที่กำลังแก้ (`boundPaths`) และไม่มี record
+ * ใดอ้าง path นี้ (`isUploadPathReferenced`) · ตรวจการอ้างอิงไม่สำเร็จ ⇒ ไม่ลบ (ปลอดภัยไว้ก่อน)
+ */
+async function removeRejectedUpload(path: string, error: unknown, options: VerifyUploadOptions): Promise<void> {
   if (!shouldRemoveRejectedUpload(error)) return
+  if (options.boundPaths?.includes(path) === true) return
+  try {
+    if (await isUploadPathReferenced(path)) return
+  } catch (referenceError: unknown) {
+    console.error('[uploads] ตรวจการอ้างอิงไฟล์ไม่สำเร็จ — ไม่ลบไฟล์', { path, error: referenceError })
+    return
+  }
   try {
     const { failed } = await removeStoredFiles([path])
     if (failed.length > 0) console.error('[uploads] ลบไฟล์ที่ถูกปฏิเสธไม่สำเร็จ', { path })
@@ -71,6 +93,7 @@ function withRejectedPath(error: unknown, path: string): unknown {
 export async function verifyUploadedFiles(
   files: ReadonlyArray<{ path: string; rule: UploadRule }>,
   known: Readonly<VerifiedUploadMap> = {},
+  options: VerifyUploadOptions = {},
 ): Promise<VerifiedUploadMap> {
   const result: VerifiedUploadMap = {}
   for (const { path, rule } of files) {
@@ -85,7 +108,7 @@ export async function verifyUploadedFiles(
       result[path] = previous
       continue
     }
-    result[path] = await verifyUploadedFile(path, rule)
+    result[path] = await verifyUploadedFile(path, rule, null, options)
   }
   return result
 }

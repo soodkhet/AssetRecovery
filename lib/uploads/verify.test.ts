@@ -6,6 +6,16 @@ import { putFakeUpload, resetFakeUploads, sampleBytes, sha256Of, uploadTestState
 
 vi.mock('@/lib/uploads/storage', async () => (await import('@/tests/helpers/fake-uploads')).fakeStorageModule())
 
+/** path ที่จำลองว่ามี record อ้างอยู่ (ของจริงอยู่ `references.ts` — เทสต์ DB ใน `receipt-upload.db.test.ts`) */
+const referencedPaths = new Set<string>()
+let referenceCheckFails = false
+vi.mock('@/lib/uploads/references', () => ({
+  isUploadPathReferenced: async (path: string) => {
+    if (referenceCheckFails) throw new Error('db down')
+    return referencedPaths.has(path)
+  },
+}))
+
 /** มติ PO 03/10/2569 (UAT Q13 · BUG-037/050 · หนี้ #1) — server ตรวจไฟล์ที่อัปโหลดเองครบวงจร */
 
 async function codeOf(fn: () => Promise<unknown>): Promise<string> {
@@ -18,7 +28,11 @@ async function codeOf(fn: () => Promise<unknown>): Promise<string> {
   return 'NO_ERROR'
 }
 
-beforeEach(resetFakeUploads)
+beforeEach(() => {
+  resetFakeUploads()
+  referencedPaths.clear()
+  referenceCheckFails = false
+})
 
 describe('verifyUploadedFile', () => {
   const rule = lotDocumentRule('lot-1', 'signed_doc')
@@ -69,6 +83,28 @@ describe('verifyUploadedFile', () => {
     const outside = 'handover-lots/lot-2/signed-doc/k1.pdf'
     putFakeUpload(outside, sampleBytes('text'))
     expect(await codeOf(() => verifyUploadedFile(outside, rule))).toBe('UPLOAD_PATH_OUT_OF_SCOPE')
+    expect(uploadTestState.removed).toEqual([])
+  })
+
+  it('ชนิดไม่ตรงแต่เป็นไฟล์เดิมของ record ที่กำลังแก้ (boundPaths) ⇒ ไม่ลบ (รีวิวเฟส 4 ข้อ 1)', async () => {
+    putFakeUpload(path, sampleBytes('text'))
+    expect(await codeOf(() => verifyUploadedFile(path, rule, null, { boundPaths: [null, path] }))).toBe(
+      'UPLOAD_FILE_TYPE_INVALID',
+    )
+    expect(uploadTestState.removed).toEqual([])
+  })
+
+  it('ชนิดไม่ตรงแต่มี record อื่นอ้าง path อยู่ (ข้อมูลเก่าที่ไม่เคยตรวจ) ⇒ ไม่ลบ', async () => {
+    putFakeUpload(path, sampleBytes('text'))
+    referencedPaths.add(path)
+    expect(await codeOf(() => verifyUploadedFile(path, rule))).toBe('UPLOAD_FILE_TYPE_INVALID')
+    expect(uploadTestState.removed).toEqual([])
+  })
+
+  it('ตรวจการอ้างอิงไม่สำเร็จ ⇒ ไม่ลบ แต่ยังคืน error เดิม', async () => {
+    putFakeUpload(path, sampleBytes('text'))
+    referenceCheckFails = true
+    expect(await codeOf(() => verifyUploadedFile(path, rule))).toBe('UPLOAD_FILE_TYPE_INVALID')
     expect(uploadTestState.removed).toEqual([])
   })
 

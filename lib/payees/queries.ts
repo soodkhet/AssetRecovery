@@ -525,7 +525,9 @@ async function resolveIdDocumentWrite(
 ): Promise<{ idDocumentHash?: string | null; idDocumentUnverified?: boolean }> {
   if (nextPath === previousPath) return {}
   if (nextPath === null) return { idDocumentHash: null, idDocumentUnverified: false }
-  const verified = await verifyUploadedFile(nextPath, payeeIdDocumentRule(organizationId))
+  const verified = await verifyUploadedFile(nextPath, payeeIdDocumentRule(organizationId), null, {
+    boundPaths: [previousPath],
+  })
   return { idDocumentHash: verified.sha256, idDocumentUnverified: false }
 }
 

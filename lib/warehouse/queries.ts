@@ -991,8 +991,10 @@ export async function attachLotDocument(
   const current = await loadLot(user, lotId)
   assertLotMutable(current.status)
 
-  const verified = await verifyUploadedFile(input.fileUrl, lotDocumentRule(lotId, input.document), input.fileHash ?? null)
   const columns = LOT_DOCUMENT_COLUMNS[input.document]
+  const verified = await verifyUploadedFile(input.fileUrl, lotDocumentRule(lotId, input.document), input.fileHash ?? null, {
+    boundPaths: [current[columns.url]],
+  })
 
   await prisma.$transaction(async (tx) => {
     const claimed = await tx.handoverLot.updateMany({
@@ -1041,7 +1043,7 @@ async function resolveLotDocument(
 ): Promise<string | null> {
   if (url === null) return null
   if (url === stored.url && stored.hash !== null) return stored.hash
-  return (await verifyUploadedFile(url, lotDocumentRule(lotId, document))).sha256
+  return (await verifyUploadedFile(url, lotDocumentRule(lotId, document), null, { boundPaths: [stored.url] })).sha256
 }
 
 // ── PATCH /api/handover-lots/:id/confirm (`44` §11) ─────────────────────────

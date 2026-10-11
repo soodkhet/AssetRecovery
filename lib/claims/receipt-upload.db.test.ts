@@ -359,6 +359,58 @@ suite('มติ PO U143 — ใบเสร็จเบิกด้วยมื
     expect(legacy?.receiptFilePath).toBeNull()
     expect(legacy?.receiptUnverified).toBe(true)
   })
+
+  it('รีวิวเฟส 4 ข้อ 1 — ใบเสร็จเก่า (ไม่ผ่านการตรวจ) ชนิดไม่ตรง ⇒ ปฏิเสธแต่ไม่ลบไฟล์ · ไฟล์ใหม่ชนิดไม่ตรง ⇒ ลบ', async () => {
+    uploadTestState.realVerify = true
+    const payeeId = await payeeIdOf(AGENT_ID)
+    const legacyPath = receiptPathOf(AGENT_ID, `legacy-${RUN}.txt`)
+    putFakeUpload(legacyPath, sampleBytes('text', 'legacy-receipt'))
+    const rows = await db().$queryRawUnsafe<{ id: string }[]>(`
+      INSERT INTO expenses (organization_id, payee_id, expense_type, gross_satang, expense_date, status,
+                            calculation_source, receipt_file_url, receipt_file_unverified, rejection_reason, created_by)
+      VALUES ('${ORG_ID}', '${payeeId}', 'receipt', 10000, DATE '2026-10-05', 'needs_revision',
+              'manual', '${legacyPath}', true, 'แนบใบเสร็จใหม่', '${AGENT_ID}')
+      RETURNING id
+    `)
+    const legacyId = rows[0]?.id ?? ''
+
+    // ส่งใหม่โดยยืนยันใบเสร็จเดิมของใบเบิกนี้ (ไฟล์ที่ผูกกับ record อยู่) ⇒ ปฏิเสธ แต่ไฟล์ยังอยู่
+    await expectCode(
+      () =>
+        fieldExpenses.resubmitFieldExpense(agent, legacyId, { note: 'ส่งใหม่', receiptFileUrl: legacyPath }, { actor: agent, meta }),
+      'UPLOAD_FILE_TYPE_INVALID',
+    )
+    // ใบเบิกใหม่อ้าง path ของใบเก่า (record อื่นอ้างอยู่) ⇒ ปฏิเสธ แต่ไม่ลบ
+    await expectCode(
+      () =>
+        claims.createManualClaim({ actor: agent, meta }, {
+          claimType: 'receipt',
+          grossSatang: 10_000,
+          expenseDate: new Date('2026-10-05T00:00:00Z'),
+          payeeId: null,
+          receiptFileUrl: legacyPath,
+          note: 'ใช้ไฟล์ใบเก่า',
+        }),
+      'UPLOAD_FILE_TYPE_INVALID',
+    )
+    expect(uploadTestState.removed).toEqual([])
+    expect(uploadTestState.files.has(legacyPath)).toBe(true)
+    const legacy = await db().expense.findUniqueOrThrow({
+      where: { id: legacyId },
+      select: { status: true, receiptFileUrl: true, receiptFileUnverified: true },
+    })
+    expect(legacy).toEqual({ status: 'needs_revision', receiptFileUrl: legacyPath, receiptFileUnverified: true })
+
+    // ไฟล์ที่เพิ่งอัปโหลดในคำขอนี้ ชนิดไม่ตรง ⇒ ลบทิ้ง (mytester A-14)
+    const freshPath = receiptPathOf(AGENT_ID, `fresh-${RUN}.txt`)
+    putFakeUpload(freshPath, sampleBytes('text', 'fresh-receipt'))
+    await expectCode(
+      () =>
+        fieldExpenses.resubmitFieldExpense(agent, legacyId, { note: 'ส่งใหม่', receiptFileUrl: freshPath }, { actor: agent, meta }),
+      'UPLOAD_FILE_TYPE_INVALID',
+    )
+    expect(uploadTestState.removed).toEqual([freshPath])
+  })
 })
 
 suite('มติ PO U143 — เคลียร์เงินทดรอง: ใบเสร็จตรวจแล้ว → audit + คำขอเบิกส่วนเกิน', () => {

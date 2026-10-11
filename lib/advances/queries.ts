@@ -611,7 +611,13 @@ export async function settleAdvance(
   // มติ PO U143 — ใบเสร็จต้องเป็นไฟล์ที่อัปโหลดผ่าน server แล้ว: ตรวจไฟล์ (prefix ของผู้เคลียร์ · มีจริง · magic bytes ·
   // ขนาด) + SHA-256 ของ server · นอก `$transaction` (I/O เครือข่าย)
   const receiptFileUrl = input.receiptFileUrl ?? null
-  const receipt = receiptFileUrl === null ? null : await verifyUploadedFile(receiptFileUrl, expenseReceiptRule(user.id))
+  // รีวิวเฟส 4 ข้อ 1 — ใบเสร็จเดิมของเงินทดรองนี้ (ถ้ามี) ถูกปฏิเสธก็ไม่ลบ
+  const receipt =
+    receiptFileUrl === null
+      ? null
+      : await verifyUploadedFile(receiptFileUrl, expenseReceiptRule(user.id), null, {
+          boundPaths: [current.receiptFileUrl],
+        })
   // มติ PO U30 — มียอดคืน ⇒ ผู้เคลียร์เลือกวิธีคืน (ค่าเริ่มต้นหักกลบในรอบจ่ายถัดไป) · ไม่มียอดคืน ⇒ NULL
   const returnMethod = resolveSettleReturnMethod(preview.returnSatang, input.returnMethod)
 

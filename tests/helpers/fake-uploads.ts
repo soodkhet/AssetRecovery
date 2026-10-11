@@ -85,15 +85,15 @@ export async function fakeVerifyModule(): Promise<typeof VerifyModule> {
   const fakeRecord = (path: string) => ({ sha256: sha256Of(path), mimeType: 'application/octet-stream', sizeBytes: 1 })
   return {
     ...actual,
-    verifyUploadedFile: async (path, rule, claimed) =>
-      uploadTestState.realVerify ? actual.verifyUploadedFile(path, rule, claimed) : fakeRecord(path),
-    verifyUploadedFiles: async (files, known = {}) => {
+    verifyUploadedFile: async (path, rule, claimed, options) =>
+      uploadTestState.realVerify ? actual.verifyUploadedFile(path, rule, claimed, options) : fakeRecord(path),
+    verifyUploadedFiles: async (files, known = {}, options) => {
       const hook = uploadTestState.duringVerify
       if (hook !== null) {
         uploadTestState.duringVerify = null
         await hook()
       }
-      if (uploadTestState.realVerify) return actual.verifyUploadedFiles(files, known)
+      if (uploadTestState.realVerify) return actual.verifyUploadedFiles(files, known, options)
       return Object.fromEntries(files.map(({ path }) => [path, known[path] ?? fakeRecord(path)]))
     },
   }
