@@ -1,23 +1,30 @@
-import { hasCapability } from '@/lib/auth/permission'
 import type { SessionUser } from '@/lib/auth/types'
 import type { CaseFieldEvidenceDto } from '@/lib/cases/types'
-import { FIELD_REJECT_EVIDENCE_CAPABILITY } from '@/lib/field/permissions'
+import { fieldEvidenceAccess } from '@/lib/field/evidence-review-ui'
 import { loadEvidenceTimelines, resubmittedAtIso } from '@/lib/field/resubmission'
 import { prisma } from '@/lib/prisma'
 
 /**
  * หลักฐานปิดงานชุดล่าสุดของเคส สำหรับหน้าตรวจของเจ้าหน้าที่อนุมัติเคส (UAT BUG-045 · `41` §8/§10.1)
  *
- * - ผู้ไม่ถือ `reject_evidence` (ระดับใดก็ได้) ได้ `null` เสมอ — รูป/วิดีโอหน้างานมีข้อมูลลูกหนี้
+ * - ผู้ไม่ถือ `reject_evidence` (ระดับใดก็ได้) ได้ `null` — รูป/วิดีโอหน้างานมีข้อมูลลูกหนี้
  *   จึงไม่เปิดให้ทุกคนที่ดูรายละเอียดเคสได้ (Superadmin ผ่านโดยนิยาม — DEC-009)
+ * - **ยกเว้น** (มติชั่วคราว M10 · mytester DO-03) ผู้จัดการ/หัวหน้าทีม (scope ทีม) เห็นแบบอ่านอย่างเดียว
+ *   เฉพาะงานของทีมตัวเอง (assignment.team_id อยู่ใน scope) — ปุ่มตีกลับยังเฉพาะผู้ถือ `reject_evidence` (API ตรวจซ้ำ)
  * - ใช้ assignment ล่าสุดของเคส (ตัวเดียวกับที่ `rejectFieldEvidence()` จะตีกลับ) + หลักฐานชุดล่าสุดของรอบนั้น
  * - ยังไม่เคยส่งหลักฐาน ⇒ `null`
  */
 export async function loadCaseFieldEvidence(user: SessionUser, caseId: string): Promise<CaseFieldEvidenceDto | null> {
-  if (!hasCapability(user, 'view', FIELD_REJECT_EVIDENCE_CAPABILITY)) return null
+  const access = fieldEvidenceAccess(user)
+  if (access === 'none') return null
 
   const assignment = await prisma.caseAssignment.findFirst({
-    where: { caseId, organizationId: user.organizationId },
+    where: {
+      caseId,
+      organizationId: user.organizationId,
+      // มติชั่วคราว M10 — scope ทีมเห็นเฉพาะงานที่มอบให้ทีมตัวเอง
+      ...(access === 'team' ? { teamId: { in: [...user.scope.teamIds] } } : {}),
+    },
     orderBy: { createdAt: 'desc' },
     select: { id: true, status: true, agent: { select: { fullName: true } } },
   })

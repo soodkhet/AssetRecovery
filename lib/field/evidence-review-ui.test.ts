@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canRejectFieldEvidence, checkinTypeLabel, fieldEvidenceFile } from '@/lib/field/evidence-review-ui'
+import { canRejectFieldEvidence, checkinTypeLabel, fieldEvidenceAccess, fieldEvidenceFile } from '@/lib/field/evidence-review-ui'
 
 describe('หน้าตรวจหลักฐานปิดงาน (UAT BUG-045)', () => {
   it('ปุ่มตีกลับแสดงเฉพาะสถานะปิดงาน', () => {
@@ -31,5 +31,40 @@ describe('หน้าตรวจหลักฐานปิดงาน (UAT B
   it('ชื่อประเภทเช็คอินเป็นภาษาไทย (ชนิดที่ไม่รู้จักคืนค่าเดิม)', () => {
     expect(checkinTypeLabel('address')).toBe('ที่อยู่ลูกหนี้')
     expect(checkinTypeLabel('unknown')).toBe('unknown')
+  })
+})
+
+describe('fieldEvidenceAccess (มติชั่วคราว M10 DO-03)', () => {
+  const base = {
+    id: 'u',
+    organizationId: 'o',
+    supabaseUid: 's',
+    email: 'e@test.local',
+    fullName: 'ผู้ใช้',
+    status: 'active',
+    roleId: 'r',
+    roleName: 'ผู้จัดการทีมติดตามทรัพย์',
+    roleGroup: 'inhouse',
+    isSuperadmin: false,
+    teamId: null,
+    companyId: null,
+    capabilities: {},
+    loginAt: new Date().toISOString(),
+  } as const
+
+  it('ผู้ถือ reject_evidence = full · scope ทีม = team (อ่านอย่างเดียว) · พนักงาน/บริษัท = none', () => {
+    expect(
+      fieldEvidenceAccess({
+        ...base,
+        capabilities: { reject_evidence: 'view' },
+        scope: { kind: 'global', teamIds: [], companyId: null, userId: 'u' },
+      }),
+    ).toBe('full')
+    expect(fieldEvidenceAccess({ ...base, scope: { kind: 'team', teamIds: ['t1'], companyId: null, userId: 'u' } })).toBe('team')
+    expect(fieldEvidenceAccess({ ...base, scope: { kind: 'team', teamIds: [], companyId: null, userId: 'u' } })).toBe('none')
+    expect(fieldEvidenceAccess({ ...base, scope: { kind: 'self', teamIds: [], companyId: null, userId: 'u' } })).toBe('none')
+    expect(
+      fieldEvidenceAccess({ ...base, roleGroup: 'finance_company', scope: { kind: 'company', teamIds: [], companyId: 'c', userId: 'u' } }),
+    ).toBe('none')
   })
 })

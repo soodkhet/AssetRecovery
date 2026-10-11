@@ -1,5 +1,8 @@
 import type { CaseFieldEvidenceDto } from '@/lib/cases/types'
 import type { FieldMediaKind } from '@/lib/field/media-upload'
+import { hasCapability } from '@/lib/auth/permission'
+import type { SessionUser } from '@/lib/auth/types'
+import { FIELD_REJECT_EVIDENCE_CAPABILITY } from '@/lib/field/permissions'
 
 /**
  * ตัวช่วยหน้าตรวจหลักฐานปิดงานของเจ้าหน้าที่อนุมัติเคส (UAT BUG-045) — **pure ล้วน**
@@ -58,3 +61,14 @@ export function fieldEvidenceFile(path: string, kind: FieldMediaKind): EvidenceV
   const subtype = extension === '' ? '*' : (SUBTYPE_ALIAS[extension] ?? extension)
   return { fileUrl: path, originalName: name, mimeType: `${KIND_MIME_PREFIX[kind]}${subtype}` }
 }
+
+/**
+ * ระดับการเห็นหลักฐานปิดงานในรายละเอียดเคส (pure) — `full` = ผู้ถือ `reject_evidence` (ทุกเคสที่เห็น) ·
+ * `team` = ผู้จัดการ/หัวหน้าทีม อ่านอย่างเดียวเฉพาะงานของทีมตัวเอง (มติชั่วคราว M10) · `none` = ไม่เห็น
+ */
+export function fieldEvidenceAccess(user: SessionUser): 'full' | 'team' | 'none' {
+  if (hasCapability(user, 'view', FIELD_REJECT_EVIDENCE_CAPABILITY)) return 'full'
+  if (user.scope.kind === 'team' && user.scope.teamIds.length > 0) return 'team'
+  return 'none'
+}
+

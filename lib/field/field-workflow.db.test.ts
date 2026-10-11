@@ -912,7 +912,7 @@ suite('Phase 2.8 — รายการงาน 4 กลุ่ม + มุม�
     expect(closed.items[0]?.closedAt).not.toBeNull()
   })
 
-  it('หลักฐานปิดงานในรายละเอียดเคส: เห็นเฉพาะผู้ถือ reject_evidence และสะท้อนผลตีกลับ (UAT BUG-045)', async () => {
+  it('หลักฐานปิดงานในรายละเอียดเคส: ผู้ถือ reject_evidence + ผู้จัดการทีมของงาน (อ่านอย่างเดียว · M10) และสะท้อนผลตีกลับ (UAT BUG-045)', async () => {
     const { loadCaseFieldEvidence } = await import('@/lib/field/evidence-review')
     const caseId = await seedReadyToClose()
     await field.closeFieldCase(agentA, caseId, { outcome: 'closed_success', ...MEDIA }, { actor: agentA, meta })
@@ -927,7 +927,19 @@ suite('Phase 2.8 — รายการงาน 4 กลุ่ม + มุม�
       scope: { kind: 'global', teamIds: [], companyId: null, userId: MANAGER_ID },
     })
 
-    expect(await loadCaseFieldEvidence(manager, caseId)).toBeNull()
+    // มติชั่วคราว M10 (DO-03) — ผู้จัดการทีมของงานเห็นแบบอ่านอย่างเดียว · ผู้จัดการทีมอื่นไม่เห็น
+    const managerView = await loadCaseFieldEvidence(manager, caseId)
+    expect(managerView?.photos).toEqual(MEDIA.photos)
+    const otherTeamManager = sessionUser({
+      id: MANAGER_ID,
+      roleId: ROLE_MANAGER,
+      roleName: 'ผู้จัดการทีมติดตามทรัพย์',
+      teamId: null,
+      scope: { kind: 'team', teamIds: ['00000000-0000-4000-8000-00000000dead'], companyId: null, userId: MANAGER_ID },
+    })
+    expect(await loadCaseFieldEvidence(otherTeamManager, caseId)).toBeNull()
+    // พนักงานภาคสนาม (scope self) ไม่ได้กล่องนี้
+    expect(await loadCaseFieldEvidence(agentB, caseId)).toBeNull()
 
     const evidence = await loadCaseFieldEvidence(approver, caseId)
     expect(evidence?.assignmentStatus).toBe('closed_success')
