@@ -148,9 +148,9 @@ async function reset(): Promise<void> {
     `DELETE FROM wht_filing_summaries WHERE organization_id = '${ORG_ID}'`,
     `DELETE FROM expense_records WHERE organization_id = '${ORG_ID}'`,
     `DELETE FROM exceptions WHERE organization_id = '${ORG_ID}'`,
-    // mytester2 F2-04 — เงินทดรองผูก payout_batch_item ⇒ ลบก่อนรายการในรอบ
-    `DELETE FROM advances WHERE organization_id = '${ORG_ID}'`,
     `DELETE FROM payout_batch_items WHERE organization_id = '${ORG_ID}'`,
+    // mytester2 F2-04 — รายการในรอบอ้าง advance_id (ON DELETE SET NULL ชน pbi_one_source) ⇒ ลบเงินทดรองหลังรายการในรอบ
+    `DELETE FROM advances WHERE organization_id = '${ORG_ID}'`,
     `DELETE FROM payout_batches WHERE organization_id = '${ORG_ID}'`,
     `DELETE FROM expenses WHERE organization_id = '${ORG_ID}'`,
     `DELETE FROM wht_policy_history WHERE organization_id = '${ORG_ID}'`,
