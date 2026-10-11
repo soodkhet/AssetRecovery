@@ -21,7 +21,7 @@ import { TaxProfileDefaultsCard } from '@/components/settings/tax-profile-defaul
 import { TaxProfilesTab } from '@/components/settings/tax-profiles-tab'
 import { VatRatesTab } from '@/components/settings/vat-rates-tab'
 import { WhtPolicyTab } from '@/components/settings/wht-policy-tab'
-import { EmptyState, PageHeader } from '@/components/ui'
+import { EmptyState, PageHeader, Select } from '@/components/ui'
 import { cn } from '@/components/ui/cn'
 import { useSession } from '@/components/auth/permission-provider'
 import { visibleFinanceSettingsTabs } from '@/lib/settings/finance-tabs'
@@ -52,8 +52,26 @@ export function FinanceSettingsShell({ initialTab }: { initialTab: string }) {
         description="ค่ากลางที่ระบบใช้คำนวณเงิน ภาษี และรอบเอกสาร — ทุกการแก้ไขต้องมีเหตุผลและถูกบันทึกลง Audit Log"
       />
 
+      {/* mytester A-09 — จอแคบ: รายการเลือกแท็บช่องเดียวแทนแถบ 19 ปุ่ม (เนื้อหาอยู่ใต้ช่องเลือกทันที) */}
+      <div className="mb-4 md:hidden">
+        <label htmlFor="finance-settings-tab-select" className="mb-1 block text-xs font-semibold text-slate-600">
+          หมวดการตั้งค่า
+        </label>
+        <Select
+          id="finance-settings-tab-select"
+          value={current?.id ?? ''}
+          onChange={(event) => setTab(event.target.value)}
+        >
+          {tabs.map((item) => (
+            <option key={item.id} value={item.id} disabled={!item.available}>
+              {item.available ? item.label : `${item.label} (${UNDER_DEVELOPMENT_TEXT})`}
+            </option>
+          ))}
+        </Select>
+      </div>
+
       <div className="flex flex-col gap-6 md:flex-row">
-        <aside className="no-scrollbar w-full shrink-0 overflow-y-auto md:max-h-[80vh] md:w-56">
+        <aside className="no-scrollbar hidden w-full shrink-0 overflow-y-auto md:block md:max-h-[80vh] md:w-56">
           <nav aria-label="แท็บตั้งค่าบัญชี/การเงิน" className="flex flex-col space-y-1 border-l-4 border-emerald-100 pl-2">
             {tabs.map((item) => {
               if (!item.available) {

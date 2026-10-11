@@ -24,6 +24,7 @@ import { callApi, jsonRequest } from '@/lib/api/types'
 import { toFieldErrors } from '@/lib/api/validation'
 import { DEVICE_CATALOG_SOURCE_LABEL, type DeviceAssetKind, type DeviceCatalogStatusCode } from '@/lib/device-catalog/catalog'
 import { deviceBrandCreateSchema, deviceModelCreateSchema } from '@/lib/device-catalog/schemas'
+import { catalogEmptyDescription } from '@/lib/device-catalog/tac-polling'
 import type {
   DeviceBrandDto,
   DeviceBrandListDto,
@@ -147,10 +148,13 @@ export function Pager({
 // ─── แบรนด์ ───────────────────────────────────────────────────────
 
 export function DeviceBrandList({
+  pendingJob = false,
   refreshKey,
   onChanged,
   onOpenModels,
 }: {
+  /** มีงานนำเข้าฐาน TAC ค้าง — ตารางว่างต้องบอกว่ากำลังนำเข้า (mytester A-13) */
+  pendingJob?: boolean
   refreshKey: number
   onChanged: () => void
   onOpenModels: (brand: DeviceBrandDto) => void
@@ -160,7 +164,8 @@ export function DeviceBrandList({
   const { showToast } = useToast()
   const [q, setQ] = useState('')
   const [search, setSearch] = useState('')
-  const [visibility, setVisibility] = useState<Visibility>('all')
+  // ค่าเริ่มต้น = แบรนด์ที่แสดงในตัวเลือก (Apple/Samsung ฯลฯ) — "ทั้งหมด" มีชื่อจากฐาน TAC หลายพันแบรนด์ (mytester A-13)
+  const [visibility, setVisibility] = useState<Visibility>('visible')
   const [page, setPage] = useState(1)
   const [data, setData] = useState<DeviceBrandListDto>({ items: [], total: 0, page: 1, pageSize: PAGE_SIZE })
   const [loading, setLoading] = useState(true)
@@ -321,7 +326,7 @@ export function DeviceBrandList({
           error={error}
           isEmpty={data.items.length === 0}
           emptyTitle="ไม่พบแบรนด์"
-          emptyDescription="ยังไม่มีข้อมูล — กด “อัปเดตตอนนี้” ด้านบน หรือเพิ่มแบรนด์เอง"
+          emptyDescription={catalogEmptyDescription({ pendingJob, filtered: visibility !== 'all' || search !== '', unit: 'แบรนด์' })}
           onRetry={
             <Button
               variant="secondary"

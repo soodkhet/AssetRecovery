@@ -24,6 +24,7 @@ import { callApi, jsonRequest } from '@/lib/api/types'
 import { toFieldErrors } from '@/lib/api/validation'
 import { TAC_SOURCE_LABEL, tacUpdateStatusView, type DeviceTacSourceCode } from '@/lib/device-catalog/tac'
 import { deviceTacBindSchema } from '@/lib/device-catalog/schemas'
+import { catalogEmptyDescription } from '@/lib/device-catalog/tac-polling'
 import type {
   DeviceModelOptionDto,
   DeviceTacHistoryDto,
@@ -48,7 +49,16 @@ const SOURCE_FILTERS: ReadonlyArray<{ value: DeviceTacSourceCode | 'all'; label:
 
 const PAGE_SIZE = 50
 
-export function DeviceTacList({ refreshKey, onChanged }: { refreshKey: number; onChanged: () => void }) {
+export function DeviceTacList({
+  pendingJob = false,
+  refreshKey,
+  onChanged,
+}: {
+  /** มีงานนำเข้าฐาน TAC ค้าง (mytester A-13) */
+  pendingJob?: boolean
+  refreshKey: number
+  onChanged: () => void
+}) {
   const { can } = usePermission()
   const canManage = can('manage', MANAGE_DEVICE_CATALOG)
   const [q, setQ] = useState('')
@@ -146,7 +156,7 @@ export function DeviceTacList({ refreshKey, onChanged }: { refreshKey: number; o
           error={error}
           isEmpty={!loading && error === null && items.length === 0}
           emptyTitle="ไม่พบ TAC"
-          emptyDescription="ยังไม่ได้นำเข้าฐาน TAC หรือคำค้นไม่ตรง — กด “อัปเดตตอนนี้” หรือ “นำเข้าไฟล์เอง” ด้านบน"
+          emptyDescription={catalogEmptyDescription({ pendingJob, filtered: query !== '' || source !== 'all', unit: 'TAC' })}
           onRetry={() => {
             setError(null)
             setLoading(true)
