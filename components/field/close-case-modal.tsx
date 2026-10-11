@@ -1017,7 +1017,7 @@ export function CloseCaseModal({
                         href={mapsPointHref(originCenter.latitude, originCenter.longitude)}
                         target="_blank"
                         rel="noreferrer"
-                        className="focus-ring inline-flex items-center gap-1 text-[11px] font-extrabold text-blue-700 underline"
+                        className="focus-ring inline-flex items-center gap-1 text-[11px] font-extrabold text-blue-700 underline pointer-coarse:min-h-11"
                       >
                         <IconMap className="h-3.5 w-3.5" /> เปิดใน Google Maps
                       </a>
