@@ -243,6 +243,11 @@
 | `googleMapsRouteUrl` | `lib/field/field-ui.ts` | staging E-044 | ลิงก์เส้นทาง Google Maps จากจุดหลายจุด (จุดเริ่ม → เช็คอิน) |
 | `approveMany` (useApprovalActions) · `bulkApprovableIds` | `components/finance/use-approval-actions.ts` · `lib/compensation/approval-ui.ts` | staging E-045 | อนุมัติหลายรายการโดยยิงทีละรายการ + สรุปผลครั้งเดียว |
 | `fmtThaiPhone` | `lib/format/phone.ts` | staging E-023 | แสดงเบอร์โทรไทย (มือถือ/กทม./ต่างจังหวัด) — เก็บดิบ format ตอนแสดง |
+| `isThaiPhone()` | `lib/format/phone.ts` | mytester A-04 | ตรวจเบอร์โทรไทย 9–10 หลักขึ้นต้น 0 (+66/วงเล็บ/ขีด/เบอร์ต่อได้) — ใช้ใน Zod `.refine` ของช่องเบอร์ที่พิมพ์บนเอกสาร |
+| `payeeBankOptions(current)` | `lib/banks/thai-banks.ts` (pure) | mytester A-16 | ตัวเลือกช่องธนาคารที่เก็บเป็น**ชื่อ** — เฉพาะชื่อที่ `resolveBankCode()` แปลงกลับเป็นรหัสตัวเองได้ + คงค่าเดิมที่พิมพ์เองพร้อมบอกว่าระบบอ่านเป็นธนาคารอะไร |
+| `portalCompanyDenyCode()` / `COMPANY_NOT_LINKED_MESSAGE` / `loginReasonMessage()` · `AuthError(code, detail, userMessage)` | `lib/auth/errors.ts` | mytester A-07 | ผู้ใช้บริษัทไฟแนนซ์ไม่ผูกบริษัท = `USER_NOT_PROVISIONED` + ข้อความเฉพาะ (≠ `COMPANY_SUSPENDED`) · `AuthError` แนบข้อความแทนค่ากลางของ code ได้ (ฟอร์ม login ใช้ข้อความจากเซิร์ฟเวอร์ก่อน) |
+| `catalogEmptyDescription()` / `tacImportedAtText()` | `lib/device-catalog/tac-polling.ts` (pure) | mytester A-13 | ข้อความตารางว่าง/ช่องนำเข้าล่าสุดของฐาน TAC ระหว่างมีงานนำเข้าค้าง |
+| `rateRangeFieldError()` / `serviceFeeBaseLabel(model)` | `lib/service-fee/template.ts` (pure) | mytester A-11/A-15 | ข้อความใต้ช่องอัตราเกิน 0-100 (ข้อความเดียวกับ `INVALID_RATE_RANGE`) · ชื่อยอด base ตามโมเดล (FLAT = ค่าบริการเหมาต่อเคส) |
 | `districtOptions` · `subdistrictOptions` | `lib/address/thai-address.ts` | staging E-017 | ตัวเลือกอำเภอ/ตำบล = ชุดตัวอย่าง ∪ พื้นที่จากรหัสไปรษณีย์ |
 | `checkCaseRef` (`GET /api/cases/ref-check`) | `lib/cases/queries.ts` | staging E-027 | ตรวจเลขที่สัญญาซ้ำก่อนบันทึก (กติกาเดียวกับ `assertCaseRefAvailable`) |
 | `storedFileName` | `lib/exports/pack.ts` | staging E-066 | ชื่อไฟล์ท้าย path ใน Storage (ไม่เปิดเผยโครง path) สำหรับ CSV/รายงาน |
