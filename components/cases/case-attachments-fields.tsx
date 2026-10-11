@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button, ConfirmModal, InlineAlert, StatusBadge } from '@/components/ui'
 import { buttonClass } from '@/components/ui/button'
+import { StoredPhotoThumb } from '@/components/ui/stored-photo-thumb'
 import {
   assertProductPhotoCapacity,
   countDocuments,
@@ -22,6 +23,7 @@ import {
   slotsExcludedBy,
 } from '@/lib/cases/document-upload'
 import { CaseError } from '@/lib/cases/errors'
+import { slotUploadBadge } from '@/lib/cases/upload-queue'
 import type { CaseDocumentDto } from '@/lib/cases/types'
 
 /**
@@ -227,19 +229,16 @@ export function CaseAttachmentsFields({
         )}
         <div className="space-y-3">
           {formSlotsFor(mode).map((slot) => {
-            const count = countOf(slot)
             const slotFiles = staged.filter((item) => item.slot === slot)
+            // นับ "อัปโหลดแล้ว" เฉพาะไฟล์ที่ผูกกับเคสจริง — ไฟล์ที่เพิ่งเลือกเป็น "รออัปโหลด" (mytester B-04)
+            const badge = slotUploadBadge(uploadedOf(slot).length, slotFiles.length)
             return (
               <div key={slot} className="rounded-lg border border-slate-200 p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-semibold text-slate-800">{DOCUMENT_SLOT_LABEL[slot]}</span>
-                      {count > 0 ? (
-                        <StatusBadge group="success" label={`อัปโหลดแล้ว ✓ (${count} ไฟล์)`} />
-                      ) : (
-                        <StatusBadge group="neutral" label="ยังไม่อัปโหลด" />
-                      )}
+                      <StatusBadge group={badge.group} label={badge.label} />
                     </div>
                     <p className="mt-0.5 text-[11px] text-slate-500">{DOCUMENT_SLOT_HINT[slot]}</p>
                   </div>
@@ -293,6 +292,7 @@ export function CaseAttachmentsFields({
                       >
                         <span className="truncate text-slate-700">
                           {isPdfMime(item.file.type) ? '📄' : '🖼'} {item.file.name}
+                          <span className="ml-1 text-[10px] text-amber-700">รออัปโหลดเมื่อกดบันทึก</span>
                         </span>
                         <button
                           type="button"
@@ -403,11 +403,13 @@ export function CaseAttachmentsFields({
             {existingPhotos.map((document) => (
               <div
                 key={document.id}
-                className="relative flex aspect-square items-center justify-center rounded-lg border border-slate-200 bg-slate-50 p-2 text-center text-[10px] text-slate-500"
+                className="relative aspect-square overflow-hidden rounded-lg border border-slate-200 bg-slate-50"
+                title={`${document.originalName} · อัปโหลดแล้ว`}
               >
-                <span>
-                  อัปโหลดแล้ว ✓<br />
-                  <span className="truncate">{document.originalName}</span>
+                {/* ภาพย่อของรูปที่อัปโหลดแล้ว (mytester B-06) */}
+                <StoredPhotoThumb path={document.fileUrl} alt={document.originalName} className="h-full rounded-none" />
+                <span className="absolute bottom-1 left-1 rounded bg-white/90 px-1 text-[10px] font-semibold text-emerald-700 shadow">
+                  อัปโหลดแล้ว ✓
                 </span>
                 {onDeleteDocument !== undefined && (
                   <button

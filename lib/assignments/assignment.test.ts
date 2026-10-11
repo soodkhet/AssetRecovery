@@ -8,10 +8,13 @@ import {
   assertRespondable,
   assignmentStateOf,
   isReassignmentExpired,
+  kanbanProvinceOptions,
   reassignBranchOf,
   reassignmentExpiresAt,
+  reassignmentResponseRecipientIds,
   reassignOutcome,
 } from '@/lib/assignments/assignment'
+import { AssignmentError } from '@/lib/assignments/errors'
 
 /** เทสต์ตาม `40` §20 (Test Cases) — โฟกัสกฎที่ห้ามสลับกันของ reassign 2 สาขา */
 
@@ -60,6 +63,17 @@ describe('assign (`40` §12)', () => {
     expect(codeOf(() => assertAgentInCaseTeam(TEAM_B, TEAM_A))).toBe('ASSIGNMENT_TEAM_MISMATCH')
     expect(codeOf(() => assertAgentInCaseTeam(null, TEAM_A))).toBe('ASSIGNMENT_TEAM_MISMATCH')
     expect(codeOf(() => assertAgentInCaseTeam(TEAM_A, null))).toBe('ASSIGNMENT_TEAM_MISMATCH')
+  })
+
+  it('error ไม่แนบรหัสทีมของพนักงาน/เคสกลับไป (ไม่ leak ข้อมูลนอกขอบเขต — mytester C-01)', () => {
+    try {
+      assertAgentInCaseTeam(TEAM_B, TEAM_A)
+      throw new Error('should throw')
+    } catch (error) {
+      expect(error).toBeInstanceOf(AssignmentError)
+      expect(JSON.stringify((error as AssignmentError).context ?? {})).not.toContain(TEAM_B)
+      expect(JSON.stringify((error as AssignmentError).context ?? {})).not.toContain(TEAM_A)
+    }
   })
 })
 
@@ -154,5 +168,31 @@ describe('accept_assignment (`40` §8)', () => {
     expect(
       codeOf(() => assertAcceptable({ agentId: AGENT, status: 'accepted_unscheduled', acceptedAt: new Date() }, AGENT)),
     ).toBe('ASSIGNMENT_INVALID_STATUS')
+  })
+})
+
+describe('ผู้รับผลการตอบคำขอเปลี่ยนผู้รับผิดชอบ (`40` §15 · mytester C-02)', () => {
+  const SUP = 'sup'
+  const MGR = 'mgr'
+  const AGENT = 'agent'
+  it('หัวหน้าเป็นผู้ขอ ⇒ ผู้จัดการทีมได้รับด้วย ไม่ซ้ำ', () => {
+    expect(reassignmentResponseRecipientIds(SUP, [SUP, MGR], AGENT)).toEqual([SUP, MGR])
+  })
+  it('ผู้ขอนอกกลุ่มหัวหน้าทีม อยู่ลำดับแรก · ไม่ส่งถึงผู้ตอบเอง', () => {
+    expect(reassignmentResponseRecipientIds('requester', [SUP, MGR, AGENT], AGENT)).toEqual(['requester', SUP, MGR])
+  })
+  it('ทีมไม่มีหัวหน้า/ผู้จัดการ ⇒ ผู้ขอคนเดียว', () => {
+    expect(reassignmentResponseRecipientIds(MGR, [], AGENT)).toEqual([MGR])
+  })
+})
+
+describe('ตัวเลือกกรองจังหวัด Kanban (mytester C-03)', () => {
+  it('จังหวัดที่ทีมดูแลก่อน แล้วตามด้วยจังหวัดของเคสที่อยู่นอกพื้นที่ ไม่ซ้ำ ไม่ว่าง', () => {
+    expect(
+      kanbanProvinceOptions(['นนทบุรี', 'กรุงเทพมหานคร'], ['ชลบุรี', null, 'นนทบุรี', '', 'ชลบุรี', 'ขอนแก่น']),
+    ).toEqual(['นนทบุรี', 'กรุงเทพมหานคร', 'ขอนแก่น', 'ชลบุรี'])
+  })
+  it('ทีมไม่ได้ตั้งจังหวัดและไม่มีเคส ⇒ ว่าง', () => {
+    expect(kanbanProvinceOptions([], [])).toEqual([])
   })
 })

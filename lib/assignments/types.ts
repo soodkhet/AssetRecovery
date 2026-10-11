@@ -119,6 +119,8 @@ export interface KanbanBoardDto {
   teamId: string
   teamName: string
   teamSide: AssignmentTeamSide
+  /** ตัวเลือกกรองจังหวัด — จังหวัดที่ทีมดูแล ตามด้วยจังหวัดอื่นที่มีเคสในมือของทีม (mytester C-03) */
+  provinces: string[]
   columns: KanbanColumnDto[]
 }
 

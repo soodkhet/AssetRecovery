@@ -60,10 +60,11 @@ export function assertAssignable(state: AssignmentState): void {
 /**
  * `40` §11 — กรองพนักงานตามทีม**ของเคส**เท่านั้น (ไม่ใช่ทีมใดก็ได้ที่ผู้จัดการดูแล)
  * `agentTeamId` ต้องมาจากสมาชิกภาพจริงของพนักงาน (`users.team_id`)
+ * ห้ามแนบรหัสทีมใน error — ทีมของพนักงานอาจอยู่นอกขอบเขตผู้เรียก (Rule 03 ไม่ leak · mytester C-01)
  */
 export function assertAgentInCaseTeam(agentTeamId: string | null, caseTeamId: string | null): void {
   if (caseTeamId === null || agentTeamId === null || agentTeamId !== caseTeamId) {
-    throw new AssignmentError('ASSIGNMENT_TEAM_MISMATCH', { context: { agentTeamId, caseTeamId } })
+    throw new AssignmentError('ASSIGNMENT_TEAM_MISMATCH')
   }
 }
 
@@ -170,4 +171,37 @@ export interface ReassignOutcome {
  */
 export function reassignOutcome(): ReassignOutcome {
   return { previousStatus: 'reassigned_away', nextStatus: 'pending_accept', acceptedAt: null }
+}
+
+/**
+ * ผู้รับผลการตอบคำขอเปลี่ยนผู้รับผิดชอบ (ยินยอม/ไม่ยินยอม) — ผู้ขอ + ผู้จัดการ/หัวหน้าของทีมเคส
+ * (`40` §15 · `90` §6.3 — เหมือนแจ้ง "พนักงานกดรับงานแล้ว" · mytester C-02)
+ * ผู้ขออยู่ลำดับแรก · ไม่ซ้ำ · ไม่ส่งถึงผู้ตอบเอง
+ */
+export function reassignmentResponseRecipientIds(
+  requestedBy: string,
+  teamLeadIds: readonly string[],
+  responderId: string,
+): string[] {
+  return [...new Set([requestedBy, ...teamLeadIds])].filter((id) => id !== responderId)
+}
+
+/**
+ * ตัวเลือกกรองจังหวัดของ Kanban — จังหวัดที่ทีมดูแล (ตามลำดับที่ตั้งไว้) ตามด้วยจังหวัดอื่นที่มีเคสในมือ
+ * (เรียงตามตัวอักษร) · ตัดค่าว่าง/ซ้ำ (mytester C-03 — แทนรายการ 77 จังหวัด)
+ */
+export function kanbanProvinceOptions(
+  teamProvinces: readonly string[],
+  caseProvinces: readonly (string | null)[],
+): string[] {
+  const covered = [...new Set(teamProvinces.map((p) => p.trim()).filter((p) => p !== ''))]
+  const coveredSet = new Set(covered)
+  const extra = [
+    ...new Set(
+      caseProvinces
+        .map((p) => (p ?? '').trim())
+        .filter((p) => p !== '' && !coveredSet.has(p)),
+    ),
+  ].sort((a, b) => a.localeCompare(b, 'th'))
+  return [...covered, ...extra]
 }

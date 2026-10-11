@@ -116,6 +116,11 @@ export const caseUpdateSchema = caseCreateSchema
      * ไม่ส่ง = ไม่ตรวจ (ผู้เรียกภายนอก/เดิม)
      */
     expectedUpdatedAt: z.iso.datetime({ offset: true }).optional(),
+    /**
+     * ฟอร์มแก้ไขมีไฟล์ใหม่รออัปโหลดต่อจากการบันทึกนี้ ⇒ ประวัติการแก้ไขระบุ "เอกสารแนบ" ด้วย
+     * (ไฟล์ขึ้นผ่าน endpoint แยกหลังบันทึก — mytester B-13) · ไม่ส่ง = ไม่มีไฟล์ใหม่
+     */
+    attachingDocuments: z.boolean().optional(),
   })
 
 export type CaseUpdateInput = z.infer<typeof caseUpdateSchema>

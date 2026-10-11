@@ -914,7 +914,7 @@ export async function updateCase(
   if (current === null) throw new CaseError('CASE_NOT_FOUND')
   assertCaseEditable(current.status)
 
-  const { editNote, expectedUpdatedAt, ...values } = input
+  const { editNote, expectedUpdatedAt, attachingDocuments, ...values } = input
   // preship R3-003 — ฟอร์มที่เปิดก่อนคนอื่นบันทึก ห้ามทับเงียบ (เช็คซ้ำแบบ atomic ตอน update ด้านล่าง)
   assertCaseNotModifiedSince(current.updatedAt, expectedUpdatedAt)
   const companyId = values.financeCompanyId ?? current.companyId
@@ -1004,7 +1004,10 @@ export async function updateCase(
     ...toCaseAuditPayload(values),
     ...(device === undefined ? {} : { assetBrandModel: device.text, deviceModelId: device.deviceModelId }),
   }
-  const changedFields = changedFieldsOf(beforePayload, afterPayload)
+  const changedFields = [
+    ...changedFieldsOf(beforePayload, afterPayload),
+    ...(attachingDocuments === true ? ['documents'] : []),
+  ]
 
   try {
     const saved = await prisma.$transaction(async (tx) => {
@@ -1291,6 +1294,16 @@ export async function deleteCaseDocument(
       },
       tx as CaseTxClient,
     )
+    // ลบเอกสาร = การแก้ไขเคสอย่างหนึ่ง ⇒ ลงประวัติการแก้ไขด้วย (`38` §6.4 · mytester B-13)
+    await tx.caseEditHistory.create({
+      data: {
+        organizationId,
+        caseId,
+        note: `ลบเอกสาร ${document.originalName}${context.reason ? ` — ${context.reason}` : ''}`.slice(0, 500),
+        changedFields: ['documents'],
+        editedBy: context.actor.id,
+      },
+    })
 
     const refreshed = await tx.case.findUniqueOrThrow({ where: { id: caseId }, select: detailSelect })
     return toDetailDto(refreshed)

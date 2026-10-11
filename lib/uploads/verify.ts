@@ -1,7 +1,7 @@
 import type { Prisma } from '@/lib/generated/prisma/client'
 import { UploadError } from '@/lib/uploads/errors'
 import { assertUploadPathInScope, inspectUploadedBytes, type UploadRule, type VerifiedUpload } from '@/lib/uploads/inspect'
-import { downloadUploadedFile } from '@/lib/uploads/storage'
+import { downloadUploadedFile, removeStoredFiles } from '@/lib/uploads/storage'
 
 /**
  * ตรวจไฟล์ที่อัปโหลดแล้วฝั่ง server ครบวงจร (มติ PO 03/10/2569 — UAT Q13 · BUG-037/050)
@@ -23,9 +23,34 @@ export async function verifyUploadedFile(
     assertUploadPathInScope(path, rule.prefix)
     const bytes = await downloadUploadedFile(path)
     if (bytes === null) throw new UploadError('UPLOAD_FILE_NOT_FOUND', { detail: `path=${path}` })
-    return inspectUploadedBytes(bytes, rule, claimedSha256)
+    try {
+      return inspectUploadedBytes(bytes, rule, claimedSha256)
+    } catch (error) {
+      await removeRejectedUpload(path, error)
+      throw error
+    }
   } catch (error) {
     throw withRejectedPath(error, path)
+  }
+}
+
+/**
+ * ไฟล์ที่เนื้อไม่ตรงชนิดที่รับ ไม่มีทางเป็นไฟล์ที่เคยผูกกับ record ได้ (ทุกไฟล์ที่ผูกแล้วผ่านการตรวจเดียวกันมาก่อน)
+ * ⇒ ลบทิ้งทันทีไม่ให้ค้างใน Storage (mytester A-14) · เฉพาะ path ที่ผ่าน prefix ของผู้เรียกแล้วเท่านั้น
+ * · hash ไม่ตรง/ไฟล์ใหญ่เกิน **ไม่ลบ** (อาจเป็นไฟล์เดิมที่ผูกอยู่แล้วถูกส่งซ้ำด้วยค่าผิด หรือเกณฑ์ขนาดเปลี่ยน)
+ */
+export function shouldRemoveRejectedUpload(error: unknown): boolean {
+  return error instanceof UploadError && error.code === 'UPLOAD_FILE_TYPE_INVALID'
+}
+
+async function removeRejectedUpload(path: string, error: unknown): Promise<void> {
+  if (!shouldRemoveRejectedUpload(error)) return
+  try {
+    const { failed } = await removeStoredFiles([path])
+    if (failed.length > 0) console.error('[uploads] ลบไฟล์ที่ถูกปฏิเสธไม่สำเร็จ', { path })
+  } catch (removeError: unknown) {
+    // ลบไม่สำเร็จต้องไม่บัง error เดิมที่ผู้ใช้ต้องเห็น
+    console.error('[uploads] ลบไฟล์ที่ถูกปฏิเสธไม่สำเร็จ', { path, error: removeError })
   }
 }
 

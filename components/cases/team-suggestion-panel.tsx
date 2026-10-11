@@ -1,6 +1,6 @@
 'use client'
 
-import { otherMatchedHeading, teamSelectionView } from '@/lib/cases/team-suggestion-ui'
+import { otherMatchedHeading, outOfAreaToggleLabel, teamSelectionView } from '@/lib/cases/team-suggestion-ui'
 import { useState } from 'react'
 import { Badge, Button, InlineAlert, StatusBadge } from '@/components/ui'
 import { ROLE_GROUP_BADGE_CLASS } from '@/lib/ui/status-badge'
@@ -50,6 +50,8 @@ export function TeamSuggestionPanel({
   })
   const remainingMatched = matchedOptions.filter((team) => team.id !== selected?.id)
   const matchedHeading = otherMatchedHeading(remainingMatched.length)
+  const remainingOutOfArea = otherOptions.filter((team) => team.id !== selected?.id)
+  const toggleLabel = outOfAreaToggleLabel(remainingOutOfArea.length, showAll)
 
   return (
     <section>
@@ -98,19 +100,20 @@ export function TeamSuggestionPanel({
               ))}
           </div>
 
-          <div className="mt-3">
-            <Button variant="ghost" size="sm" onClick={() => setShowAll((current) => !current)}>
-              {showAll ? 'ซ่อนทีมอื่น' : `ดูทีมอื่นทั้งหมด (${otherOptions.length})`}
-            </Button>
-          </div>
+          {toggleLabel !== null && (
+            <div className="mt-3">
+              <Button variant="ghost" size="sm" onClick={() => setShowAll((current) => !current)}>
+                {toggleLabel}
+              </Button>
+            </div>
+          )}
 
           {showAll && (
             <div className="mt-2 space-y-2">
-              {otherOptions.length === 0 ? (
+              {remainingOutOfArea.length === 0 ? (
                 <p className="text-xs text-slate-400">ไม่มีทีมอื่นนอกจากที่แสดงอยู่</p>
               ) : (
-                otherOptions
-                  .filter((team) => team.id !== selected?.id)
+                remainingOutOfArea
                   .map((team) => (
                     <TeamOptionCard
                       key={team.id}

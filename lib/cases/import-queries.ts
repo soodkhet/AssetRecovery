@@ -60,14 +60,31 @@ async function findExistingCaseRefs(
   organizationId: string,
   companyId: string,
   rows: readonly { input: { caseRef: string } }[],
-): Promise<Set<string>> {
+): Promise<Map<string, string | null>> {
   const normalized = [...new Set(rows.map((row) => normalizeCaseRef(row.input.caseRef)))]
-  if (normalized.length === 0) return new Set()
+  if (normalized.length === 0) return new Map()
   const existing = await prisma.case.findMany({
     where: { organizationId, companyId, caseRefNormalized: { in: normalized } },
-    select: { caseRefNormalized: true },
+    // รอบล่าสุดก่อน — ลิงก์ไปเคสที่ยังไม่ถูกลบรอบล่าสุด (เคสที่ลบแล้วยังจองเลขแต่เปิดดูไม่ได้)
+    orderBy: { trackingRound: 'desc' },
+    select: { id: true, caseRefNormalized: true, deletedAt: true },
   })
-  return new Set(existing.map((row) => row.caseRefNormalized))
+  const result = new Map<string, string | null>()
+  for (const row of existing) {
+    const current = result.get(row.caseRefNormalized)
+    if (current === undefined || current === null) {
+      result.set(row.caseRefNormalized, row.deletedAt === null ? row.id : (current ?? null))
+    }
+  }
+  return result
+}
+
+/** id เคสเดิมจาก error `CASE_REF_DUPLICATE` ของ `createCase()` (มี `existingCase` ใน context) */
+function existingCaseIdOf(error: ModuleError): string | undefined {
+  const existing = error.context?.['existingCase']
+  if (existing === null || typeof existing !== 'object') return undefined
+  const id = (existing as { id?: unknown }).id
+  return typeof id === 'string' ? id : undefined
 }
 
 export async function importCases(
@@ -114,7 +131,9 @@ export async function importCases(
 
   // preview ต้องตรวจเลขที่สัญญาที่มีในฐานแล้วด้วย (preship R2-001 — เดิมตรวจแค่ซ้ำในไฟล์ ⇒ preview บอกผ่าน
   // แต่ยืนยันแล้วแถวตก) · ค้นทีเดียวทั้งไฟล์ · ไม่กรอง `deleted_at` เหมือน `assertCaseRefAvailable()` (เคสที่ลบยังจองเลข)
-  const existingRefs = input.dryRun ? await findExistingCaseRefs(organizationId, input.financeCompanyId, plan.rows) : new Set<string>()
+  const existingRefs = input.dryRun
+    ? await findExistingCaseRefs(organizationId, input.financeCompanyId, plan.rows)
+    : new Map<string, string | null>()
 
   const results: CaseImportRowResultDto[] = plan.errors.map((error) => ({
     rowNumber: error.rowNumber,
@@ -163,6 +182,7 @@ export async function importCases(
 
     if (input.dryRun && existingRefs.has(normalizeCaseRef(row.input.caseRef))) {
       const duplicate = new CaseError('CASE_REF_DUPLICATE', { context: { caseRef: row.input.caseRef } })
+      const existingCaseId = existingRefs.get(normalizeCaseRef(row.input.caseRef)) ?? null
       results.push({
         rowNumber: row.rowNumber,
         caseRef: row.input.caseRef,
@@ -172,6 +192,7 @@ export async function importCases(
         errorMessage: duplicate.userMessage,
         fields: null,
         warnings: rowWarnings(row.input.assetImeiSerial, activeImeis, device.warning),
+        ...(existingCaseId === null ? {} : { existingCaseId }),
       })
       continue
     }
@@ -212,6 +233,7 @@ export async function importCases(
     } catch (error) {
       // error ของโมดูล (ref ซ้ำ/บริษัทถูกระงับ/เลขบัตรผิด) = แถวนั้นตก · error อื่นถือเป็นความผิดพลาดจริง
       if (!(error instanceof ModuleError)) throw error
+      const existingCaseId = error.code === 'CASE_REF_DUPLICATE' ? existingCaseIdOf(error) : undefined
       results.push({
         rowNumber: row.rowNumber,
         caseRef: row.input.caseRef,
@@ -221,6 +243,7 @@ export async function importCases(
         errorMessage: error.userMessage,
         fields: null,
         warnings: rowWarnings(row.input.assetImeiSerial, activeImeis, device.warning),
+        ...(existingCaseId === undefined ? {} : { existingCaseId }),
       })
     }
   }

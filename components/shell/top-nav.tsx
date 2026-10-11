@@ -10,6 +10,7 @@ import { TOUCH_TARGET_CLASS } from '@/components/ui/button'
 import { cn } from '@/components/ui/cn'
 import type { MenuItem } from '@/lib/nav/menu-registry'
 import type { ClientSession } from '@/lib/auth/types'
+import { roleBadgeText } from '@/lib/roles/role-groups'
 
 /**
  * Top Nav 7 เมนู — โครง/คลาสตาม mockup `reference/app-shell.html` (`06` §8)
@@ -68,8 +69,8 @@ export function TopNav({ menus, session }: { menus: readonly MenuItem[]; session
             <NotificationBell allHref="/notifications" />
             <div className="hidden text-right sm:block">
               <div className="text-sm font-bold text-slate-900">{session.fullName}</div>
-              <div className="inline-block rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] text-slate-500">
-                {session.roleName} · {session.roleGroup}
+              <div className="inline-block rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">
+                {roleBadgeText(session.roleName, session.roleGroup)}
               </div>
             </div>
             <LogoutButton />

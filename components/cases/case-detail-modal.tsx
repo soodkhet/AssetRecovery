@@ -5,6 +5,7 @@ import { usePermission } from '@/components/auth/permission-provider'
 import { FieldEvidenceSection } from '@/components/cases/field-evidence-section'
 import { FileViewerModal, type ViewableFile } from '@/components/cases/file-viewer-modal'
 import { TeamSuggestionPanel } from '@/components/cases/team-suggestion-panel'
+import { StoredPhotoThumb } from '@/components/ui/stored-photo-thumb'
 import { ReasonConfirmModal } from '@/components/settings/reason-confirm-modal'
 import { REASON_MAX } from '@/lib/api/validation'
 import {
@@ -149,6 +150,24 @@ export function CaseDetailModal({
   const [rejectEvidenceReason, setRejectEvidenceReason] = useState('')
   const [rejectingEvidence, setRejectingEvidence] = useState(false)
 
+  // modal ตัวเดียวถูกใช้ซ้ำข้ามเคส ⇒ ค่าที่ผู้ตรวจกรอก/ติ๊กต้องรีเซ็ตทุกครั้งที่เปิดเคสใหม่หรือเปิดซ้ำ
+  // (กันติ๊ก "ยืนยันเอกสารชุด" ค้างไปเคสถัดไป — mytester B-12) · รีเซ็ตระหว่าง render ตามแนวของ React
+  const sessionKey = open ? caseId : null
+  const [lastSessionKey, setLastSessionKey] = useState(sessionKey)
+  if (sessionKey !== lastSessionKey) {
+    setLastSessionKey(sessionKey)
+    setReason('')
+    setConfirmingReject(null)
+    setActionError(null)
+    setTeamPick(null)
+    setTeamReason('')
+    setChosenTeam(null)
+    setBundleConfirmed(false)
+    setBundleError(null)
+    setRejectEvidenceOpen(false)
+    setRejectEvidenceReason('')
+  }
+
   const load = useCallback(async (id: string) => await callApi<CaseDetailDto>(apiPath('case.detail', { id })), [])
 
   useEffect(() => {
@@ -189,7 +208,10 @@ export function CaseDetailModal({
           action: button.action,
           reason,
           ...(teamChanged ? { teamId: chosenTeam.id, teamChangeReason: chosenTeam.reason } : {}),
-          ...(button.action === 'accept' ? { bundleDocumentsConfirmed: bundleConfirmed } : {}),
+          // ส่งเฉพาะเคสโหมดเอกสารชุด — เคสแยกประเภทไม่ต้องมีค่านี้ (mytester B-12)
+          ...(button.action === 'accept' && documentModeOf(countDocuments(detail.documents)) === 'bundle'
+            ? { bundleDocumentsConfirmed: bundleConfirmed }
+            : {}),
         }),
       )
 
@@ -403,7 +425,7 @@ export function CaseDetailModal({
                     maxLength={1000}
                     id="case-review-reason"
                     value={reason}
-                    placeholder="ระบุเหตุผลให้ผู้เกี่ยวข้องเข้าใจตรงกัน — ถูกบันทึกลง audit log"
+                    placeholder="ระบุเหตุผลให้ผู้เกี่ยวข้องเข้าใจตรงกัน — บันทึกในประวัติการแก้ไข"
                     onChange={(event) => setReason(event.target.value)}
                   />
                 </Field>
@@ -725,10 +747,13 @@ function DocumentSection({
               <button
                 key={photo.id}
                 type="button"
-                className="focus-ring flex aspect-square items-center justify-center rounded-lg border border-slate-200 bg-slate-50 p-2 text-center text-[10px] text-slate-600 hover:border-slate-400"
+                aria-label={`ดูรูป ${photo.originalName}`}
+                title={photo.originalName}
+                className="focus-ring overflow-hidden rounded-lg border border-slate-200 bg-slate-50 hover:border-slate-400"
                 onClick={() => onView(photo)}
               >
-                <span className="line-clamp-3 break-all">🖼 {photo.originalName}</span>
+                {/* ภาพย่อแทนชื่อไฟล์ — คลิกเปิดภาพขยาย (mytester B-06) */}
+                <StoredPhotoThumb path={photo.fileUrl} alt={photo.originalName} className="rounded-none" />
               </button>
             ))}
           </div>

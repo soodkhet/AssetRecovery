@@ -15,6 +15,7 @@ import {
   assignmentStateOf,
   reassignBranchOf,
   reassignmentExpiresAt,
+  reassignmentResponseRecipientIds,
   reassignOutcome,
   type AssignmentState,
 } from '@/lib/assignments/assignment'
@@ -682,15 +683,21 @@ export async function respondReassignment(
     return replacement
   })
 
-  // `40` §15 — ผู้ขอรู้ผลการตอบเสมอ · ยินยอม = คนใหม่ได้งาน (UAT Q17 · BUG-040)
+  // `40` §15 — ผู้ขอ + ผู้จัดการ/หัวหน้าทีมรู้ผลการตอบเสมอ · ยินยอม = คนใหม่ได้งาน (UAT Q17 · BUG-040 · mytester C-02)
   const responded = {
     caseRef: row.caseRef,
     pendingReassignmentId: pending.id,
     decision: input.decision,
     declineReason,
   }
-  dispatchNotification(
-    { organizationId: user.organizationId, userIds: [pending.requestedBy] },
+  dispatchToResolvedUsers(
+    user.organizationId,
+    async () =>
+      reassignmentResponseRecipientIds(
+        pending.requestedBy,
+        await teamLeadIds(user.organizationId, row.assignedTeamId),
+        user.id,
+      ),
     reassignmentRespondedMessage(responded, 'requester'),
   )
   if (input.decision === 'consent') {

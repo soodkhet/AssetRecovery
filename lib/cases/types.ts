@@ -162,6 +162,8 @@ export interface CaseImportRowResultDto {
   fields: Record<string, string> | null
   /** เตือนต่อช่อง (ไม่ทำให้แถวตก) เช่น Serial ที่ดูเหมือน IMEI พิมพ์ผิด (มติ PO U54) — ไม่มี = `null` */
   warnings: Record<string, string> | null
+  /** เลขที่สัญญาซ้ำเคสเดิมในระบบ ⇒ id ของเคสนั้น ให้หน้าจอทำลิงก์เปิดดู (mytester B-10) · ไม่มี = ไม่ส่ง */
+  existingCaseId?: string
 }
 
 export interface CaseImportResultDto {

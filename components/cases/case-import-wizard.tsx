@@ -375,6 +375,17 @@ export function CaseImportWizard({
                     </Td>
                     <Td>
                       <div className="text-xs text-slate-600">{row.errorMessage ?? '—'}</div>
+                      {/* เลขที่สัญญาซ้ำเคสเดิม ⇒ ลิงก์เปิดเคสนั้นในแท็บใหม่ (ไม่ทิ้งผลตรวจไฟล์ — mytester B-10) */}
+                      {row.existingCaseId !== undefined && (
+                        <a
+                          href={`/cases/submit?case=${encodeURIComponent(row.existingCaseId)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="focus-ring text-xs font-semibold text-sky-700 underline"
+                        >
+                          เปิดเคสเดิม ↗
+                        </a>
+                      )}
                       {row.fields !== null && (
                         <div className="text-[11px] text-red-600">
                           {Object.entries(row.fields)
