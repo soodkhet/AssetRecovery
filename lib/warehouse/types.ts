@@ -83,6 +83,8 @@ export interface LotDetailDto extends LotSummaryDto {
   trackingNo: string | null
   signedDocUrl: string | null
   deliveryProofUrl: string | null
+  /** มติชั่วคราว M5 — นำเครื่องออกจากล็อตไม่ได้ (แนบใบเซ็นรับแล้ว/ของออกจากคลังแล้ว) · คิดก่อนซ่อนเอกสารตามสิทธิ์ · ไม่ระบุ = ไม่ล็อก */
+  assetRemovalLocked?: boolean
   note: string | null
   confirmedByName: string | null
   createdAt: string

@@ -71,6 +71,32 @@ export function assertLotMutable(status: HandoverLotStatus): void {
   if (isLotConfirmed(status)) throw new WarehouseError('LOT_ALREADY_CONFIRMED', { context: { status } })
 }
 
+/**
+ * มติชั่วคราว M5 (mytester WH-05 · รีวิวเฟส 4) — นำเครื่องออกจากล็อตได้เฉพาะล็อต `pending_attach` ที่**ยังไม่แนบใบเซ็นรับ**
+ * — แนบใบเซ็นรับแล้ว (ผู้รับเซ็นรับรายการเครื่องไปแล้ว) หรือ `pending_delivery_proof` ขึ้นไป (ของออกจากคลังแล้ว) ⇒ ล็อก
+ * ใช้ทั้งฝั่ง server (assert) และหน้าจอ (ซ่อนปุ่ม "นำออกจากล็อต")
+ */
+export function isLotAssetRemovalLocked(lot: { status: HandoverLotStatus; signedDocUrl: string | null }): boolean {
+  return lot.status !== 'pending_attach' || (lot.signedDocUrl !== null && lot.signedDocUrl !== '')
+}
+
+export const LOT_ASSET_REMOVAL_LOCKED_MESSAGES = {
+  title: 'นำเครื่องออกจากล็อตนี้ไม่ได้',
+  message:
+    'ล็อตนี้แนบใบเซ็นรับแล้ว หรือเครื่องออกจากคลังไปแล้ว — รายการเครื่องต้องตรงกับเอกสารที่ผู้รับเซ็น จึงนำเครื่องออกไม่ได้',
+} as const
+
+/** ใช้ code `LOT_ALREADY_CONFIRMED` (ล็อตอยู่ในสถานะที่แก้รายการเครื่องไม่ได้ — `44` §12) พร้อมข้อความเฉพาะกรณี */
+export function assertLotAssetRemovable(lot: { status: HandoverLotStatus; signedDocUrl: string | null }): void {
+  assertLotMutable(lot.status)
+  if (isLotAssetRemovalLocked(lot)) {
+    throw new WarehouseError('LOT_ALREADY_CONFIRMED', {
+      messages: LOT_ASSET_REMOVAL_LOCKED_MESSAGES,
+      context: { status: lot.status, signedDocAttached: lot.signedDocUrl !== null && lot.signedDocUrl !== '' },
+    })
+  }
+}
+
 /** เอกสารที่ต้องแนบก่อน `confirmed` แยกตามรูปแบบการส่งมอบ (`44` §6.3) */
 export const LOT_DOCUMENTS = ['signed_doc', 'delivery_proof'] as const
 export type LotDocument = (typeof LOT_DOCUMENTS)[number]

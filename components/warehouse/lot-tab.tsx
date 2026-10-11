@@ -413,7 +413,8 @@ export function LotTab({
                     >
                       ดู
                     </Button>
-                    {!confirmed && canManageLot && (
+                    {/* มติชั่วคราว M5 — แนบใบเซ็นรับแล้ว/ของออกจากคลังแล้ว ⇒ ซ่อนปุ่ม (server ปฏิเสธซ้ำ) */}
+                    {!confirmed && canManageLot && openLot.assetRemovalLocked !== true && (
                       <Button variant="secondary" size="sm" className="ml-2" onClick={() => setRemoveAsset(asset)}>
                         นำออกจากล็อต
                       </Button>

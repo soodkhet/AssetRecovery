@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { WarehouseError } from '@/lib/warehouse/errors'
 import {
+  assertLotAssetRemovable,
   assertLotConfirmDocuments,
   assertLotDeliveredAt,
   assertLotMutable,
   canConfirmLot,
   initialLotStatus,
+  isLotAssetRemovalLocked,
   isLotConfirmedElsewhere,
   LOT_STATUSES,
   lotTab,
@@ -128,5 +130,33 @@ describe('isLotConfirmedElsewhere (mytester WH-03)', () => {
     expect(isLotConfirmedElsewhere('LOT_ALREADY_CONFIRMED')).toBe(true)
     expect(isLotConfirmedElsewhere('CONFIRM_TRANSACTION_FAILED')).toBe(false)
     expect(isLotConfirmedElsewhere(undefined)).toBe(false)
+  })
+})
+
+describe('isLotAssetRemovalLocked / assertLotAssetRemovable (มติชั่วคราว M5 — รีวิวเฟส 4)', () => {
+  const doc = 'https://storage.test/handover-lots/signed.pdf'
+
+  it('pending_attach ที่ยังไม่แนบใบเซ็นรับ ⇒ นำเครื่องออกได้', () => {
+    expect(isLotAssetRemovalLocked({ status: 'pending_attach', signedDocUrl: null })).toBe(false)
+    expect(isLotAssetRemovalLocked({ status: 'pending_attach', signedDocUrl: '' })).toBe(false)
+    expect(() => assertLotAssetRemovable({ status: 'pending_attach', signedDocUrl: null })).not.toThrow()
+  })
+
+  it('แนบใบเซ็นรับแล้ว ⇒ ล็อก · LOT_ALREADY_CONFIRMED พร้อมข้อความบอกเหตุ', () => {
+    expect(isLotAssetRemovalLocked({ status: 'pending_attach', signedDocUrl: doc })).toBe(true)
+    try {
+      assertLotAssetRemovable({ status: 'pending_attach', signedDocUrl: doc })
+      expect.unreachable()
+    } catch (error) {
+      expect(error).toBeInstanceOf(WarehouseError)
+      expect((error as WarehouseError).code).toBe('LOT_ALREADY_CONFIRMED')
+      expect((error as WarehouseError).message).toContain('ใบเซ็นรับ')
+    }
+  })
+
+  it('pending_delivery_proof / confirmed ⇒ ล็อก', () => {
+    expect(isLotAssetRemovalLocked({ status: 'pending_delivery_proof', signedDocUrl: null })).toBe(true)
+    expect(isLotAssetRemovalLocked({ status: 'confirmed', signedDocUrl: doc })).toBe(true)
+    expect(() => assertLotAssetRemovable({ status: 'pending_delivery_proof', signedDocUrl: null })).toThrow(WarehouseError)
   })
 })

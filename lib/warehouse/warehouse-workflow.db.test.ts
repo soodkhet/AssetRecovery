@@ -887,6 +887,34 @@ suite('Phase 2.13 — ยืนยันส่งมอบ = $transaction 4 ข�
     expect((await db().asset.findUniqueOrThrow({ where: { id: assetId } })).assetStatus).toBe('handed_over')
   })
 
+  it('มติชั่วคราว M5 (รีวิวเฟส 4) — แนบใบเซ็นรับแล้ว/ล็อต we_deliver นำเครื่องออกไม่ได้ · เครื่องไม่ขยับ · ไม่มี audit', async () => {
+    const signed = await seedPendingLot()
+    await db().handoverLot.update({ where: { id: signed.lotId }, data: { signedDocUrl: SIGNED_DOC } })
+    const detail = await warehouse.getLot(admin, signed.lotId)
+    expect(detail.assetRemovalLocked).toBe(true)
+    await expectCode(
+      () => warehouse.removeAssetFromLot(admin, signed.lotId, { assetId: signed.assetId, reason: 'จัดผิดล็อต' }, ctx(admin)),
+      'LOT_ALREADY_CONFIRMED',
+    )
+    const asset = await db().asset.findUniqueOrThrow({ where: { id: signed.assetId } })
+    expect(asset.lotId).toBe(signed.lotId)
+
+    const shipped = await seedPendingLot('we_deliver')
+    expect((await warehouse.getLot(admin, shipped.lotId)).assetRemovalLocked).toBe(true)
+    await expectCode(
+      () => warehouse.removeAssetFromLot(admin, shipped.lotId, { assetId: shipped.assetId, reason: 'จัดผิดล็อต' }, ctx(admin)),
+      'LOT_ALREADY_CONFIRMED',
+    )
+    expect((await db().asset.findUniqueOrThrow({ where: { id: shipped.assetId } })).lotId).toBe(shipped.lotId)
+    const audits = await db().auditLog.count({
+      where: { organizationId: ORG_ID, targetId: { in: [signed.lotId, shipped.lotId] }, reason: 'จัดผิดล็อต' },
+    })
+    expect(audits).toBe(0)
+
+    const open = await seedPendingLot()
+    expect((await warehouse.getLot(admin, open.lotId)).assetRemovalLocked).toBe(false)
+  })
+
   it('T09 — ยืนยันโดยไม่แนบใบเซ็นรับ = LOT_MISSING_SIGNED_DOC (ล็อตไม่ขยับ)', async () => {
     const { lotId } = await seedPendingLot()
     await expectCode(

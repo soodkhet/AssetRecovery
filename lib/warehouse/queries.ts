@@ -41,7 +41,16 @@ import {
 } from '@/lib/warehouse/intake'
 import { assertLotAssets } from '@/lib/warehouse/lot-assets'
 import { bangkokDayRange, buildLotCompanyGroups } from '@/lib/warehouse/lot-company-groups'
-import { assertLotConfirmDocuments, assertLotDeliveredAt, assertLotMutable, initialLotStatus, lotTab } from '@/lib/warehouse/lot-status'
+import {
+  assertLotAssetRemovable,
+  assertLotConfirmDocuments,
+  assertLotDeliveredAt,
+  assertLotMutable,
+  initialLotStatus,
+  isLotAssetRemovalLocked,
+  LOT_ASSET_REMOVAL_LOCKED_MESSAGES,
+  lotTab,
+} from '@/lib/warehouse/lot-status'
 import { nextDocumentNumber } from '@/lib/document-numbering/queries'
 import { revenueOutcomeByCase, tryCreateRevenue } from '@/lib/warehouse/revenue-service'
 import { periodKeyOf } from '@/lib/accounting/period'
@@ -307,6 +316,7 @@ function toLotDetail(row: LotRow, assets: readonly AssetListItemDto[]): LotDetai
     trackingNo: row.trackingNo,
     signedDocUrl: row.signedDocUrl,
     deliveryProofUrl: row.deliveryProofUrl,
+    assetRemovalLocked: isLotAssetRemovalLocked(row),
     note: row.note,
     confirmedByName: row.confirmedByUser?.fullName ?? null,
     createdAt: row.createdAt.toISOString(),
@@ -906,7 +916,7 @@ export async function removeAssetFromLot(
     })
   }
   const current = await loadLot(user, lotId)
-  assertLotMutable(current.status)
+  assertLotAssetRemovable(current)
 
   const asset = await prisma.asset.findFirst({
     where: { id: input.assetId, lotId, organizationId: user.organizationId, deletedAt: null, ...assetScopeWhere(user) },
@@ -916,11 +926,12 @@ export async function removeAssetFromLot(
   const nextStatus = nextAssetStatus(asset.assetStatus, 'detach_from_lot')
 
   await prisma.$transaction(async (tx) => {
+    // แนบใบเซ็นรับ/ยืนยันพร้อมกันระหว่างทาง ⇒ ไม่ claim (มติชั่วคราว M5 — รีวิวเฟส 4)
     const claimed = await tx.handoverLot.updateMany({
-      where: { id: lotId, status: current.status },
+      where: { id: lotId, status: 'pending_attach', signedDocUrl: null },
       data: { updatedBy: context.actor.id },
     })
-    if (claimed.count === 0) throw new WarehouseError('LOT_ALREADY_CONFIRMED')
+    if (claimed.count === 0) throw new WarehouseError('LOT_ALREADY_CONFIRMED', { messages: LOT_ASSET_REMOVAL_LOCKED_MESSAGES })
 
     const detached = await tx.asset.updateMany({
       where: { id: asset.id, lotId, assetStatus: asset.assetStatus },
