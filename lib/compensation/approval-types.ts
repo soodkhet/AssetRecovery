@@ -115,6 +115,28 @@ export const compensationRejectSchema = z.object({
   reason: reasonSchema,
 })
 
+/**
+ * `GET /api/compensation/bulk-preview?ids=a,b,c` (mytester2 F2-01) — ยอดสรุปของหน้าต่าง "อนุมัติที่เลือก (N)"
+ * ids คั่นด้วยจุลภาค (สูงสุด 300 = เพดานรายการของคิว)
+ */
+export const compensationBulkPreviewQuerySchema = z.object({
+  ids: z
+    .string()
+    .trim()
+    .min(1, 'ต้องเลือกอย่างน้อย 1 รายการ')
+    .transform((value) => [...new Set(value.split(',').map((id) => id.trim()).filter((id) => id !== ''))])
+    .pipe(z.array(z.string().guid('รูปแบบรหัสไม่ถูกต้อง')).min(1, 'ต้องเลือกอย่างน้อย 1 รายการ').max(300)),
+})
+
+/** ยอดสรุปของชุดที่เลือก — คิดแบบรอบจ่ายถัดไป (ประมาณการ) · `count` = รายการที่ผู้เรียกมีสิทธิ์เห็นจริง */
+export interface CompensationBulkPreviewDto {
+  count: number
+  grossSatang: number
+  whtDeductedSatang: number
+  netSatang: number
+}
+
 export type CompensationApprovalListQuery = z.infer<typeof compensationListQuerySchema>
+export type CompensationBulkPreviewQuery = z.infer<typeof compensationBulkPreviewQuerySchema>
 export type CompensationApproveInput = z.infer<typeof compensationApproveSchema>
 export type CompensationRejectInput = z.infer<typeof compensationRejectSchema>

@@ -25,6 +25,8 @@ import {
 import type {
   CompensationApprovalDto,
   CompensationApprovalListQuery,
+  CompensationBulkPreviewDto,
+  CompensationBulkPreviewQuery,
   CompensationApproveInput,
   CompensationRejectInput,
 } from '@/lib/compensation/approval-types'
@@ -39,6 +41,7 @@ import {
 import { FinanceError } from '@/lib/finance/errors'
 import {
   approvalWhtPreviewsForNextBatch,
+  approvalWhtSelectionTotals,
   type ApprovalWhtGroupInput,
   type ApprovalWhtPreview,
 } from '@/lib/compensation/approval-wht'
@@ -674,6 +677,57 @@ export async function listCompensationApprovals(
         ]
       : []
   })
+}
+
+/**
+ * `GET /api/compensation/bulk-preview` (mytester2 F2-01) — ยอดสรุปของหน้าต่าง "อนุมัติที่เลือก (N)" คิดแบบรอบจ่ายถัดไป:
+ * ชุดที่เลือกรวมกลุ่มต่อผู้รับกับรายการ `approved` ที่ยังไม่เข้ารอบ + ยอดสะสมของเดือน (`approvalWhtSelectionTotals()`)
+ * · scope/ขั้นที่เห็นเหมือนคิว (`approvalScopeFilter` + `isApprovalItemVisibleTo`) — id ที่มองไม่เห็นถูกตัดทิ้งเงียบ ๆ ไม่ leak
+ * · อ่านอย่างเดียว ไม่มี mutation
+ */
+export async function previewCompensationBulkApproval(
+  user: SessionUser,
+  query: CompensationBulkPreviewQuery,
+): Promise<CompensationBulkPreviewDto> {
+  const found = await prisma.expense.findMany({
+    where: {
+      AND: [
+        { organizationId: user.organizationId, deletedAt: null, id: { in: query.ids } },
+        approvalScopeFilter(user),
+      ],
+    },
+    select: expenseSelect,
+  })
+  const candidates = found.length === 0 ? null : await loadMatrixCandidates(user.organizationId)
+  const rows = found.filter((row) => {
+    if (candidates === null) return false
+    const flow = flowOf(row, candidates)
+    return isApprovalItemVisibleTo(user, { status: row.status, approvalStepCurrent: row.approvalStepCurrent, steps: flow.steps })
+  })
+  if (rows.length === 0) return { count: 0, grossSatang: 0, whtDeductedSatang: 0, netSatang: 0 }
+
+  const payeeIds = [...new Set(rows.map((row) => row.payee.id))]
+  const settings = await currentWhtPolicy(user.organizationId, payeeIds)
+  // รายการอนุมัติแล้วที่ยังไม่เข้ารอบของผู้รับเดียวกัน (รวมนอก scope ของผู้ดู — ใช้ร่วมคิดเท่านั้น ไม่ส่งออก) — ชุดเดียวกับ `whtPreviewsFor()`
+  const others = await prisma.expense.findMany({
+    where: {
+      organizationId: user.organizationId,
+      deletedAt: null,
+      payeeId: { in: payeeIds },
+      status: 'approved',
+      payoutBatchItemId: null,
+      id: { notIn: rows.map((row) => row.id) },
+    },
+    select: expenseSelect,
+    take: 500,
+  })
+  return approvalWhtSelectionTotals(
+    [
+      ...rows.map((row) => ({ ...whtInputOf(row, settings), approved: row.status === 'approved', selected: true })),
+      ...others.map((row) => ({ ...whtInputOf(row, settings), approved: true, selected: false })),
+    ],
+    { monthToDate: settings.monthToDate },
+  )
 }
 
 /**

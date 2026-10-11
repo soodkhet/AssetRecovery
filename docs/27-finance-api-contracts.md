@@ -44,6 +44,7 @@
 | v3.27 | 11/10/2569 | **staging E-049** — §6.6 เพิ่ม `GET /api/payout-batches/preview` (สรุปจำนวน/ยอดรายการที่วันตัดรอบนี้จะดึงเข้ารอบ ก่อนกดสร้าง · สิทธิ์เดียวกับสร้างรอบ) |
 | v3.28 | 11/10/2569 | **mytester G-05** — §6.7 เพิ่ม `GET /api/billing-batches/preview?companyId=&cutoffDate=` (สรุปจำนวน/ยอดรายได้ที่วันตัดรอบนี้จะดึงเข้ารอบวางบิล + รายได้ที่อยู่หลังวันตัดรอบ · manage `manage_billing` · อ่านอย่างเดียว ไม่ลง audit) |
 | v3.29 | 11/10/2569 | **mytester F-04 · รีวิวเฟส 4 ข้อ 2** — §6.6 `PayoutBatchDto`: `compensationSatang` = ค่าตอบแทน (เงินได้จริง) **ไม่รวมเงินทดรองจ่าย** · เพิ่ม `advancePaidSatang` (ยอดเงินทดรองจ่ายในรอบ — ไม่มี = 0) · ⇒ `compensationSatang + advancePaidSatang + whtPaidByPayerSatang = grossSatang` (ดู `17` v2.12) |
+| v3.30 | 12/10/2569 | **mytester2 F2-01** — §6.5 เพิ่ม `GET /api/compensation/bulk-preview?ids=` (อ่านอย่างเดียว · capability/scope เดียวกับ `GET /api/compensation`) ยอดสรุปของหน้าต่าง "อนุมัติที่เลือก (N)": ชุดที่เลือกรวมกลุ่มต่อผู้รับกับรายการ `approved` ที่ยังไม่เข้ารอบ + ยอดสะสมของเดือน แล้วคิด WHT แบบรอบจ่ายด้วย pure module เดียวกับคิว (`22` §6.9) — ยอดสุทธิ = ส่วนที่รอบจ่ายถัดไปเพิ่มขึ้น · เป็นประมาณการ (ขั้นอนุมัติที่เหลือ/วันตัดรอบ) · **สูตรไม่เปลี่ยน** |
 
 ขอบเขตเอกสารนี้: รวม API Endpoint ทั้งหมดของโมดูล Finance/Accounting เป็นรายการเดียว จัดกลุ่มตาม resource เพื่อให้ backend implement ตาม REST convention เดียวกันทั้งระบบ
 
@@ -141,6 +142,7 @@ POST   /api/advances/:id/returns                       (v3.8 มติ PO U30 �
 
 ```
 GET    /api/compensation
+GET    /api/compensation/bulk-preview?ids=a,b,c   (ยอดสรุป "อนุมัติที่เลือก" — ประมาณการแบบรอบจ่าย · v3.30)
 PATCH  /api/compensation/:id/approve
 PATCH  /api/compensation/:id/reject
 ```
