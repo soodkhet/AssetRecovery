@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { AuthError } from '@/lib/auth/errors'
+import { AuthError, COMPANY_NOT_LINKED_MESSAGE } from '@/lib/auth/errors'
 import type { SessionUser } from '@/lib/auth/types'
 
 /**
@@ -131,6 +131,21 @@ describe('login — ผู้ใช้บริษัทไฟแนนซ์', 
       action: 'login',
       targetType: 'users',
       after: { result: 'failed', code: 'COMPANY_SUSPENDED', company_id: COMPANY, company_status: 'suspended' },
+    })
+  })
+
+  it('mytester A-07 — ยังไม่ได้ผูกบริษัท → USER_NOT_PROVISIONED 403 + ข้อความ "ยังไม่ได้ผูกบริษัท" · signOut · audit', async () => {
+    loadSessionUserMock.mockResolvedValue(account({ companyId: null }))
+    loadCompanyStatusMock.mockResolvedValue(null)
+
+    const error = await loginError()
+    expect(error.code).toBe('USER_NOT_PROVISIONED')
+    expect(error.status).toBe(403)
+    expect(error.userMessage).toEqual(COMPANY_NOT_LINKED_MESSAGE)
+    expect(signOutMock).toHaveBeenCalledTimes(1)
+    expect(emitAuditMock.mock.calls[0]?.[0]).toMatchObject({
+      action: 'login',
+      after: { result: 'failed', code: 'USER_NOT_PROVISIONED', company_id: null },
     })
   })
 

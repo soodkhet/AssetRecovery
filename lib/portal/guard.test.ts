@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { AuthError } from '@/lib/auth/errors'
+import { AuthError, COMPANY_NOT_LINKED_MESSAGE } from '@/lib/auth/errors'
 import type { SessionUser } from '@/lib/auth/types'
 
 /**
@@ -141,10 +141,24 @@ describe('requirePortalAccess — ลำดับตรวจ `97` §17', () => 
     expect(lastAudit().after).toMatchObject({ code: 'COMPANY_SUSPENDED', cause: 'company_status:suspended' })
   })
 
-  it('บริษัทถูกลบ/ไม่ได้ผูกบริษัท → COMPANY_SUSPENDED (ปิดไว้ก่อน)', async () => {
-    getRawSessionUserMock.mockResolvedValue(user({ companyId: null }))
+  it('บริษัทถูกลบ → COMPANY_SUSPENDED (ปิดไว้ก่อน)', async () => {
+    getRawSessionUserMock.mockResolvedValue(user())
     loadCompanyStatusMock.mockResolvedValue(null)
     await expectCode(requirePortalAccess('cases'), 'COMPANY_SUSPENDED', 403)
+  })
+
+  it('mytester A-07 — ยังไม่ได้ผูกบริษัท → 403 USER_NOT_PROVISIONED + ข้อความ "ยังไม่ได้ผูกบริษัท" (ไม่ใช่ "บริษัทถูกระงับ")', async () => {
+    getRawSessionUserMock.mockResolvedValue(user({ companyId: null }))
+    loadCompanyStatusMock.mockResolvedValue(null)
+    const error = await requirePortalAccess('cases').then(
+      () => null,
+      (e: unknown) => e,
+    )
+    expect(error).toBeInstanceOf(AuthError)
+    expect((error as AuthError).code).toBe('USER_NOT_PROVISIONED')
+    expect((error as AuthError).status).toBe(403)
+    expect((error as AuthError).userMessage).toEqual(COMPANY_NOT_LINKED_MESSAGE)
+    expect(lastAudit().after).toMatchObject({ code: 'USER_NOT_PROVISIONED', cause: 'company_missing' })
   })
 
   it('ไม่มี capability ของหมวด → 403 PERMISSION_DENIED + audit (D1 — หัวหน้าเรียกการเงิน)', async () => {

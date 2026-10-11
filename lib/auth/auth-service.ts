@@ -1,7 +1,7 @@
 import { emitAudit } from '@/lib/audit/audit'
-import { isCompanyActive, loadCompanyStatus } from '@/lib/auth/company-status'
+import { loadCompanyStatus } from '@/lib/auth/company-status'
 import { CHANGE_PASSWORD_PATH, LOGIN_PATH } from '@/lib/auth/constants'
-import { AuthError, type AuthErrorCode } from '@/lib/auth/errors'
+import { AuthError, COMPANY_NOT_LINKED_MESSAGE, portalCompanyDenyCode, type AuthErrorCode } from '@/lib/auth/errors'
 import { resolveLandingPath } from '@/lib/auth/landing'
 import { isPortalOnlyUser } from '@/lib/auth/permission'
 import {
@@ -261,7 +261,9 @@ async function authenticate(input: LoginInput, meta: RequestMeta): Promise<Login
   // ผู้ใช้บริษัทไฟแนนซ์: บริษัทต้อง active (มติ PO 05/10/2569 O43 D5 · `97` §12) — ตรวจซ้ำทุก request ที่ยามพอร์ทัล
   if (isPortalOnlyUser(sessionAccount)) {
     const companyStatus = await loadCompanyStatus(sessionAccount.organizationId, sessionAccount.companyId)
-    if (!isCompanyActive(companyStatus)) {
+    // ยังไม่ผูกบริษัท ≠ บริษัทถูกระงับ (mytester A-07) — แยก code/ข้อความให้ผู้ใช้รู้ว่าต้องให้ผู้ดูแลผูกบริษัท
+    const denyCode = portalCompanyDenyCode(sessionAccount.companyId, companyStatus)
+    if (denyCode !== null) {
       await supabase.auth.signOut()
       await emitAudit({
         organizationId: sessionAccount.organizationId,
@@ -270,11 +272,15 @@ async function authenticate(input: LoginInput, meta: RequestMeta): Promise<Login
         action: 'login',
         targetType: 'users',
         targetId: sessionAccount.id,
-        after: { result: 'failed', code: 'COMPANY_SUSPENDED', company_id: sessionAccount.companyId, company_status: companyStatus },
+        after: { result: 'failed', code: denyCode, company_id: sessionAccount.companyId, company_status: companyStatus },
         ipAddress: meta.ipAddress,
         userAgent: meta.userAgent,
       })
-      throw new AuthError('COMPANY_SUSPENDED', `user=${sessionAccount.id} company=${sessionAccount.companyId ?? '-'}`)
+      throw new AuthError(
+        denyCode,
+        `user=${sessionAccount.id} company=${sessionAccount.companyId ?? '-'}`,
+        denyCode === 'USER_NOT_PROVISIONED' ? COMPANY_NOT_LINKED_MESSAGE : undefined,
+      )
     }
   }
 

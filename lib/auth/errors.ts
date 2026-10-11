@@ -84,19 +84,53 @@ export function authErrorMessage(code: AuthErrorCode): { title: string; message:
   return MESSAGES[code]
 }
 
+/**
+ * mytester A-07 — ผู้ใช้กลุ่มบริษัทไฟแนนซ์ที่ยังไม่ได้ผูกบริษัท (`users.company_id` ว่าง) ใช้ code เดิม
+ * `USER_NOT_PROVISIONED` (บัญชียังตั้งค่าไม่ครบ) แต่ข้อความบอกตรงเหตุ — เดิมขึ้น "บริษัทถูกระงับ" ชวนเข้าใจผิด
+ */
+export const COMPANY_NOT_LINKED_MESSAGE: { title: string; message: string } = {
+  title: 'บัญชียังไม่ได้ผูกบริษัท',
+  message: 'บัญชีนี้ยังไม่ได้ผูกกับบริษัทไฟแนนซ์ กรุณาติดต่อผู้ดูแลระบบให้ผูกบริษัทก่อนเข้าใช้งาน',
+}
+
+/**
+ * code ที่ผู้ใช้บริษัทไฟแนนซ์ถูกปฏิเสธตามสถานะบริษัท — ไม่ได้ผูกบริษัท = `USER_NOT_PROVISIONED`
+ * (+ `COMPANY_NOT_LINKED_MESSAGE`) · บริษัทไม่ active/ถูกลบ = `COMPANY_SUSPENDED` · ผ่าน = `null`
+ */
+/** ค่า `?reason=` ของหน้า login เมื่อหน้าพอร์ทัลพบว่าบัญชียังไม่ผูกบริษัท (ไม่ใช่ error code ของ API) */
+export const LOGIN_REASON_COMPANY_NOT_LINKED = 'COMPANY_NOT_LINKED'
+
+/** `?reason=` ของหน้า login → ข้อความ · ค่าที่ไม่รู้จัก = `null` (ไม่แสดงอะไร) */
+export function loginReasonMessage(reason: string | undefined): { title: string; message: string } | null {
+  if (reason === undefined) return null
+  if (reason === LOGIN_REASON_COMPANY_NOT_LINKED) return COMPANY_NOT_LINKED_MESSAGE
+  return (AUTH_ERROR_CODES as readonly string[]).includes(reason) ? MESSAGES[reason as AuthErrorCode] : null
+}
+
+export function portalCompanyDenyCode(
+  companyId: string | null,
+  companyStatus: string | null,
+): 'USER_NOT_PROVISIONED' | 'COMPANY_SUSPENDED' | null {
+  if (companyId === null) return 'USER_NOT_PROVISIONED'
+  return companyStatus === 'active' ? null : 'COMPANY_SUSPENDED'
+}
+
 /** error กลางของชั้น auth/permission — route handler จับแล้วแปลงเป็น response ด้วย `toAuthErrorResponse()` */
 export class AuthError extends Error {
   readonly code: AuthErrorCode
   readonly status: number
   /** รายละเอียดสำหรับ log ฝั่ง server เท่านั้น — ห้ามส่งออก response */
   readonly detail?: string
+  /** ข้อความแทนค่ากลางของ code (เช่น `COMPANY_NOT_LINKED_MESSAGE`) — ไม่ระบุ = ข้อความกลาง */
+  readonly userMessage?: { title: string; message: string }
 
-  constructor(code: AuthErrorCode, detail?: string) {
-    super(`${code}: ${MESSAGES[code].message}`)
+  constructor(code: AuthErrorCode, detail?: string, userMessage?: { title: string; message: string }) {
+    super(`${code}: ${(userMessage ?? MESSAGES[code]).message}`)
     this.name = 'AuthError'
     this.code = code
     this.status = HTTP_STATUS[code]
     this.detail = detail
+    this.userMessage = userMessage
   }
 }
 
@@ -115,8 +149,8 @@ export interface AuthErrorBody {
   }
 }
 
-export function toAuthErrorBody(code: AuthErrorCode): AuthErrorBody {
-  return { success: false, data: null, error: { code, ...MESSAGES[code] } }
+export function toAuthErrorBody(code: AuthErrorCode, userMessage?: { title: string; message: string }): AuthErrorBody {
+  return { success: false, data: null, error: { code, ...(userMessage ?? MESSAGES[code]) } }
 }
 
 /**
@@ -126,5 +160,5 @@ export function toAuthErrorBody(code: AuthErrorCode): AuthErrorBody {
 export function toAuthErrorResponse(error: unknown): Response {
   // error ที่ไม่ใช่ของ auth ⇒ envelope 500/400 กลาง (เดิมโยนต่อเป็น 500 ไม่มี body — preship PS-006)
   if (!isAuthError(error)) return unexpectedErrorResponse(error)
-  return Response.json(toAuthErrorBody(error.code), { status: error.status })
+  return Response.json(toAuthErrorBody(error.code, error.userMessage), { status: error.status })
 }
