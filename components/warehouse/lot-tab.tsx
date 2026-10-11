@@ -33,7 +33,7 @@ import { fmtDateTime } from '@/lib/format/datetime'
 import { monthLabel } from '@/lib/field/month-filter'
 import { documentDeviceText } from '@/lib/warehouse/handover-doc'
 import { imeiSearchHint, matchesAssetSearch, type FilterOption } from '@/lib/warehouse/asset-filters'
-import { lotDocumentSlots } from '@/lib/warehouse/lot-documents'
+import { lotDocumentSlots, lotPendingNotice } from '@/lib/warehouse/lot-documents'
 import {
   DELIVERED_STATUS_OPTIONS,
   FILTER_ALL,
@@ -283,6 +283,7 @@ export function LotTab({
     const emptyLot = isEmptyOpenLot({ status: openLot.status, assetCount: openLot.assets.length })
     const assets = openLot.assets.filter((asset) => matchesAssetSearch(asset, detailSearch))
     const slots = lotDocumentSlots(openLot)
+    const pendingNotice = lotPendingNotice(openLot, slots)
 
     return (
       <>
@@ -354,7 +355,10 @@ export function LotTab({
 
           {!confirmed && (
             <InlineAlert className="mb-4" tone="warning" title={LOT_STATUS_LABELS[openLot.status]}>
-              ต้องแนบ{slots.map((slot) => slot.label).join(' + ')} แล้วยืนยัน — รายการเบิกของทีมภาคสนามและรายได้จะปลดล็อกเมื่อยืนยัน
+              {pendingNotice.pending}
+              {canManageLot && pendingNotice.removalLocked !== null && (
+                <div className="mt-1">{pendingNotice.removalLocked}</div>
+              )}
             </InlineAlert>
           )}
           {openLot.note !== null && (

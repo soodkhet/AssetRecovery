@@ -71,6 +71,12 @@ export interface LotSummaryDto {
   deliveredAt: string | null
   confirmedAt: string | null
   assetCount: number
+  /**
+   * แนบใบเซ็นรับ/หลักฐานจัดส่งแล้วหรือยัง (บอกเฉพาะสถานะ ไม่ส่ง path ไฟล์) — การ์ดล็อตต้องขึ้น "แนบแล้ว" ทันทีหลังแนบ
+   * แม้ยังไม่ยืนยัน (mytester2 E2-02) · ไม่ระบุ = ดูจาก url (ถ้ามี)
+   */
+  signedDocAttached?: boolean
+  deliveryProofAttached?: boolean
   /** แท็บที่ล็อตนี้ไปโผล่ (`44` §9.3) — คำนวณจาก status ผ่าน `lotTab()` ห้าม if เองที่หน้าจอ */
   tab: LotTab
 }

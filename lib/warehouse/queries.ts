@@ -305,8 +305,14 @@ function toLotSummary(row: LotRow): LotSummaryDto {
     deliveredAt: row.deliveredAt?.toISOString() ?? null,
     confirmedAt: row.confirmedAt?.toISOString() ?? null,
     assetCount: row._count.assets,
+    signedDocAttached: isNonEmpty(row.signedDocUrl),
+    deliveryProofAttached: isNonEmpty(row.deliveryProofUrl),
     tab: lotTab(row.status),
   }
+}
+
+function isNonEmpty(value: string | null): boolean {
+  return value !== null && value.trim() !== ''
 }
 
 function toLotDetail(row: LotRow, assets: readonly AssetListItemDto[]): LotDetailDto {

@@ -8,6 +8,7 @@ import {
   lotDocumentPath,
   lotDocumentPrefix,
   lotDocumentSlots,
+  lotPendingNotice,
 } from '@/lib/warehouse/lot-documents'
 
 /** ยามของเอกสารแนบล็อต (`44` §6.3 · §6.4) — จำนวนช่องต้องตรงชนิดล็อตเสมอ */
@@ -103,5 +104,50 @@ describe('lotDocumentFileName — แสดงชื่อไฟล์แทน 
     const name = lotDocumentFileName('signed_doc', `handover-lots/${LOT}/signed-doc.pdf`)
     expect(name).toBe('signed-doc.pdf')
     expect(name).not.toContain('/')
+  })
+})
+
+describe('mytester2 E2-02 — แนบใบเซ็นรับแล้วแต่ยังไม่ยืนยัน', () => {
+  it('การ์ด (ไม่มี url) ใช้ธงจาก server ⇒ "แนบแล้ว" ไม่ใช่ "รอแนบ"', () => {
+    const slots = lotDocumentSlots({ type: 'finance_pickup', status: 'pending_attach', signedDocAttached: true })
+    expect(slots[0]).toMatchObject({ attached: true, fileUrl: null })
+    const proofMissing = lotDocumentSlots({
+      type: 'we_deliver',
+      status: 'pending_delivery_proof',
+      signedDocAttached: true,
+      deliveryProofAttached: false,
+    })
+    expect(proofMissing.map((slot) => slot.attached)).toEqual([true, false])
+  })
+
+  it('หน้ารายละเอียด: เอกสารครบ ⇒ รอยืนยัน · บอกเหตุที่นำเครื่องออกไม่ได้', () => {
+    const lot = { type: 'finance_pickup', status: 'pending_attach', signedDocAttached: true, assetRemovalLocked: true } as const
+    const notice = lotPendingNotice(lot, lotDocumentSlots(lot))
+    expect(notice.pending).toContain('แนบเอกสารครบแล้ว รอยืนยันส่งมอบ')
+    expect(notice.pending).not.toContain('ต้องแนบ')
+    expect(notice.removalLocked).toContain('แนบใบส่งมอบที่มีลายเซ็นผู้รับแล้ว')
+    expect(notice.removalLocked).toContain('นำเครื่องออกจากล็อตนี้ไม่ได้')
+  })
+
+  it('ยังไม่แนบ ⇒ บอกเฉพาะเอกสารที่ขาด · นำเครื่องออกได้ (ไม่มีข้อความล็อก)', () => {
+    const lot = { type: 'finance_pickup', status: 'pending_attach', assetRemovalLocked: false } as const
+    const notice = lotPendingNotice(lot, lotDocumentSlots(lot))
+    expect(notice.pending).toContain(`ต้องแนบ${LOT_DOCUMENT_LABEL.signed_doc} แล้วยืนยัน`)
+    expect(notice.removalLocked).toBeNull()
+  })
+
+  it('ส่งของแล้วรอหลักฐานจัดส่ง ⇒ ขาดเฉพาะหลักฐานจัดส่ง · เหตุล็อกตามใบเซ็นรับ', () => {
+    const lot = {
+      type: 'we_deliver',
+      status: 'pending_delivery_proof',
+      signedDocAttached: true,
+      deliveryProofAttached: false,
+      assetRemovalLocked: true,
+    } as const
+    const notice = lotPendingNotice(lot, lotDocumentSlots(lot))
+    expect(notice.pending).toContain(`ต้องแนบ${LOT_DOCUMENT_LABEL.delivery_proof} แล้วยืนยัน`)
+    expect(notice.pending).not.toContain(LOT_DOCUMENT_LABEL.signed_doc)
+    expect(notice.removalLocked).not.toBeNull()
+    expect(`${notice.pending}${notice.removalLocked}`).not.toMatch(/§|ไฟล์ \d/)
   })
 })
