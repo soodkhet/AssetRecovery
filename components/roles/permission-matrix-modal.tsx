@@ -232,7 +232,7 @@ export function PermissionMatrixModal({
               id="permission-reason"
               label="เหตุผลในการเปลี่ยนสิทธิ์"
               required
-              hint="การเปลี่ยนสิทธิ์ถูกบันทึกลง audit log ถาวร"
+              hint="การเปลี่ยนสิทธิ์ถูกบันทึกไว้ในประวัติการใช้งานถาวร"
               error={reasonTooShort && reason.length > 0 ? `ระบุอย่างน้อย ${REASON_MIN_LENGTH} ตัวอักษร` : null}
             >
               <Textarea

@@ -104,7 +104,7 @@ export function CostCenterMapModal({
           </Select>
         </Field>
 
-        <Field label="หมายเหตุการ Mapping" required hint="บังคับกรอก — บันทึกเป็นเหตุผลใน audit log">
+        <Field label="หมายเหตุการ Mapping" required hint="บังคับกรอก — บันทึกเป็นเหตุผลในประวัติการใช้งาน">
           <Textarea
             maxLength={1000}
             rows={3}

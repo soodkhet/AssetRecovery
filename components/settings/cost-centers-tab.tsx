@@ -338,7 +338,7 @@ export function CostCentersTab() {
             />
           </Field>
 
-          <InlineAlert tone="info" title="ทุกการแก้ไขถูกบันทึกลง Audit Log">
+          <InlineAlert tone="info" title="ทุกการแก้ไขถูกบันทึกไว้ในประวัติการใช้งาน">
             การตั้งค่าการเงินกระทบตัวเลขในรายงาน — ระบบบันทึกผู้แก้ ค่าก่อน/หลัง และเหตุผลไว้ถาวร
           </InlineAlert>
         </div>

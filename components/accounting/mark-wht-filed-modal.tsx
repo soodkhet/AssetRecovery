@@ -45,7 +45,7 @@ export function MarkWhtFiledModal({
     showToast({
       tone: 'success',
       title: `บันทึกว่ายื่นแบบรอบ ${summary.periodLabel} แล้ว`,
-      description: 'ระบบเก็บอ้างอิงการยื่นไว้ใน audit log',
+      description: 'ระบบเก็บอ้างอิงการยื่นไว้ในประวัติการใช้งาน',
     })
     onFiled()
     onClose()

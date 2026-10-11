@@ -93,7 +93,7 @@ export function CancelWhtModal({
           </div>
         </div>
 
-        <Field label="เหตุผลการยกเลิก" required hint="บังคับกรอก — บันทึกลงเอกสารและ audit log">
+        <Field label="เหตุผลการยกเลิก" required hint="บังคับกรอก — บันทึกลงเอกสารและประวัติการใช้งาน">
           <Textarea
             maxLength={1000}
             rows={3}

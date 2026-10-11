@@ -50,7 +50,7 @@ export function MarkWhtSupplementaryFiledModal({
     showToast({
       tone: 'success',
       title: `บันทึกว่ายื่นเพิ่มเติมรอบ ${summary.periodLabel} แล้ว`,
-      description: 'ยอดที่ยื่นปรับเป็นยอดปัจจุบัน · อ้างอิงการยื่นเก็บไว้ใน audit log',
+      description: 'ยอดที่ยื่นปรับเป็นยอดปัจจุบัน · อ้างอิงการยื่นบันทึกไว้ในประวัติการใช้งาน',
     })
     onFiled()
     onClose()

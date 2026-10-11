@@ -279,7 +279,7 @@ export function ServiceFeeFormModal({
           })}
         />
 
-        <Field id="sf-reason" label="เหตุผล" required hint="บันทึกลง audit log ถาวร (กระทบรายได้)" error={errors.reason}>
+        <Field id="sf-reason" label="เหตุผล" required hint="บันทึกไว้ในประวัติการใช้งานถาวร (กระทบรายได้)" error={errors.reason}>
           <Textarea
             maxLength={500}
             id="sf-reason"

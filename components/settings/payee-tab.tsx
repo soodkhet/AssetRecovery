@@ -456,7 +456,7 @@ export function PayeeTab() {
             id="payee-reason"
             label="เหตุผลการแก้ไข"
             required
-            hint="ข้อมูลธนาคาร/ภาษีกระทบเงินที่โอนจริง — ต้องบันทึกเหตุผลลง Audit Log เสมอ"
+            hint="ข้อมูลธนาคาร/ภาษีกระทบเงินที่โอนจริง — ต้องบันทึกเหตุผลไว้ในประวัติการใช้งานเสมอ"
             error={errors.reason}
           >
             <Textarea

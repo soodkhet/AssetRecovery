@@ -312,7 +312,7 @@ export function RolesManager() {
             </Select>
           </Field>
 
-          <Field id="role-reason" label="เหตุผล" required hint="บันทึกลง audit log ถาวร">
+          <Field id="role-reason" label="เหตุผล" required hint="บันทึกไว้ในประวัติการใช้งานถาวร">
             <Textarea
               maxLength={500}
               id="role-reason"

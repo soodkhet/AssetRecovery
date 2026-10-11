@@ -4,7 +4,7 @@ import ts from 'typescript'
 import { describe, expect, it } from 'vitest'
 
 /**
- * Rule 05 — ข้อความที่ผู้ใช้เห็นต้องเป็นภาษาไทย ไม่มีรหัส/ศัพท์ระบบ (mytester รอบ 2: A2-01 · B2-02 · G2-01 · J2-02)
+ * Rule 05 — ข้อความที่ผู้ใช้เห็นต้องเป็นภาษาไทย ไม่มีรหัส/ศัพท์ระบบ (mytester รอบ 2: A2-01 · B2-02 · G2-01 · J2-02 · LR-01)
  *
  * สแกน **string literal + ข้อความ JSX** ด้วย TypeScript AST (comment ไม่นับ) ของ `app/` `components/` `lib/`
  * แล้วห้ามมีวลีที่เคยหลุดขึ้นจอ — กันไม่ให้กลับมาอีก · code identifier/คอมเมนต์ใช้ศัพท์อังกฤษได้ตามเดิม
@@ -21,6 +21,7 @@ const BANNED: readonly { phrase: RegExp; issue: string; inThaiText?: boolean }[]
   { phrase: /^(Case Ref|Model|VAT Flag|Policy)$/, issue: 'G2-01' },
   { phrase: /source record|sync 1:1|statement|tolerance|snapshot/, issue: 'G2-01', inThaiText: true },
   { phrase: /รอ retry|3 model|commission =|\(Claim\)|map Cost Center/, issue: 'J2-02' },
+  { phrase: /(?<!\()audit log|Statement/i, issue: 'LR-01', inThaiText: true },
   { phrase: /รอบ (collecting|locked)|\(collecting → sent\)|ที่ locked|mark filed|map Cost Center \(manual\)|resolve\)/, issue: 'A2-01' },
 ]
 

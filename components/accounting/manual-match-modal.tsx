@@ -194,7 +194,7 @@ export function ManualMatchModal({
         <Field
           label="หมายเหตุชี้แจง"
           required={noteRequired}
-          hint={noteRequired ? 'บังคับกรอก — บันทึกลง audit log' : 'ไม่บังคับเมื่อยอดตรงเป๊ะ'}
+          hint={noteRequired ? 'บังคับกรอก — บันทึกไว้ในประวัติการใช้งาน' : 'ไม่บังคับเมื่อยอดตรงเป๊ะ'}
         >
           <Textarea
             maxLength={1000}

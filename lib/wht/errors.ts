@@ -46,7 +46,7 @@ const MESSAGES: Record<WhtErrorCode, ErrorMessage> = {
   },
   WHT_CANCEL_REQUIRES_REASON: {
     title: 'ต้องระบุเหตุผลการยกเลิก',
-    message: 'การยกเลิกหนังสือรับรองหัก ณ ที่จ่ายต้องกรอกเหตุผลเสมอ เพื่อบันทึกไว้ในเอกสารและ audit log',
+    message: 'การยกเลิกหนังสือรับรองหัก ณ ที่จ่ายต้องกรอกเหตุผลเสมอ เพื่อบันทึกไว้ในเอกสารและประวัติการใช้งาน',
   },
   WHT_FILING_SUMMARY_NOT_FOUND: {
     title: 'ไม่พบสรุปรอบนำส่ง',

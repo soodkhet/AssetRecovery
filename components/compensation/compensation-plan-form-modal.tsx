@@ -411,7 +411,7 @@ export function CompensationPlanFormModal({
           บังคับแนบใบเสร็จค่าที่พัก (มีผลต่อการตรวจรายการเบิก)
         </label>
 
-        <Field id="plan-reason" label="เหตุผล" required hint="บันทึกลง audit log ถาวร (หมวดเงิน)" error={errors.reason}>
+        <Field id="plan-reason" label="เหตุผล" required hint="บันทึกไว้ในประวัติการใช้งานถาวร (หมวดเงิน)" error={errors.reason}>
           <Textarea
             maxLength={500}
             id="plan-reason"

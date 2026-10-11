@@ -222,7 +222,7 @@ export function CreateBillingModal({
           <ClosedPeriodCutoffAlert onUseToday={setCutoffOverride} />
         )}
 
-        <Field label="เหตุผล" required hint={`อย่างน้อย ${REASON_MIN_LENGTH} ตัวอักษร — บันทึกลง audit log`}>
+        <Field label="เหตุผล" required hint={`อย่างน้อย ${REASON_MIN_LENGTH} ตัวอักษร — บันทึกไว้ในประวัติการใช้งาน`}>
           <Textarea
             maxLength={500}
             rows={3}

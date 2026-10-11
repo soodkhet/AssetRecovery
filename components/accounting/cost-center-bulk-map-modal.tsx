@@ -81,7 +81,7 @@ export function CostCenterBulkMapModal({
             ))}
           </Select>
         </Field>
-        <Field label="หมายเหตุการ Mapping" required hint="บังคับกรอก — บันทึกเป็นเหตุผลใน audit log ของทุกรายการ">
+        <Field label="หมายเหตุการ Mapping" required hint="บังคับกรอก — บันทึกเป็นเหตุผลในประวัติการใช้งานของทุกรายการ">
           <Textarea
             maxLength={1000}
             rows={3}

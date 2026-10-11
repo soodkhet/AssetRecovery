@@ -152,7 +152,7 @@ export function ExportPackModal({
           </div>
         </div>
 
-        <Field label="บันทึกช่วยจำ" hint="ไม่บังคับ — เก็บลง audit log คู่กับรายชื่อไฟล์และเวอร์ชัน">
+        <Field label="บันทึกช่วยจำ" hint="ไม่บังคับ — เก็บไว้ในประวัติการใช้งานคู่กับรายชื่อไฟล์และเวอร์ชัน">
           <Textarea
             maxLength={1000}
             rows={2}

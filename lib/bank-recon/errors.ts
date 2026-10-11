@@ -66,7 +66,7 @@ const MESSAGES: Record<BankReconErrorCode, ErrorMessage> = {
   },
   ALREADY_MATCHED: {
     title: 'รายการนี้จับคู่ไปแล้ว',
-    message: 'ยืนยันอีกครั้งเพื่อเปลี่ยนการจับคู่เดิม — ระบบจะบันทึกการเปลี่ยนแปลงลง audit log',
+    message: 'ยืนยันอีกครั้งเพื่อเปลี่ยนการจับคู่เดิม — ระบบจะบันทึกการเปลี่ยนแปลงลงประวัติการใช้งาน',
   },
   CUSTOMER_WHT_NOT_FOUND: {
     title: 'ไม่พบรายการหนังสือรับรองภาษี',

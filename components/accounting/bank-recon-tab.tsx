@@ -138,7 +138,7 @@ export function BankReconTab() {
           <THead>
             <Tr>
               <Th>วันที่</Th>
-              <Th>รายละเอียด Statement</Th>
+              <Th>รายละเอียดรายการเดินบัญชี</Th>
               <Th numeric>เงินเข้า</Th>
               <Th numeric>เงินออก</Th>
               <Th>จับคู่กับ</Th>

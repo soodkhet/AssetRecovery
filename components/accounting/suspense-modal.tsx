@@ -151,7 +151,7 @@ export function SuspenseModal({
           </>
         )}
 
-        <Field label={isRefund ? 'เหตุผลที่คืนเงิน' : 'เหตุผล'} required hint="บังคับกรอกเสมอ — บันทึกลง audit log">
+        <Field label={isRefund ? 'เหตุผลที่คืนเงิน' : 'เหตุผล'} required hint="บังคับกรอกเสมอ — บันทึกไว้ในประวัติการใช้งาน">
           <Input
             value={reason}
             onChange={(event) => setReason(event.target.value)}

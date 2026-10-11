@@ -96,7 +96,7 @@ export function ResolveUnmatchedModal({
           <SuspenseRefundPicker transaction={transaction} onPick={setNote} />
         )}
 
-        <Field label="เหตุผลที่ปิดรายการ" required hint="บังคับกรอกเสมอ — บันทึกลง audit log">
+        <Field label="เหตุผลที่ปิดรายการ" required hint="บังคับกรอกเสมอ — บันทึกไว้ในประวัติการใช้งาน">
           <Input
             value={note}
             onChange={(event) => setNote(event.target.value)}
