@@ -397,10 +397,10 @@ export function CaseFormModal({
             </Field>
             <Field
               id="case-ref"
-              label="เลขที่สัญญา (case_ref)"
+              label="เลขที่สัญญา"
               required
               error={fieldErrors.caseRef}
-              hint="เก็บค่าดิบตามที่ไฟแนนซ์ส่งมา — ระบบ normalize ให้เองสำหรับเทียบซ้ำ"
+              hint="กรอกตามที่ไฟแนนซ์ส่งมา — ระบบไม่สนใจตัวพิมพ์เล็ก/ใหญ่และช่องว่างหัวท้ายเมื่อตรวจเลขซ้ำ"
             >
               <Input
                 id="case-ref"

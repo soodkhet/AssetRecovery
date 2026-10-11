@@ -219,7 +219,7 @@ suite('Phase 2.3 — state machine + snapshot + recycle (DB จริง)', () =
     const { getCase } = await import('@/lib/cases/queries')
     const detail = await getCase(actor, caseId)
     expect(detail.projectedRevenueSource).toContain(`template=${TEMPLATE_V1}`)
-    expect(detail.projectedRevenueSourceLabel).toBe('เทมเพลต "เทมเพลตทดสอบ 2.3" v1 · Hybrid: ฿500.00 + 15% ของมูลหนี้')
+    expect(detail.projectedRevenueSourceLabel).toBe('เทมเพลต "เทมเพลตทดสอบ 2.3" v1 · แบบผสม: ฿500.00 + 15% ของมูลหนี้')
   })
 
   it('เอกสาร required ไม่ครบ → CASE_DOCUMENT_INCOMPLETE (ไม่เปลี่ยนสถานะ)', async () => {

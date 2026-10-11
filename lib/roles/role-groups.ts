@@ -28,6 +28,14 @@ export const ROLE_GROUP_LABEL: Readonly<Record<RoleGroup, string>> = {
   finance_company: 'บริษัทไฟแนนซ์',
 }
 
+/**
+ * ป้ายบทบาทใต้ชื่อผู้ใช้บนแถบเมนู — ไม่โชว์รหัสกลุ่มดิบ (`system`) · กลุ่มแอดมินแสดงแค่ชื่อบทบาท
+ * · ทีมภาคสนามต่อท้าย Inhouse/Outsource เพราะชื่อบทบาทซ้ำข้ามกลุ่มได้ (mytester B-07)
+ */
+export function roleBadgeText(roleName: string, roleGroup: RoleGroup): string {
+  return roleGroup === 'system' ? roleName : `${roleName} · ${ROLE_GROUP_LABEL[roleGroup]}`
+}
+
 export const ROLE_GROUP_TABS: readonly RoleGroupTab[] = [
   { id: 'admin', label: 'แอดมิน', roleGroups: ['system'], hasSubToggle: false },
   {

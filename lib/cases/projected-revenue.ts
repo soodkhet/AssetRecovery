@@ -125,9 +125,10 @@ export function parseProjectedRevenueSource(source: string): ProjectedRevenueSou
 }
 
 const MODEL_SHORT_LABEL: Readonly<Record<ServiceFeeModel, string>> = {
-  SUCCESS_FEE: 'Success Fee',
-  FLAT: 'Flat Rate',
-  HYBRID: 'Hybrid',
+  // ภาษาไทยบนจอ (mytester B-07) — ชื่อเต็มของโมเดลอยู่ที่ `SERVICE_FEE_MODEL_LABEL`
+  SUCCESS_FEE: 'ตาม % ความสำเร็จ',
+  FLAT: 'เหมาจ่ายรายเคส',
+  HYBRID: 'แบบผสม',
 }
 
 const BASIS_SHORT_LABEL: Readonly<Record<ServiceFeeBasis, string>> = {
@@ -135,7 +136,7 @@ const BASIS_SHORT_LABEL: Readonly<Record<ServiceFeeBasis, string>> = {
 }
 
 /**
- * ข้อความอ่านง่ายของที่มาประมาณการ เช่น `เทมเพลต "ค่าบริการมาตรฐาน" v2 · Hybrid: ฿500.00 + 15% ของมูลหนี้`
+ * ข้อความอ่านง่ายของที่มาประมาณการ เช่น `เทมเพลต "ค่าบริการมาตรฐาน" v2 · แบบผสม: ฿500.00 + 15% ของมูลหนี้`
  * — `templateName` มาจากการ lookup ฝั่ง server (ค่าดิบเก็บแค่ template id) · ไม่มีชื่อ = แสดงแค่เวอร์ชัน
  * · ค่าดิบที่อ่านไม่ออก (ไม่มี model) คืน `null` ให้ UI แสดงข้อความกลางแทน — ไม่โชว์ UUID/ค่าดิบ
  */

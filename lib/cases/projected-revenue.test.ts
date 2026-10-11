@@ -142,17 +142,17 @@ describe('ข้อความที่มาประมาณการสำ�
       templateVersion: 2,
     })
     const text = projectedRevenueSourceText(source, 'ค่าบริการมาตรฐาน')
-    expect(text).toBe('เทมเพลต "ค่าบริการมาตรฐาน" v2 · Hybrid: ฿500.00 + 15% ของมูลหนี้')
+    expect(text).toBe('เทมเพลต "ค่าบริการมาตรฐาน" v2 · แบบผสม: ฿500.00 + 15% ของมูลหนี้')
     expect(text).not.toContain(TEMPLATE_ID)
   })
 
   it('FLAT / SUCCESS_FEE และกรณีไม่รู้ชื่อเทมเพลต', () => {
     const flat = sourceOf({ model: 'FLAT', baseSatang: 150_000, ratePct: 0, basis: null, templateVersion: 1 })
-    expect(projectedRevenueSourceText(flat, null)).toBe('เทมเพลต v1 · Flat Rate: ฿1,500.00')
+    expect(projectedRevenueSourceText(flat, null)).toBe('เทมเพลต v1 · เหมาจ่ายรายเคส: ฿1,500.00')
 
     const success = sourceOf({ model: 'SUCCESS_FEE', baseSatang: 0, ratePct: 2.5, basis: 'debt_amount' })
     expect(projectedRevenueSourceText(success, 'ตามมูลหนี้')).toBe(
-      'เทมเพลต "ตามมูลหนี้" · Success Fee: 2.5% ของมูลหนี้',
+      'เทมเพลต "ตามมูลหนี้" · ตาม % ความสำเร็จ: 2.5% ของมูลหนี้',
     )
   })
 

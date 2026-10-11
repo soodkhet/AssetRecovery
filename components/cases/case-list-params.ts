@@ -56,3 +56,20 @@ export function sameCaseListFilters(a: CaseListFilters, b: CaseListFilters): boo
     a.province === b.province
   )
 }
+
+/**
+ * ข้อความตอนรายการว่าง — ไม่มีตัวกรอง = "ยังไม่มีเคส" ชวนเริ่มรับเคส · มีตัวกรอง = "ไม่พบตามเงื่อนไข" ชวนล้างตัวกรอง
+ * (mytester B-08 — เดิมขึ้น "ลองล้างตัวกรอง" ทั้งที่ยังไม่ได้กรองอะไร)
+ */
+export function caseListEmptyView(filters: CaseListFilters): { title: string; description: string } {
+  if (sameCaseListFilters(filters, EMPTY_CASE_LIST_FILTERS)) {
+    return {
+      title: 'ยังไม่มีเคส',
+      description: 'เริ่มรับเคสด้วยปุ่ม “+ รับเคส (กรอกมือ)” หรือ “Import ไฟล์” ด้านบน',
+    }
+  }
+  return {
+    title: 'ไม่พบเคสตามเงื่อนไขที่ค้นหา',
+    description: 'ลองล้างตัวกรอง หรือกด “+ รับเคส (กรอกมือ)” เพื่อสร้างเคสใหม่',
+  }
+}

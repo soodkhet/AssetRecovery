@@ -403,7 +403,7 @@ export function CaseDetailModal({
                     maxLength={1000}
                     id="case-review-reason"
                     value={reason}
-                    placeholder="ระบุเหตุผลให้ผู้เกี่ยวข้องเข้าใจตรงกัน — ถูกบันทึกลง audit log"
+                    placeholder="ระบุเหตุผลให้ผู้เกี่ยวข้องเข้าใจตรงกัน — บันทึกในประวัติการแก้ไข"
                     onChange={(event) => setReason(event.target.value)}
                   />
                 </Field>

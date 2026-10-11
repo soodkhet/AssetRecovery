@@ -3,6 +3,7 @@
 import { usePathname } from 'next/navigation'
 import { browserSearchParams, initialUrlUuid, pickUuid, replaceUrlParams } from '@/components/ui/url-state'
 import {
+  caseListEmptyView,
   EMPTY_CASE_LIST_FILTERS,
   parseCaseListParams,
   sameCaseListFilters,
@@ -66,7 +67,7 @@ import type {
   CaseStatusChangeResultDto,
 } from '@/lib/cases/types'
 import { fmtDateTime } from '@/lib/format/datetime'
-import { fmtSatang } from '@/lib/format/money'
+import { fmtSatangSymbol } from '@/lib/format/money'
 
 /**
  * หน้า "รับเคส" (`/cases/submit` — `38` §7.1/§7.2 · `06` §7.1.1)
@@ -318,6 +319,7 @@ export function CasesManager({
   const items = result?.items ?? []
   const total = result?.total ?? 0
   const lastPage = Math.max(1, Math.ceil(total / PAGE_SIZE))
+  const emptyView = caseListEmptyView(filters)
   // staging E-029 / mytester B-01 — ติ๊กเลือกได้เฉพาะแถวที่ปุ่มส่งตรวจแสดง · ที่เลือกไว้แต่ไม่อยู่ในหน้านี้แล้วไม่นับ
   const submittableIds = bulkSubmittableIds(items, (capability) => can('manage', capability))
   const selectedIds = submittableIds.filter((id) => bulkSelected.has(id))
@@ -375,7 +377,7 @@ export function CasesManager({
   return (
     <>
       <PageHeader
-        title="รับเคส (Case Submission)"
+        title="รับเคส"
         description="รับเคสจากบริษัทไฟแนนซ์ผ่าน API / Import ไฟล์ / กรอกฟอร์มมือ — ตรวจสอบและพิจารณารับก่อนส่งต่อมอบหมายทีม"
         action={
           <Can action="manage" resource={CASE_WRITE_CAPABILITY}>
@@ -512,8 +514,8 @@ export function CasesManager({
               loading={loading}
               error={error === null ? null : { title: error.title, message: error.message }}
               isEmpty={items.length === 0}
-              emptyTitle="ไม่พบเคสตามเงื่อนไขที่ค้นหา"
-              emptyDescription="ลองล้างตัวกรอง หรือกด “รับเคส (กรอกมือ)” เพื่อสร้างเคสใหม่"
+              emptyTitle={emptyView.title}
+              emptyDescription={emptyView.description}
               onRetry={
                 <Button
                   variant="secondary"
@@ -562,7 +564,7 @@ export function CasesManager({
                       <div className="text-xs text-slate-600">{item.assetBrandModel ?? '—'}</div>
                       <div className="text-[11px] text-slate-400">เอกสารแนบ {item.documentCount} ไฟล์</div>
                     </Td>
-                    <Td numeric>{fmtSatang(item.outstandingDebtSatang)}</Td>
+                    <Td numeric>{fmtSatangSymbol(item.outstandingDebtSatang)}</Td>
                     <Td>
                       {item.assignedTeamName ?? item.suggestedTeamName ?? (
                         <span className="text-slate-400 italic">ยังไม่เสนอ</span>
@@ -608,7 +610,10 @@ export function CasesManager({
             </div>
           )}
           {!loading && error === null && items.length === 0 && (
-            <div className="py-8 text-center text-sm text-slate-400">ไม่พบเคสตามเงื่อนไขที่ค้นหา</div>
+            <div className="py-8 text-center text-sm text-slate-400">
+              <div className="font-semibold text-slate-600">{emptyView.title}</div>
+              <div className="mt-1 text-xs">{emptyView.description}</div>
+            </div>
           )}
           {!loading &&
             error === null &&
@@ -646,7 +651,7 @@ export function CasesManager({
                     <span className="text-slate-400">ทรัพย์:</span> {item.assetBrandModel ?? '—'}
                   </div>
                   <div className="text-right font-mono font-semibold text-slate-800">
-                    {fmtSatang(item.outstandingDebtSatang)}
+                    {fmtSatangSymbol(item.outstandingDebtSatang)}
                   </div>
                   <div>
                     <span className="text-slate-400">ทีมที่เสนอ:</span>{' '}
@@ -674,8 +679,11 @@ export function CasesManager({
         {/* โหลดไม่สำเร็จ ⇒ ไม่โชว์ "แสดง 0 จาก 0 รายการ" ใต้ข้อความ error (preship PS-027) */}
         {error === null && (
           <div className="mt-4 flex items-center justify-between text-xs text-slate-500">
+            {/* ระหว่างโหลดไม่โชว์ "แสดง 0 จาก 0" (mytester B-08) */}
             <span>
-              แสดง {items.length} จาก {total} รายการ (หน้า {page}/{lastPage})
+              {loading && result === null
+                ? 'กำลังโหลด...'
+                : `แสดง ${items.length} จาก ${total} รายการ (หน้า ${page}/${lastPage})`}
             </span>
             <div className="flex items-center gap-2">
               <Button
