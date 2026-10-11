@@ -271,6 +271,10 @@ export function CaseFormModal({
       if (saved.activeAssetImeiWarning !== null) {
         showToast({ tone: 'warning', title: 'IMEI ซ้ำกับเครื่องที่ยังไม่ส่งมอบ', description: saved.activeAssetImeiWarning })
       }
+      // มติชั่วคราว M1 (B-03) — IMEI ตรงกับเคสอื่นที่ยังดำเนินการอยู่: บันทึกได้ แต่เตือนพร้อมเลขเคส
+      if (saved.activeCaseImeiWarning !== null) {
+        showToast({ tone: 'warning', title: 'IMEI ซ้ำกับเคสอื่นที่ยังดำเนินการอยู่', description: saved.activeCaseImeiWarning })
+      }
       setStaged([])
       onSaved(saved)
     } finally {

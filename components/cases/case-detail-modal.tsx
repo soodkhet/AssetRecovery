@@ -237,6 +237,13 @@ export function CaseDetailModal({
           description: response.data.case.activeAssetImeiWarning,
         })
       }
+      if (response.data.case.activeCaseImeiWarning !== null) {
+        showToast({
+          tone: 'warning',
+          title: 'IMEI ซ้ำกับเคสอื่นที่ยังดำเนินการอยู่',
+          description: response.data.case.activeCaseImeiWarning,
+        })
+      }
       setDetail(response.data.case)
       setReason('')
       setChosenTeam(null)
@@ -546,6 +553,12 @@ function CaseSummary({ detail }: { detail: CaseDetailDto }) {
               {detail.activeAssetImeiWarning !== null && (
                 <span className="mt-0.5 block text-[11px] font-semibold text-amber-600">
                   {detail.activeAssetImeiWarning}
+                </span>
+              )}
+              {/* มติชั่วคราว M1 (B-03) — IMEI ตรงกับเคสอื่นที่ยังดำเนินการอยู่: เตือนเท่านั้น */}
+              {detail.activeCaseImeiWarning !== null && (
+                <span className="mt-0.5 block text-[11px] font-semibold text-amber-600">
+                  {detail.activeCaseImeiWarning}
                 </span>
               )}
             </span>

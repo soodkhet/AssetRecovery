@@ -296,6 +296,14 @@ export function CasesManager({
           description: response.data.case.activeAssetImeiWarning,
         })
       }
+      // มติชั่วคราว M1 (B-03) — IMEI ตรงกับเคสอื่นที่ยังดำเนินการอยู่ ⇒ เตือนพร้อมเลขเคส (ไม่บล็อก)
+      if (response.data.case.activeCaseImeiWarning !== null) {
+        showToast({
+          tone: 'warning',
+          title: 'IMEI ซ้ำกับเคสอื่นที่ยังดำเนินการอยู่',
+          description: response.data.case.activeCaseImeiWarning,
+        })
+      }
       setLoading(true)
       await reload()
     } finally {
@@ -357,7 +365,10 @@ export function CasesManager({
         return {
           ok: true,
           statusLabel: caseStatusLabel(response.data.case.status),
-          warning: response.data.case.activeAssetImeiWarning,
+          warning:
+            [response.data.case.activeAssetImeiWarning, response.data.case.activeCaseImeiWarning]
+              .filter((text): text is string => text !== null)
+              .join(' · ') || null,
         }
       },
       (done, count) => setBulkProgress({ done, total: count }),

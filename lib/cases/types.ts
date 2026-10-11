@@ -251,6 +251,11 @@ export interface CaseDetailDto extends CaseListItemDto {
    * ข้อมูลประกอบใน `data` ไม่ใช่ error code · `null` = ไม่มี/ไม่ได้ตรวจ (มุมมองฝั่งบริษัทไฟแนนซ์ไม่ตรวจ)
    */
   activeAssetImeiWarning: string | null
+  /**
+   * มติชั่วคราว M1 (B-03) — เตือน (ไม่บล็อก) เมื่อ IMEI ตรงกับเคสอื่นที่ยังดำเนินการอยู่ พร้อมเลขเคส
+   * ฝั่งบริษัทไฟแนนซ์เห็นเฉพาะเคสบริษัทตัวเอง · `null` = ไม่ชน/ไม่ได้ตรวจ
+   */
+  activeCaseImeiWarning: string | null
   projectedRevenueSatang: number | null
   /** ค่าดิบ `calculation_source` (มี template id) — เก็บไว้ trace · หน้าจอใช้ `projectedRevenueSourceLabel` */
   projectedRevenueSource: string | null

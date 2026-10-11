@@ -36,6 +36,7 @@ import { caseDocumentRule } from '@/lib/uploads/rules'
 import { verifyUploadedFile } from '@/lib/uploads/verify'
 import { assetIdentifierWarning } from '@/lib/warehouse/imei'
 import { activeAssetImeiWarning } from '@/lib/warehouse/imei-duplicate'
+import { activeCaseImeiWarning } from '@/lib/cases/imei-duplicate-case'
 import type {
   CaseCreateInput,
   CaseDocumentUploadInput,
@@ -413,6 +414,7 @@ export function toDetailDto(row: CaseDetailRow): CaseDetailDto {
     assetColor: row.assetColor,
     assetIdentifierWarning: assetIdentifierWarning(row.serialNo),
     activeAssetImeiWarning: null,
+    activeCaseImeiWarning: null,
     projectedRevenueSatang: row.projectedRevenueSatang,
     projectedRevenueSource: row.projectedRevenueSource,
     projectedRevenueSourceLabel:
@@ -599,18 +601,27 @@ export async function listCases(user: SessionUser, query: CaseListQuery): Promis
 /**
  * เติมคำเตือน IMEI ซ้ำกับเครื่องที่ยังไม่ส่งมอบ (มติ PO U129) ลง detail — ใช้หลังบันทึก/ส่งเคส/เปิดดูเคส
  * อ่าน IMEI จากเคสเอง (DTO รวม IMEI/Serial เป็นช่องเดียว) · ไม่ตรวจเคสที่ปิดแล้ว (เครื่องของเคสเองคือตัวที่ชน)
+ * + มติชั่วคราว M1 (B-03) — IMEI ตรงกับเคสอื่นที่ยังดำเนินการอยู่ (รวมต่างบริษัท) ⇒ เตือนพร้อมเลขเคส
+ *   (ผู้ใช้ฝั่งบริษัทไฟแนนซ์เห็นเฉพาะเคสบริษัทตัวเอง) · ไม่ตรวจเคสร่าง/ไม่รับ/ปิดแล้วของตัวเอง
  */
 export async function withActiveAssetImeiWarning(
-  organizationId: string,
+  viewer: SessionUser,
   detail: CaseDetailDto,
 ): Promise<CaseDetailDto> {
   if (detail.status === 'closed_success' || detail.status === 'closed_fail') return detail
+  const organizationId = viewer.organizationId
   const row = await prisma.case.findFirst({
     where: { id: detail.id, organizationId },
     select: { imei: true },
   })
-  const warning = await activeAssetImeiWarning(organizationId, row?.imei ?? null, detail.id)
-  return warning === null ? detail : { ...detail, activeAssetImeiWarning: warning }
+  const imei = row?.imei ?? null
+  const [assetWarning, caseWarning] = await Promise.all([
+    activeAssetImeiWarning(organizationId, imei, detail.id),
+    detail.status === 'rejected'
+      ? Promise.resolve(null)
+      : activeCaseImeiWarning(viewer, imei, { excludeCaseId: detail.id, financeCompanyId: detail.financeCompanyId }),
+  ])
+  return { ...detail, activeAssetImeiWarning: assetWarning, activeCaseImeiWarning: caseWarning }
 }
 
 /** อ่านเคสเดียว — นอก scope ตอบ `CASE_NOT_FOUND` เหมือนไม่มีเคสนี้ (ไม่ leak ข้ามทีม/ข้ามบริษัท) */
@@ -634,8 +645,9 @@ export async function getCase(user: SessionUser, caseId: string): Promise<CaseDe
   }
   // บริษัทไฟแนนซ์เห็นเหตุผลปิดงานไม่สำเร็จของเคสตัวเองได้ (มติ PO 03/10/2569 — UAT Q16)
   if (isCompanySideViewer(user)) return redactCaseDetailForCompany(detail)
-  const warned = await withActiveAssetImeiWarning(user.organizationId, detail)
+  const warned = await withActiveAssetImeiWarning(user, detail)
   detail.activeAssetImeiWarning = warned.activeAssetImeiWarning
+  detail.activeCaseImeiWarning = warned.activeCaseImeiWarning
   const [fieldEvidence, resubmittedAt] = await Promise.all([
     loadCaseFieldEvidence(user, row.id),
     loadCaseResubmittedAt(user.organizationId, row.id),
@@ -885,7 +897,7 @@ export async function createCase(
 
       return toDetailDto(created)
     })
-    return await withActiveAssetImeiWarning(organizationId, saved)
+    return await withActiveAssetImeiWarning(context.actor, saved)
   } catch (error) {
     rethrowDuplicate(error, input.caseRef)
   }
@@ -1116,7 +1128,7 @@ export async function updateCase(
           : ((await tx.case.findUniqueOrThrow({ where: { id: caseId }, select: detailSelect })) as typeof updated)
       return toDetailDto(refreshed)
     })
-    return await withActiveAssetImeiWarning(organizationId, saved)
+    return await withActiveAssetImeiWarning(context.actor, saved)
   } catch (error) {
     rethrowDuplicate(error, values.caseRef ?? current.caseRef)
   }

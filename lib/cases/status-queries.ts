@@ -415,7 +415,7 @@ export async function changeCaseStatus(
   }
 
   // มติ PO U129 — ส่งเคสแล้ว IMEI ชนเครื่องที่ยังไม่ส่งมอบ ⇒ เตือนในผลลัพธ์ (ไม่บล็อก)
-  return { case: await withActiveAssetImeiWarning(organizationId, toDetailDto(updated)), suggestion }
+  return { case: await withActiveAssetImeiWarning(context.actor, toDetailDto(updated)), suggestion }
 }
 
 /**

@@ -1042,6 +1042,52 @@ suite('Phase 2.3 — state machine + snapshot + recycle (DB จริง)', () =
     }
   })
 
+  it('มติชั่วคราว M1 (B-03): IMEI ตรงกับเคส active ของบริษัทอื่น ⇒ เตือนพร้อมเลขเคส ไม่บล็อก · ฝั่งบริษัทไม่เห็นบริษัทอื่น', async () => {
+    const { createCase, withActiveAssetImeiWarning } = await import('@/lib/cases/queries')
+    const { caseCreateSchema } = await import('@/lib/cases/schemas')
+    const otherCompanyId = '00000000-0000-4000-8000-0000000023b9'
+    await db().$executeRawUnsafe(`
+      INSERT INTO finance_companies (id, organization_id, name, short_name, tax_id, service_fee_template_id, created_by)
+      VALUES ('${otherCompanyId}', '${ORG_ID}', 'ไฟแนนซ์อื่น M1', 'M1X', '0105512300099', '${TEMPLATE_V1}', '${USER_ID}')
+    `)
+    try {
+      const imei = '356938035641111'
+      const other = await createCase(
+        caseCreateSchema.parse({ caseRef: 'M1-OTHER-01', financeCompanyId: otherCompanyId, assetImeiSerial: imei }),
+        { actor, meta },
+      )
+      // ร่างของบริษัทอื่นยังไม่นับ
+      const whileDraft = await createCase(
+        caseCreateSchema.parse({ caseRef: 'M1-MINE-01', financeCompanyId: COMPANY_ID, assetImeiSerial: imei }),
+        { actor, meta },
+      )
+      expect(whileDraft.activeCaseImeiWarning).toBeNull()
+
+      await db().$executeRawUnsafe(`UPDATE cases SET status = 'pending_review' WHERE id = '${other.id}'`)
+      const mine = await createCase(
+        caseCreateSchema.parse({ caseRef: 'M1-MINE-02', financeCompanyId: COMPANY_ID, assetImeiSerial: imei }),
+        { actor, meta },
+      )
+      expect(mine.status).toBe('draft')
+      expect(mine.activeCaseImeiWarning).toContain('M1-OTHER-01 (ไฟแนนซ์อื่น M1)')
+      expect(mine.activeCaseImeiWarning).not.toContain('M1-MINE-01')
+
+      // ผู้ใช้ฝั่งบริษัทไฟแนนซ์ (scope company) ไม่เห็นเคสของบริษัทอื่น
+      const companyViewer: SessionUser = {
+        ...actor,
+        isSuperadmin: false,
+        roleGroup: 'finance_company',
+        companyId: COMPANY_ID,
+        scope: { kind: 'company', teamIds: [], companyId: COMPANY_ID, userId: USER_ID },
+      }
+      const companyView = await withActiveAssetImeiWarning(companyViewer, mine)
+      expect(companyView.activeCaseImeiWarning).toBeNull()
+    } finally {
+      await db().$executeRawUnsafe(`DELETE FROM cases WHERE organization_id = '${ORG_ID}' AND company_id = '${otherCompanyId}'`)
+      await db().$executeRawUnsafe(`DELETE FROM finance_companies WHERE id = '${otherCompanyId}'`)
+    }
+  })
+
   it('Import dryRun ไม่เขียนอะไรลง DB (preview ก่อนยืนยัน)', async () => {
     const { importCases } = await import('@/lib/cases/import-queries')
     const result = await importCases(
