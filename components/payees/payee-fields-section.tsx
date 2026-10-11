@@ -17,6 +17,7 @@ import {
   PER_PAYEE_TAX_PROFILE_SUFFIX,
   TAX_PROFILE_TAB_PATH,
 } from '@/lib/teams/team-tax-rule'
+import { payeeBankOptions } from '@/lib/banks/thai-banks'
 import { EMPTY_ADDRESS, addressFromDto, type AddressValue } from '@/lib/address/address-value'
 import { branchCodeFromForm, branchKindOf, isHeadOfficeBranch, type BranchKind } from '@/lib/format/branch'
 import { fmtPercent } from '@/lib/format/money'
@@ -447,12 +448,15 @@ export function PayeeFieldsSection({
       <p className="mb-3 text-xs font-semibold text-slate-700">ข้อมูลบัญชีธนาคาร</p>
       <div className="space-y-3">
         <Field id="payee-bank" label="ธนาคาร" error={errors.bankName}>
-          <Input
-            id="payee-bank"
-            value={form.bankName}
-            onChange={(event) => onChange('bankName', event.target.value)}
-            placeholder="ธนาคารกสิกรไทย"
-          />
+          {/* mytester A-16 — เลือกจากรายการเดียวกับบัญชีธนาคารบริษัท/ไฟล์โอน (ค่าเดิมที่พิมพ์เองยังคงไว้ได้) */}
+          <Select id="payee-bank" value={form.bankName} onChange={(event) => onChange('bankName', event.target.value)}>
+            <option value="">— เลือกธนาคาร —</option>
+            {payeeBankOptions(form.bankName).map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </Select>
         </Field>
         <Field id="payee-account-name" label="ชื่อบัญชี" error={errors.accountName}>
           <Input
