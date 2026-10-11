@@ -46,6 +46,40 @@ function assertScopedKey({ organizationId, key }: ReportCacheKey): void {
   }
 }
 
+// ── เวอร์ชันของตรรกะรายงาน (mytester V2-01) ─────────────────────────────────────
+
+/**
+ * เลขเวอร์ชันตรรกะรายงานที่ผูกกับคีย์แคช — **bump เมื่อแก้สูตร/รูปผลลัพธ์ของรายงาน** (ใช้ได้ทุก environment
+ * รวม local/self-host ที่ไม่มีเลข commit) · บน Vercel คีย์ผูกเลข commit ของ deploy ด้วยอยู่แล้ว (ดู {@link reportCacheVersion})
+ */
+export const REPORT_CACHE_LOGIC_VERSION = 1
+
+/** ความยาวเลข commit ที่ใส่ในคีย์ — พอแยก deploy ได้โดยคีย์ไม่ยาวเกินจำเป็น */
+const COMMIT_SHA_LENGTH = 12
+
+/**
+ * เวอร์ชันของแคชรายงาน = เลขตรรกะ + เลข commit ของ deploy (`VERCEL_GIT_COMMIT_SHA` ถ้ามี)
+ *
+ * เหตุผลที่ผูกเลข commit (เดิมแคชรายวันที่คำนวณก่อน deploy ยังเสิร์ฟตรรกะเก่าจนเที่ยงคืนหรือจนกดรีเฟรช — V2-01):
+ * - แคชเป็นแค่ตัวเร่งความเร็วของรายงานที่**หมดอายุทุกเที่ยงคืนอยู่แล้ว** ⇒ deploy ใหม่ = คำนวณใหม่ครั้งแรกต่อรายงาน/ตัวกรอง
+ *   เท่ากับต้นทุนของ "วันใหม่" หนึ่งครั้ง ไม่ใช่การล้างข้อมูล (deploy production ไม่ถี่)
+ * - ใช้เลขที่ต้อง bump เองอย่างเดียวพึ่งความจำของคนแก้สูตร — ลืมครั้งเดียวผู้บริหารเห็นตัวเลขผิดทั้งวันแบบไม่มีใครรู้
+ *   (ต้นเหตุจริงของ V2-01) จึงใช้เลข commit เป็นหลัก และเก็บเลขตรรกะไว้สำหรับ environment ที่ไม่มีเลข commit
+ * - ระหว่าง rolling deploy instance เก่า/ใหม่เขียนคนละคีย์ ไม่ทับกัน · แถวเก่าหมดอายุตามรอบเดิมและยังถูกล้างด้วย prefix เดิม
+ */
+export function reportCacheVersion(env: Readonly<Record<string, string | undefined>> = process.env): string {
+  const sha = (env['VERCEL_GIT_COMMIT_SHA'] ?? '').trim().slice(0, COMMIT_SHA_LENGTH)
+  return sha === '' ? `${REPORT_CACHE_LOGIC_VERSION}` : `${REPORT_CACHE_LOGIC_VERSION}.${sha}`
+}
+
+/**
+ * คีย์ที่เก็บจริง = คีย์ของผู้เรียก + `|v=<เวอร์ชัน>` ต่อท้าย — ต่อท้ายเพื่อให้ prefix ขององค์กร/รายงานเหมือนเดิม
+ * (การล้างแคชด้วย prefix · ตรวจ `assertScopedKey` ยังครอบทุกเวอร์ชัน)
+ */
+export function versionedReportCacheKey(key: string, version: string = reportCacheVersion()): string {
+  return `${key}|v=${version}`
+}
+
 /** ระยะห้ามกดรีเฟรชซ้ำต่อคีย์ (E14 — "ปุ่มรีเฟรช cooldown 5 นาที/รายงาน") */
 export const REPORT_REFRESH_COOLDOWN_MS = 5 * 60 * 1000
 
@@ -140,7 +174,9 @@ export async function withReportCache<T>(
   }
 
   assertScopedKey(cacheKey)
-  const { organizationId, key } = cacheKey
+  const { organizationId } = cacheKey
+  // ผูกเวอร์ชันตรรกะ/deploy — แคชที่คำนวณด้วยสูตรเก่าไม่ถูกเสิร์ฟหลัง deploy (V2-01)
+  const key = versionedReportCacheKey(cacheKey.key)
   const cached = await activeStore.get(organizationId, key, now)
   const cooldownUntil = cached === null ? null : new Date(cached.computedAt.getTime() + REPORT_REFRESH_COOLDOWN_MS)
   const throttled =
@@ -208,7 +244,7 @@ export async function invalidateOrganizationReportCache(organizationId: string):
 
 /** เวลาที่คำนวณค่าล่าสุดของคีย์ (ไม่ทำให้ค่าถูกคำนวณใหม่) — `null` = ไม่มี/หมดอายุแล้ว */
 export async function reportCacheComputedAt(cacheKey: ReportCacheKey, now: Date = new Date()): Promise<Date | null> {
-  const entry = await activeStore.get(cacheKey.organizationId, cacheKey.key, now)
+  const entry = await activeStore.get(cacheKey.organizationId, versionedReportCacheKey(cacheKey.key), now)
   return entry?.computedAt ?? null
 }
 

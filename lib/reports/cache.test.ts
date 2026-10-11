@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  REPORT_CACHE_LOGIC_VERSION,
   REPORT_REFRESH_COOLDOWN_MS,
   type ReportCacheKey,
+  reportCacheVersion,
+  versionedReportCacheKey,
   invalidateReportCache,
   nextBangkokMidnight,
   nextHourBoundary,
@@ -202,5 +205,44 @@ describe('withReportCache — 3 โหมดตาม `96` §8', () => {
 
     const later = await requestReportRefresh('org-a', 'org-a:report:f1:', new Date(now.getTime() + REPORT_REFRESH_COOLDOWN_MS + 1))
     expect(later.allowed).toBe(true)
+  })
+})
+
+describe('แคชผูกเวอร์ชันตรรกะ/deploy (mytester V2-01)', () => {
+  const NOW = new Date('2026-10-11T06:00:00Z')
+
+  it('เวอร์ชัน = เลขตรรกะ + เลข commit 12 ตัว · ไม่มี commit = เลขตรรกะอย่างเดียว', () => {
+    expect(reportCacheVersion({ VERCEL_GIT_COMMIT_SHA: 'c4ab59ca0123456789abcdef' })).toBe(
+      `${REPORT_CACHE_LOGIC_VERSION}.c4ab59ca0123`,
+    )
+    expect(reportCacheVersion({})).toBe(`${REPORT_CACHE_LOGIC_VERSION}`)
+    expect(reportCacheVersion({ VERCEL_GIT_COMMIT_SHA: '  ' })).toBe(`${REPORT_CACHE_LOGIC_VERSION}`)
+  })
+
+  it('เวอร์ชันต่อท้ายคีย์ — prefix ขององค์กร/รายงานเหมือนเดิม (ล้างด้วย prefix ได้ทุกเวอร์ชัน)', () => {
+    const key = versionedReportCacheKey('org-t:report:ar-aging:x', '1.abc')
+    expect(key.startsWith('org-t:report:ar-aging:')).toBe(true)
+    expect(key).toBe('org-t:report:ar-aging:x|v=1.abc')
+  })
+
+  it('deploy ใหม่ (commit เปลี่ยน) ⇒ ไม่ใช้แคชที่คำนวณด้วยตรรกะเก่า', async () => {
+    const compute = vi.fn(async () => 'value')
+    vi.stubEnv('VERCEL_GIT_COMMIT_SHA', 'aaaaaaaaaaaaaaaa')
+    try {
+      await withDailyCache(k('f3'), { refresh: false, now: NOW }, compute)
+      expect((await withDailyCache(k('f3'), { refresh: false, now: NOW }, compute)).fromCache).toBe(true)
+      vi.stubEnv('VERCEL_GIT_COMMIT_SHA', 'bbbbbbbbbbbbbbbb')
+      const afterDeploy = await withDailyCache(k('f3'), { refresh: false, now: NOW }, compute)
+      expect(afterDeploy.fromCache).toBe(false)
+      expect(compute).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it('ล้างแคชด้วย prefix ยังครอบคีย์ที่มีเวอร์ชัน', async () => {
+    const compute = vi.fn(async () => 'value')
+    await withDailyCache(k('org-t:report:f3:x'), { refresh: false, now: NOW }, compute)
+    expect(await invalidateReportCache('org-t', 'org-t:report:f3:')).toBe(1)
   })
 })
