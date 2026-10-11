@@ -751,16 +751,30 @@ export async function acceptAssignment(
   })
 
   // `40` §15 — ผู้มอบหมาย + ผู้จัดการ/หัวหน้าของทีมเคส (ทีมอื่นไม่ได้รับ — UAT Q17 · BUG-040/064)
+  // mytester J-02 — ผู้มอบหมายที่เป็นพนักงานภาคสนาม (ขอโอนเคสให้เพื่อน) ได้ลิงก์ของแอปภาคสนาม ไม่ใช่หน้ามอบหมาย
   const organizationId = user.organizationId
+  const acceptedInput = { caseRef: row.caseRef, assignmentId: current.id, agentName: user.fullName, acceptedAt }
+  const recipients = (async () => {
+    const leads = await teamLeadIds(organizationId, current.teamId)
+    const assigner =
+      current.createdBy === null || leads.includes(current.createdBy)
+        ? null
+        : await prisma.user.findFirst({
+            where: { id: current.createdBy, organizationId },
+            select: { id: true, role: { select: { name: true } } },
+          })
+    const assignerIsAgent = assigner?.role.name === FIELD_AGENT_ROLE_NAME
+    const others = (ids: readonly string[]): string[] => ids.filter((id) => id !== user.id)
+    return {
+      assigners: others([...(assigner !== null && !assignerIsAgent ? [assigner.id] : []), ...leads]),
+      requesterAgents: others(assigner !== null && assignerIsAgent ? [assigner.id] : []),
+    }
+  })()
+  dispatchToResolvedUsers(organizationId, async () => (await recipients).assigners, assignmentAcceptedMessage(acceptedInput))
   dispatchToResolvedUsers(
     organizationId,
-    async () => [current.createdBy, ...(await teamLeadIds(organizationId, current.teamId))].filter((id) => id !== user.id),
-    assignmentAcceptedMessage({
-      caseRef: row.caseRef,
-      assignmentId: current.id,
-      agentName: user.fullName,
-      acceptedAt,
-    }),
+    async () => (await recipients).requesterAgents,
+    assignmentAcceptedMessage(acceptedInput, 'requester_agent'),
   )
 
   return toActionResult(row.id, updated, null, ['assignment.accepted'])

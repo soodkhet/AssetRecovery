@@ -112,18 +112,25 @@ export function assignmentReassignedMessage(
 }
 
 /** พนักงานกดรับงานแล้ว (`assignment.accepted`) — ถึงผู้มอบหมาย + ผู้จัดการ/หัวหน้าทีม */
-export function assignmentAcceptedMessage(input: {
-  caseRef: string
-  assignmentId: string
-  agentName: string | null
-  acceptedAt: Date
-}): NotificationMessage {
+export function assignmentAcceptedMessage(
+  input: {
+    caseRef: string
+    assignmentId: string
+    agentName: string | null
+    acceptedAt: Date
+  },
+  /**
+   * mytester J-02 — ผู้รับเป็นพนักงานภาคสนามที่ขอโอนเคสให้เพื่อน (`assigned_by` = พนักงาน) ⇒ ลิงก์ไปเคสที่โอนออกในแอปภาคสนาม
+   * (`/cases/assign` พนักงานเปิดไม่ได้ — ขัดกติกา "ลิงก์ต้องเปิดได้โดยผู้รับ" ของ `90` §6.3) · ไม่ระบุ = ผู้มอบหมาย/หัวหน้าทีม
+   */
+  audience: 'assigner' | 'requester_agent' = 'assigner',
+): NotificationMessage {
   const by = input.agentName === null ? 'พนักงาน' : input.agentName
   return {
     eventCode: 'assignment.accepted',
     title: 'พนักงานกดรับงานแล้ว',
     body: `เคส ${input.caseRef} — ${by} รับงานเมื่อ ${fmtDateTime(input.acceptedAt)}`,
-    linkPath: ASSIGNER_PATH,
+    linkPath: audience === 'requester_agent' ? AGENT_LOST_WORK_PATH : ASSIGNER_PATH,
     dedupeKey: `assignment-accepted-${input.assignmentId}`,
   }
 }

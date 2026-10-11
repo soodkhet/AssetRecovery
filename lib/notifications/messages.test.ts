@@ -61,6 +61,10 @@ const ALL: readonly NotificationMessage[] = [
     agentName: 'สมชาย',
     acceptedAt: new Date('2026-10-03T09:39:00Z'),
   }),
+  assignmentAcceptedMessage(
+    { caseRef: 'CASE-26-0015', assignmentId: 'as3', agentName: 'สมชาย', acceptedAt: new Date('2026-10-03T09:39:00Z') },
+    'requester_agent',
+  ),
   reassignmentRespondedMessage({ caseRef: 'CASE-26-0016', pendingReassignmentId: 'p2', decision: 'consent' }, 'new_agent'),
   reassignmentRespondedMessage({ caseRef: 'CASE-26-0016', pendingReassignmentId: 'p2', decision: 'consent' }, 'requester'),
   reassignmentRespondedMessage(
@@ -488,5 +492,13 @@ describe('แจ้งผู้รับเงิน/ผู้ขอโดยต
     expect(message.body).toContain('฿970.00')
     expect(message.dedupeKey).toBe('payout-paid-b1-u1')
     expect(message.linkPath).toBe('/field/income')
+  })
+})
+
+describe('mytester J-02 — แจ้งพนักงานกดรับงาน: ลิงก์ตามผู้รับ', () => {
+  const input = { caseRef: 'C-1', assignmentId: 'a1', agentName: 'สมชาย', acceptedAt: new Date('2026-10-03T09:39:00Z') }
+  it('ผู้มอบหมาย/หัวหน้าทีม ⇒ หน้ามอบหมาย · พนักงานที่ขอโอน ⇒ แอปภาคสนาม (เคสที่โอนออก)', () => {
+    expect(assignmentAcceptedMessage(input).linkPath).toBe('/cases/assign')
+    expect(assignmentAcceptedMessage(input, 'requester_agent').linkPath).toBe('/field/closed')
   })
 })

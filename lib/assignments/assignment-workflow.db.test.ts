@@ -324,6 +324,30 @@ suite('Phase 2.6 — assign / accept (`40` §8 · §20)', () => {
       'ASSIGNMENT_INVALID_STATUS',
     )
   })
+
+  it('mytester J-02 — ผู้มอบหมายเป็นพนักงาน (ขอโอนเคสให้เพื่อน) ได้ลิงก์แอปภาคสนาม · หัวหน้าทีมได้ลิงก์หน้ามอบหมาย', async () => {
+    const caseId = await seedApprovedCase()
+    await queries.assignCase(manager, caseId, { agentId: AGENT_A }, { actor: manager, meta })
+    // จำลองงานที่ "พนักงาน B" เป็นผู้สร้าง (ขอโอนเคสของตัวเองให้ A)
+    await db().caseAssignment.updateMany({ where: { caseId, agentId: AGENT_A }, data: { createdBy: AGENT_B } })
+    await queries.acceptAssignment(agentA, caseId, { actor: agentA, meta })
+
+    const waitFor = async (): Promise<{ userId: string; linkPath: string | null }[]> => {
+      for (let attempt = 0; attempt < 40; attempt += 1) {
+        const rows = await db().notification.findMany({
+          where: { organizationId: ORG_ID, eventCode: 'assignment.accepted' },
+          select: { userId: true, linkPath: true },
+        })
+        if (rows.some((row) => row.userId === AGENT_B) && rows.some((row) => row.userId === MANAGER_ID)) return rows
+        await new Promise((resolve) => setTimeout(resolve, 50))
+      }
+      return []
+    }
+    const notified = await waitFor()
+    expect(notified.find((row) => row.userId === AGENT_B)?.linkPath).toBe('/field/closed')
+    expect(notified.find((row) => row.userId === MANAGER_ID)?.linkPath).toBe('/cases/assign')
+    expect(notified.some((row) => row.userId === AGENT_A)).toBe(false)
+  })
 })
 
 suite('Phase 2.6 — reassign 2 สาขา (`40` §9 · §11 · §20)', () => {
