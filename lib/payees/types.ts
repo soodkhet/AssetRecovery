@@ -56,6 +56,11 @@ export interface PayeeDto {
   verifiedByName: string | null
   /** ผลเทียบชื่อบัญชีกับชื่อผู้รับเงิน — `false` = ควรเตือน `BANK_ACCOUNT_NAME_MISMATCH` (`18` §11) */
   bankAccountNameMatches: boolean
+  /**
+   * มติชั่วคราว M4 — ไม่มีกติกาภาษีระดับผู้รับ แต่ทีมผูกแผนค่าตอบแทน ⇒ ใช้อัตราของแผน (เงื่อนไขเดียวกับคำเตือนตอนยืนยัน)
+   * · `null` = ไม่ได้ใช้อัตราแผน (ทดสอบซ้ำ local L-03)
+   */
+  planFallbackWht: PayeePlanFallbackWht | null
   /** ฟิลด์ที่ยังขาดก่อนกดยืนยันได้ (`18` §9) — ว่าง = พร้อมยืนยัน */
   missingForVerification: readonly string[]
   /** ยอดคืนเงินทดรองค้างของผู้รับ (มติ PO U30 — เคลียร์แล้วแต่ยังไม่หัก/รับคืน · `22` §6.14) */
@@ -81,4 +86,10 @@ export interface PayeeCandidateDto {
   roleName: string
   /** ฝั่งสำหรับกติกาภาษี (มติ PO U164) — `null` = ไม่มีฝั่ง */
   payoutSide: PayoutBatchSide | null
+}
+
+/** อัตราหัก ณ ที่จ่ายของแผนค่าตอบแทนที่ผู้รับใช้แทน (มติชั่วคราว M4) */
+export interface PayeePlanFallbackWht {
+  planName: string
+  whtPct: number
 }

@@ -127,10 +127,12 @@ export interface PayeeTaxRuleInput {
   whtPct: number | null
   /** อัตราหัก 40(1)/40(2) รายคน — `null` = ยังไม่กรอก */
   wht402Pct: number | null
+  /** มติชั่วคราว M4 — อัตราของแผนที่ใช้แทนเมื่อไม่มีกติการะดับผู้รับ (`PayeeDto.planFallbackWht`) · ไม่ระบุ/`null` = ไม่มี */
+  planFallbackWht?: { planName: string; whtPct: number } | null
 }
 
 export interface PayeeTaxRuleSummary {
-  kind: 'per_payee_rate' | 'own_profile' | 'default_profile' | 'missing'
+  kind: 'per_payee_rate' | 'own_profile' | 'default_profile' | 'plan_fallback' | 'missing'
   /** บรรทัดหลัก เช่น "หัก 40(2) ตามอัตรารายคน 5.00%" / "3.00%" */
   label: string
   /** บรรทัดรอง (ชื่อ Tax Profile / ที่มา) */
@@ -180,6 +182,17 @@ export function payeeEffectiveTaxRule(
       label: fmtPercent(defaultLine.profile.whtPct),
       detail: `${defaultLine.profile.name} (ค่าเริ่มต้นตามประเภทผู้รับ)`,
       warning: false,
+      ignoredProfileName: null,
+    }
+  }
+  // ทดสอบซ้ำ local L-03 — ผู้รับที่ยืนยันด้วยอัตราแผน (M4) ต้องไม่ขึ้น "ยังไม่มีกติกา" สวนกับคำเตือนตอนยืนยัน
+  const planFallback = payee.planFallbackWht ?? null
+  if (planFallback !== null) {
+    return {
+      kind: 'plan_fallback',
+      label: `ใช้อัตราของแผน ${fmtPercent(planFallback.whtPct)}`,
+      detail: `${planFallback.planName} — ยังไม่มีกติกาภาษีของผู้รับ (ชั่วคราว)`,
+      warning: true,
       ignoredProfileName: null,
     }
   }

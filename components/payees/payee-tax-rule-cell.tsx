@@ -12,6 +12,9 @@ import { payeeDefaultTaxRule, payeeEffectiveTaxRule } from '@/lib/teams/team-tax
  */
 export function PayeeTaxRuleCell({ payee, settings }: { payee: PayeeDto; settings: TaxRuleSettings | null }) {
   if (settings === null) {
+    if (payee.whtPct === null && payee.planFallbackWht !== null) {
+      return <span className="text-[10px] font-semibold text-amber-600">ใช้อัตราของแผน {fmtPercent(payee.planFallbackWht.whtPct)}</span>
+    }
     return payee.whtPct === null ? (
       <span className="text-[10px] text-slate-500">ตามค่าเริ่มต้นตามประเภทผู้รับ</span>
     ) : (

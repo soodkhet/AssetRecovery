@@ -370,6 +370,8 @@ suite('Phase 3.2 — Payee & Tax Profile (`18`)', () => {
     const verified = await payees.verifyPayee(ctx(finance, 'ใช้อัตราแผนชั่วคราว'), payeeId)
     expect(verified.payee.isVerified).toBe(true)
     expect(verified.warning?.code).toBe('WHT_RATE_FALLBACK_TO_PLAN')
+    // ทดสอบซ้ำ local L-03 — DTO บอกอัตราแผนที่ใช้แทน (คอลัมน์ภาษีแสดง "ใช้อัตราของแผน 3.00%")
+    expect(verified.payee.planFallbackWht).toEqual({ planName: 'แผนทดสอบ 3.2', whtPct: 3 })
   })
 
   it('มติ PO U94 ข้อ 1 — ที่อยู่ไม่ครบ ⇒ ยืนยันไม่ได้ · กรอกครบแล้วยืนยันได้ · แก้ที่อยู่ ⇒ ต้องยืนยันใหม่', async () => {

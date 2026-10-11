@@ -28,7 +28,7 @@ import {
 } from '@/lib/payees/payee'
 import { PayeeError } from '@/lib/payees/errors'
 import type { PayeeFieldsInput, PayeeListQuery } from '@/lib/payees/schemas'
-import type { PayeeCandidateDto, PayeeDto, PayeeOptionDto } from '@/lib/payees/types'
+import type { PayeeCandidateDto, PayeeDto, PayeeOptionDto, PayeePlanFallbackWht } from '@/lib/payees/types'
 import { resolvePayoutSide } from '@/lib/payout/payout'
 import { prisma } from '@/lib/prisma'
 import { getFinancePolicy } from '@/lib/settings/queries/finance-policy'
@@ -95,7 +95,15 @@ const payeeSelect = {
       fullName: true,
       role: { select: { name: true, roleGroup: true } },
       // มติชั่วคราว M4 — ทีมผูกแผนค่าตอบแทน ⇒ มีอัตราของแผนให้ fallback
-      team: { select: { name: true, side: true, compensationPlanId: true } },
+      team: {
+        select: {
+          name: true,
+          side: true,
+          compensationPlanId: true,
+          // ทดสอบซ้ำ local L-03 — ชื่อ + อัตราของแผนให้คอลัมน์ภาษีบอกว่าใช้อัตราแผน
+          compensationPlan: { select: { name: true, whtPct: true } },
+        },
+      },
     },
   },
   taxProfile: { select: { id: true, name: true, whtPct: true } },
@@ -217,6 +225,19 @@ function rowPlanRateAvailable(row: PayeeRow): boolean {
   return (row.user.team?.compensationPlanId ?? null) !== null
 }
 
+/**
+ * ทดสอบซ้ำ local L-03 — อัตราของแผนที่ผู้รับรายนี้ใช้แทน (มติชั่วคราว M4) · เงื่อนไขเดียวกับคำเตือนตอนยืนยัน
+ * (`payeeWhtFallsBackToPlan`) ⇒ `null` = ไม่ได้ fallback
+ */
+function planFallbackWhtOf(row: PayeeRow, typeDefaults: TaxProfileDefaults<unknown>): PayeePlanFallbackWht | null {
+  const plan = row.user.team?.compensationPlan ?? null
+  if (plan === null) return null
+  if (!payeeWhtFallsBackToPlan(toValues(row), rowTypeDefaultAvailable(row, typeDefaults), rowPlanRateAvailable(row))) {
+    return null
+  }
+  return { planName: plan.name, whtPct: plan.whtPct.toNumber() }
+}
+
 /** คำเตือน `WHT_RATE_FALLBACK_TO_PLAN` เมื่อผู้รับที่ยืนยันแล้วไม่มีอัตราของตัวเอง (ใช้อัตราแผน) — ไม่ block */
 function planFallbackWarning(row: PayeeRow, typeDefaults: TaxProfileDefaults<unknown>): ApiWarning | undefined {
   if (!payeeWhtFallsBackToPlan(toValues(row), rowTypeDefaultAvailable(row, typeDefaults), rowPlanRateAvailable(row))) {
@@ -275,6 +296,7 @@ function toDto(row: PayeeRow, canSeeFullAccount: boolean, typeDefaults: TaxProfi
     legalName: row.legalName,
     incomeCategoryOverride: values.incomeCategoryOverride,
     bankAccountNameMatches: checkBankAccountName(legalNameOf(row, row.user.fullName), row.accountName).matches,
+    planFallbackWht: planFallbackWhtOf(row, typeDefaults),
     missingForVerification: missingFieldsForVerification(values, {
       typeDefaultAvailable: rowTypeDefaultAvailable(row, typeDefaults),
       planRateAvailable: rowPlanRateAvailable(row),

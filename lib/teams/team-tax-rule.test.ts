@@ -170,6 +170,23 @@ describe('payeeEffectiveTaxRule', () => {
     expect(payeeEffectiveTaxRule(line, { taxProfileName: null, whtPct: null, wht402Pct: 5 }).kind).toBe('default_profile')
   })
 
+  it('ทดสอบซ้ำ local L-03 — ยืนยันด้วยอัตราแผน (M4) ⇒ "ใช้อัตราของแผน x%" ไม่ใช่ "ยังไม่มีกติกา"', () => {
+    const summary = payeeEffectiveTaxRule(null, {
+      taxProfileName: null,
+      whtPct: null,
+      wht402Pct: null,
+      planFallbackWht: { planName: 'แผน Outsource', whtPct: 3 },
+    })
+    expect(summary).toMatchObject({ kind: 'plan_fallback', label: 'ใช้อัตราของแผน 3.00%', warning: true })
+    expect(summary.detail).toContain('แผน Outsource')
+    expect(summary.label).not.toContain('ยังไม่มีกติกา')
+    // มีกติการะดับผู้รับ ⇒ ชนะอัตราแผนเสมอ (Payee-level ชนะ Plan-level)
+    const line = payeeDefaultTaxRule('outsource', 'corporate', BY_SIDE, DEFAULTS)
+    expect(
+      payeeEffectiveTaxRule(line, { taxProfileName: null, whtPct: null, wht402Pct: null, planFallbackWht: { planName: 'x', whtPct: 1 } }).kind,
+    ).toBe('default_profile')
+  })
+
   it('ไม่มีฝั่งและไม่ผูกรายคน ⇒ missing + เตือน', () => {
     expect(payeeEffectiveTaxRule(null, { taxProfileName: null, whtPct: null, wht402Pct: null })).toMatchObject({
       kind: 'missing',
