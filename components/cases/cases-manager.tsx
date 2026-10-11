@@ -468,7 +468,16 @@ export function CasesManager({
                 ? `ติ๊กเลือกเคสร่างเพื่อส่งตรวจพร้อมกัน (ส่งได้ ${submittableIds.length} เคสในหน้านี้)`
                 : `เลือกแล้ว ${selectedIds.length} เคส`}
             </span>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
+              {/* มือถือไม่มีหัวตาราง ⇒ ปุ่มเลือกทั้งหมดอยู่ที่แถบนี้ (mytester B-01 มือถือ) */}
+              <Button
+                variant="secondary"
+                size="sm"
+                className="md:hidden"
+                onClick={() => setBulkSelected(allSubmittableSelected ? new Set() : new Set(submittableIds))}
+              >
+                {allSubmittableSelected ? 'ยกเลิกเลือกทั้งหมด' : `เลือกเคสร่างทั้งหมด (${submittableIds.length})`}
+              </Button>
               {selectedIds.length > 0 && (
                 <Button variant="ghost" size="sm" onClick={() => setBulkSelected(new Set())}>
                   ล้างที่เลือก
@@ -622,13 +631,16 @@ export function CasesManager({
                 <div className="mb-2 flex items-start justify-between gap-2">
                   <div className="flex items-start gap-2">
                     {submittableIds.includes(item.id) && (
-                      <input
-                        type="checkbox"
-                        aria-label={`เลือกส่งตรวจ ${item.caseRef}`}
-                        checked={bulkSelected.has(item.id)}
-                        onChange={() => toggleSelected(item.id)}
-                        className="focus-ring mt-0.5 h-5 w-5 rounded border-slate-300"
-                      />
+                      // พื้นที่แตะ ≥ 44px บนมือถือ — ห่อด้วย label (mytester B-01 มือถือ)
+                      <label className="-ml-3 -mt-3 inline-flex min-h-11 min-w-11 cursor-pointer items-center justify-center">
+                        <input
+                          type="checkbox"
+                          aria-label={`เลือกส่งตรวจ ${item.caseRef}`}
+                          checked={bulkSelected.has(item.id)}
+                          onChange={() => toggleSelected(item.id)}
+                          className="focus-ring h-5 w-5 rounded border-slate-300"
+                        />
+                      </label>
                     )}
                   <div>
                     <RefText className="font-bold">{item.caseRef}</RefText>

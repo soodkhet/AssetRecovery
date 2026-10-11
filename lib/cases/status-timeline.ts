@@ -99,11 +99,16 @@ const CASE_EDIT_FIELD_LABEL: Readonly<Record<string, string>> = {
   addressWork: 'ที่อยู่ที่ทำงาน',
   addressIdCard: 'ที่อยู่ตามบัตร',
   contactCount: 'ผู้ติดต่อ',
+  // แนบ/ลบไฟล์ (mytester B-13) — ไม่ใช่คอลัมน์ของเคส แต่เป็นส่วนหนึ่งของการแก้ไขเคส
+  documents: 'เอกสารแนบ',
 }
+
+/** แถวประวัติที่บันทึกโดยไม่มีฟิลด์เปลี่ยน (ข้อมูลเก่าก่อนบันทึกการแนบไฟล์) — ไม่แสดง "—" ที่ไม่มีความหมาย */
+export const CASE_EDIT_NO_FIELD_CHANGE_TEXT = 'บันทึกโดยไม่เปลี่ยนข้อมูลในฟอร์ม'
 
 /** รายชื่อฟิลด์ที่แก้ไข (ภาษาไทย ไม่ซ้ำ) — ฟิลด์ที่ไม่รู้จักรวมเป็น "ข้อมูลอื่น" ไม่โชว์ชื่อคอลัมน์ดิบ */
 export function caseEditedFieldsText(changedFields: readonly string[]): string {
   const labels = changedFields.map((field) => CASE_EDIT_FIELD_LABEL[field] ?? 'ข้อมูลอื่น')
   const unique = [...new Set(labels)]
-  return unique.length === 0 ? '—' : unique.join(', ')
+  return unique.length === 0 ? CASE_EDIT_NO_FIELD_CHANGE_TEXT : unique.join(', ')
 }

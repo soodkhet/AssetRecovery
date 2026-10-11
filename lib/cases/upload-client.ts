@@ -1,7 +1,7 @@
 import type { DocumentSlot } from '@/lib/cases/case'
 import { sha256Hex } from '@/lib/cases/document-upload'
 import type { CaseDocumentUploadInput } from '@/lib/cases/schemas'
-import { StorageUploadError, uploadToStorage } from '@/lib/uploads/client'
+import { StorageUploadError, uploadToStorage, type UploadToStorageOptions } from '@/lib/uploads/client'
 
 /**
  * อัปโหลดไฟล์แนบของเคสขึ้น Supabase Storage แล้วคืน metadata สำหรับ
@@ -23,11 +23,13 @@ export async function uploadCaseFile(
   caseId: string,
   slot: DocumentSlot,
   file: File,
+  /** `signal` = ปุ่มยกเลิกการอัปโหลดของฟอร์ม — abort request ที่ค้างจริง (mytester B-04) */
+  options: UploadToStorageOptions = {},
 ): Promise<CaseDocumentUploadInput> {
   const fileHash = await sha256Hex(await file.arrayBuffer())
   let path: string
   try {
-    path = await uploadToStorage({ kind: 'case_document', caseId, slot }, file)
+    path = await uploadToStorage({ kind: 'case_document', caseId, slot }, file, options)
   } catch (error) {
     if (error instanceof StorageUploadError) throw new CaseUploadError(error.message)
     throw error

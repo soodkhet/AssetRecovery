@@ -419,6 +419,8 @@ suite('Phase 2.3 — state machine + snapshot + recycle (DB จริง)', () =
     const detail = await deleteCaseDocument(actor, caseId, target.id, { actor, meta })
     expect(detail.documents.map((document) => document.documentType)).not.toContain('contract_doc')
     expect(detail.readiness.missingDocuments).toEqual(['contract_doc'])
+    // mytester B-13 — ลบเอกสารลงประวัติการแก้ไขเป็น "เอกสารแนบ" (ไม่ใช่ "แก้ไข: —")
+    expect(detail.editHistory[0]?.changedFields).toEqual(['documents'])
 
     const [row] = await db().$queryRawUnsafe<Array<{ deleted_at: Date | null; file_url: string }>>(
       `SELECT deleted_at, file_url FROM case_documents WHERE id = '${target.id}'`,
@@ -1074,6 +1076,12 @@ suite('Phase 2.3 — state machine + snapshot + recycle (DB จริง)', () =
       ['created', null],
     ])
     expect(preview.createdCount).toBe(1)
+    // mytester B-10 — แถวซ้ำมีลิงก์ไปเคสเดิม · แถวที่ผ่านไม่มี
+    const existing = await db().$queryRawUnsafe<Array<{ id: string }>>(
+      `SELECT id FROM cases WHERE organization_id = '${ORG_ID}' AND case_ref_normalized = 'R2-OLD-${suffix}'`,
+    )
+    expect(preview.rows[0]?.existingCaseId).toBe(existing[0]?.id)
+    expect(preview.rows[1]?.existingCaseId).toBeUndefined()
   })
   it('Import dryRun: ผล preview (สถานะ/รหัส error ต่อแถว) ตรงกับนำเข้าจริง — เบอร์โทร/เลขบัตร (preship R3-006)', async () => {
     const { importCases } = await import('@/lib/cases/import-queries')

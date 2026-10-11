@@ -252,3 +252,11 @@ export function readDuplicateCase(error: { code?: string; payload?: Record<strin
     trackingRound: typeof value.trackingRound === 'number' ? value.trackingRound : 1,
   }
 }
+
+/**
+ * ฟอร์มรับเคส/แก้ไขเคสมีข้อมูลที่ยังไม่บันทึกไหม — ใช้ถามยืนยันก่อนทิ้งเมื่อกด "ยกเลิก" (mytester B-05)
+ * เทียบกับค่าเริ่มต้นตอนเปิดฟอร์ม + มีไฟล์ที่เลือกไว้แต่ยังไม่อัปโหลด
+ */
+export function isCaseFormDirty(form: CaseFormState, initial: CaseFormState, stagedFileCount: number): boolean {
+  return stagedFileCount > 0 || JSON.stringify(form) !== JSON.stringify(initial)
+}

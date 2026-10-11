@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AddressFields } from '@/components/address/address-fields'
 import { CaseAttachmentsFields, type StagedFile } from '@/components/cases/case-attachments-fields'
 import { CaseContactsFields, normalizePhoneEvent } from '@/components/cases/case-contacts-fields'
@@ -28,6 +28,7 @@ import {
 import {
   buildCasePayload,
   caseFormFromDetail,
+  isCaseFormDirty,
   contactsPayload,
   identityFieldOf,
   mapCaseErrorField,
@@ -40,6 +41,7 @@ import { caseCreateSchema, caseUpdateSchema } from '@/lib/cases/schemas'
 import { ASSET_TYPE_LABEL, caseReviewNoteNotice } from '@/lib/cases/status-display'
 import type { CaseDetailDto, CaseDocumentDto, CaseTeamOptionDto, CaseTeamOptionsDto } from '@/lib/cases/types'
 import { uploadCaseFile } from '@/lib/cases/upload-client'
+import { CASE_UPLOAD_CONCURRENCY, runWithConcurrency, uploadProgressLabel } from '@/lib/cases/upload-queue'
 import { parseBahtInput } from '@/lib/format/money'
 import {
   assetIdentifierWarning,
@@ -111,6 +113,12 @@ export function CaseFormModal({
   const [baseUpdatedAt, setBaseUpdatedAt] = useState<string | null>(editing?.updatedAt ?? null)
   /** staging E-027 — เลขที่สัญญาซ้ำที่ตรวจพบระหว่างกรอก (ก่อนกดบันทึก) */
   const [refDuplicate, setRefDuplicate] = useState<{ id: string; caseRef: string; trackingRound: number } | null>(null)
+  /** ค่าเริ่มต้นตอนเปิดฟอร์ม — เทียบหาข้อมูลที่ยังไม่บันทึกก่อนกด "ยกเลิก" (mytester B-05) */
+  const [initialForm, setInitialForm] = useState<CaseFormState>(() => caseFormFromDetail(editing))
+  const [discardOpen, setDiscardOpen] = useState(false)
+  /** ความคืบหน้าอัปโหลดหลังบันทึก (`null` = ไม่ได้อัปโหลดอยู่) + ตัวยกเลิก (mytester B-04) */
+  const [uploadProgress, setUploadProgress] = useState<{ done: number; total: number } | null>(null)
+  const uploadAbortRef = useRef<AbortController | null>(null)
 
   async function checkRefDuplicate(): Promise<void> {
     const caseRef = form.caseRef.trim()
@@ -145,6 +153,7 @@ export function CaseFormModal({
     setBaseUpdatedAt(editing?.updatedAt ?? null)
     setDocuments(editing?.documents ?? [])
     setForm(caseFormFromDetail(editing))
+    setInitialForm(caseFormFromDetail(editing))
     setFieldErrors({})
     setFormError(null)
   }
@@ -170,6 +179,23 @@ export function CaseFormModal({
     }
   }, [open])
 
+  // ระหว่างบันทึก/อัปโหลด ปิดแท็บหรือรีเฟรช ⇒ ให้ browser ถามก่อน (ไฟล์ที่ยังไม่ขึ้นจะหาย — mytester B-04)
+  useEffect(() => {
+    if (!submitting) return
+    function handleBeforeUnload(event: BeforeUnloadEvent): void {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [submitting])
+
+  /** ปุ่ม "ยกเลิก" — กรอก/เลือกไฟล์ไว้แล้วต้องยืนยันก่อนทิ้ง (mytester B-05) */
+  function requestCancel(): void {
+    if (isCaseFormDirty(form, initialForm, staged.length)) setDiscardOpen(true)
+    else onClose()
+  }
+
   // มติ PO U166 — ตัวเลือกความจุ/สี (ผู้ดูแลแก้ได้ในหน้า Model Phone)
   const attributeOptions = useDeviceAttributeOptions(open)
 
@@ -189,6 +215,8 @@ export function CaseFormModal({
     const payload = {
       ...buildCasePayload(form, isEdit ? 'edit' : 'create'),
       ...(isEdit && baseUpdatedAt !== null ? { expectedUpdatedAt: baseUpdatedAt } : {}),
+      // ประวัติการแก้ไขบอกว่าแนบเอกสาร แม้ไม่ได้แก้ช่องอื่น (mytester B-13)
+      ...(isEdit && staged.length > 0 ? { attachingDocuments: true } : {}),
     }
     const schema = isEdit ? caseUpdateSchema : caseCreateSchema
     const parsed = schema.safeParse(payload)
@@ -246,6 +274,8 @@ export function CaseFormModal({
       setStaged([])
       onSaved(saved)
     } finally {
+      uploadAbortRef.current = null
+      setUploadProgress(null)
       setSubmitting(false)
     }
   }
@@ -287,24 +317,43 @@ export function CaseFormModal({
   async function uploadStagedFiles(saved: CaseDetailDto): Promise<CaseDetailDto> {
     if (staged.length === 0) return saved
 
+    const controller = new AbortController()
+    uploadAbortRef.current = controller
+    let done = 0
+    setUploadProgress({ done, total: staged.length })
+
+    // ขั้น 1: ขึ้น Storage พร้อมกันหลายไฟล์ (ส่วนที่ช้า — mytester B-14) · ยกเลิกได้ระหว่างทาง (B-04)
+    const uploads = await runWithConcurrency(staged, CASE_UPLOAD_CONCURRENCY, async (item) => {
+      try {
+        return await uploadCaseFile(saved.id, item.slot, item.file, { signal: controller.signal })
+      } finally {
+        done += 1
+        setUploadProgress({ done, total: staged.length })
+      }
+    })
+
+    // ขั้น 2: ผูกไฟล์เข้าเคสทีละไฟล์ตามลำดับที่เลือก (เร็ว · server ตรวจโหมดเอกสาร/จำนวนรูปต่อไฟล์)
     let latest = saved
     const failed: string[] = []
-    for (const item of staged) {
-      try {
-        const payload = await uploadCaseFile(saved.id, item.slot, item.file)
-        const response = await callApi<CaseDetailDto>(
-          apiPath('case.uploadDocument', { id: saved.id }),
-          jsonRequest('POST', payload),
-        )
-        if (response.error !== undefined || response.data === undefined) {
-          failed.push(`${item.file.name} (${response.error?.message ?? 'บันทึกไฟล์ไม่สำเร็จ'})`)
-          continue
-        }
-        latest = response.data
-      } catch (error) {
-        failed.push(`${item.file.name} (${error instanceof Error ? error.message : 'อัปโหลดไม่สำเร็จ'})`)
+    for (const [index, item] of staged.entries()) {
+      const uploaded = uploads[index]
+      if (uploaded === undefined || uploaded.status === 'rejected') {
+        const reason: unknown = uploaded?.reason
+        failed.push(`${item.file.name} (${reason instanceof Error ? reason.message : 'อัปโหลดไม่สำเร็จ'})`)
+        continue
       }
+      const response = await callApi<CaseDetailDto>(
+        apiPath('case.uploadDocument', { id: saved.id }),
+        jsonRequest('POST', uploaded.value),
+      )
+      if (response.error !== undefined || response.data === undefined) {
+        failed.push(`${item.file.name} (${response.error?.message ?? 'บันทึกไฟล์ไม่สำเร็จ'})`)
+        continue
+      }
+      latest = response.data
     }
+    uploadAbortRef.current = null
+    setUploadProgress(null)
 
     if (failed.length > 0) {
       showToast({
@@ -321,6 +370,8 @@ export function CaseFormModal({
       open={open}
       onClose={onClose}
       size="lg"
+      // ระหว่างอัปโหลดไฟล์ ปิดด้วย X/Esc ไม่ได้ — ใช้ปุ่ม "ยกเลิกการอัปโหลด" (mytester B-04)
+      lockClose={uploadProgress !== null}
       title={isEdit ? `แก้ไขเคส ${editing.caseRef}` : 'รับเคส (กรอกมือ)'}
       description={
         isEdit
@@ -329,10 +380,27 @@ export function CaseFormModal({
       }
       footer={
         <>
-          <Button variant="secondary" onClick={onClose} disabled={submitting}>
-            ยกเลิก
-          </Button>
-          <Button onClick={() => void submit()} loading={submitting}>
+          {uploadProgress !== null && (
+            <span role="status" className="mr-auto self-center text-xs font-semibold text-slate-600">
+              {uploadProgressLabel(uploadProgress.done, uploadProgress.total)}
+            </span>
+          )}
+          {uploadProgress !== null ? (
+            // เคสบันทึกแล้ว — ยกเลิกได้เฉพาะไฟล์ที่ยังขึ้นไม่เสร็จ (mytester B-04)
+            <Button variant="secondary" onClick={() => uploadAbortRef.current?.abort()}>
+              ยกเลิกการอัปโหลด
+            </Button>
+          ) : (
+            <Button variant="secondary" onClick={requestCancel} disabled={submitting}>
+              ยกเลิก
+            </Button>
+          )}
+          {/* ช่วงอัปโหลดไม่ใช้ loading — ไม่งั้น modal ล็อกปุ่มทั้งแถบรวมปุ่มยกเลิกการอัปโหลด */}
+          <Button
+            onClick={() => void submit()}
+            loading={submitting && uploadProgress === null}
+            disabled={submitting}
+          >
             {isEdit ? 'บันทึกการแก้ไข' : 'บันทึกเคสร่าง'}
           </Button>
         </>
@@ -733,6 +801,19 @@ export function CaseFormModal({
                 }
               : undefined
           }
+        />
+        <ConfirmModal
+          open={discardOpen}
+          onClose={() => setDiscardOpen(false)}
+          onConfirm={() => {
+            setDiscardOpen(false)
+            onClose()
+          }}
+          title="ทิ้งข้อมูลที่กรอกไว้?"
+          description="ข้อมูลและไฟล์ที่เลือกไว้ในฟอร์มนี้ยังไม่ได้บันทึก — ถ้าปิดตอนนี้จะหายทั้งหมด"
+          confirmLabel="ทิ้งข้อมูลและปิด"
+          cancelLabel="กลับไปกรอกต่อ"
+          confirmVariant="danger"
         />
         <ConfirmModal
           open={deleteTarget !== null}

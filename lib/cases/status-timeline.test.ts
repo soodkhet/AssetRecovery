@@ -74,6 +74,11 @@ describe('caseEditedFieldsText (staging E-004)', () => {
   it('แปลงชื่อฟิลด์เป็นภาษาไทย · ตัดซ้ำ · ฟิลด์ไม่รู้จัก = "ข้อมูลอื่น"', () => {
     expect(caseEditedFieldsText(['debtorName', 'assetBrandModel', 'deviceModelId'])).toBe('ชื่อลูกหนี้, ยี่ห้อ/รุ่น, รุ่นอุปกรณ์')
     expect(caseEditedFieldsText(['foo', 'bar'])).toBe('ข้อมูลอื่น')
-    expect(caseEditedFieldsText([])).toBe('—')
+    expect(caseEditedFieldsText([])).toBe('บันทึกโดยไม่เปลี่ยนข้อมูลในฟอร์ม')
+  })
+
+  it('แนบ/ลบเอกสาร = "เอกสารแนบ" (mytester B-13)', () => {
+    expect(caseEditedFieldsText(['documents'])).toBe('เอกสารแนบ')
+    expect(caseEditedFieldsText(['debtorName', 'documents'])).toBe('ชื่อลูกหนี้, เอกสารแนบ')
   })
 })
