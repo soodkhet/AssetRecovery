@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Button, Field, InlineAlert, Input, Modal, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
+import { refundSuspenseInputProblem } from '@/lib/bank-recon/schemas'
 import type { BankTransactionDto } from '@/lib/bank-recon/types'
 import { fmtDate, toInputDate } from '@/lib/format/datetime'
 import { fmtSatangSymbol } from '@/lib/format/money'
@@ -44,6 +45,13 @@ export function SuspenseModal({
     let body: Record<string, unknown> = { reason: reason.trim() }
     if (isRefund) {
       if (file === null) return
+      // mytester2 H2-02 — ตรวจวันที่/เหตุผลด้วย schema เดียวกับ server ก่อนอัปโหลด ไม่ให้สลิปค้างใน Storage เมื่อถูกปฏิเสธ
+      const problem = refundSuspenseInputProblem({ refundDate, reason })
+      if (problem !== null) {
+        setSaving(false)
+        showToast({ tone: 'error', title: 'ข้อมูลการคืนเงินไม่ถูกต้อง', description: problem })
+        return
+      }
       let filePath: string
       try {
         filePath = await uploadToStorage({ kind: 'bank_refund', transactionId: transaction.id }, file)
