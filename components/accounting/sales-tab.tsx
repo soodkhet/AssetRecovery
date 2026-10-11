@@ -36,6 +36,7 @@ import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
 import { MANAGE_TAX_INVOICE } from '@/lib/sales/sales'
 import type { CreditNoteDto } from '@/lib/credit-notes/types'
 import type { SalesRecordDto, TaxInvoiceDto, TaxInvoiceSummaryDto } from '@/lib/sales/types'
+import { CreditNoteWaiveNotice } from '@/components/finance/credit-note-waive'
 
 /**
  * แท็บ "รายได้และขาย" (`31` §8 · mockup `accounting.html` แท็บ `sales`)
@@ -222,6 +223,19 @@ export function SalesTab() {
                               ),
                             ]}
                           />
+                          {/* mytester G-01 — ปุ่ม "จัดการนอกระบบ" (E-016) ต้องอยู่หน้าที่ผู้ถือสิทธิ์ใบลดหนี้ (บัญชี) เปิดได้ */}
+                          {awaitingCreditNotes.items
+                            .filter((item) => item.taxInvoiceId === invoice.id && item.canWaive)
+                            .map((item) => (
+                              <CreditNoteWaiveNotice
+                                key={item.adjustmentId}
+                                awaiting={item}
+                                targetBillFullyPaid
+                                waivedAt={null}
+                                waiveReason={null}
+                                onWaived={() => void reloadCreditNotes()}
+                              />
+                            ))}
                           <div className="mt-0.5 flex flex-wrap gap-1">
                             <Button
                               size="sm"
