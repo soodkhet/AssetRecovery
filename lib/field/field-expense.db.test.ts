@@ -1098,6 +1098,23 @@ suite('Phase 2.9 — 2 เส้นทางตีกลับ (`41` §10.1 ห�
     expect(resubmitted.rejectReason).toBeNull()
   })
 
+  it('mytester F-02 — ส่งใหม่หลังตีกลับ: คิวอนุมัติเห็นเหตุผลตีกลับครั้งก่อน + คำชี้แจง', async () => {
+    const caseId = await closeSuccessfully()
+    await db().expense.updateMany({ where: { caseId }, data: { status: 'pending_approval' } })
+    const target = (await expensesOf(caseId))[0]
+    await expenses.rejectFieldExpense(manager, target?.id ?? '', { reason: 'MT-F02 ใบเสร็จไม่ชัด' }, { actor: manager, meta })
+    await expenses.resubmitFieldExpense(agentA, target?.id ?? '', { note: 'ถ่ายใบเสร็จใหม่แล้ว' }, { actor: agentA, meta })
+
+    // คิวอนุมัติ (`toDto`) อ่านค่าผ่านตัวโหลดนี้ — ทดสอบตรงเพราะไฟล์นี้ไม่ได้ seed สายอนุมัติ
+    const { loadPreviousRejectReasons } = await import('@/lib/compensation/approval-queries')
+    const rows = await db().expense.findMany({ where: { caseId }, select: { id: true, resubmitNote: true, rejectionReason: true } })
+    const reasons = await loadPreviousRejectReasons(ORG_ID, rows)
+    expect(rows.find((row) => row.id === target?.id)?.rejectionReason).toBeNull()
+    expect(reasons.get(target?.id ?? '')).toBe('MT-F02 ใบเสร็จไม่ชัด')
+    // รายการที่ไม่เคยถูกตีกลับ/ส่งใหม่ ⇒ ไม่มีค่า
+    expect([...reasons.keys()]).toEqual([target?.id])
+  })
+
   /**
    * Final Test ด่าน 1 (Phase 8.3) — `41` §10.1 ให้ `reject_evidence` ทำได้จาก `closed_success`
    * แต่ `19` §6.1 บอกว่าเคสที่ผ่านขั้นสุดท้ายแล้ว "ไม่มีโอกาสถูกตีกลับอีก"

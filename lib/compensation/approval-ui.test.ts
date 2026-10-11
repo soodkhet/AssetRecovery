@@ -55,6 +55,7 @@ function dto(overrides: Partial<CompensationApprovalDto> = {}): CompensationAppr
     rejectReason: null,
     note: null,
     resubmitNote: null,
+    previousRejectReason: null,
     receiptFilePath: null,
     receiptUnverified: false,
     sharedWithName: null,

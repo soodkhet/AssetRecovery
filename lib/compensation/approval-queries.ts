@@ -380,6 +380,28 @@ async function currentWhtPolicy(organizationId: string, payeeIds: readonly strin
  * mytester F-03 — ยอด WHT คาดการณ์ของแถวในคิว คิดแบบรอบจ่ายถัดไป: รวมรายการ `approved` ที่ยังไม่เข้ารอบของผู้รับเดียวกัน
  * (รวมที่อยู่นอกแท็บ/ตัวกรอง — ใช้ร่วมคิดเท่านั้น ไม่แสดง) + ยอดสะสมของเดือน · ใช้ทั้งรายการคิวและผลของ action
  */
+/**
+ * mytester F-02 — เหตุผลตีกลับครั้งล่าสุดของรายการที่ส่งใหม่ (`resubmit_note` ไม่ว่าง) จาก audit ของการส่งใหม่
+ * (`before_data.rejectionReason` — `expense-queries.ts` เก็บไว้ก่อนล้างคอลัมน์) · ใช้ `idx_audit_target`
+ */
+export async function loadPreviousRejectReasons(
+  organizationId: string,
+  rows: readonly Pick<ExpenseRow, 'id' | 'resubmitNote'>[],
+): Promise<Map<string, string>> {
+  const ids = rows.filter((row) => row.resubmitNote !== null && row.resubmitNote.trim() !== '').map((row) => row.id)
+  if (ids.length === 0) return new Map()
+  const found = await prisma.$queryRaw<{ target_id: string; reason: string }[]>`
+    SELECT DISTINCT ON (target_id) target_id::text AS target_id, before_data->>'rejectionReason' AS reason
+      FROM audit_logs
+     WHERE organization_id = ${organizationId}::uuid
+       AND target_type = 'expenses'
+       AND target_id = ANY(${ids}::uuid[])
+       AND before_data->>'rejectionReason' IS NOT NULL
+       AND after_data->'events' ? 'expense.resubmitted'
+     ORDER BY target_id, created_at DESC`
+  return new Map(found.map((row) => [row.target_id, row.reason]))
+}
+
 async function whtPreviewsFor(
   organizationId: string,
   rows: readonly ExpenseRow[],
@@ -454,6 +476,8 @@ function toDto(
   payeeGaps: ReadonlyMap<string, readonly string[]>,
   /** ยอด WHT จาก `whtPreviewsFor()` (คิดเป็นกลุ่มแบบรอบจ่ายถัดไป) */
   wht: ApprovalWhtPreview,
+  /** `loadPreviousRejectReasons()` — เหตุผลตีกลับครั้งก่อนของรายการที่ส่งใหม่ */
+  previousRejectReasons: ReadonlyMap<string, string> = new Map(),
 ): CompensationApprovalDto {
   const pendingStep = row.status === 'approved' ? null : row.approvalStepCurrent
   const pendingStepRole = pendingStep === null ? null : (flow.steps[pendingStep - 1] ?? null)
@@ -507,6 +531,7 @@ function toDto(
     substituteReceipt: substituteReceiptRefOf(row.substituteReceipts),
     note: row.revisionNote,
     resubmitNote: row.resubmitNote,
+    previousRejectReason: previousRejectReasons.get(row.id) ?? null,
     receiptFilePath: verifiedReceiptPath(row),
     receiptUnverified: hasUnverifiedReceipt(row),
     sharedWithName: row.sharedWithUser?.fullName ?? null,
@@ -613,7 +638,10 @@ export async function listCompensationApprovals(
     loadPayeeInfoGaps(user.organizationId, payeeIds),
     loadFuelRoutes(user.organizationId, rows),
   ])
-  const whtById = await whtPreviewsFor(user.organizationId, rows, policy)
+  const [whtById, previousRejectReasons] = await Promise.all([
+    whtPreviewsFor(user.organizationId, rows, policy),
+    loadPreviousRejectReasons(user.organizationId, rows),
+  ])
   // `16` §10 — ผู้อนุมัติขั้น N เห็นเฉพาะรายการที่ถึงขั้นของตน (UAT R6-7) · กรองหลังรู้สายของแต่ละรายการ
   // (สาย snapshot/คาดการณ์ต่างกันรายแถว จึงกรองใน SQL ตรง ๆ ไม่ได้)
   return rows.flatMap((row) => {
@@ -624,7 +652,12 @@ export async function listCompensationApprovals(
       steps: flow.steps,
     })
     return visible
-      ? [{ ...toDto(row, flow, user, policy, payeeGaps, whtById.get(row.id)!), fuelRoute: fuelRoutes.get(row.id) ?? [] }]
+      ? [
+          {
+            ...toDto(row, flow, user, policy, payeeGaps, whtById.get(row.id)!, previousRejectReasons),
+            fuelRoute: fuelRoutes.get(row.id) ?? [],
+          },
+        ]
       : []
   })
 }

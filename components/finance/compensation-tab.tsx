@@ -11,6 +11,7 @@ import {
   Badge,
   Button,
   Card,
+  ConfirmModal,
   RefText,
   StatusBadge,
   TBody,
@@ -25,13 +26,17 @@ import type { CompensationApprovalDto } from '@/lib/compensation/approval-types'
 import {
   approvalStepText,
   approvalStepTone,
+  bulkApprovableIds,
+  bulkApproveSummary,
   expenseRowActions,
   expenseRowHighlight,
+  isResubmittedClaim,
   whtAmountLabel,
 } from '@/lib/compensation/approval-ui'
 import { EXPENSE_STATUS_LABEL, EXPENSE_TYPE_LABEL, expenseStatusBadgeGroup } from '@/lib/field/expense-ui'
 import { fmtSatangSymbol } from '@/lib/format/money'
 import { SubstituteReceiptPanel } from '@/components/substitute-receipts/substitute-receipt-panel'
+import { RejectReasonNotes } from '@/components/finance/reject-reason-notes'
 
 /**
  * แท็บ "ค่าตอบแทน" (ไฟล์ 16 §8 · mockup `finance.html` แท็บ `comp`)
@@ -44,7 +49,23 @@ import { SubstituteReceiptPanel } from '@/components/substitute-receipts/substit
  */
 
 export function CompensationTab() {
-  const { items, loading, error, reload, isBusy, canApprove, approve, reject } = useApprovalActions('/api/compensation')
+  const { items, loading, error, reload, isBusy, canApprove, approve, approveMany, reject } =
+    useApprovalActions('/api/compensation')
+  // mytester F-02 (staging E-045 ฝั่งผู้จัดการ) — เลือกหลายแถวแล้วอนุมัติครั้งเดียว · ตัวช่วยชุดเดียวกับคิวการเงิน
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
+  const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false)
+  const approvableIds = bulkApprovableIds(items, canApprove)
+  const selectedForApproval = items.filter((item) => approvableIds.includes(item.id) && selected.has(item.id))
+  const bulkSummary = bulkApproveSummary(selectedForApproval)
+  const allApprovableSelected = approvableIds.length > 0 && selectedForApproval.length === approvableIds.length
+  const toggle = (id: string, checked: boolean): void => {
+    setSelected((current) => {
+      const next = new Set(current)
+      if (checked) next.add(id)
+      else next.delete(id)
+      return next
+    })
+  }
 
   const [formulaTarget, setFormulaTarget] = useState<CompensationApprovalDto | null>(null)
   // มติ PO U152 — กดแถวเห็นหมายเหตุ/คำชี้แจง/ใบเสร็จ/ผู้พักร่วมก่อนอนุมัติ
@@ -54,11 +75,18 @@ export function CompensationTab() {
 
   return (
     <Card>
-      <div className="mb-4">
-        <h2 className="text-base font-semibold text-slate-900">ค่าตอบแทนจากเคส (Compensation) — อนุมัติหลายขั้น</h2>
-        <p className="mt-1 text-xs text-slate-500">
-          รายการที่ระบบคิดให้จากงานภาคสนาม เดินตามสายอนุมัติของ Approval Matrix
-        </p>
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold text-slate-900">ค่าตอบแทนจากเคส (Compensation) — อนุมัติหลายขั้น</h2>
+          <p className="mt-1 text-xs text-slate-500">
+            รายการที่ระบบคิดให้จากงานภาคสนาม เดินตามสายอนุมัติของ Approval Matrix
+          </p>
+        </div>
+        {selectedForApproval.length > 0 && (
+          <Button size="sm" onClick={() => setBulkConfirmOpen(true)}>
+            อนุมัติที่เลือก ({selectedForApproval.length})
+          </Button>
+        )}
       </div>
 
       <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800">
@@ -70,6 +98,17 @@ export function CompensationTab() {
         <Table>
           <THead>
             <Tr>
+              {approvableIds.length > 0 && (
+                <Th className="w-8">
+                  <input
+                    type="checkbox"
+                    aria-label="เลือกทุกรายการที่อนุมัติได้"
+                    checked={allApprovableSelected}
+                    onChange={() => setSelected(allApprovableSelected ? new Set() : new Set(approvableIds))}
+                    className="focus-ring h-4 w-4 rounded border-slate-300"
+                  />
+                </Th>
+              )}
               <Th>เคส / ผู้รับเงิน</Th>
               <Th>ประเภท</Th>
               <Th>สูตร / ฐานคิด</Th>
@@ -83,7 +122,7 @@ export function CompensationTab() {
             error={error}
             isEmpty={items.length === 0}
             emptyTitle="ยังไม่มีรายการค่าตอบแทน"
-            colSpan={6}
+            colSpan={approvableIds.length > 0 ? 7 : 6}
             onRetry={() => void reload()}
           />
           <TBody>
@@ -99,6 +138,19 @@ export function CompensationTab() {
                     className={highlight ?? undefined}
                     onClick={() => setDetailTarget(item)}
                   >
+                    {approvableIds.length > 0 && (
+                      <Td onClick={(event) => event.stopPropagation()}>
+                        {approvableIds.includes(item.id) && (
+                          <input
+                            type="checkbox"
+                            aria-label={`เลือก ${item.caseRef ?? item.payeeName}`}
+                            checked={selected.has(item.id)}
+                            onChange={(event) => toggle(item.id, event.target.checked)}
+                            className="focus-ring h-4 w-4 rounded border-slate-300"
+                          />
+                        )}
+                      </Td>
+                    )}
                     <Td>
                       {/* เลขเคสไม่ตัดบรรทัดที่ขีด (preship R5-002) */}
                       <p>
@@ -143,6 +195,13 @@ export function CompensationTab() {
                           {approvalStepText(item)}
                         </Badge>
                       </div>
+                      {/* staging E-045 — ส่งใหม่หลังถูกตีกลับ (mytester F-02 ฝั่งผู้จัดการ) */}
+                      {isResubmittedClaim(item) && (
+                        <div className="mt-1">
+                          <StatusBadge status="resubmitted" group="info" label="ส่งใหม่" />
+                        </div>
+                      )}
+                      <RejectReasonNotes item={item} />
                     </Td>
                     <Td className="text-right whitespace-nowrap">
                       <div className="inline-flex flex-col items-end gap-1" onClick={(event) => event.stopPropagation()}>
@@ -188,6 +247,26 @@ export function CompensationTab() {
 
       <CalcDetailModal item={formulaTarget} onClose={() => setFormulaTarget(null)} />
       <ExpenseDetailModal item={detailTarget} onClose={() => setDetailTarget(null)} />
+
+      <ConfirmModal
+        open={bulkConfirmOpen}
+        onClose={() => setBulkConfirmOpen(false)}
+        onConfirm={() => {
+          setBulkConfirmOpen(false)
+          void approveMany(selectedForApproval).then(() => setSelected(new Set()))
+        }}
+        title={`อนุมัติ ${bulkSummary.count} รายการ`}
+        description="ระบบอนุมัติทีละรายการตามขั้นที่รออยู่ — รายการที่อนุมัติไม่ได้จะแจ้งชื่อไว้ ส่วนที่เหลือยังอนุมัติตามปกติ"
+        confirmLabel={`ยืนยันอนุมัติ ${bulkSummary.count} รายการ`}
+        confirmVariant="primary"
+      >
+        <dl className="grid grid-cols-2 gap-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs">
+          <dt className="text-slate-500">ยอดก่อนหักภาษีรวม</dt>
+          <dd className="text-right font-semibold text-slate-800">{fmtSatangSymbol(bulkSummary.grossSatang)}</dd>
+          <dt className="text-slate-500">ยอดสุทธิรวม</dt>
+          <dd className="text-right font-semibold text-emerald-700">{fmtSatangSymbol(bulkSummary.netSatang)}</dd>
+        </dl>
+      </ConfirmModal>
 
       <ReasonConfirmModal
         maxLength={REASON_MAX}

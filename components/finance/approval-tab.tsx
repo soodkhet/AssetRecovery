@@ -65,6 +65,7 @@ import { fmtDate } from '@/lib/format/datetime'
 import { canViewFinanceTabSection } from '@/lib/finance/operation-tabs'
 import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
 import { SubstituteReceiptPanel } from '@/components/substitute-receipts/substitute-receipt-panel'
+import { RejectReasonNotes } from '@/components/finance/reject-reason-notes'
 
 /**
  * แท็บ "รออนุมัติ" (`15` §8 · mockup `finance.html` แท็บ `approval`) — **2 ตารางในหน้าเดียว**
@@ -293,11 +294,7 @@ export function ApprovalTab() {
                             <StatusBadge status="resubmitted" group="info" label="ส่งใหม่" />
                           </div>
                         )}
-                        {item.rejectReason !== null && (
-                          <p className="mt-1 max-w-[180px] text-[10px] text-orange-700">
-                            เหตุผล: {item.rejectReason}
-                          </p>
-                        )}
+                        <RejectReasonNotes item={item} />
                       </Td>
                       <Td className="text-right whitespace-nowrap">
                         <div className="inline-flex flex-col items-end gap-1" onClick={(event) => event.stopPropagation()}>

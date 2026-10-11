@@ -74,6 +74,11 @@ export interface CompensationApprovalDto {
   /** มติ PO U152 — คำชี้แจงตอนส่งใหม่หลังถูกตีกลับ (ครั้งล่าสุด) */
   resubmitNote: string | null
   /**
+   * mytester F-02 — เหตุผลที่ถูกตีกลับครั้งล่าสุดก่อนส่งใหม่ (`rejection_reason` ถูกล้างตอนส่งใหม่ — อ่านจาก audit ของการส่งใหม่)
+   * · ยังไม่เคยถูกตีกลับ/ไม่ได้ส่งใหม่ = `null`
+   */
+  previousRejectReason: string | null
+  /**
    * มติ PO U152/U143 — path ใบเสร็จที่ **ผ่านการตรวจของ server แล้ว** (เปิดผ่าน signed URL) · ไม่มี/ไม่ผ่าน = `null`
    */
   receiptFilePath: string | null
