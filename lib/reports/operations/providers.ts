@@ -2,6 +2,7 @@ import { getAssignmentPolicy } from '@/lib/assignments/policy-queries'
 import { caseStatusLabel } from '@/lib/cases/status-display'
 import { endOfBangkokDay, startOfBangkokDay } from '@/lib/format/datetime'
 import type { AssignmentStatus, CaseStatus } from '@/lib/generated/prisma/enums'
+import { reportableCaseStatusWhere } from '@/lib/reports/case-scope'
 import { prisma } from '@/lib/prisma'
 import { pickParam } from '@/lib/reports/finance/providers'
 import type { ReportData } from '@/lib/reports/payload'
@@ -108,6 +109,8 @@ async function loadSuccessRateEntries(
       // ขอบเขต = เคสที่ **รับเข้าระบบ** ในช่วงที่เลือก ⇒ เคสที่ยังไม่ปิดก็อยู่ในตัวตั้ง
       // (ตัวหารของ % สำเร็จ ตัดเคส open ออกในโมดูล pure — `96` §13/§14)
       createdAt: instantRange(range),
+      // มติชั่วคราว M7 (J-07) — ไม่นับร่าง/ไม่รับเคส (ตรงแดชบอร์ด + นิยาม open ของ O4)
+      ...reportableCaseStatusWhere(),
       ...caseTeamFilter(teamIds),
     },
     select: {

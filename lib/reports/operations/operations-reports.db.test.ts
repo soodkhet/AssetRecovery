@@ -311,6 +311,9 @@ suite('O1 — อัตราความสำเร็จ', () => {
     await seedCase({ status: 'closed_success' })
     await seedCase({ status: 'closed_fail' })
     await seedCase({ status: 'active', closedAt: null })
+    // มติชั่วคราว M7 (J-07) — ร่าง/ไม่รับเคส ไม่อยู่ในขอบเขต "เคสที่รับเข้าระบบ"
+    await seedCase({ status: 'draft', closedAt: null })
+    await seedCase({ status: 'rejected', closedAt: null })
 
     const payload = await run('success-rate', { dimension: 'team' })
 

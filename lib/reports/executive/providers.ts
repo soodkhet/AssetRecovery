@@ -28,6 +28,7 @@ import { loadProfitEntries } from '@/lib/reports/queries'
 import { summarizeProfitability } from '@/lib/reports/profitability'
 import type { ReportContext, ReportProvider } from '@/lib/reports/provider-types'
 import { previousReportRange } from '@/lib/reports/range'
+import { reportableCaseStatusWhere } from '@/lib/reports/case-scope'
 
 /**
  * ตัวคำนวณของ **Executive Dashboard (E1–E3)** — ชั้น DB ของ `96` §6-E
@@ -92,6 +93,8 @@ async function loadCaseOutcomes(
       organizationId,
       deletedAt: null,
       createdAt: instantRange(window),
+      // มติชั่วคราว M7 (J-07) — "เคสทั้งหมด/ยังไม่ปิด" ไม่นับร่าง/ไม่รับเคส (ตรงแดชบอร์ด)
+      ...reportableCaseStatusWhere(),
       ...(teamIds === null ? {} : { assignedTeamId: { in: [...teamIds] } }),
     },
     select: {

@@ -373,6 +373,11 @@ suite('E1 — KPI ภาพรวม', () => {
   it('เคสที่ยังไม่ปิดนับใน "เคสทั้งหมด" แต่ไม่เข้าตัวหารของ % สำเร็จ (`96` §13 O1)', async () => {
     await seedCase({ createdAt: '2026-08-03T03:00:00Z' })
     await seedCase({ createdAt: '2026-08-03T03:00:00Z', outcome: 'closed_success', closedAt: '2026-08-06T03:00:00Z' })
+    // มติชั่วคราว M7 (J-07) — ร่าง/ไม่รับเคส ไม่นับใน "เคสทั้งหมด"
+    for (const status of ['draft', 'rejected']) {
+      const id = await seedCase({ createdAt: '2026-08-03T03:00:00Z' })
+      await db().$executeRawUnsafe(`UPDATE cases SET status = '${status}' WHERE id = '${id}'`)
+    }
 
     const payload = await run('kpi-summary')
 
