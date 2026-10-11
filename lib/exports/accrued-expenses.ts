@@ -1,4 +1,5 @@
 import { calculatePayeeBatchWht, type PayeeTaxProfileValues } from '@/lib/finance/wht-calc'
+import type { MonthToDate } from '@/lib/finance/wht-month-to-date'
 import type { ExpenseType, PayeeType, PayoutBatchSide, WhtCondition, WhtIncomeCategory } from '@/lib/generated/prisma/enums'
 import { isInWhtBase, isWhtConditionAllowed, resolveIncomeCategory, type WhtPolicyValues } from '@/lib/settings/wht-policy'
 
@@ -8,7 +9,8 @@ import { isInWhtBase, isWhtConditionAllowed, resolveIncomeCategory, type WhtPoli
  *
  * - รายการที่อยู่ในรอบจ่ายแล้ว (ยังไม่โอน) ⇒ ใช้ยอด WHT ที่รอบคิดไว้แล้ว (`payout_batch_items.wht_satang`)
  * - รายการที่ยังไม่เข้ารอบ ⇒ จำลองว่าทุกรายการค้างของผู้รับคนนั้นเข้ารอบจ่ายเดียวกัน แล้วคิดด้วยค่าตั้ง WHT ที่มีผล
- *   ณ วันสร้างชุด (เกณฑ์ขั้นต่ำต่อผู้รับต่อรอบ · ฐานตามชนิดรายการ · ประเภทเงินได้ตามฝั่ง/ชนิดผู้รับ)
+ *   ณ วันสร้างชุด (เกณฑ์ขั้นต่ำต่อผู้รับ — ค่าตั้งสะสมต่อเดือนนับยอดที่จ่ายไปแล้วในเดือนด้วย (`monthToDate` · E-054 ·
+ *   mytester H-04) · ฐานตามชนิดรายการ · ประเภทเงินได้ตามฝั่ง/ชนิดผู้รับ)
  *   ⇒ เป็น **ยอดประมาณ** — ยอดจริงขึ้นกับว่ารายการถูกจัดเข้ารอบจ่ายไหนบ้าง
  * - คิดไม่ได้ (ผู้รับ 40(1)/40(2) ยังไม่มีอัตรา · ไม่มี Tax Profile รายคน/ค่าเริ่มต้นตามประเภท และไม่มีอัตราแผน
  *   ของรายการในฐาน — มติ PO U121) ⇒ `null` (ไฟล์เป็น `-`) · รายการนอกฐานไม่ต้องมีอัตรา
@@ -43,6 +45,8 @@ export function estimateAccruedWhtSatang(
     WhtPolicyValues,
     'baseExpenseTypes' | 'incomeTypeMode' | 'inhouseIncomeCategory' | 'outsourceIncomeCategory'
   > & Partial<Pick<WhtPolicyValues, 'allowGrossUpConditions'>>,
+  /** ยอดสะสมของเดือนต่อผู้รับ (ค่าตั้งเกณฑ์สะสมต่อเดือน) · ไม่ส่ง/`null` = เกณฑ์ต่อรอบ */
+  monthToDate: ReadonlyMap<string, MonthToDate> | null = null,
 ): (number | null)[] {
   const result: (number | null)[] = items.map((item) => item.batchWhtSatang)
   const byPayee = new Map<string, number[]>()
@@ -78,6 +82,7 @@ export function estimateAccruedWhtSatang(
             isWhtConditionAllowed({ allowGrossUpConditions: policy.allowGrossUpConditions ?? false }, first.whtCondition)
               ? first.whtCondition
               : 'withhold',
+          ...(monthToDate === null ? {} : { monthToDate: monthToDate.get(first.payeeId) ?? { priorBaseSatang: 0, priorUnwithheldBaseSatang: 0 } }),
         },
       )
       members.forEach((index, position) => {

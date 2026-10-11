@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   approvalWhtPreview,
+  approvalWhtPreviews,
   WHT_402_RATE_MISSING_WARNING,
   WHT_RATE_MISSING_WARNING,
   type ApprovalWhtInput,
@@ -120,5 +121,41 @@ describe('whtBelowThreshold (staging E-039)', () => {
       }),
     )
     expect(fromPayout.whtBelowThreshold).toBe(false)
+  })
+})
+
+describe('mytester F-03 — คิวอนุมัติคิดเกณฑ์รวมต่อผู้รับ + ยอดสะสมของเดือน', () => {
+  it('ค่าน้ำมัน/เบี้ยเสี่ยงยอดเล็กของผู้รับที่มีค่าคอมรวมเกินเกณฑ์ ⇒ ถูกหักด้วย (ไม่ใช่ ฿0)', () => {
+    const rows = [
+      { ...input({ grossSatang: 100_000, expenseType: 'commission' }), payeeId: 'p1' },
+      { ...input({ grossSatang: 9_336, expenseType: 'fuel' }), payeeId: 'p1' },
+    ]
+    const [commission, fuel] = approvalWhtPreviews(rows)
+    expect(fuel!.whtBelowThreshold).toBe(false)
+    expect(fuel!.whtSatang).toBeGreaterThan(0)
+    // ทีละรายการ (แบบเดิม) ค่าน้ำมันต่ำกว่าเกณฑ์ ⇒ 0
+    expect(approvalWhtPreview(rows[1]!).whtSatang).toBe(0)
+    expect(commission!.whtSatang + fuel!.whtSatang).toBe(Math.round((109_336 * 3) / 100))
+  })
+
+  it('ยอดสะสมของเดือนเกินเกณฑ์แล้ว ⇒ รายการเดี่ยวยอดเล็กถูกหัก', () => {
+    const row = { ...input({ grossSatang: 30_000, expenseType: 'commission' }), payeeId: 'p2' }
+    expect(approvalWhtPreviews([row])[0]!.whtSatang).toBe(0)
+    const withMonth = approvalWhtPreviews([row], {
+      monthToDate: new Map([['p2', { priorBaseSatang: 150_000, priorUnwithheldBaseSatang: 0 }]]),
+    })
+    expect(withMonth[0]!.whtSatang).toBeGreaterThan(0)
+  })
+
+  it('ผู้รับต่างกันไม่ปนกลุ่ม · รายการที่เข้ารอบแล้วใช้ยอดของรอบ', () => {
+    const fromPayout = {
+      ...input({ grossSatang: 50_000, payoutItem: { whtSatang: 1_500, netSatang: 48_500, whtPctSnapshot: 3, whtCondition: 'withhold' } }),
+      payeeId: 'p1',
+    }
+    const other = { ...input({ grossSatang: 50_000 }), payeeId: 'p3' }
+    const [batched, alone] = approvalWhtPreviews([fromPayout, other])
+    expect(batched!.whtFromPayout).toBe(true)
+    expect(batched!.whtSatang).toBe(1_500)
+    expect(alone!.whtSatang).toBe(0)
   })
 })

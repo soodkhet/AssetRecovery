@@ -61,3 +61,17 @@ describe('estimateAccruedWhtSatang', () => {
     expect(estimateAccruedWhtSatang([fromDefault], policy)).toEqual([6_000])
   })
 })
+
+describe('mytester H-04 — เกณฑ์สะสมต่อเดือน (E-054)', () => {
+  it('จ่ายไปแล้วในเดือนเกินเกณฑ์ ⇒ รายการค้างยอดเล็กถูกประมาณหัก (เดิม 0)', () => {
+    // out2 — จ่ายไปแล้ว ฿3,000 ในเดือน · ค้างเบี้ยเสี่ยง ฿300 สองรายการ ⇒ หัก 3% = ฿9 ต่อรายการ
+    const pending = [item({ payeeId: 'out2', grossSatang: 30_000 }), item({ payeeId: 'out2', grossSatang: 30_000 })]
+    expect(estimateAccruedWhtSatang(pending, policy)).toEqual([0, 0])
+    const monthToDate = new Map([['out2', { priorBaseSatang: 300_000, priorUnwithheldBaseSatang: 0 }]])
+    expect(estimateAccruedWhtSatang(pending, policy, monthToDate)).toEqual([900, 900])
+  })
+
+  it('ผู้รับที่ยังไม่มีการจ่ายในเดือน ⇒ เหมือนเดิม (ยอดสะสม 0)', () => {
+    expect(estimateAccruedWhtSatang([item({ grossSatang: 35_000 })], policy, new Map())).toEqual([0])
+  })
+})

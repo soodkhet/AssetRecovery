@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { assertPeriodOpenAt } from '@/lib/accounting/period-guard'
-import { periodKeyOf, periodRangeOf } from '@/lib/accounting/period'
-import { monthToDateByPayee, type MonthToDate } from '@/lib/finance/wht-month-to-date'
+import { loadMonthToDate } from '@/lib/payout/month-to-date-queries'
 import { lockOutstandingRecoveries, releasePayoutRecoveryOffsets } from '@/lib/payout/recoveries'
 import type { ApiWarning } from '@/lib/api/envelope'
 import { emitAudit } from '@/lib/audit/audit'
@@ -662,30 +661,6 @@ async function collectExpenseCandidates(
   })
 }
 
-/**
- * staging E-054 — ยอดสะสมของผู้รับในรอบจ่ายก่อน ๆ ของเดือนปฏิทินไทยเดียวกับวันสร้างรอบ (รอบที่ไม่ถูกยกเลิก ·
- * รายการค่าตอบแทนในฐาน WHT หมวดที่มีเกณฑ์) — รวมยอดด้วย `monthToDateByPayee()` (pure)
- */
-async function loadMonthToDate(
-  organizationId: string,
-  payeeIds: readonly string[],
-  now: Date,
-): Promise<Map<string, MonthToDate>> {
-  if (payeeIds.length === 0) return new Map()
-  const { start, end } = periodRangeOf(periodKeyOf(now))
-  const rows = await prisma.payoutBatchItem.findMany({
-    where: {
-      organizationId,
-      payeeId: { in: [...payeeIds] },
-      expenseId: { not: null },
-      whtBaseIncluded: true,
-      OR: [{ whtIncomeCategory: 'sec_40_8' }, { whtIncomeCategory: null }],
-      payoutBatch: { status: { not: 'cancelled' }, createdAt: { gte: start, lt: end } },
-    },
-    select: { payeeId: true, grossSatang: true, whtSatang: true, whtCarriedBaseSatang: true, whtCondition: true },
-  })
-  return monthToDateByPayee(rows)
-}
 
 /**
  * เงินทดรองจ่ายที่อนุมัติแล้วและยังไม่เคยถูกโอนออก (A4 มติ PO 2026-08-12 —

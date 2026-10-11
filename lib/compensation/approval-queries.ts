@@ -37,7 +37,9 @@ import {
   type ApprovalMatrixCandidate,
 } from '@/lib/finance/approval-flow-resolver'
 import { FinanceError } from '@/lib/finance/errors'
-import { approvalWhtPreview, type ApprovalWhtPreview } from '@/lib/compensation/approval-wht'
+import { approvalWhtPreviews, type ApprovalWhtGroupInput, type ApprovalWhtPreview } from '@/lib/compensation/approval-wht'
+import type { MonthToDate } from '@/lib/finance/wht-month-to-date'
+import { loadMonthToDate } from '@/lib/payout/month-to-date-queries'
 import { resolvePayoutSide } from '@/lib/payout/payout'
 import { resolveWhtPolicyForPayout } from '@/lib/settings/queries/wht-policy'
 import type { WhtPolicyValues } from '@/lib/settings/wht-policy'
@@ -351,27 +353,40 @@ export function describeExpenseBasis(row: {
 interface ApprovalWhtSettings {
   policy: WhtPolicyValues
   typeDefaults: TaxProfileDefaults<PayeeTaxProfileValues>
+  /** E-054 — ยอดสะสมของเดือนต่อผู้รับ (ค่าตั้งเกณฑ์สะสมต่อเดือน) · `null` = เกณฑ์ต่อรอบ (mytester F-03) */
+  monthToDate: ReadonlyMap<string, MonthToDate> | null
 }
 
 /** ตัวเดียวกับที่รอบจ่ายใช้ (`resolveWhtPolicyForPayout()` + `loadTaxProfileDefaults()`) */
-async function currentWhtPolicy(organizationId: string): Promise<ApprovalWhtSettings> {
+async function currentWhtPolicy(organizationId: string, payeeIds: readonly string[] = []): Promise<ApprovalWhtSettings> {
+  const now = new Date()
   const [policy, defaults] = await Promise.all([
-    resolveWhtPolicyForPayout(organizationId, new Date()),
+    resolveWhtPolicyForPayout(organizationId, now),
     loadTaxProfileDefaults(organizationId),
   ])
   const typeDefaults = emptyTaxProfileDefaults<PayeeTaxProfileValues>()
   for (const slot of TAX_PROFILE_DEFAULT_SLOTS) typeDefaults[slot] = defaults.profiles[slot]?.values ?? null
-  return { policy: policy.values, typeDefaults }
+  // รอบจ่ายที่จะสร้างวันนี้นับยอดสะสมของเดือนนี้ — ชุดเดียวกับ `createPayoutBatch()`
+  const monthToDate =
+    policy.values.thresholdScope === 'monthly_cumulative' ? await loadMonthToDate(organizationId, payeeIds, now) : null
+  return { policy: policy.values, typeDefaults, monthToDate }
 }
 
 function whtOf(row: ExpenseRow, settings: ApprovalWhtSettings): ApprovalWhtPreview {
+  const [preview] = approvalWhtPreviews([whtInputOf(row, settings)], { monthToDate: settings.monthToDate })
+  if (preview === undefined) throw new Error('whtOf: คำนวณ WHT ไม่ได้')
+  return preview
+}
+
+function whtInputOf(row: ExpenseRow, settings: ApprovalWhtSettings): ApprovalWhtGroupInput {
   const payoutItem =
     row.payoutBatchItemId === null ? undefined : row.payoutItems.find((item) => item.id === row.payoutBatchItemId)
   const side = resolvePayoutSide({
     teamSide: row.payee.user.team?.side ?? null,
     roleGroup: row.payee.user.role.roleGroup,
   })
-  return approvalWhtPreview({
+  return {
+    payeeId: row.payee.id,
     grossSatang: row.grossSatang,
     expenseType: row.expenseType,
     planWhtPct: row.compPlan?.whtPct.toNumber() ?? null,
@@ -401,7 +416,7 @@ function whtOf(row: ExpenseRow, settings: ApprovalWhtSettings): ApprovalWhtPrevi
             whtPctSnapshot: payoutItem.whtPctSnapshot === null ? null : payoutItem.whtPctSnapshot.toNumber(),
             whtCondition: payoutItem.whtCondition,
           },
-  })
+  }
 }
 
 function toDto(
@@ -410,12 +425,14 @@ function toDto(
   viewer: CapabilityHolder,
   policy: ApprovalWhtSettings,
   payeeGaps: ReadonlyMap<string, readonly string[]>,
+  /** ยอด WHT ที่คิดเป็นกลุ่มต่อผู้รับไว้แล้ว (คิว) · ไม่ส่ง = คิดเฉพาะแถวนี้ */
+  precomputedWht?: ApprovalWhtPreview,
 ): CompensationApprovalDto {
   const pendingStep = row.status === 'approved' ? null : row.approvalStepCurrent
   const pendingStepRole = pendingStep === null ? null : (flow.steps[pendingStep - 1] ?? null)
 
   // `22` §6.9 · `18` §6.3 — **Payee ชนะ Plan** + ฐาน/ประเภทเงินได้/เงื่อนไขการหัก ผ่านตัวคำนวณเดียวกับรอบจ่าย (BUG-176)
-  const wht = whtOf(row, policy)
+  const wht = precomputedWht ?? whtOf(row, policy)
 
   return {
     id: row.id,
@@ -563,15 +580,33 @@ export async function listCompensationApprovals(
   })
   if (rows.length === 0) return []
 
-  const [candidates, policy, payeeGaps, fuelRoutes] = await Promise.all([
+  const payeeIds = [...new Set(rows.map((row) => row.payee.id))]
+  const [candidates, policy, payeeGaps, fuelRoutes, otherUnbatched] = await Promise.all([
     loadMatrixCandidates(user.organizationId),
-    currentWhtPolicy(user.organizationId),
+    currentWhtPolicy(user.organizationId, payeeIds),
     loadPayeeInfoGaps(
       user.organizationId,
       rows.map((row) => row.payee.id),
     ),
     loadFuelRoutes(user.organizationId, rows),
+    // mytester F-03 — รายการอื่นของผู้รับเดียวกันที่ยังไม่เข้ารอบ (นอกแท็บ/ตัวกรอง) ร่วมคิดเกณฑ์ขั้นต่ำ แต่ไม่แสดง
+    prisma.expense.findMany({
+      where: {
+        organizationId: user.organizationId,
+        deletedAt: null,
+        payeeId: { in: payeeIds },
+        status: { in: [...PIPELINE_STATUSES] },
+        payoutBatchItemId: null,
+        id: { notIn: rows.map((row) => row.id) },
+      },
+      select: expenseSelect,
+    }),
   ])
+  const previews = approvalWhtPreviews(
+    [...rows, ...otherUnbatched].map((row) => whtInputOf(row, policy)),
+    { monthToDate: policy.monthToDate },
+  )
+  const whtById = new Map(rows.map((row, index) => [row.id, previews[index]]))
   // `16` §10 — ผู้อนุมัติขั้น N เห็นเฉพาะรายการที่ถึงขั้นของตน (UAT R6-7) · กรองหลังรู้สายของแต่ละรายการ
   // (สาย snapshot/คาดการณ์ต่างกันรายแถว จึงกรองใน SQL ตรง ๆ ไม่ได้)
   return rows.flatMap((row) => {
@@ -581,7 +616,9 @@ export async function listCompensationApprovals(
       approvalStepCurrent: row.approvalStepCurrent,
       steps: flow.steps,
     })
-    return visible ? [{ ...toDto(row, flow, user, policy, payeeGaps), fuelRoute: fuelRoutes.get(row.id) ?? [] }] : []
+    return visible
+      ? [{ ...toDto(row, flow, user, policy, payeeGaps, whtById.get(row.id)), fuelRoute: fuelRoutes.get(row.id) ?? [] }]
+      : []
   })
 }
 
@@ -834,7 +871,7 @@ export async function approveCompensationExpense(
       outcome.row,
       { ...flow, projected: false },
       user,
-      await currentWhtPolicy(user.organizationId),
+      await currentWhtPolicy(user.organizationId, [outcome.row.payee.id]),
       await loadPayeeInfoGaps(user.organizationId, [outcome.row.payee.id]),
     ),
     events: outcome.events,
@@ -992,7 +1029,7 @@ async function rejectExpenseWith(
       updated,
       flow ?? fallbackFlow(updated),
       user,
-      await currentWhtPolicy(user.organizationId),
+      await currentWhtPolicy(user.organizationId, [updated.payee.id]),
       await loadPayeeInfoGaps(user.organizationId, [updated.payee.id]),
     ),
     events: ['expense.rejected'],

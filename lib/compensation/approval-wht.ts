@@ -4,6 +4,7 @@ import {
   type PayeeTaxProfileValues,
   type WhtRateOrigin,
 } from '@/lib/finance/wht-calc'
+import type { MonthToDate } from '@/lib/finance/wht-month-to-date'
 import type { ExpenseType, PayeeType, PayoutBatchSide, WhtCondition, WhtIncomeCategory } from '@/lib/generated/prisma/enums'
 import {
   isInWhtBase,
@@ -17,7 +18,9 @@ import {
  * (`calculatePayeeBatchWht()` + ค่าตั้งฐาน WHT/ประเภทเงินได้/เงื่อนไขการหัก (1)(2)(3)) ห้ามประกอบสูตรเอง
  *
  * - รายการ**เข้ารอบจ่ายแล้ว** ⇒ ใช้ยอดที่บันทึกไว้ในรายการรอบจ่าย (snapshot — ยอดที่โอนจริง) ไม่คิดใหม่
- * - ยังไม่เข้ารอบ ⇒ คาดการณ์จากรายการเดียว (เกณฑ์ขั้นต่ำจริงเทียบกับฐานรวมทั้งรอบ ยอดจริงอาจต่างได้)
+ * - ยังไม่เข้ารอบ ⇒ คาดการณ์แบบรอบจ่าย: รวมทุกรายการที่ยังไม่เข้ารอบของผู้รับคนเดียวกันในชุดที่ส่งมา + ยอดสะสมของเดือน
+ *   (ค่าตั้งเกณฑ์สะสมต่อเดือน — E-054) แล้วเทียบเกณฑ์ขั้นต่ำครั้งเดียว (mytester F-03 · ดู `approvalWhtPreviews()`)
+ *   ยอดจริงอาจต่างได้ตามการจัดรายการเข้ารอบ
  * - (2)/(3) บริษัทออกภาษีให้ ⇒ ผู้รับได้ยอดเต็ม (`net = gross`) · `whtSatang` = ภาษีที่บริษัทออกให้
  */
 
@@ -80,63 +83,106 @@ export const WHT_RATE_MISSING_WARNING =
   'ผู้รับเงินยังไม่มีอัตราหัก ณ ที่จ่าย (ไม่มี Tax Profile รายคน ไม่มีค่าเริ่มต้นตามประเภทผู้รับ และรายการไม่มีอัตราจากแผน) — ต้องกำหนดก่อนสร้างรอบจ่าย (ยอดภาษีที่แสดงยังไม่รวม)'
 
 export function approvalWhtPreview(input: ApprovalWhtInput): ApprovalWhtPreview {
-  const incomeCategory = resolveIncomeCategory(input.policy, input.payee.side, input.payee.payeeType, input.payee.incomeCategoryOverride ?? null)
-  const includedInBase = isInWhtBase(input.policy, input.expenseType)
-  const missing402 = usesPerPayeeWhtRate(incomeCategory) && includedInBase && input.payee.wht402Pct === null
+  const [preview] = approvalWhtPreviews([{ ...input, payeeId: '' }])
+  if (preview === undefined) throw new Error('approvalWhtPreview: คำนวณ WHT ไม่ได้')
+  return preview
+}
 
-  const calc = calculatePayeeBatchWht(
-    [
+export interface ApprovalWhtGroupInput extends ApprovalWhtInput {
+  payeeId: string
+}
+
+/**
+ * **pure** — ยอด WHT ของหลายรายการพร้อมกัน (mytester F-03): รายการที่ยังไม่เข้ารอบของผู้รับคนเดียวกันคิดเป็นกลุ่มเดียว
+ * ด้วย `calculatePayeeBatchWht()` (เกณฑ์ขั้นต่ำเทียบฐานรวม + ยอดสะสมของเดือนเมื่อส่ง `monthToDate`) ⇒ ตัวเลขต่อแถว/ผลรวม
+ * ตรงกับรอบจ่ายที่จะสร้าง แทนการคิดเกณฑ์ทีละรายการ (เดิมค่าน้ำมัน/เบี้ยเสี่ยงโชว์ ฿0) · ลำดับผลลัพธ์ = ลำดับ input
+ */
+export function approvalWhtPreviews(
+  inputs: readonly ApprovalWhtGroupInput[],
+  options: { monthToDate?: ReadonlyMap<string, MonthToDate> | null } = {},
+): ApprovalWhtPreview[] {
+  const result = new Array<ApprovalWhtPreview | undefined>(inputs.length)
+  const groups = new Map<string, number[]>()
+  inputs.forEach((input, index) => {
+    // รายการที่เข้ารอบแล้วไม่ร่วมกลุ่ม — ยอดเป็น snapshot ของรอบ
+    const key = input.payoutItem === null ? input.payeeId : `#${index}`
+    const members = groups.get(key) ?? []
+    members.push(index)
+    groups.set(key, members)
+  })
+
+  for (const members of groups.values()) {
+    const first = inputs[members[0] ?? -1]
+    if (first === undefined) continue
+    const incomeCategory = resolveIncomeCategory(first.policy, first.payee.side, first.payee.payeeType, first.payee.incomeCategoryOverride ?? null)
+    const missing402 =
+      usesPerPayeeWhtRate(incomeCategory) &&
+      members.some((index) => isInWhtBase(first.policy, inputs[index]!.expenseType)) &&
+      first.payee.wht402Pct === null
+    const priorMonth = first.payoutItem === null ? (options.monthToDate?.get(first.payeeId) ?? null) : null
+
+    const calc = calculatePayeeBatchWht(
+      members.map((index) => {
+        const input = inputs[index]!
+        return {
+          grossSatang: input.grossSatang,
+          // ขาดอัตรา 40(1)/40(2) ⇒ รอบจ่ายจะปัดทั้งรอบ — คิวอนุมัติแสดงแบบไม่หักพร้อมคำเตือนแทนการล้ม
+          includedInBase: isInWhtBase(input.policy, input.expenseType) && !missing402,
+          source: {
+            payeeTaxProfile: input.payee.taxProfile,
+            typeDefaultTaxProfile: input.payee.typeDefaultTaxProfile ?? null,
+            planWhtPct: input.planWhtPct,
+          },
+        }
+      }),
       {
-        grossSatang: input.grossSatang,
-        // ขาดอัตรา 40(1)/40(2) ⇒ รอบจ่ายจะปัดทั้งรอบ — คิวอนุมัติแสดงแบบไม่หักพร้อมคำเตือนแทนการล้ม
-        includedInBase: includedInBase && !missing402,
-        source: {
-          payeeTaxProfile: input.payee.taxProfile,
-          typeDefaultTaxProfile: input.payee.typeDefaultTaxProfile ?? null,
-          planWhtPct: input.planWhtPct,
-        },
+        incomeCategory: missing402 ? 'sec_40_8' : incomeCategory,
+        section402Pct: first.payee.wht402Pct,
+        condition: first.payee.whtCondition,
+        ...(priorMonth === null ? {} : { monthToDate: priorMonth }),
       },
-    ],
-    {
-      incomeCategory: missing402 ? 'sec_40_8' : incomeCategory,
-      section402Pct: input.payee.wht402Pct,
-      condition: input.payee.whtCondition,
-    },
-  )
-  const [line] = calc.lines
-  if (line === undefined) throw new Error('approvalWhtPreview: คำนวณ WHT ไม่ได้')
+    )
 
-  const whtRateSource = line.rate.source
-  const whtWarning = missing402
-    ? WHT_402_RATE_MISSING_WARNING
-    : line.rateMissing
-      ? WHT_RATE_MISSING_WARNING
-      : line.includedInBase
-        ? (line.rate.warning ?? null)
-        : null
-
-  if (input.payoutItem !== null) {
-    return {
-      whtSatang: input.payoutItem.whtSatang,
-      netSatang: input.payoutItem.netSatang,
-      whtPctUsed: input.payoutItem.whtPctSnapshot ?? line.whtPctUsed,
-      whtRateSource,
-      whtWarning: null,
-      whtPayerBorne: isPayerBorneWhtCondition(input.payoutItem.whtCondition),
-      whtFromPayout: true,
-      whtBelowThreshold: false,
-    }
+    members.forEach((index, position) => {
+      const input = inputs[index]!
+      const line = calc.lines[position]
+      if (line === undefined) throw new Error('approvalWhtPreviews: คำนวณ WHT ไม่ได้')
+      const whtRateSource = line.rate.source
+      if (input.payoutItem !== null) {
+        result[index] = {
+          whtSatang: input.payoutItem.whtSatang,
+          netSatang: input.payoutItem.netSatang,
+          whtPctUsed: input.payoutItem.whtPctSnapshot ?? line.whtPctUsed,
+          whtRateSource,
+          whtWarning: null,
+          whtPayerBorne: isPayerBorneWhtCondition(input.payoutItem.whtCondition),
+          whtFromPayout: true,
+          whtBelowThreshold: false,
+        }
+        return
+      }
+      result[index] = {
+        whtSatang: line.whtSatang,
+        // (2)/(3) ⇒ `line.netSatang` = ยอดรายการเต็ม (ภาษีบวกเข้าเงินได้ ไม่ได้หักออก)
+        netSatang: line.netSatang,
+        whtPctUsed: line.whtPctUsed,
+        whtRateSource,
+        whtWarning: missing402
+          ? WHT_402_RATE_MISSING_WARNING
+          : line.rateMissing
+            ? WHT_RATE_MISSING_WARNING
+            : line.includedInBase
+              ? (line.rate.warning ?? null)
+              : null,
+        whtPayerBorne: isPayerBorneWhtCondition(line.whtCondition),
+        whtFromPayout: false,
+        whtBelowThreshold: line.includedInBase && line.whtPctUsed > 0 && calc.belowThreshold,
+      }
+    })
   }
 
-  return {
-    whtSatang: line.whtSatang,
-    // (2)/(3) ⇒ `line.netSatang` = ยอดรายการเต็ม (ภาษีบวกเข้าเงินได้ ไม่ได้หักออก)
-    netSatang: line.netSatang,
-    whtPctUsed: line.whtPctUsed,
-    whtRateSource,
-    whtWarning,
-    whtPayerBorne: isPayerBorneWhtCondition(line.whtCondition),
-    whtFromPayout: false,
-    whtBelowThreshold: line.includedInBase && line.whtPctUsed > 0 && calc.belowThreshold,
-  }
+  return result.map((preview) => {
+    if (preview === undefined) throw new Error('approvalWhtPreviews: คำนวณ WHT ไม่ครบทุกรายการ')
+    return preview
+  })
 }

@@ -233,6 +233,10 @@
 | `payeeLegalName` | `lib/payees/payee.ts` | staging E-002/E-010 | ชื่อผู้ถูกหักบน 50 ทวิ/ภ.ง.ด./ไฟล์โอน/เทียบชื่อบัญชี — นิติบุคคลใช้ `legal_name` · **ห้ามอ่าน `user.fullName` ตรงสำหรับเอกสารภาษี** |
 | `groupTransfersByPayee` | `lib/payout/bank-file-builder.ts` | staging E-009 | รวมยอดโอนเป็น 1 บรรทัดต่อผู้รับ (ลำดับ/เลขอ้างอิงคงที่) |
 | `monthToDateByPayee` · `calculatePayeeBatchWht({ monthToDate })` | `lib/finance/wht-month-to-date.ts` · `lib/finance/wht-calc.ts` | staging E-054 | เกณฑ์ ฿1,000 สะสมต่อผู้รับต่อเดือน + ยกฐานรอบก่อนที่ยังไม่หัก (`wht_carried_base_satang`) |
+| `loadMonthToDate(org, payeeIds, at)` | `lib/payout/month-to-date-queries.ts` | mytester F-03/H-04 | โหลดยอดสะสมของเดือนต่อผู้รับ — ใช้ร่วม รอบจ่าย · คิวอนุมัติ (`approvalWhtPreviews`) · ไฟล์ค้างจ่าย 15 ห้ามเขียน query ซ้ำ |
+| `approvalWhtPreviews(inputs, { monthToDate })` | `lib/compensation/approval-wht.ts` | mytester F-03 | ยอด WHT คาดการณ์ของหลายรายการ คิดเป็นกลุ่มต่อผู้รับแบบรอบจ่าย (ไม่คิดเกณฑ์ทีละรายการ) |
+| `wrapReference(value, maxChars)` | `lib/format/ref-wrap.ts` | mytester WH-01 | ตัดบรรทัดเลขอ้างอิงยาวใน PDF หลัง `-`/`/` (ฟอนต์ไทยปิดการตัดคำ) — ตัวอักษรไม่เปลี่ยน |
+| `loadCertificateTaxSnapshots` · `certificateTaxSource` | `lib/wht/queries.ts` · `lib/wht/wht.ts` | mytester F-01 | ข้อมูลภาษีของใบ 50 ทวิ ต่อรอบ = รายการแรกในฐาน (ไม่ใช่จุดยึด) |
 | `bulkMappableIds` · `effectiveBulkSelection` · `toggleAllBulkSelection` | `lib/expenses/cost-center-bulk.ts` | staging E-065 | เลือกหลายแถว (เฉพาะที่ทำได้) แล้วสั่งงานรวด — แบบเดียวกันใช้กับตารางอื่นได้ |
 | `createRecoveryForApprovedAdjustment` · `lockOutstandingRecoveries` · `releasePayoutRecoveryOffsets` · `payeeRecoveryOutstandingSatang` | `lib/payout/recoveries.ts` · `lib/finance/advance-offset-calc.ts` | staging E-014 | ยอดเรียกคืนจากผู้รับ — หักจากยอดโอนรอบถัดไป (ตัวจัดสรรเดียวกับเงินทดรอง) · ยอดโอนทุกจุดใช้ `payoutTransferSatang(net, advance, recovery)` |
 | `<StoredPhotoThumb>` | `components/ui/stored-photo-thumb.tsx` | staging E-041 | ภาพย่อรูปใน bucket private (signed URL ทุกครั้ง) — ใช้แทนปุ่มชื่อไฟล์/ชื่อมุม |

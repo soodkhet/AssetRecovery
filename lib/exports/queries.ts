@@ -104,6 +104,7 @@ import { getBillingInvoiceSource } from '@/lib/revenue/billing-invoice-queries'
 import { buildPaymentVoucherDocs, buildPayslipDocs } from '@/lib/payout/payout-doc'
 import { resolvePayoutSide } from '@/lib/payout/payout'
 import { getPayoutDocSource } from '@/lib/payout/queries'
+import { loadMonthToDate } from '@/lib/payout/month-to-date-queries'
 import { resolveWhtPolicyForPayout } from '@/lib/settings/queries/wht-policy'
 import { getWhtCertificateDocSource, loadCertificateTaxSnapshots, type CertificateTaxSnapshot } from '@/lib/wht/queries'
 import { buildWhtCertificateDoc } from '@/lib/wht/wht'
@@ -1271,6 +1272,10 @@ async function accruedExpenseRows(
       }
     }),
     policy.values,
+    // E-054 — รอบจ่ายที่จะจ่ายรายการค้างนับยอดที่จ่ายไปแล้วในเดือนเดียวกับวันสร้างชุด (mytester H-04)
+    policy.values.thresholdScope === 'monthly_cumulative'
+      ? await loadMonthToDate(organizationId, [...new Set(rows.map((row) => row.payee.id))], generatedAt)
+      : null,
   )
 
   return rows.map((row, index) => {
