@@ -238,7 +238,7 @@ suite('Phase 2.3 — state machine + snapshot + recycle (DB จริง)', () =
       VALUES ('${OTHER_TEAM}', '${ORG_ID}', 'ทีมที่ระบบเสนอ B-02', 'outsource', ARRAY[]::text[], 'active', '${USER_ID}')
       ON CONFLICT (id) DO NOTHING
     `)
-    const caseId = await seedCase('SF-2026-2399', { withDocuments: true })
+    const caseId = await seedCase('MT-B02-TEAMCHANGE', { withDocuments: true })
     try {
       await service.changeCaseStatus(actor, caseId, change({ action: 'review' }), { actor, meta })
       await db().$executeRawUnsafe(`UPDATE cases SET suggested_team_id = '${OTHER_TEAM}' WHERE id = '${caseId}'`)
