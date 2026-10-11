@@ -408,7 +408,7 @@ export function CompensationPlanFormModal({
             onChange={(event) => set('hotelReceiptRequired', event.target.checked)}
             className="h-4 w-4 rounded border-slate-300"
           />
-          บังคับแนบใบเสร็จค่าที่พัก (ติ๊ก = ใบเบิกค่าที่พักต้องแนบใบเสร็จจริง ใช้ใบรับรองแทนใบเสร็จไม่ได้)
+          บังคับแนบใบเสร็จค่าที่พัก (มีผลต่อการตรวจรายการเบิก)
         </label>
 
         <Field id="plan-reason" label="เหตุผล" required hint="บันทึกลง audit log ถาวร (หมวดเงิน)" error={errors.reason}>

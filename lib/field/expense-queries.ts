@@ -23,7 +23,6 @@ import {
 import {
   assertHotelClaimFields,
   assertHotelClaimWithinCap,
-  assertHotelReceiptPolicy,
   assertSharedAgentInTeam,
   HOTEL_NIGHTS_DEFAULT,
   hotelStayDateKeys,
@@ -179,8 +178,6 @@ export interface HotelCapSnapshot {
   compPlanVersion: number
   /** `null` = แผนไม่ตั้งเพดาน (ไม่จำกัด) */
   hotelMaxPerNightSatang: number | null
-  /** มติชั่วคราว M2 (DO-02) — แผนบังคับใบเสร็จค่าที่พัก ⇒ ใช้ใบรับรองแทนใบเสร็จไม่ได้ */
-  hotelReceiptRequired: boolean
 }
 
 /**
@@ -199,22 +196,7 @@ export async function resolveHotelCapForUser(
   if (planId === null) return null
   const row = await resolvePlanVersionRow(client, { organizationId: params.organizationId, planId, onDate: params.onDate })
   if (row === null) return null
-  return {
-    compPlanId: row.id,
-    compPlanVersion: row.version,
-    hotelMaxPerNightSatang: row.hotelMaxPerNightSatang,
-    hotelReceiptRequired: row.hotelReceiptRequired,
-  }
-}
-
-/** มติชั่วคราว M2 (DO-02) — แผนของทีมผู้ใช้ ณ วันที่ระบุบังคับใบเสร็จค่าที่พักหรือไม่ (ไม่มีทีม/แผน = ไม่บังคับ) */
-export async function resolveHotelReceiptRequiredForUser(user: SessionUser, onDate: Date): Promise<boolean> {
-  const snapshot = await resolveHotelCapForUser(prisma as ExpenseTxClient, {
-    organizationId: user.organizationId,
-    userId: user.id,
-    onDate,
-  })
-  return snapshot?.hotelReceiptRequired ?? false
+  return { compPlanId: row.id, compPlanVersion: row.version, hotelMaxPerNightSatang: row.hotelMaxPerNightSatang }
 }
 
 /** เพดานจาก snapshot ที่ใบเบิกผูกไว้ (`comp_plan_id` = แถวเวอร์ชันนั้นเอง ไม่ resolve ซ้ำ) */
@@ -224,15 +206,10 @@ async function loadHotelCapSnapshot(
 ): Promise<HotelCapSnapshot | null> {
   const row = await client.compensationPlan.findFirst({
     where: { id: params.compPlanId, organizationId: params.organizationId },
-    select: { id: true, version: true, hotelMaxPerNightSatang: true, hotelReceiptRequired: true },
+    select: { id: true, version: true, hotelMaxPerNightSatang: true },
   })
   if (row === null) return null
-  return {
-    compPlanId: row.id,
-    compPlanVersion: row.version,
-    hotelMaxPerNightSatang: row.hotelMaxPerNightSatang,
-    hotelReceiptRequired: row.hotelReceiptRequired,
-  }
+  return { compPlanId: row.id, compPlanVersion: row.version, hotelMaxPerNightSatang: row.hotelMaxPerNightSatang }
 }
 
 const planSnapshotSelect = {
@@ -936,11 +913,6 @@ export async function submitHotelClaim(
     amountSatang: input.amountSatang,
     maxPerNightSatang: capSnapshot?.hotelMaxPerNightSatang ?? null,
     nights: input.hotelNights,
-  })
-  // มติชั่วคราว M2 (DO-02) — แผนบังคับใบเสร็จค่าที่พัก ⇒ ใบรับรองแทนใบเสร็จใช้ไม่ได้ (ตรวจที่ server)
-  assertHotelReceiptPolicy({
-    hasSubstituteReceipt: substituteLines !== null,
-    receiptRequired: capSnapshot?.hotelReceiptRequired ?? false,
   })
 
   // ขยายมติ PO Q13 ถึงใบเสร็จ (UAT BUG-072) — server ดาวน์โหลดมาตรวจเอง (prefix ของผู้เบิก · มีจริง ·

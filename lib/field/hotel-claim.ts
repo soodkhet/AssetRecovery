@@ -39,23 +39,6 @@ export function assertHotelClaimFields(input: HotelClaimFields): void {
   if (missing.length > 0) throw new FieldError('HOTEL_CLAIM_FIELD_REQUIRED', { context: { missing } })
 }
 
-/** ข้อความเมื่อแผนบังคับใบเสร็จค่าที่พัก แต่ผู้เบิกเลือก "ไม่มีใบเสร็จ" (มติชั่วคราว M2 · DO-02) */
-export const HOTEL_RECEIPT_REQUIRED_MESSAGE =
-  'แผนค่าตอบแทนของทีมบังคับแนบใบเสร็จค่าที่พัก — ใช้ใบรับรองแทนใบเสร็จไม่ได้ กรุณาแนบใบเสร็จจริง'
-
-/**
- * มติชั่วคราว M2 (mytester DO-02 · 11/10/2569 — รอ PO ยืนยัน): แผนค่าตอบแทนตั้ง `hotel_receipt_required` ⇒
- * ใบเบิกค่าที่พักต้องแนบใบเสร็จจริง ใช้ใบรับรองแทนใบเสร็จ (มติ PO U103) ไม่ได้ · ปิด = ใช้ใบรับรองแทนได้ตามเดิม
- * ใช้แผนที่มีผล ณ วันที่เข้าพัก (แผนเดียวกับที่ตรวจเพดาน) · ไม่มีทีม/แผน = ไม่บังคับ
- */
-export function assertHotelReceiptPolicy(input: { hasSubstituteReceipt: boolean; receiptRequired: boolean }): void {
-  if (!input.receiptRequired || !input.hasSubstituteReceipt) return
-  throw new FieldError('HOTEL_CLAIM_FIELD_REQUIRED', {
-    message: HOTEL_RECEIPT_REQUIRED_MESSAGE,
-    context: { missing: ['receiptFileUrl'], receiptRequired: true },
-  })
-}
-
 /**
  * ผู้พักร่วมต้องอยู่ทีมเดียวกับผู้เบิก (`41` §6.6/§12) — เบิกให้ตัวเองซ้ำก็ไม่ได้
  * `teammateIds` = สมาชิกทีมเดียวกัน **ไม่รวมตัวผู้เบิก** (ผู้เรียกเป็นคนเตรียมมาให้)
