@@ -93,10 +93,6 @@ export const COMPANY_NOT_LINKED_MESSAGE: { title: string; message: string } = {
   message: 'บัญชีนี้ยังไม่ได้ผูกกับบริษัทไฟแนนซ์ กรุณาติดต่อผู้ดูแลระบบให้ผูกบริษัทก่อนเข้าใช้งาน',
 }
 
-/**
- * code ที่ผู้ใช้บริษัทไฟแนนซ์ถูกปฏิเสธตามสถานะบริษัท — ไม่ได้ผูกบริษัท = `USER_NOT_PROVISIONED`
- * (+ `COMPANY_NOT_LINKED_MESSAGE`) · บริษัทไม่ active/ถูกลบ = `COMPANY_SUSPENDED` · ผ่าน = `null`
- */
 /** ค่า `?reason=` ของหน้า login เมื่อหน้าพอร์ทัลพบว่าบัญชียังไม่ผูกบริษัท (ไม่ใช่ error code ของ API) */
 export const LOGIN_REASON_COMPANY_NOT_LINKED = 'COMPANY_NOT_LINKED'
 
@@ -107,6 +103,10 @@ export function loginReasonMessage(reason: string | undefined): { title: string;
   return (AUTH_ERROR_CODES as readonly string[]).includes(reason) ? MESSAGES[reason as AuthErrorCode] : null
 }
 
+/**
+ * code ที่ผู้ใช้บริษัทไฟแนนซ์ถูกปฏิเสธตามสถานะบริษัท — ไม่ได้ผูกบริษัท = `USER_NOT_PROVISIONED`
+ * (+ `COMPANY_NOT_LINKED_MESSAGE`) · บริษัทไม่ active/ถูกลบ = `COMPANY_SUSPENDED` · ผ่าน = `null`
+ */
 export function portalCompanyDenyCode(
   companyId: string | null,
   companyStatus: string | null,
