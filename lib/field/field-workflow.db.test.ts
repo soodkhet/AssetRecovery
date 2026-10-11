@@ -332,6 +332,14 @@ suite('Phase 2.8 — flow เต็ม รับงาน → จัดวัน
     })
     expect(audit?.action).toBe('status_change')
     expect(audit?.actorId).toBe(AGENT_A)
+
+    // mytester DO-03 — มุมมอง "เคสทั้งหมดของทีม" ของผู้จัดการเห็นผู้รับผิดชอบและเวลาปิดงาน
+    const { listCases } = await import('@/lib/cases/queries')
+    const { caseListQuerySchema } = await import('@/lib/cases/schemas')
+    const teamView = await listCases(manager, caseListQuerySchema.parse({ search: caseRow.caseRef, limit: 20, page: 1 }))
+    const listed = teamView.items.find((item) => item.id === caseId)
+    expect(listed?.assignedAgentName).toBe('พนักงาน A 2.8')
+    expect(listed?.closedAt).toBe(caseRow.closedAt?.toISOString())
   })
 
   it('staging E-038 — เคสรอบที่ 2 รอรับงาน: บอกเหตุผลไม่สำเร็จของรอบก่อน (เฉพาะเคสของตัวเอง)', async () => {

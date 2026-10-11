@@ -136,9 +136,9 @@ export function TeamCasesPanel({
                 <Th>เลขที่สัญญา / รอบ</Th>
                 <Th>ลูกหนี้ / จังหวัด</Th>
                 <Th>ไฟแนนซ์ / ทรัพย์</Th>
-                <Th>ทีม</Th>
+                <Th>ทีม / ผู้รับผิดชอบ</Th>
                 <Th>สถานะ</Th>
-                <Th>พิจารณาเมื่อ</Th>
+                <Th>พิจารณา / ปิดงานเมื่อ</Th>
               </Tr>
             </THead>
             <TableState
@@ -177,7 +177,10 @@ export function TeamCasesPanel({
                       <div className="text-xs text-slate-700">{item.financeCompanyName}</div>
                       <div className="text-[11px] text-slate-400">{item.assetBrandModel ?? '—'}</div>
                     </Td>
-                    <Td className="text-xs text-slate-700">{item.assignedTeamName ?? '—'}</Td>
+                    <Td>
+                      <div className="text-xs text-slate-700">{item.assignedTeamName ?? '—'}</div>
+                      <div className="text-[11px] text-slate-500">{item.assignedAgentName ?? 'ยังไม่มอบหมาย'}</div>
+                    </Td>
                     <Td>
                       <StatusBadge
                         status={item.status}
@@ -186,7 +189,10 @@ export function TeamCasesPanel({
                       />
                     </Td>
                     <Td className="text-xs text-slate-600">
-                      {item.reviewedAt === null ? '—' : fmtDateTime(item.reviewedAt)}
+                      <div>{item.reviewedAt === null ? '—' : `พิจารณา ${fmtDateTime(item.reviewedAt)}`}</div>
+                      {item.closedAt !== null && (
+                        <div className="text-[11px] text-slate-500">ปิดงาน {fmtDateTime(item.closedAt)}</div>
+                      )}
                     </Td>
                   </Tr>
                 ))}

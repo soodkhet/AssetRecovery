@@ -85,6 +85,10 @@ export interface CaseListItemDto {
   submittedAt: string | null
   /** `cases.reviewed_at` — วันเวลาที่ผู้พิจารณารับเคส / ไม่รับเคส / ขอข้อมูลเพิ่มครั้งล่าสุด */
   reviewedAt: string | null
+  /** mytester DO-03 — พนักงานผู้รับผิดชอบรอบปัจจุบัน (ไม่มีงาน = `null` · พอร์ทัลถูกล้างเป็น `null`) */
+  assignedAgentName: string | null
+  /** mytester DO-03 — `cases.closed_at` วันเวลาปิดงาน (ยังไม่ปิด = `null`) */
+  closedAt: string | null
 }
 
 /** ตัวเลือกบริษัทไฟแนนซ์ของหน้ารับเคส (ตัวกรอง + ฟอร์ม) — ชื่ออย่างเดียว ไม่มีข้อมูลสัญญา/ภาษี */

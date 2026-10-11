@@ -120,6 +120,14 @@ const listSelect = {
   debtAmountSatang: true,
   createdAt: true,
   reviewedAt: true,
+  closedAt: true,
+  // mytester DO-03 — ผู้รับผิดชอบของรอบปัจจุบัน (งานล่าสุดที่ไม่ใช่ถูกโอนออก) สำหรับมุมมองทีม
+  assignments: {
+    where: { status: { not: 'reassigned_away' } },
+    orderBy: { createdAt: 'desc' },
+    take: 1,
+    select: { agent: { select: { fullName: true } } },
+  },
   company: { select: { name: true } },
   suggestedTeam: { select: { name: true } },
   assignedTeam: { select: { name: true } },
@@ -245,6 +253,8 @@ function redactCaseListForCompany(item: CaseListItemDto): CaseListItemDto {
     assignedTeamName: null,
     createdByName: '',
     reviewedAt: null,
+    // ชื่อพนักงานภาคสนามเป็นข้อมูลภายใน (พอร์ทัลไม่เห็นพนักงาน — `97`)
+    assignedAgentName: null,
   }
 }
 
@@ -287,6 +297,8 @@ function toListDto(row: CaseListRow, submittedAt: Date | null = null): CaseListI
     createdByName: row.createdByUser.fullName,
     submittedAt: submittedAt?.toISOString() ?? null,
     reviewedAt: row.reviewedAt?.toISOString() ?? null,
+    assignedAgentName: row.assignments[0]?.agent.fullName ?? null,
+    closedAt: row.closedAt?.toISOString() ?? null,
   }
 }
 
