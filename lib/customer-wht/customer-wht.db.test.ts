@@ -1,6 +1,7 @@
 import { PrismaPg } from '@prisma/adapter-pg'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SessionUser } from '@/lib/auth/types'
+import { toInputDate } from '@/lib/format/datetime'
 import { CSV_BOM } from '@/lib/exports/csv'
 import { PrismaClient } from '@/lib/generated/prisma/client'
 import { putFakeUpload, resetFakeUploads, sampleBytes, uploadTestState } from '@/tests/helpers/fake-uploads'
@@ -542,6 +543,13 @@ suite('มติ PO U41 — เงินรับรอตรวจสอบ', (
       'BANK_TRANSACTION_INVALID_STATUS',
     )
     await recon.moveToSuspense(ctx, txId, { reason: 'ผู้โอนแจ้งว่าโอนผิดบัญชี' })
+
+    // มติชั่วคราว M6 (H-03) — วันที่โอนคืนเกินวันนี้ (เวลาไทย) ⇒ ปฏิเสธ
+    const tomorrow = new Date(`${toInputDate(new Date(Date.now() + 86_400_000))}T00:00:00Z`)
+    await expectCode(
+      () => recon.refundSuspense(ctx, txId, { refundDate: tomorrow, reason: 'คืนล่วงหน้า', filePath: refundFile(txId) }),
+      'REQUIRED_MISSING',
+    )
 
     uploadTestState.realVerify = true
     await expectCode(

@@ -124,7 +124,12 @@ export function SuspenseModal({
         {isRefund && (
           <>
             <Field label="วันที่โอนคืน" required>
-              <Input type="date" value={refundDate} onChange={(event) => setRefundDate(event.target.value)} />
+              <Input
+                type="date"
+                value={refundDate}
+                max={toInputDate(new Date())}
+                onChange={(event) => setRefundDate(event.target.value)}
+              />
             </Field>
             <Field label="หลักฐานการโอนคืน" required hint="PDF หรือรูปภาพ (สลิปโอนคืน/หนังสือแจ้ง) ไม่เกิน 10 MB">
               <input

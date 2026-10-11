@@ -25,6 +25,8 @@ export const BANK_RECON_ERROR_CODES = [
   'CUSTOMER_WHT_NOT_FOUND',
   'CUSTOMER_WHT_INVALID_STATUS',
   'CUSTOMER_WHT_NUMBER_DUPLICATE',
+  // code กลาง (`24` §6.1) — ยามในชั้น service ของช่องที่ Zod ตรวจไว้แล้ว (มติชั่วคราว M6: วันที่คืนเงินเกินวันนี้)
+  'REQUIRED_MISSING',
 ] as const
 
 export type BankReconErrorCode = (typeof BANK_RECON_ERROR_CODES)[number]
@@ -39,6 +41,7 @@ const HTTP_STATUS: Record<BankReconErrorCode, number> = {
   CUSTOMER_WHT_NOT_FOUND: 404,
   CUSTOMER_WHT_INVALID_STATUS: 400,
   CUSTOMER_WHT_NUMBER_DUPLICATE: 409,
+  REQUIRED_MISSING: 400,
 }
 
 const MESSAGES: Record<BankReconErrorCode, ErrorMessage> = {
@@ -76,6 +79,10 @@ const MESSAGES: Record<BankReconErrorCode, ErrorMessage> = {
   CUSTOMER_WHT_NUMBER_DUPLICATE: {
     title: 'เลขที่หนังสือซ้ำ',
     message: 'เลขที่หนังสือรับรองนี้ของลูกค้ารายนี้ถูกบันทึกไว้แล้ว — ตรวจเลขที่อีกครั้ง',
+  },
+  REQUIRED_MISSING: {
+    title: 'ข้อมูลไม่ถูกต้อง',
+    message: 'ข้อมูลที่กรอกไม่ครบหรือไม่ถูกต้อง — ตรวจช่องที่ไฮไลต์แล้วลองอีกครั้ง',
   },
 }
 

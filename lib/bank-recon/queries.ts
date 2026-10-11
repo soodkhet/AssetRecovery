@@ -34,6 +34,7 @@ import type {
   ResolveUnmatchedInput,
   StatementImportInput,
 } from '@/lib/bank-recon/schemas'
+import { isDateOnlyAfterBangkokToday, REFUND_DATE_IN_FUTURE_MESSAGE } from '@/lib/bank-recon/schemas'
 import {
   buildStatementImportTemplate,
   parseStatementCsv,
@@ -1383,6 +1384,13 @@ export async function refundSuspense(
   }
   if (!hasNote(input.reason)) {
     throw new BankReconError('MATCH_NOTE_REQUIRED', { message: 'ต้องระบุเหตุผลที่คืนเงินให้ผู้โอน' })
+  }
+  // มติชั่วคราว M6 (H-03) — คืนเงินเป็นสถานะสุดท้าย ⇒ บันทึกได้เฉพาะวันที่โอนคืนแล้ว (ไม่เกินวันนี้ตามเวลาไทย)
+  if (isDateOnlyAfterBangkokToday(input.refundDate)) {
+    throw new BankReconError('REQUIRED_MISSING', {
+      message: REFUND_DATE_IN_FUTURE_MESSAGE,
+      context: { fields: { refundDate: REFUND_DATE_IN_FUTURE_MESSAGE } },
+    })
   }
 
   for (const at of [before.transactionDate, input.refundDate]) {

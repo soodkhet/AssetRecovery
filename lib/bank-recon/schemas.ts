@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { dateOnlySchema } from '@/lib/api/validation'
+import { toInputDate } from '@/lib/format/datetime'
 import { MAX_STORAGE_PATH_LENGTH } from '@/lib/uploads/targets'
 
 /**
@@ -69,9 +70,21 @@ export const moveToSuspenseSchema = z.object({
   reason: z.string().trim().min(1, 'ต้องระบุเหตุผลที่ย้ายเป็นเงินรับรอตรวจสอบ').max(1000),
 })
 
-/** U41 — คืนเงินรับรอตรวจสอบให้ผู้โอน: วันที่ + หลักฐาน + เหตุผล (บังคับทั้งหมด) */
+export const REFUND_DATE_IN_FUTURE_MESSAGE = 'วันที่คืนเงินต้องไม่เกินวันนี้ — บันทึกได้เฉพาะการคืนเงินที่โอนไปแล้ว'
+
+/**
+ * มติชั่วคราว M6 (mytester H-03 · รอ PO ยืนยัน) — วันที่ (คอลัมน์ `DATE` = เที่ยงคืน UTC ของวันนั้น) เกินวันนี้ตามเวลาไทยหรือไม่
+ * **pure** ใช้ทั้ง Zod (FE/BE) และยามใน service
+ */
+export function isDateOnlyAfterBangkokToday(date: Date, now: Date = new Date()): boolean {
+  return date.toISOString().slice(0, 10) > toInputDate(now)
+}
+
+/** U41 — คืนเงินรับรอตรวจสอบให้ผู้โอน: วันที่ + หลักฐาน + เหตุผล (บังคับทั้งหมด) · วันที่ห้ามเกินวันนี้ (มติชั่วคราว M6) */
 export const refundSuspenseSchema = z.object({
-  refundDate: dateOnlySchema('วันที่คืนเงิน'),
+  refundDate: dateOnlySchema('วันที่คืนเงิน').refine((date) => !isDateOnlyAfterBangkokToday(date), {
+    message: REFUND_DATE_IN_FUTURE_MESSAGE,
+  }),
   reason: z.string().trim().min(1, 'ต้องระบุเหตุผลที่คืนเงิน').max(1000),
   filePath: z.string().min(1, 'แนบหลักฐานการคืนเงิน').max(MAX_STORAGE_PATH_LENGTH),
 })
