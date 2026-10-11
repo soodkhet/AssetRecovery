@@ -152,6 +152,13 @@ describe('ข้อความแจ้งเตือนทุกตัว', (
     }
   })
 
+  it('หัวข้อไม่มีค่า enum ภาษาอังกฤษดิบ เช่น critical/warning (ทดสอบซ้ำ local L-06)', () => {
+    for (const message of ALL) {
+      expect(message.title, message.eventCode).not.toMatch(/\b(critical|warning|info)\b/i)
+    }
+    expect(exceptionCreatedMessage({ title: 'x', periodLabel: 'ตุลาคม 2569' }).title).toBe('ข้อยกเว้นระดับวิกฤตใหม่')
+  })
+
   it('ลิงก์ไปหน้า Field Tracker ต้องเป็นหน้าที่มีอยู่จริงในเมนู (UAT BUG-049)', () => {
     const fieldHrefs = new Set(FIELD_NAV_ITEMS.map((item) => item.href))
     for (const message of ALL) {

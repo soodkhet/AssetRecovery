@@ -644,7 +644,8 @@ export function exceptionCreatedMessage(input: {
 }): NotificationMessage {
   return {
     eventCode: 'exception.created',
-    title: 'ข้อยกเว้นระดับ critical ใหม่',
+    // ภาษาไทยล้วน (ทดสอบซ้ำ local L-06) — ระดับ critical = "ต้องแก้ก่อนปิดงวด" บนหน้าจอ
+    title: 'ข้อยกเว้นระดับวิกฤตใหม่',
     // ข้อความที่ผู้ใช้เห็นห้ามมีเลขอ้างอิงสเปค (Rule 05 · preship R9-017) — เดิมต่อท้าย "(`37`)" · ที่มา: `37` export gate
     body: `งวด ${input.periodLabel} · ${clip(input.title) ?? '-'} — ต้องเคลียร์ก่อนส่งงวดให้สำนักงานบัญชี`,
     linkPath: '/accounting?tab=documents',
