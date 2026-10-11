@@ -1002,6 +1002,15 @@ export async function saveCloseDraft(
   }
 
   const result = await prisma.$transaction(async (tx) => {
+    // mytester DO-01 — ตรวจสถานะซ้ำใต้ล็อกแถว: สถานะที่อ่านตอนต้นเป็นของก่อน `verifyUploadedFiles()` (ช้า) ·
+    // ปิดงาน/ส่งปิดใหม่ที่ commit ไประหว่างนั้นลบ draft ไปแล้ว — ไม่ตรวจซ้ำ autosave ที่ค้างจะสร้าง draft กลับมา
+    // (ปิดงานเริ่มด้วย UPDATE แถวเดียวกัน ⇒ ล็อกนี้ทำให้สองทางเรียงกัน)
+    const locked = await tx.$queryRaw<{ status: AssignmentStatus }[]>`
+      SELECT status FROM case_assignments WHERE id = ${current.id}::uuid FOR UPDATE`
+    const lockedStatus = locked[0]?.status
+    if (lockedStatus === undefined) throw new AssignmentError('ASSIGNMENT_INVALID_STATUS')
+    assertFieldStateAction(lockedStatus, 'save_close_draft')
+
     const draft = await tx.closeCaseDraft.upsert({
       where: { assignmentId: current.id },
       create: {

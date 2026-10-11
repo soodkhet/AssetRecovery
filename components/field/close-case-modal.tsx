@@ -485,6 +485,8 @@ export function CloseCaseModal({
   const uploadAbortRef = useRef<AbortController | null>(null)
   useEffect(() => () => uploadAbortRef.current?.abort(), [])
   const [submitting, setSubmitting] = useState(false)
+  /** กำลังส่งปิดงาน — autosave ที่ค้างหยุดทันที ไม่สร้าง draft ใหม่หลังปิดงาน (mytester DO-01 · server ตรวจซ้ำใต้ล็อกด้วย) */
+  const closingRef = useRef(false)
   const [showMissing, setShowMissing] = useState(false)
   const [originError, setOriginError] = useState<string | null>(null)
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number } | null>(null)
@@ -519,6 +521,7 @@ export function CloseCaseModal({
   const persistDraft = useCallback(
     async (next: CloseFormState, options?: { revision?: boolean }): Promise<boolean> => {
       if (options?.revision === true) return true
+      if (closingRef.current) return true
       let payloadForm = next
       let dropped = false
       // ไฟล์ปลอมหลายไฟล์ = server ปัดทีละไฟล์ — วนจนชุดที่เหลือผ่าน (เพดานเท่าจำนวนไฟล์ในฟอร์ม)
@@ -785,6 +788,7 @@ export function CloseCaseModal({
     }
 
     setSubmitting(true)
+    closingRef.current = true
     try {
       const response = mode.revision
         ? await callApi<FieldActionResultDto>(
@@ -797,6 +801,8 @@ export function CloseCaseModal({
           )
 
       if (response.error !== undefined || response.data === undefined) {
+        // ปิดงานไม่สำเร็จ = ยังอยู่ในฟอร์ม ⇒ autosave กลับมาทำงาน
+        closingRef.current = false
         setShowMissing(true)
         const cleaned = response.error === undefined ? null : dropRejectedUpload(form, response.error)
         if (cleaned !== null) {
@@ -819,6 +825,9 @@ export function CloseCaseModal({
       })
       onDone()
       onClose()
+    } catch (error) {
+      closingRef.current = false
+      throw error
     } finally {
       setSubmitting(false)
     }

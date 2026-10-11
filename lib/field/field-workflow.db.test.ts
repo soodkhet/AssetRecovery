@@ -689,6 +689,23 @@ suite('Phase 2.8 — ลำดับงานต่อวัน (`41` §8 · §2
 suite('Phase 2.8 — draft + จุดเริ่มเดินทาง (`41` §6.4.1 · §6.5 · §20)', () => {
   beforeEach(cleanupCases)
 
+  it('mytester DO-01 — autosave ที่ค้างระหว่างปิดงานไม่สร้าง draft กลับมาหลังปิดงาน', async () => {
+    const caseId = await seedReadyToClose()
+    // autosave อ่านสถานะ (scheduled) ผ่านแล้ว — ระหว่างตรวจไฟล์ ปิดงานสำเร็จ commit ไปก่อน (ลบ draft)
+    uploadTestState.duringVerify = async () => {
+      await field.closeFieldCase(
+        agentA,
+        caseId,
+        { outcome: 'closed_fail', ...MEDIA, failReason: 'debtor_not_found' },
+        { actor: agentA, meta },
+      )
+    }
+    await expect(
+      field.saveCloseDraft(agentA, caseId, { outcome: 'closed_fail', ...MEDIA }, { actor: agentA, meta }),
+    ).rejects.toMatchObject({ code: 'ASSIGNMENT_INVALID_STATUS' })
+    expect(await db().closeCaseDraft.count({ where: { caseId } })).toBe(0)
+  })
+
   it('บันทึก draft แล้วเปิดใหม่เห็นของเดิมครบ (autoload)', async () => {
     const caseId = await seedReadyToClose()
     await field.saveCloseDraft(

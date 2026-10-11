@@ -23,11 +23,14 @@ export const uploadTestState: {
   removed: string[]
   /** path ที่จำลองให้การลบล้มเหลว (มติ PO U97 — ไฟล์ที่ลบไม่สำเร็จต้องลองใหม่รอบหน้า) */
   failRemove: Set<string>
+  /** เรียกครั้งเดียวระหว่าง `verifyUploadedFiles()` — จำลองงานอื่นที่ commit ระหว่างตรวจไฟล์ (mytester DO-01) */
+  duringVerify: (() => Promise<void>) | null
 } = {
   realVerify: false,
   files: new Map(),
   removed: [],
   failRemove: new Set(),
+  duringVerify: null,
 }
 
 export function resetFakeUploads(): void {
@@ -35,6 +38,7 @@ export function resetFakeUploads(): void {
   uploadTestState.files.clear()
   uploadTestState.removed.length = 0
   uploadTestState.failRemove.clear()
+  uploadTestState.duringVerify = null
 }
 
 export function putFakeUpload(path: string, bytes: Uint8Array): void {
@@ -84,6 +88,11 @@ export async function fakeVerifyModule(): Promise<typeof VerifyModule> {
     verifyUploadedFile: async (path, rule, claimed) =>
       uploadTestState.realVerify ? actual.verifyUploadedFile(path, rule, claimed) : fakeRecord(path),
     verifyUploadedFiles: async (files, known = {}) => {
+      const hook = uploadTestState.duringVerify
+      if (hook !== null) {
+        uploadTestState.duringVerify = null
+        await hook()
+      }
       if (uploadTestState.realVerify) return actual.verifyUploadedFiles(files, known)
       return Object.fromEntries(files.map(({ path }) => [path, known[path] ?? fakeRecord(path)]))
     },
