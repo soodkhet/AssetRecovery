@@ -111,7 +111,7 @@ const MESSAGES: Record<ExpenseErrorCode, { title: string; message: string }> = {
   },
   REJECT_REASON_REQUIRED: {
     title: 'ต้องระบุเหตุผล',
-    message: 'การตีกลับรายการเบิกต้องระบุเหตุผลให้ผู้เบิกเสมอ',
+    message: 'การตีกลับหรือปฏิเสธรายการเบิกต้องระบุเหตุผลให้ผู้เบิกเสมอ (อย่างน้อย 5 ตัวอักษร)',
   },
 }
 

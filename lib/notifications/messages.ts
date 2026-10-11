@@ -562,8 +562,9 @@ export function payoutPaidToPayeeMessage(input: {
 }): NotificationMessage {
   return {
     eventCode: 'payout.paid_to_payee',
-    title: 'โอนค่าตอบแทนเข้าบัญชีแล้ว',
-    body: `ยอดโอนสุทธิ ${fmtSatangSymbol(input.transferSatang)} — ตรวจรายการได้ที่หน้าสรุปรายได้`,
+    // mytester F-04 — ยอดโอนอาจรวมเงินทดรองจ่าย (ไม่ใช่ค่าตอบแทน) ⇒ หัวข้อไม่เรียกรวมว่า "ค่าตอบแทน"
+    title: 'โอนเงินเข้าบัญชีแล้ว',
+    body: `ยอดโอนสุทธิ ${fmtSatangSymbol(input.transferSatang)} — ตรวจรายการค่าตอบแทน/เงินทดรองได้ที่หน้าสรุปรายได้`,
     linkPath: '/field/income',
     dedupeKey: `payout-paid-${input.batchId}-${input.userId}`,
   }

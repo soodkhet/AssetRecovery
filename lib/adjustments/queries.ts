@@ -30,6 +30,7 @@ import {
   adjustmentApprovalPolicyFor,
   actorFillsMissingRole,
   assertApprovalLevelSufficient,
+  missingApproverMessage,
   missingApproverRoles,
   requiresSeparateAuditEntry,
 } from '@/lib/finance/adjustment-approval-policy'
@@ -634,6 +635,7 @@ export async function approveAdjustment(
       throw new FinanceError('INSUFFICIENT_APPROVAL_LEVEL', {
         detail: `period_status=${periodStatus ?? 'collecting'} role=${user.roleName} missing=${missing.join(',')}`,
         context: { missingRoles: missing },
+        message: missingApproverMessage(missing),
       })
     }
 

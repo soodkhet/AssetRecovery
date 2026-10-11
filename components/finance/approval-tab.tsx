@@ -248,7 +248,7 @@ export function ApprovalTab() {
                       <Td>
                         <p className="text-[11px] text-slate-400">{fmtDate(item.expenseDate)}</p>
                         <RefText>{item.caseRef ?? '— ไม่ผูกเคส'}</RefText>
-                        <p className="text-[10px] text-slate-400">{claimSourceLabel(item.calculationSource)}</p>
+                        <p className="text-[10px] text-slate-400">{claimSourceLabel(item.calculationSource, item.note)}</p>
                         {/* มติ PO U103 — ป้าย "ใบรับรองแทนใบเสร็จ CRT-…" + สถานะฉบับเซ็น (ต้องเซ็นแล้วจึงอนุมัติได้) */}
                         {/* มติ PO U107 — การเงิน/ผู้บริหารยกเลิก/ออกใบใหม่แทนได้ก่อนอนุมัติจ่าย (server ตรวจซ้ำ) */}
                         {item.substituteReceipt !== null && (

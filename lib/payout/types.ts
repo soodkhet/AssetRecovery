@@ -28,6 +28,8 @@ export interface PayoutBatchDto {
   compensationSatang: number
   whtWithheldSatang: number
   whtPaidByPayerSatang: number
+  /** mytester F-04 — เงินทดรองจ่ายในรอบ (ไม่ใช่เงินได้ — ไม่รวมใน `compensationSatang`) */
+  advancePaidSatang: number
   itemCount: number
   bankAccountId: string | null
   bankAccountLabel: string | null

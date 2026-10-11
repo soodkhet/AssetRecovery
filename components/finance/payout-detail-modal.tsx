@@ -136,6 +136,12 @@ export function PayoutDetailModal({
             />
             <span>
               ค่าตอบแทน {fmtSatangSymbol(batch.compensationSatang)}
+              {/* mytester F-04 — เงินทดรองไม่ใช่เงินได้ แสดงแยกจากค่าตอบแทน */}
+              {batch.advancePaidSatang > 0 && (
+                <>
+                  {' '}· เงินทดรองจ่าย <span className="text-purple-800">{fmtSatangSymbol(batch.advancePaidSatang)}</span>
+                </>
+              )}
               {batch.whtPaidByPayerSatang > 0 && (
                 <>
                   {' '}· ภาษีที่บริษัทออกให้{' '}

@@ -168,10 +168,32 @@ export function advanceCreateAccess(canManage: (capability: string) => boolean):
  */
 export const ADVANCE_EXCESS_CLAIM_TYPE: ExpenseType = 'manual'
 
-/** หมายเหตุของคำขอเบิกส่วนเกิน — บอกที่มาให้ผู้อนุมัติเห็นโดยไม่ต้องเปิด audit */
-export function advanceExcessClaimNote(input: { purpose: string; approvedSatang: number; usedSatang: number }): string {
-  const note = `เบิกส่วนเกินเงินทดรองอัตโนมัติ (ใช้จริง ${fmtSatangSymbol(input.usedSatang)} เกินยอดอนุมัติ ${fmtSatangSymbol(input.approvedSatang)}) — ${input.purpose}`
+/** ขึ้นต้นหมายเหตุของคำขอเบิกส่วนเกิน — ใช้ระบุที่มาบนคิวอนุมัติ (ไม่มีคอลัมน์ผูกเงินทดรองใน `expenses`) */
+export const ADVANCE_EXCESS_NOTE_PREFIX = 'เบิกส่วนเกินเงินทดรองอัตโนมัติ'
+
+/**
+ * หมายเหตุของคำขอเบิกส่วนเกิน — บอกที่มาให้ผู้อนุมัติเห็นโดยไม่ต้องเปิด audit
+ * (mytester F-08 — อ้างเลขเงินทดรอง ADV-… ด้วย เมื่อมี)
+ */
+export function advanceExcessClaimNote(input: {
+  purpose: string
+  approvedSatang: number
+  usedSatang: number
+  advanceNumber?: string
+}): string {
+  const ref = input.advanceNumber === undefined ? '' : ` ${input.advanceNumber}`
+  const note = `${ADVANCE_EXCESS_NOTE_PREFIX}${ref} (ใช้จริง ${fmtSatangSymbol(input.usedSatang)} เกินยอดอนุมัติ ${fmtSatangSymbol(input.approvedSatang)}) — ${input.purpose}`
   return note.length > 500 ? `${note.slice(0, 499)}…` : note
+}
+
+/**
+ * mytester F-08 — คำขอเบิกนี้ระบบสร้างจากส่วนเกินเงินทดรองหรือไม่ (อ่านจากหมายเหตุ)
+ * คืนเลข ADV ถ้าหมายเหตุมี · ไม่ใช่รายการส่วนเกิน = `null`
+ */
+export function advanceExcessSource(note: string | null): { advanceNumber: string | null } | null {
+  if (note === null || !note.startsWith(ADVANCE_EXCESS_NOTE_PREFIX)) return null
+  const match = /^\s(ADV-[\w-]+)/.exec(note.slice(ADVANCE_EXCESS_NOTE_PREFIX.length))
+  return { advanceNumber: match?.[1] ?? null }
 }
 
 // ── ยอดคืนเงินทดรอง (มติ PO 05/10/2569 UAT U30 · BUG-109 · `15` §9.3) ─────────────

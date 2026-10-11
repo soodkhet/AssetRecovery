@@ -9,7 +9,7 @@ type RouteContext = { params: Promise<{ id: string }> }
 
 /**
  * `PATCH /api/advances/:id/approve` (`15` §14 · `23` §6.4)
- * อนุมัติ = เงินออกจริง ⇒ `approved` รวมความหมาย "รอเคลียร์ยอด" ในตัว (`15` §17)
+ * อนุมัติ = ยืนยันยอด (เงินโอนในรอบจ่ายถัดไป — มติ PO U83) ⇒ `approved` รวมความหมาย "รอจ่าย/รอเคลียร์ยอด" ในตัว (`15` §17)
  */
 export const PATCH = withApiPermission<RouteContext>(
   'manage',

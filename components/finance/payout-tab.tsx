@@ -222,7 +222,15 @@ export function PayoutTab() {
                       </span>
                     </Td>
                     {/* มติ PO U109 — แยกค่าตอบแทน (เงินได้จริง) กับภาษีที่บริษัทออกให้ (ยอดจาก server) */}
-                    <Td numeric>{fmtSatangSymbol(batch.compensationSatang)}</Td>
+                    {/* mytester F-04 — เงินทดรองไม่ใช่ค่าตอบแทน ⇒ แสดงแยกบรรทัดรอง */}
+                    <Td numeric>
+                      {fmtSatangSymbol(batch.compensationSatang)}
+                      {batch.advancePaidSatang > 0 && (
+                        <p className="text-[10px] font-normal text-purple-800">
+                          + เงินทดรองจ่าย {fmtSatangSymbol(batch.advancePaidSatang)}
+                        </p>
+                      )}
+                    </Td>
                     <Td numeric className={batch.whtPaidByPayerSatang > 0 ? 'text-amber-700' : undefined}>
                       {fmtSatangSymbol(batch.whtPaidByPayerSatang)}
                     </Td>
@@ -315,7 +323,7 @@ export function PayoutTab() {
       <ReasonConfirmModal
         maxLength={REASON_MAX}
         open={completeTarget !== null}
-        title="ยืนยันการจ่ายเงินสำเร็จ (Mark Completed)"
+        title="ยืนยันการจ่ายเงินสำเร็จ"
         description={completeTarget?.name}
         confirmLabel="ยืนยันจ่ายแล้ว"
         confirmVariant="primary"
@@ -340,8 +348,8 @@ export function PayoutTab() {
             )}
           </InlineAlert>
           <InlineAlert tone="info">
-            ปกติระบบ sync สถานะนี้อัตโนมัติจากรายการเดินบัญชีที่จับคู่สำเร็จ —
-            การยืนยันด้วยมือเป็นทางเลือกสำรองเมื่อ statement ล่าช้า และจะถูกบันทึกชื่อผู้ยืนยันไว้
+            ปกติระบบอัปเดตสถานะนี้อัตโนมัติเมื่อรายการเดินบัญชีจับคู่กับรอบจ่ายสำเร็จ —
+            การยืนยันด้วยมือเป็นทางเลือกสำรองเมื่อรายการเดินบัญชีจากธนาคารมาล่าช้า และจะบันทึกชื่อผู้ยืนยันไว้
           </InlineAlert>
         </div>
       </ReasonConfirmModal>

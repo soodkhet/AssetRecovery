@@ -132,7 +132,7 @@ export function CreateBillingModal({
     <Modal
       open
       onClose={onClose}
-      title="สร้างรอบวางบิล (Create Billing Batch)"
+      title="สร้างรอบวางบิล"
       description="ระบบรวม Revenue ที่รอวางบิลของบริษัทนั้นในงวดให้อัตโนมัติ"
       footer={
         <>

@@ -153,7 +153,7 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
     <Modal
       open
       onClose={onClose}
-      title="เคลียร์เงินทดรองจ่าย (Settle Advance)"
+      title="เคลียร์เงินทดรองจ่าย"
       description={advance.purpose}
       // ระหว่างอัปโหลดไม่ใช้ `loading` (ซึ่งล็อกทั้ง footer) — ให้ปุ่ม "ยกเลิกการอัปโหลด" กดได้ (R3-026)
       lockClose={uploading}

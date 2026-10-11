@@ -2,6 +2,7 @@ import type { WhtRateOrigin } from '@/lib/finance/wht-calc'
 import type { ApiCallError } from '@/lib/api/types'
 import type { ApprovalHistoryEntry } from '@/lib/compensation/approval'
 import type { CompensationApprovalDto } from '@/lib/compensation/approval-types'
+import { advanceExcessSource } from '@/lib/advances/advance'
 import { isManualClaim } from '@/lib/claims/claim'
 import { canExpenseAction } from '@/lib/field/expense-status'
 import { EXPENSE_STATUS_LABEL } from '@/lib/field/expense-ui'
@@ -74,8 +75,13 @@ export function approvalStepTone(status: ExpenseStatus): StatusBadgeGroup {
   return 'neutral'
 }
 
-/** `15` §8 — ป้ายบอกที่มาของรายการ (auto จากไฟล์ 41 หรือบันทึกเอง) */
-export function claimSourceLabel(calculationSource: string | null): string {
+/**
+ * `15` §8 — ป้ายบอกที่มาของรายการ (auto จากไฟล์ 41 หรือบันทึกเอง)
+ * mytester F-08 — คำขอเบิกส่วนเกินที่ระบบสร้างตอนเคลียร์เงินทดรอง ⇒ "ส่วนเกินเงินทดรอง ADV-…" (ไม่ใช่ "บันทึกเอง")
+ */
+export function claimSourceLabel(calculationSource: string | null, note: string | null = null): string {
+  const excess = advanceExcessSource(note)
+  if (excess !== null) return `↪ ส่วนเกินเงินทดรอง${excess.advanceNumber === null ? '' : ` ${excess.advanceNumber}`}`
   return isManualClaim(calculationSource) ? '✏️ บันทึกเอง' : '🤖 อัตโนมัติ'
 }
 
