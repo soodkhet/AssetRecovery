@@ -337,7 +337,7 @@ export function FinancePolicyCard() {
         </Field>
 
         <InlineAlert tone="warning" title="ค่าเหล่านี้กระทบตัวเลขทั้งระบบ">
-          เปลี่ยนแล้วมีผลกับรายการใหม่เท่านั้น — เอกสารและงวดที่ปิดไปแล้วยังอ้างค่าที่ snapshot ไว้เสมอ
+          เปลี่ยนแล้วมีผลกับรายการใหม่เท่านั้น — เอกสารและงวดที่ปิดไปแล้วยังใช้ค่าที่บันทึกไว้เดิมเสมอ
         </InlineAlert>
 
         <Can action="manage" resource={MANAGE_SETTINGS}>

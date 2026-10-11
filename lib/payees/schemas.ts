@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { pctSchema, reasonSchema, requiredIdSchema } from '@/lib/api/validation'
 import { BRANCH_CODE_PATTERN } from '@/lib/format/branch'
-import { PAYEE_INCOME_CATEGORY_OVERRIDES, WHT_CONDITIONS } from '@/lib/payees/payee'
+import { CORPORATE_LEGAL_NAME_REQUIRED, PAYEE_INCOME_CATEGORY_OVERRIDES, WHT_CONDITIONS } from '@/lib/payees/payee'
 
 /**
  * Zod schema ชุดเดียวใช้ร่วม FE/BE ของผู้รับเงิน (ไฟล์ 18 · Rule 13)
@@ -95,6 +95,12 @@ export const payeeFieldsSchema = z.object({
     (value) => (value === '' ? null : value),
     z.enum(PAYEE_INCOME_CATEGORY_OVERRIDES).nullable().optional(),
   ),
+}).superRefine((values, ctx) => {
+  // mytester A-11 — นิติบุคคลที่ส่งชื่อมาว่าง ต้องขึ้นใต้ช่องตั้งแต่หน้าฟอร์ม (กติกาเดียวกับ
+  // `assertCorporateLegalName()` ฝั่ง service) · ไม่ส่ง (`undefined`) = คงค่าเดิม ไม่ตรวจที่นี่
+  if (values.payeeType === 'corporate' && values.legalName === null) {
+    ctx.addIssue({ code: 'custom', path: ['legalName'], message: CORPORATE_LEGAL_NAME_REQUIRED })
+  }
 })
 
 export const payeeCreateSchema = payeeFieldsSchema.extend({

@@ -23,6 +23,7 @@ import { callApi, jsonRequest, type ApiCallResult } from '@/lib/api/types'
 import {
   SERVICE_FEE_BASIS_LABEL,
   SERVICE_FEE_MODEL_LABEL,
+  serviceFeeBaseLabel,
   describeServiceFeeFormula,
   type ServiceFeeCharge,
   type ServiceFeeModel,
@@ -255,7 +256,7 @@ export function ServiceFeeTemplatesManager() {
 
                   <div className="mb-4 grid grid-cols-2 gap-3">
                     <Stat
-                      label="💰 ค่าเปิดเคส (Base)"
+                      label={`💰 ${serviceFeeBaseLabel(template.model)}`}
                       value={template.baseSatang > 0 ? `${fmtSatang(template.baseSatang)} บาท` : '—'}
                     />
                     <Stat

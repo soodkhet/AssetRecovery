@@ -134,7 +134,6 @@ export function PeriodLockTab() {
                 <Tr key={row.status}>
                   <Td>
                     <div className="font-semibold text-slate-900">{row.statusLabel}</div>
-                    <div className="mt-0.5 font-mono text-[10px] text-slate-400">{row.status}</div>
                   </Td>
                   <Td>
                     <span className={`text-xs ${DIRECT_EDIT_CLASS[row.directEdit]}`}>{row.directEditLabel}</span>

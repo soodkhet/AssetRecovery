@@ -507,7 +507,7 @@ export function ApprovalMatrixTab() {
         maxLength={REASON_MAX}
         open={deleteTarget !== null}
         title={`ปิดใช้งานกติกา "${deleteTarget?.condition ?? ''}"`}
-        description="รายการที่อยู่ระหว่างอนุมัติยังใช้สายเดิมที่ snapshot ไว้ — กติกานี้จะไม่ถูกใช้กับรายการใหม่"
+        description="รายการที่อยู่ระหว่างอนุมัติยังใช้สายอนุมัติเดิมที่บันทึกไว้ — กติกานี้จะไม่ถูกใช้กับรายการใหม่"
         confirmLabel="ยืนยันปิดใช้งาน"
         loading={deleting}
         reason={deleteReason}

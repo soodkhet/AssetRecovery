@@ -43,7 +43,7 @@ const MESSAGES: Record<RoleErrorCode, { title: string; message: string }> = {
   },
   ROLE_NOT_EDITABLE: {
     title: 'บทบาทนี้แก้สิทธิ์ไม่ได้',
-    message: 'สิทธิ์ของบทบาทนี้ถูกกำหนดตายตามสเปค — แก้ได้เฉพาะบทบาทที่เปิดให้ปรับสิทธิ์',
+    message: 'สิทธิ์ของบทบาทนี้เป็นค่าตายตัวของระบบ — แก้ได้เฉพาะบทบาทที่เปิดให้ปรับสิทธิ์',
   },
   CAPABILITY_LOCKED: {
     title: 'สิทธิ์นี้ถูกล็อกไว้',

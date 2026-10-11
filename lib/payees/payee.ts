@@ -233,12 +233,16 @@ export function normalizePayeeValues(values: PayeeValues): PayeeValues {
   }
 }
 
+/** ข้อความใต้ช่องชื่อนิติบุคคล — ใช้ทั้ง Zod (ฟอร์ม) และ service */
+export const CORPORATE_LEGAL_NAME_REQUIRED = 'กรุณากรอกชื่อนิติบุคคลตามหนังสือรับรอง'
+
 /** staging E-002 — นิติบุคคลต้องมีชื่อตามหนังสือรับรองตั้งแต่ตอนบันทึก (DB CHECK `chk_payee_profiles_legal_name`) */
 export function assertCorporateLegalName(values: PayeeValues): void {
   if (values.payeeType !== 'corporate' || normalizePayeeValues(values).legalName !== null) return
   throw new PayeeError('REQUIRED_MISSING', {
     detail: 'legal_name required for corporate payee',
-    context: { fields: ['legalName'] },
+    // `fields` ต้องเป็น { ช่อง: ข้อความ } — array เดิมทำให้ toast ต่อท้าย "— legalName" (mytester A-11)
+    context: { fields: { legalName: CORPORATE_LEGAL_NAME_REQUIRED } },
     message: {
       title: 'ยังไม่ได้กรอกชื่อนิติบุคคล',
       message: 'ผู้รับเงินนิติบุคคลต้องกรอกชื่อบริษัทตามหนังสือรับรอง — ใช้พิมพ์บนหนังสือรับรองการหักภาษีและไฟล์โอน',

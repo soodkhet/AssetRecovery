@@ -255,7 +255,6 @@ export function FunctionalPermissionsTab() {
                       {row.description !== null && (
                         <p className="mt-0.5 text-[10px] text-slate-400">{row.description}</p>
                       )}
-                      <p className="mt-0.5 font-mono text-[10px] text-slate-300">{row.code}</p>
                     </Td>
                     <Td>
                       <div className="flex flex-wrap gap-1">

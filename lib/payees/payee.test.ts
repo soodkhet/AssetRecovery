@@ -19,6 +19,7 @@ import {
   type PayeeValues,
   assertCorporateLegalName,
   payeeLegalName,
+  CORPORATE_LEGAL_NAME_REQUIRED,
 } from '@/lib/payees/payee'
 import { payeeFieldsSchema } from '@/lib/payees/schemas'
 
@@ -312,6 +313,15 @@ describe('ข้อมูลผู้ถูกหักบนใบ 50 ทวิ
     expect(ok.address?.district).toBeNull()
     expect(ok.whtCondition).toBe('pay_always')
   })
+
+  it('mytester A-11 — Zod: นิติบุคคลส่งชื่อว่าง ⇒ error ใต้ช่อง legalName · ไม่ส่ง = คงค่าเดิม ไม่ตรวจ', () => {
+    const base = { payeeType: 'corporate', bankName: '', accountName: '', accountNumber: '' }
+    const blank = payeeFieldsSchema.safeParse({ ...base, legalName: '  ' })
+    expect(blank.success).toBe(false)
+    expect(blank.error?.issues[0]).toMatchObject({ path: ['legalName'], message: CORPORATE_LEGAL_NAME_REQUIRED })
+    expect(payeeFieldsSchema.safeParse(base).success).toBe(true)
+    expect(payeeFieldsSchema.safeParse({ ...base, payeeType: 'individual', legalName: '' }).success).toBe(true)
+  })
 })
 
 describe('U105 — ตัวเลือกเงื่อนไขการหักในฟอร์มผู้รับตามค่าตั้ง (มติ PO 06/10/2569)', () => {
@@ -345,7 +355,7 @@ describe('ชื่อนิติบุคคล + ประเภทเงิ�
     try {
       assertCorporateLegalName(complete({ payeeType: 'corporate' }))
     } catch (error) {
-      expect(error).toMatchObject({ code: 'REQUIRED_MISSING', context: { fields: ['legalName'] } })
+      expect(error).toMatchObject({ code: 'REQUIRED_MISSING', context: { fields: { legalName: CORPORATE_LEGAL_NAME_REQUIRED } } })
     }
     expect(() => assertCorporateLegalName(complete({ payeeType: 'corporate', legalName: 'บริษัท ก จำกัด' }))).not.toThrow()
     expect(() => assertCorporateLegalName(complete())).not.toThrow()

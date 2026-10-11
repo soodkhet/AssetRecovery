@@ -1,4 +1,4 @@
-import { ServiceFeeError } from '@/lib/service-fee/errors'
+import { ServiceFeeError, serviceFeeErrorMessage } from '@/lib/service-fee/errors'
 
 /**
  * Logic ล้วนของเทมเพลตค่าบริการ (ไฟล์ 12) — **ห้าม import อะไรที่แตะ Prisma/DB ในไฟล์นี้**
@@ -41,8 +41,20 @@ const VALUE_FIELDS = [
 ] as const satisfies readonly (keyof ServiceFeeTemplateValues)[]
 
 /** ช่วง `rate` ตาม `12` §11 — ใช้ code เฉพาะ `INVALID_RATE_RANGE` ไม่ใช่ `REQUIRED_MISSING` */
+export function isRateInRange(ratePct: number): boolean {
+  return Number.isFinite(ratePct) && ratePct >= 0 && ratePct <= 100
+}
+
+/**
+ * mytester A-11 — ข้อความใต้ช่องอัตราของฟอร์ม (ตรวจก่อนส่ง ไม่ต้องรอ toast จากเซิร์ฟเวอร์)
+ * ใช้ข้อความเดียวกับ `INVALID_RATE_RANGE` · อยู่ในช่วง = `null`
+ */
+export function rateRangeFieldError(ratePct: number): string | null {
+  return isRateInRange(ratePct) ? null : serviceFeeErrorMessage('INVALID_RATE_RANGE').message
+}
+
 export function assertRateRange(ratePct: number): void {
-  if (!Number.isFinite(ratePct) || ratePct < 0 || ratePct > 100) {
+  if (!isRateInRange(ratePct)) {
     throw new ServiceFeeError('INVALID_RATE_RANGE', { detail: `rate=${ratePct}` })
   }
 }
@@ -172,6 +184,14 @@ export function describeServiceFeeFormula(template: ServiceFeeTemplateValues): S
 
 export const SERVICE_FEE_BASIS_LABEL: Record<ServiceFeeBasis, string> = {
   debt_amount: 'มูลค่าหนี้คงเหลือ',
+}
+
+/**
+ * mytester A-15 — ชื่อยอด `base` ตามโมเดล: FLAT = ค่าบริการเหมาที่เก็บ**เมื่อเคสสำเร็จ** (ไม่ใช่ค่าเปิดเคส)
+ * · HYBRID = ส่วนคงที่ที่บวกกับเปอร์เซ็นต์ · SUCCESS_FEE ไม่มีส่วนนี้ (แสดง "—")
+ */
+export function serviceFeeBaseLabel(model: ServiceFeeModel): string {
+  return model === 'FLAT' ? 'ค่าบริการเหมาต่อเคส' : 'ค่าบริการส่วนคงที่'
 }
 
 export const SERVICE_FEE_MODEL_LABEL: Record<ServiceFeeModel, string> = {

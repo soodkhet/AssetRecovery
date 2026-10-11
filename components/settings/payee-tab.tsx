@@ -187,6 +187,7 @@ export function PayeeTab() {
         jsonRequest(editing === null ? 'POST' : 'PATCH', parsed.data),
       )
       if (result.error !== undefined) {
+        if (result.error.fields !== undefined) setErrors(result.error.fields)
         showToast({ tone: 'error', title: result.error.title, description: result.error.message })
         return
       }
