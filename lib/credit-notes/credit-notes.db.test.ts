@@ -378,6 +378,69 @@ suite('ใบลดหนี้ — ยกเลิก', () => {
 })
 
 suite('ใบลดหนี้ — Adjustment "รอใบลดหนี้" + ฟังก์ชันให้ portal', () => {
+  it('มติชั่วคราว M3 (G-02): ลดยอดก่อนออกใบกำกับ ⇒ ยอดตามเอกสาร/AR ลดทันที · ไม่รอใบลดหนี้ · ใบกำกับออกจากยอดหลังปรับ · ลดหลังออกใบ ⇒ รอใบลดหนี้ตามเดิม', async () => {
+    const documentedModule = await import('@/lib/portal/documented-amounts')
+    cursor += 1
+    const gross = 1_200_000
+    const vat = 84_000
+    const batch = await db().$queryRawUnsafe<{ id: string }[]>(`
+      INSERT INTO billing_batches (organization_id, company_id, period, status, total_satang, due_date, created_by)
+      VALUES ('${ORG_ID}', '${companyId}', $$มกราคม ${2580 + cursor}$$, 'sent', ${gross + vat}, '2026-12-31', '${ACCOUNTING_ID}')
+      RETURNING id
+    `)
+    const billingBatchId = batch[0]?.id ?? ''
+    const revenue = await db().$queryRawUnsafe<{ id: string }[]>(`
+      INSERT INTO revenues (organization_id, case_id, company_id, billing_batch_id, tracking_round, gross_satang, vat_satang,
+                            vat_rate_pct_used, total_satang, fee_model_snapshot, vat_mode_snapshot, status, revenue_date, created_by)
+      VALUES ('${ORG_ID}', '${caseId}', '${companyId}', '${billingBatchId}', ${cursor}, ${gross}, ${vat}, 7.00, ${gross + vat},
+              'SUCCESS_FEE', 'exclude_vat', 'billed', '2026-06-25', '${ACCOUNTING_ID}')
+      RETURNING id
+    `)
+    const revenueId = revenue[0]?.id ?? ''
+    const record = await sales.syncSalesRecordFromBilling(ctx, billingBatchId)
+
+    // ยังไม่มีใบกำกับ ⇒ ลด 100 บาท (ก่อน VAT) มีผลกับยอดเรียกเก็บทันที · VAT 7 ตามอัตราของรายได้
+    const before = await seedAdjustment(revenueId, { amount: 10_000 })
+    const documented = (await documentedModule.documentedAmountsForBatches(ORG_ID, [billingBatchId])).get(billingBatchId)
+    expect(documented?.preInvoiceAdjustments).toEqual({ beforeVatSatang: 10_000, vatSatang: 700, totalSatang: 10_700 })
+    expect(documented?.documented.totalSatang).toBe(gross + vat - 10_700)
+    expect((await documentedModule.adjustmentsAwaitingNotesByBatch(ORG_ID, [billingBatchId])).get(billingBatchId)).toBeUndefined()
+
+    // ลูกค้าโอนยอดหลังลด ⇒ ใบเสร็จรับเงิน/ใบกำกับภาษีปิดยอดจากฐานหลังปรับ
+    const receipt = await db().$queryRawUnsafe<{ id: string }[]>(`
+      INSERT INTO cash_receipts (organization_id, period_id, billing_batch_id, amount_satang, received_date, created_by)
+      VALUES ('${ORG_ID}', '${record?.periodId ?? ''}', '${billingBatchId}', ${gross + vat - 10_700}, '2026-09-15', '${ACCOUNTING_ID}')
+      RETURNING id
+    `)
+    const invoice = await sales.issueTaxInvoice(ctx, { cashReceiptId: receipt[0]?.id ?? '' })
+    expect(invoice).toMatchObject({ totalBeforeVatSatang: gross - 10_000, vatSatang: vat - 700, totalSatang: gross + vat - 10_700 })
+
+    // หลังออกใบแล้ว: รายการเดิมไม่รอใบลดหนี้ และอ้างในใบลดหนี้ไม่ได้ (กันหักซ้ำ)
+    const awaiting = await credit.listAdjustmentsAwaitingCreditNote(accountant)
+    expect(awaiting.some((row) => row.adjustmentId === before)).toBe(false)
+    await expectCode(
+      () =>
+        credit.createCreditNote(ctx, {
+          taxInvoiceId: invoice.id,
+          creditNoteNumber: nextNumber(),
+          issueDate: day('2026-10-05'),
+          amountBeforeVatSatang: 10_000,
+          reason: 'อ้างรายการที่ลดก่อนออกใบ',
+          adjustmentId: before,
+        }),
+      'CREDIT_NOTE_ADJUSTMENT_MISMATCH',
+    )
+    const after = (await documentedModule.documentedAmountsForBatches(ORG_ID, [billingBatchId])).get(billingBatchId)
+    expect(after?.documented.totalSatang).toBe(gross + vat - 10_700)
+
+    // ลดยอดหลังออกใบกำกับแล้ว ⇒ ต้องใช้ใบลดหนี้ตามเดิม (ม.86/10)
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    const later = await seedAdjustment(revenueId, { amount: 5_000 })
+    const awaitingLater = await credit.listAdjustmentsAwaitingCreditNote(accountant)
+    expect(awaitingLater.find((row) => row.adjustmentId === later)).toMatchObject({ noteType: 'credit', billingBatchId })
+    expect((await documentedModule.adjustmentsAwaitingNotesByBatch(ORG_ID, [billingBatchId])).get(billingBatchId)).toBe(1)
+  })
+
   it('Adjustment ลดยอดที่อนุมัติแล้ว ⇒ รอใบลดหนี้ จนกว่าจะบันทึกใบที่อ้างถึง', async () => {
     const seeded = await seedInvoice()
     const adjustmentId = await seedAdjustment(seeded.revenueId)

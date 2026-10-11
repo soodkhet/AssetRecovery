@@ -28,6 +28,18 @@ describe('U44 — กระทบยอดรายงานรายได้�
     expect(result.lines.some((line) => line.key === 'uninvoiced')).toBe(false)
   })
 
+  it('มติชั่วคราว M3: ลดยอดก่อนออกใบกำกับ ⇒ ใบกำกับออกยอดหลังปรับ (หักจากบรรทัดใบกำกับ) ไม่นับ "รอใบลดหนี้" · ยังลงตัว', () => {
+    const result = buildRevenueReconciliation({
+      reportTotalSatang: 363_000,
+      revenues: [{ grossSatang: 373_000, invoiced: true }],
+      adjustments: [{ adjustmentType: 'decrease', amountSatang: 10_000, invoiced: true, hasActiveNote: false, preInvoice: true }],
+      notes: [],
+    })
+    expect(lineOf(result, 'invoiced')).toBe(363_000)
+    expect(lineOf(result, 'awaitingCredit')).toBe(0)
+    expect(result.balanced).toBe(true)
+  })
+
   it('ออกใบลดหนี้แล้ว ⇒ ย้ายจาก "รอใบลดหนี้" ไปบรรทัดใบลดหนี้ ยังลงเท่าเดิม', () => {
     const result = buildRevenueReconciliation({
       reportTotalSatang: 363_000,

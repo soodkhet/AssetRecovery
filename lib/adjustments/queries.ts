@@ -50,6 +50,7 @@ import { EXPENSE_STATUS_LABEL, EXPENSE_TYPE_LABEL } from '@/lib/field/expense-ui
 import { fmtDate, toInputDate } from '@/lib/format/datetime'
 import { PAYOUT_SIDE_LABEL } from '@/lib/payout/payout'
 import { toIso } from '@/lib/settings/queries/shared'
+import { syncBillingStatusWithDocuments } from '@/lib/revenue/billing-status-sync'
 
 /**
  * รายการปรับปรุง (ไฟล์ 20) — ชั้น DB (`27` §6.8)
@@ -705,6 +706,21 @@ export async function approveAdjustment(
         actorRole: user.roleName,
         reason: note ?? row.reason,
         meta: context.meta,
+      })
+    }
+
+    // มติชั่วคราว M3 (G-02) — ลดยอดก่อนออกใบกำกับเปลี่ยนยอดตามเอกสารของรอบทันที ⇒ สถานะรับชำระของรอบต้องตามยอดใหม่
+    // (เช่น ลูกค้าโอนยอดหลังลดมาแล้ว `partially_paid` ⇒ `paid`) · อ่านผ่าน tx ⇒ เห็นการอนุมัติที่เพิ่งเขียน
+    const targetBatchId = row.billingBatchId ?? row.revenue?.billingBatchId ?? null
+    if (complete && row.adjustmentType === 'decrease' && targetBatchId !== null) {
+      await syncBillingStatusWithDocuments(tx, {
+        organizationId: user.organizationId,
+        billingBatchId: targetBatchId,
+        actorId: user.id,
+        actorRole: user.roleName,
+        sourceRef: 'รายการปรับปรุงลดยอดก่อนออกใบกำกับภาษี',
+        ipAddress: context.meta.ipAddress,
+        userAgent: context.meta.userAgent,
       })
     }
 
