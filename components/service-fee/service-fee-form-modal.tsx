@@ -173,7 +173,7 @@ export function ServiceFeeFormModal({
       <div className="space-y-4">
         {isEdit && template.companyCount > 0 && (
           <InlineAlert tone="warning" title={`มี ${template.companyCount} บริษัทผูกอยู่กับเทมเพลตนี้`}>
-            บริษัททั้งหมดถูกย้ายมาใช้เวอร์ชันใหม่ทันที — เคสที่อนุมัติแล้วใช้ snapshot เดิม ไม่กระทบ
+            บริษัททั้งหมดถูกย้ายมาใช้เวอร์ชันใหม่ทันที — เคสที่อนุมัติแล้วใช้ยอดที่บันทึกไว้เดิม ไม่กระทบ
           </InlineAlert>
         )}
 
@@ -182,7 +182,7 @@ export function ServiceFeeFormModal({
             id="sf-name"
             value={form.name}
             onChange={(event) => set('name', event.target.value)}
-            placeholder='เช่น "Standard Success Fee 10%"'
+            placeholder='เช่น "ค่าบริการมาตรฐาน 10%"'
           />
         </Field>
 

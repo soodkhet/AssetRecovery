@@ -49,7 +49,7 @@ export function CostCenterMapModal({
     }
     showToast({
       tone: 'success',
-      title: 'บันทึก Cost Center แล้ว',
+      title: 'บันทึกศูนย์ต้นทุนแล้ว',
       description: 'รายการนี้พร้อมรวมเข้าชุดเอกสารส่งสำนักงานบัญชี',
     })
     onMapped()
@@ -68,7 +68,7 @@ export function CostCenterMapModal({
             ยกเลิก
           </Button>
           <Button loading={saving} disabled={!ready} onClick={() => void submit()}>
-            บันทึก Cost Center
+            บันทึกศูนย์ต้นทุน
           </Button>
         </>
       }
@@ -93,7 +93,7 @@ export function CostCenterMapModal({
           </div>
         </div>
 
-        <Field label="เลือก Cost Center" required>
+        <Field label="เลือกศูนย์ต้นทุน" required>
           <Select value={costCenterId} onChange={(event) => setCostCenterId(event.target.value)}>
             <option value="">— เลือกศูนย์ต้นทุน —</option>
             {costCenters.map((option) => (

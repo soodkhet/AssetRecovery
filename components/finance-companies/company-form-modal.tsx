@@ -345,7 +345,7 @@ export function CompanyFormModal({
 
         {isEdit && company.serviceFeeTemplateId !== form.serviceFeeTemplateId && (
           <InlineAlert tone="info" title="เปลี่ยนเทมเพลตค่าบริการ">
-            เคสที่อนุมัติ (approved) ไปแล้วใช้ตัวเลขที่ snapshot ไว้ที่ตัวเคส — ยอดเดิมไม่เปลี่ยน · เคสที่ยังไม่อนุมัติจะคิดตามเทมเพลตใหม่
+            เคสที่อนุมัติไปแล้วใช้ตัวเลขที่บันทึกไว้ที่ตัวเคส — ยอดเดิมไม่เปลี่ยน · เคสที่ยังไม่อนุมัติจะคิดตามเทมเพลตใหม่
           </InlineAlert>
         )}
 

@@ -22,11 +22,11 @@ import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
 import {
   customerWhtSummary,
   isArOutstanding,
+  REVENUE_FEE_MODEL_LABEL,
   REVENUE_STATUS_LABEL,
   revenueStatusBadgeGroup,
 } from '@/lib/revenue/revenue-ui'
 import type { BillingBatchDetailDto, BillingBatchDto } from '@/lib/revenue/types'
-import { SERVICE_FEE_MODEL_LABEL } from '@/lib/service-fee/template'
 
 /**
  * ปุ่ม "เอกสาร/ดู" ของ `19` §8 — รายละเอียดรอบวางบิล + รายการรายได้ที่ถูกรวมเข้ารอบ
@@ -78,7 +78,7 @@ export function BillingDetailModal({ batch, onClose }: { batch: BillingBatchDto 
       onClose={onClose}
       size="lg"
       title={`รอบวางบิล ${batch.batchNumber} — ${batch.companyName} งวด ${batch.period}`}
-      description="รายการรายได้ที่ถูกรวมเข้ารอบนี้ (snapshot ตอนสร้างรอบ)"
+      description="รายการรายได้ที่ถูกรวมเข้ารอบนี้ (ยอดที่บันทึกไว้ตอนสร้างรอบ)"
       footer={
         <>
           {/* มติ PO U95 — ใบแจ้งหนี้/ใบวางบิล PDF ของรอบที่ส่งแล้ว (ไม่ใช่เอกสารภาษี) */}
@@ -146,10 +146,10 @@ export function BillingDetailModal({ batch, onClose }: { batch: BillingBatchDto 
           <Table>
             <THead>
               <Tr>
-                <Th>Case Ref</Th>
+                <Th>เลขเคส</Th>
                 <Th>วันที่รายได้</Th>
-                <Th>Model</Th>
-                <Th numeric>Gross</Th>
+                <Th>รูปแบบค่าบริการ</Th>
+                <Th numeric>ยอดก่อน VAT</Th>
                 <Th numeric>VAT</Th>
                 <Th numeric>รวม</Th>
                 <Th>สถานะ</Th>
@@ -175,7 +175,7 @@ export function BillingDetailModal({ batch, onClose }: { batch: BillingBatchDto 
                       )}
                     </Td>
                     <Td>{fmtDate(revenue.revenueDate)}</Td>
-                    <Td className="text-xs">{SERVICE_FEE_MODEL_LABEL[revenue.feeModelSnapshot]}</Td>
+                    <Td className="text-xs">{REVENUE_FEE_MODEL_LABEL[revenue.feeModelSnapshot]}</Td>
                     <Td numeric>{fmtSatangSymbol(revenue.grossSatang)}</Td>
                     <Td numeric className="text-slate-500">
                       {fmtSatangSymbol(revenue.vatSatang)}

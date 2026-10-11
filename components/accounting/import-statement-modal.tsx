@@ -108,7 +108,7 @@ export function ImportStatementModal({
     const data = result.data
     showToast({
       tone: 'success',
-      title: 'นำเข้า statement แล้ว',
+      title: 'นำเข้ารายการเดินบัญชีแล้ว',
       description: `บันทึกใหม่ ${fmtCount(data?.imported ?? 0)} รายการ · จับคู่อัตโนมัติ ${fmtCount(
         data?.autoMatched ?? 0,
       )} · ซ้ำ ${fmtCount(data?.duplicates ?? 0)} · อ่านไม่ออก ${fmtCount(data?.skippedRows.length ?? 0)}`,
@@ -167,7 +167,7 @@ export function ImportStatementModal({
             {file === null ? 'คลิกเพื่อเลือกไฟล์ หรือลากไฟล์มาวางที่นี่' : file.name}
           </div>
           <div className="mt-1 text-xs text-slate-400">
-            รองรับไฟล์ Excel (.xlsx) หรือ CSV ตามรูปแบบ statement ที่ตั้งไว้กับบัญชีนั้น (ตั้งค่าที่หน้าตั้งค่าการเงิน)
+            รองรับไฟล์ Excel (.xlsx) หรือ CSV ตามรูปแบบไฟล์รายการเดินบัญชีที่ตั้งไว้กับบัญชีนั้น (ตั้งค่าที่หน้าตั้งค่าการเงิน)
           </div>
           <input
             ref={inputRef}
@@ -189,11 +189,11 @@ export function ImportStatementModal({
             onDownloadCsv={() => downloadTextFile(template.fileName, template.csv)}
             note={
               template.usedConfiguredMapping
-                ? `ไฟล์ตัวอย่างเรียงคอลัมน์ตามรูปแบบ statement "${template.statementFormat ?? ''}" ที่ตั้งไว้กับบัญชีนี้ · ระบบอ่านตามตำแหน่งคอลัมน์ แถวหัวคอลัมน์จะถูกข้ามให้`
+                ? `ไฟล์ตัวอย่างเรียงคอลัมน์ตามรูปแบบไฟล์รายการเดินบัญชี "${template.statementFormat ?? ''}" ที่ตั้งไว้กับบัญชีนี้ · ระบบอ่านตามตำแหน่งคอลัมน์ แถวหัวคอลัมน์จะถูกข้ามให้`
                 : `ไฟล์ตัวอย่างเป็นรูปแบบมาตรฐานของระบบ${
                     template.bankAccountId === null
-                      ? ' (เลือกบัญชีก่อน ถ้าบัญชีนั้นตั้งรูปแบบ statement ไว้ ไฟล์ตัวอย่างจะเรียงตามรูปแบบนั้น)'
-                      : ' (บัญชีนี้ยังไม่ได้ตั้งรูปแบบ statement)'
+                      ? ' (เลือกบัญชีก่อน ถ้าบัญชีนั้นตั้งรูปแบบไฟล์รายการเดินบัญชีไว้ ไฟล์ตัวอย่างจะเรียงตามรูปแบบนั้น)'
+                      : ' (บัญชีนี้ยังไม่ได้ตั้งรูปแบบไฟล์รายการเดินบัญชี)'
                   } · ระบบอ่านจากชื่อหัวคอลัมน์ · วันที่กรอกเป็น พ.ศ. ได้`
             }
           />
@@ -203,7 +203,7 @@ export function ImportStatementModal({
 
         <InlineAlert tone="info">
           ระบบจับคู่อัตโนมัติเมื่อยอดตรงเป๊ะและอยู่ในช่วง
-          {selected === undefined ? ' tolerance ที่ตั้งไว้ต่อบัญชี' : ` ${selected.autoMatchToleranceDays} วัน`}
+          {selected === undefined ? 'จำนวนวันที่ตั้งไว้ต่อบัญชี' : ` ${selected.autoMatchToleranceDays} วัน`}
           หลังวันวางบิล/วันสร้างไฟล์โอน — ที่เหลือจะขึ้นเป็น <b>ยังไม่จับคู่</b> ให้จับคู่เอง ·
           แถวที่เคยนำเข้าแล้วจะถูกข้าม ไม่นับเงินซ้ำ
         </InlineAlert>

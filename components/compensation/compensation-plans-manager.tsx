@@ -160,7 +160,7 @@ export function CompensationPlansManager() {
     <>
       <PageHeader
         title="แผนค่าตอบแทน (จ่ายออก)"
-        description="commission = จ่ายเมื่อปิดสำเร็จ · เบี้ยเสี่ยง = จ่ายเมื่อไม่สำเร็จ — เคสหนึ่งได้อย่างใดอย่างหนึ่ง"
+        description="ค่าคอมมิชชัน = จ่ายเมื่อปิดสำเร็จ · เบี้ยเสี่ยง = จ่ายเมื่อไม่สำเร็จ — เคสหนึ่งได้อย่างใดอย่างหนึ่ง"
         action={
           <Can action="manage" resource={MANAGE_RESOURCE}>
             <Button

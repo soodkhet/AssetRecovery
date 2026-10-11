@@ -51,7 +51,7 @@ export const CAPABILITIES: readonly CapabilitySeed[] = [
   { code: 'map_cost_center', label: 'กำหนดศูนย์ต้นทุนของค่าใช้จ่าย', module: 'accounting', functionalGroup: FunctionalGroup.accounting },
   { code: 'manage_exceptions', label: 'จัดการข้อยกเว้น (บันทึก/แก้/ปิดข้อยกเว้น)', module: 'exception', functionalGroup: FunctionalGroup.accounting },
   { code: 'authorize_exception', label: 'สร้าง Authorized Exception', module: 'exception', functionalGroup: FunctionalGroup.accounting, description: '🔒 Executive เท่านั้น — รับความเสี่ยงข้าม exception' },
-  { code: 'manage_bank_reconciliation', label: 'Import statement / จับคู่ Bank Reconcile', module: 'bank', functionalGroup: FunctionalGroup.accounting, description: 'รวมปิดรายการโดยไม่จับคู่' },
+  { code: 'manage_bank_reconciliation', label: 'นำเข้ารายการเดินบัญชี / จับคู่กระทบยอดธนาคาร', module: 'bank', functionalGroup: FunctionalGroup.accounting, description: 'รวมปิดรายการโดยไม่จับคู่' },
   { code: 'manage_accountant_questions', label: 'บันทึก/ตอบ Accountant Question', module: 'accounting', functionalGroup: FunctionalGroup.accounting },
   { code: 'export_accounting_pack', label: 'Export Accounting Pack', module: 'export', functionalGroup: FunctionalGroup.accounting, description: 'ถ้ามีข้อยกเว้นระดับวิกฤตที่ยังเปิดอยู่ จะส่งออกไม่ได้' },
 

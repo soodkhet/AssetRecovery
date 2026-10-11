@@ -41,7 +41,7 @@ export const JOB_STATUS_LABEL: Readonly<Record<JobViewStatus, string>> = {
   pending: 'รอคิว',
   running: 'กำลังทำงาน',
   completed: 'สำเร็จ',
-  failed: 'ล้มเหลว (รอ retry)',
+  failed: 'ล้มเหลว (รอลองใหม่)',
   dead_letter: 'ล้มเหลวถาวร',
   cancelled: 'ยกเลิก',
 }

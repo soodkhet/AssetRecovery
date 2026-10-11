@@ -71,7 +71,7 @@ export function CostCenterBulkMapModal({
       }
     >
       <div className="space-y-4">
-        <Field label="เลือก Cost Center" required>
+        <Field label="เลือกศูนย์ต้นทุน" required>
           <Select value={costCenterId} onChange={(event) => setCostCenterId(event.target.value)}>
             <option value="">— เลือกศูนย์ต้นทุน —</option>
             {costCenters.map((option) => (

@@ -286,7 +286,7 @@ export function BankFileFormatsTab() {
           title: outcome.status === 'passed' ? 'ทดสอบผ่าน' : 'ทดสอบไม่ผ่าน',
           description:
             outcome.status === 'passed'
-              ? `${testTarget.bankName} — ${testTarget.purpose === 'payment' ? 'ใช้สร้างไฟล์โอนเงินจริงได้แล้ว' : 'ใช้นำเข้า statement ได้แล้ว'}`
+              ? `${testTarget.bankName} — ${testTarget.purpose === 'payment' ? 'ใช้สร้างไฟล์โอนเงินจริงได้แล้ว' : 'ใช้นำเข้ารายการเดินบัญชีได้แล้ว'}`
               : outcome.issues.join(' · '),
         })
       }
@@ -325,7 +325,7 @@ export function BankFileFormatsTab() {
         <div>
           <h2 className="text-sm font-bold text-slate-900">รูปแบบไฟล์ธนาคาร (Bank File Format)</h2>
           <p className="mt-0.5 text-xs text-slate-500">
-            โครงไฟล์ statement ที่นำเข้ากระทบยอด และไฟล์โอนเงินที่ส่งธนาคาร — <b>ไฟล์โอนต้องทดสอบผ่านก่อนจึงใช้จริงได้</b>
+            โครงไฟล์รายการเดินบัญชีที่นำเข้ากระทบยอด และไฟล์โอนเงินที่ส่งธนาคาร — <b>ไฟล์โอนต้องทดสอบผ่านก่อนจึงใช้จริงได้</b>
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -540,7 +540,7 @@ export function BankFileFormatsTab() {
             </Field>
           </div>
           {form.purpose === 'statement' && (
-            <div className="text-[10px] text-slate-500">ตัวนำเข้า statement อ่านไฟล์ CSV UTF-8 หรือ Excel (.xlsx)</div>
+            <div className="text-[10px] text-slate-500">ตัวนำเข้ารายการเดินบัญชีอ่านไฟล์ CSV UTF-8 หรือ Excel (.xlsx)</div>
           )}
           {form.purpose === 'payment' && (
             <div>
@@ -649,7 +649,7 @@ export function BankFileFormatsTab() {
         title={`ทดสอบรูปแบบไฟล์ "${testTarget?.bankName ?? ''}"`}
         description={
           testTarget?.purpose === 'statement'
-            ? 'ระบบจะสร้างไฟล์ตัวอย่างตามลำดับคอลัมน์นี้แล้วอ่านด้วยตัวนำเข้า statement จริง — ผ่าน = นำเข้าไฟล์ของธนาคารที่เรียงแบบนี้ได้'
+            ? 'ระบบจะสร้างไฟล์ตัวอย่างตามลำดับคอลัมน์นี้แล้วอ่านด้วยตัวนำเข้ารายการเดินบัญชีจริง — ผ่าน = นำเข้าไฟล์ของธนาคารที่เรียงแบบนี้ได้'
             : 'ระบบจะตรวจคอลัมน์ที่จำเป็นและสร้างตัวอย่างบรรทัดข้อมูล — ผ่านแล้วจึงใช้สร้างไฟล์โอนเงินจริงได้'
         }
         confirmLabel="เริ่มทดสอบ"

@@ -292,7 +292,7 @@ const bankAccountFields = z.object({
   accountType: z.enum(ACCOUNT_TYPE_VALUES),
   usage: bankAccountUsageSchema,
   /** อ้างรูปแบบด้วย id (มติ PO U147) — ชนิด statement/payment ตรวจที่ชั้น DB */
-  statementFormatId: optionalUuid('เลือกรูปแบบไฟล์ statement จากรายการ'),
+  statementFormatId: optionalUuid('เลือกรูปแบบไฟล์รายการเดินบัญชีจากรายการ'),
   paymentFileFormatId: optionalUuid('เลือกรูปแบบไฟล์โอนจากรายการ'),
   autoMatchToleranceDays: z
     .number()
@@ -455,7 +455,7 @@ export const bankFileTypeSchema = z.enum(['CSV', 'TXT'])
 export const bankFileEncodingSchema = z.enum(['UTF_8', 'TIS_620'])
 
 /** มติ PO U147 — statement (นำเข้ากระทบยอด) / payment (ไฟล์โอน) */
-export const bankFilePurposeSchema = z.enum(BANK_FILE_PURPOSES, { error: 'เลือกว่าใช้สำหรับไฟล์ statement หรือไฟล์โอนเงิน' })
+export const bankFilePurposeSchema = z.enum(BANK_FILE_PURPOSES, { error: 'เลือกว่าใช้สำหรับไฟล์รายการเดินบัญชีหรือไฟล์โอนเงิน' })
 
 const bankFileFormatFields = z.object({
   purpose: bankFilePurposeSchema,

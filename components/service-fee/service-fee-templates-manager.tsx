@@ -179,7 +179,7 @@ export function ServiceFeeTemplatesManager() {
     <>
       <PageHeader
         title="เทมเพลตค่าบริการ (รับเข้า)"
-        description="ฐานคำนวณรายได้ที่เรียกเก็บจากบริษัทไฟแนนซ์ — 3 model · ผูกกับบริษัทไฟแนนซ์ทุกราย"
+        description="ฐานคำนวณรายได้ที่เรียกเก็บจากบริษัทไฟแนนซ์ — มี 3 รูปแบบการคิดค่าบริการ · ผูกกับบริษัทไฟแนนซ์ทุกราย"
         action={
           <Can action="manage" resource={MANAGE_RESOURCE}>
             <Button
@@ -197,7 +197,7 @@ export function ServiceFeeTemplatesManager() {
       <Card>
         <div className="mb-4 flex items-center justify-between gap-3">
           <span className="text-xs text-slate-500">
-            แก้ไขเทมเพลตที่ใช้งานอยู่จะสร้าง <strong>เวอร์ชันใหม่</strong> — เคสที่อนุมัติแล้วใช้ snapshot เดิม
+            แก้ไขเทมเพลตที่ใช้งานอยู่จะสร้าง <strong>เวอร์ชันใหม่</strong> — เคสที่อนุมัติแล้วใช้ยอดที่บันทึกไว้เดิม
           </span>
           <div className="w-40">
             <Select

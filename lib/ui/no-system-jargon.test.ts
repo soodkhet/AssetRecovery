@@ -12,11 +12,23 @@ import { describe, expect, it } from 'vitest'
 
 const ROOT = process.cwd()
 
-/** วลีต้องห้ามบนหน้าจอ — `issue` = ที่มาของรายการ */
-const BANNED: readonly { phrase: RegExp; issue: string }[] = [
+/**
+ * วลีต้องห้ามบนหน้าจอ — `issue` = ที่มาของรายการ · `inThaiText` = นับเฉพาะข้อความที่มีอักษรไทยปน
+ * (ศัพท์อย่าง `statement`/`snapshot` เป็นชื่อ id/enum/path ได้ — ข้อความภาษาไทยที่ผู้ใช้อ่านเท่านั้นที่ห้าม)
+ */
+const BANNED: readonly { phrase: RegExp; issue: string; inThaiText?: boolean }[] = [
   { phrase: /แก้ mapping/, issue: 'B2-02' },
+  { phrase: /^(Case Ref|Model|VAT Flag|Policy)$/, issue: 'G2-01' },
+  { phrase: /source record|sync 1:1|statement|tolerance|snapshot/, issue: 'G2-01', inThaiText: true },
+  { phrase: /รอ retry|3 model|commission =|\(Claim\)|map Cost Center/, issue: 'J2-02' },
   { phrase: /รอบ (collecting|locked)|\(collecting → sent\)|ที่ locked|mark filed|map Cost Center \(manual\)|resolve\)/, issue: 'A2-01' },
 ]
+
+/**
+ * ไฟล์ที่ข้อความไม่ขึ้นจอผู้ใช้ทั่วไป — ทะเบียน event (คำอธิบายสำหรับนักพัฒนา มีเลขอ้างอิงสเปคปนอยู่แล้ว)
+ * · เหตุผล audit ที่ระบบเขียนเองตอนอนุมัติเคส (ซ่อนจากไทม์ไลน์ และ DB test ตรึงถ้อยคำไว้ — ข้อมูลเก่าใช้ถ้อยคำเดิม)
+ */
+const NOT_ON_SCREEN = new Set(['lib/api/events.ts', 'lib/notifications/events.ts', 'lib/cases/status-queries.ts'])
 
 function walk(dir: string, filter: (file: string) => boolean, out: string[] = []): string[] {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -51,14 +63,14 @@ describe('ข้อความบนหน้าจอไม่มีศัพ�
     expect(texts.filter((t) => /แก้ mapping/.test(t.text)).map((t) => t.line)).toEqual([2])
   })
 
-  it.each(BANNED)('ไม่มี $phrase ($issue)', ({ phrase }) => {
+  it.each(BANNED)('ไม่มี $phrase ($issue)', ({ phrase, inThaiText }) => {
     const files = ['app', 'components', 'lib'].flatMap((dir) =>
-      walk(path.join(ROOT, dir), (f) => /\.tsx?$/.test(f) && !/\.test\.tsx?$/.test(f)),
+      walk(path.join(ROOT, dir), (f) => /\.tsx?$/.test(f) && !/\.test\.tsx?$/.test(f) && !NOT_ON_SCREEN.has(path.relative(ROOT, f))),
     )
     expect(files.length).toBeGreaterThan(100)
     const hits = files.flatMap((file) =>
       literalTexts(file, readFileSync(file, 'utf8'))
-        .filter(({ text }) => phrase.test(text))
+        .filter(({ text }) => phrase.test(text) && (inThaiText !== true || /[ก-๙]/.test(text)))
         .map(({ line, text }) => `${path.relative(ROOT, file)}:${line} ${text.replace(/\s+/g, ' ').trim().slice(0, 80)}`),
     )
     expect(hits).toEqual([])

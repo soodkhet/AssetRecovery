@@ -36,7 +36,7 @@ const MAX_STATEMENT_CHARS = 2_000_000
 export const statementImportSchema = z.object({
   bankAccountId: uuidSchema,
   /** เนื้อไฟล์ CSV เป็นข้อความ (FE อ่านด้วย `FileReader.readAsText`) */
-  csv: z.string().min(1, 'ต้องแนบไฟล์ statement').max(MAX_STATEMENT_CHARS, 'ไฟล์ใหญ่เกินกำหนด (2 MB)'),
+  csv: z.string().min(1, 'ต้องแนบไฟล์รายการเดินบัญชี').max(MAX_STATEMENT_CHARS, 'ไฟล์ใหญ่เกินกำหนด (2 MB)'),
   fileName: z.string().trim().min(1).max(255),
 })
 
