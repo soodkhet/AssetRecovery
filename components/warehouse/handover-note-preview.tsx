@@ -3,9 +3,9 @@
 import { Button, Modal, RefText } from '@/components/ui'
 import { fmtDateTime, nowDate } from '@/lib/format/datetime'
 import type { HandoverType } from '@/lib/generated/prisma/enums'
-import { documentDeviceText, documentIdentifier, HANDOVER_DOC_TITLE } from '@/lib/warehouse/handover-doc'
+import { HANDOVER_DOC_TITLE, handoverDocRow } from '@/lib/warehouse/handover-doc'
 import type { AssetListItemDto } from '@/lib/warehouse/types'
-import { assetConditionLabel, HANDOVER_TYPE_LABEL } from '@/lib/warehouse/warehouse-ui'
+import { HANDOVER_TYPE_LABEL } from '@/lib/warehouse/warehouse-ui'
 
 /**
  * **ตัวอย่าง**ใบส่งมอบก่อนบันทึกการนัด (`44` §8.4 modal `preview-delivery-doc`)
@@ -97,18 +97,39 @@ export function HandoverNotePreview({
             </tr>
           </thead>
           <tbody>
-            {assets.map((asset, index) => (
-              <tr key={asset.id} className="border-b border-slate-100">
-                <td className="px-3 py-2">{index + 1}</td>
-                <td className="px-3 py-2">
-                  <RefText>{asset.caseRef}</RefText>
-                </td>
-                <td className="px-3 py-2">{asset.debtorName}</td>
-                <td className="px-3 py-2">{documentDeviceText(asset)}</td>
-                <td className="px-3 py-2 font-mono">{documentIdentifier(asset)}</td>
-                <td className="px-3 py-2">{assetConditionLabel(asset.condition)}</td>
-              </tr>
-            ))}
+            {/* แถวชุดเดียวกับ PDF (`handoverDocRow`) — รายละเอียดสภาพ/ค่าที่ตรวจจริง/สี-ความจุไม่ตรงต้องเห็นตั้งแต่ร่าง (mytester WH-06) */}
+            {assets.map((asset, index) => {
+              const row = handoverDocRow(asset, index)
+              return (
+                <tr key={asset.id} className="border-b border-slate-100 align-top">
+                  <td className="px-3 py-2">{row.no}</td>
+                  <td className="px-3 py-2">
+                    <RefText>{row.caseRef}</RefText>
+                  </td>
+                  <td className="px-3 py-2">{row.debtorName}</td>
+                  <td className="px-3 py-2">
+                    {row.deviceDesc}
+                    {row.colorCapacityMismatch !== null && (
+                      <div className="mt-0.5 text-[11px] text-slate-500">{row.colorCapacityMismatch}</div>
+                    )}
+                  </td>
+                  <td className="px-3 py-2">
+                    <span className="font-mono">{row.identifier}</span>
+                    {row.identifierActual !== null && (
+                      <div className="mt-0.5 text-[11px] text-slate-500">
+                        ตรวจจริง: <span className="font-mono">{row.identifierActual}</span>
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-3 py-2">
+                    {row.condition}
+                    {row.conditionNote !== null && row.conditionNote.trim() !== '' && (
+                      <div className="mt-0.5 text-[11px] text-slate-500">{row.conditionNote}</div>
+                    )}
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
 

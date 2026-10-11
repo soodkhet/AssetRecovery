@@ -237,6 +237,7 @@ export function LotTab({
           lot={attachLot}
           onClose={() => setAttachLot(null)}
           onConfirmed={afterConfirmed}
+          onConfirmedElsewhere={afterConfirmed}
         />
       )}
       {docsLot !== null && <ViewAttachedDocModal open lot={docsLot} onClose={() => setDocsLot(null)} />}

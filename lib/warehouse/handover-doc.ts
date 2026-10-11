@@ -129,6 +129,24 @@ export function scheduledAtCaption(type: LotDetailDto['type']): string {
   return type === 'finance_pickup' ? 'วันนัดรับ' : 'กำหนดจัดส่ง'
 }
 
+/**
+ * แถวเครื่องหนึ่งแถวของใบส่งมอบ — ใช้ทั้ง PDF/Excel (ผ่าน {@link buildHandoverDoc}) และหน้าดูตัวอย่างก่อนบันทึก
+ * ให้ร่างกับฉบับจริงแสดงรายละเอียดสภาพ/ค่าที่ตรวจจริง/สี-ความจุไม่ตรงชุดเดียวกัน (mytester WH-06)
+ */
+export function handoverDocRow(asset: LotDetailDto['assets'][number], index: number): HandoverDocRow {
+  return {
+    no: index + 1,
+    caseRef: asset.caseRef,
+    debtorName: asset.debtorName,
+    deviceDesc: documentDeviceText(asset),
+    identifier: documentIdentifier(asset),
+    identifierActual: documentIdentifierActual(asset),
+    colorCapacityMismatch: documentColorCapacityMismatch(asset),
+    condition: assetConditionLabel(asset.condition),
+    conditionNote: asset.conditionNote,
+  }
+}
+
 export function buildHandoverDoc(lot: LotDetailDto, issuer: HandoverParty, recipient: HandoverParty): HandoverDocModel {
   const issuedAt = lot.deliveredAt ?? lot.scheduledAt ?? lot.createdAt
   return {
@@ -151,17 +169,7 @@ export function buildHandoverDoc(lot: LotDetailDto, issuer: HandoverParty, recip
       contactPerson: orDash(lot.contactPerson),
       deliveryAddr: orDash(lot.deliveryAddr),
     },
-    rows: lot.assets.map((asset, index) => ({
-      no: index + 1,
-      caseRef: asset.caseRef,
-      debtorName: asset.debtorName,
-      deviceDesc: documentDeviceText(asset),
-      identifier: documentIdentifier(asset),
-      identifierActual: documentIdentifierActual(asset),
-      colorCapacityMismatch: documentColorCapacityMismatch(asset),
-      condition: assetConditionLabel(asset.condition),
-      conditionNote: asset.conditionNote,
-    })),
+    rows: lot.assets.map(handoverDocRow),
     totalCount: lot.assets.length,
   }
 }

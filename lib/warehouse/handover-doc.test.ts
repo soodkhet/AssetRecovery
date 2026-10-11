@@ -10,6 +10,7 @@ import {
   documentDeviceText,
   documentIdentifier,
   documentIdentifierActual,
+  handoverDocRow,
   handoverFileName,
   type HandoverParty,
 } from '@/lib/warehouse/handover-doc'
@@ -190,6 +191,13 @@ describe('buildHandoverDoc', () => {
       identifier: '355000000000001',
       identifierActual: '355000000000999',
     })
+  })
+
+  it('หน้าดูตัวอย่างก่อนบันทึกใช้แถวชุดเดียวกับ PDF — เห็นรายละเอียดสภาพตั้งแต่ร่าง (mytester WH-06)', () => {
+    const damaged = asset({ condition: 'damaged', conditionNote: 'จอแตก', imeiActual: '355000000000999' })
+    const doc = buildHandoverDoc(lot({ assets: [damaged] }), ISSUER, RECIPIENT)
+    expect(handoverDocRow(damaged, 0)).toEqual(doc.rows[0])
+    expect(handoverDocRow(damaged, 0).conditionNote).toBe('จอแตก')
   })
 })
 

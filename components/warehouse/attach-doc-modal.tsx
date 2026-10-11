@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, type ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { Button, ConfirmModal, Field, InlineAlert, Input, Modal, useToast } from '@/components/ui'
 import { buttonClass } from '@/components/ui/button'
 import { cn } from '@/components/ui/cn'
@@ -14,7 +14,12 @@ import {
   lotDocumentSlots,
   type LotDocumentSlot,
 } from '@/lib/warehouse/lot-documents'
-import { canConfirmLot, LOT_DELIVERED_AT_CLOCK_SKEW_MS, type LotDocument } from '@/lib/warehouse/lot-status'
+import {
+  canConfirmLot,
+  isLotConfirmedElsewhere,
+  LOT_DELIVERED_AT_CLOCK_SKEW_MS,
+  type LotDocument,
+} from '@/lib/warehouse/lot-status'
 import type { LotConfirmResultDto, LotDetailDto } from '@/lib/warehouse/types'
 import { uploadLotDocument, WarehouseUploadError } from '@/lib/warehouse/upload-client'
 import { HANDOVER_TYPE_LABEL } from '@/lib/warehouse/warehouse-ui'
@@ -34,11 +39,14 @@ export function AttachDocModal({
   lot,
   onClose,
   onConfirmed,
+  onConfirmedElsewhere,
 }: {
   open: boolean
   lot: LotDetailDto
   onClose: () => void
   onConfirmed: (result: LotConfirmResultDto) => void
+  /** มีคน/อีกแท็บยืนยันล็อตนี้ไปก่อน — ผู้เรียกปิดหน้าต่างแล้วรีเฟรชรายการ (mytester WH-03) */
+  onConfirmedElsewhere: () => void
 }) {
   const { showToast } = useToast()
 
@@ -49,6 +57,8 @@ export function AttachDocModal({
   const [deliveredLocal, setDeliveredLocal] = useState(toInputDateTime(lot.deliveredAt ?? new Date()))
   const [uploading, setUploading] = useState<LotDocument | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  /** กันกดยืนยันซ้ำก่อนปุ่มทัน disable — กดเร็ว 3 ครั้งเคยยิง PATCH 3 ครั้ง (mytester WH-02) */
+  const confirmingRef = useRef(false)
   const [error, setError] = useState<ApiCallError | null>(null)
   const [dateError, setDateError] = useState<string | null>(null)
   const [viewing, setViewing] = useState<ViewableFile | null>(null)
@@ -103,6 +113,8 @@ export function AttachDocModal({
   }
 
   async function confirm(deliveredAt: Date): Promise<void> {
+    if (confirmingRef.current) return
+    confirmingRef.current = true
     setPendingDeliveredAt(null)
     setSubmitting(true)
     try {
@@ -115,6 +127,15 @@ export function AttachDocModal({
         }),
       )
       if (response.error !== undefined || response.data === undefined) {
+        if (isLotConfirmedElsewhere(response.error?.code)) {
+          showToast({
+            tone: 'info',
+            title: `${lot.lotNumber} ถูกยืนยันส่งมอบไปแล้ว`,
+            description: 'มีผู้ใช้อื่นหรือหน้าต่างอื่นยืนยันล็อตนี้ก่อน — รายการอัปเดตให้แล้ว',
+          })
+          onConfirmedElsewhere()
+          return
+        }
         setError(response.error ?? { title: 'ยืนยันส่งมอบไม่สำเร็จ', message: 'กรุณาลองใหม่' })
         return
       }
@@ -126,6 +147,7 @@ export function AttachDocModal({
       })
       onConfirmed(result)
     } finally {
+      confirmingRef.current = false
       setSubmitting(false)
     }
   }
@@ -213,11 +235,11 @@ export function AttachDocModal({
             />
           </Field>
 
-          <InlineAlert tone="success" title="เมื่อยืนยันแล้ว ระบบจะทำให้ทันทีในทรานแซกชันเดียว">
+          <InlineAlert tone="success" title="เมื่อยืนยันแล้ว ระบบจะทำ 3 อย่างนี้พร้อมกันทันที">
             <ul className="mt-1 space-y-0.5">
               <li>· เครื่องทุกเครื่องในล็อต → “ส่งมอบแล้ว” (สถานะสุดท้าย)</li>
               <li>· ปลดล็อกรายการเบิกของทีมภาคสนามให้เข้าคิวอนุมัติ</li>
-              <li>· เปิดเกตรายได้เพื่อรอวางบิลบริษัทไฟแนนซ์</li>
+              <li>· เปิดให้เคสในล็อตนับเป็นรายได้เพื่อวางบิลบริษัทไฟแนนซ์ (เคสที่ค่าตอบแทนยังรออนุมัติ นับเมื่ออนุมัติแล้ว)</li>
             </ul>
             <div className="mt-1 font-semibold">ล็อตที่ยืนยันแล้วแก้ไขไม่ได้ทุกกรณี</div>
           </InlineAlert>

@@ -142,7 +142,7 @@ export function RejectIntakeModal({
           </InlineAlert>
         )}
 
-        <Field label="เหตุผลที่ตีกลับ" required hint="บันทึกลง audit log — อธิบายให้ทีมภาคสนามแก้ไขได้">
+        <Field label="เหตุผลที่ตีกลับ" required hint="ระบบเก็บเหตุผลนี้ไว้และแสดงให้ทีมภาคสนามเห็น — เขียนให้เข้าใจว่าต้องแก้อะไร">
           <Textarea
             rows={3}
             value={reason}

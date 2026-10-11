@@ -58,6 +58,14 @@ export function isLotConfirmed(status: HandoverLotStatus): boolean {
   return status === 'confirmed'
 }
 
+/**
+ * ยืนยันล็อตแล้วได้ error นี้ = มีคน/อีกแท็บยืนยันล็อตเดียวกันไปก่อน (mytester WH-03) — หน้าจอต้องปิดหน้าต่างแล้วรีเฟรชรายการ
+ * ไม่ค้างแถบแดงให้กดซ้ำ (ข้อมูลฝั่ง server ถูกต้องอยู่แล้ว)
+ */
+export function isLotConfirmedElsewhere(errorCode: string | undefined): boolean {
+  return errorCode === 'LOT_ALREADY_CONFIRMED'
+}
+
 /** `44` §10 "Confirmed is Terminal" — ทุก mutation ของล็อตต้องเรียกตัวนี้ก่อนเสมอ */
 export function assertLotMutable(status: HandoverLotStatus): void {
   if (isLotConfirmed(status)) throw new WarehouseError('LOT_ALREADY_CONFIRMED', { context: { status } })

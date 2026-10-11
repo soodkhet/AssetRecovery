@@ -188,7 +188,7 @@ export function HandoverLotModal({
                   label={isPickup ? 'วันเวลานัดรับ' : 'กำหนดวันเวลาจัดส่ง'}
                   required
                   error={fieldErrors.scheduledAt ?? null}
-                  hint="เวลาไทย — ระบบเก็บเป็น UTC ให้เอง"
+                  hint="เวลาไทย"
                 >
                   <Input
                     type="datetime-local"
