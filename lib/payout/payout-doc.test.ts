@@ -237,7 +237,10 @@ describe('buildPayslipDocs (`06_payslip.pdf`)', () => {
       ]),
       ISSUER,
     )
-    expect(slip.rows[0]!.description).toBe('ค่าเดินทางล่วงหน้า (เงินทดรองจ่าย — ไม่หักภาษี ณ ที่จ่าย)')
+    // รีวิว F2-02 — เงินทดรองไม่อยู่ในตารางเงินได้ · บรรทัดสรุปแยกกำกับว่าไม่ใช่เงินได้/ไม่หักภาษี
+    expect(slip.rows).toEqual([])
+    expect(slip.advancePaidLine?.label).toContain('ไม่หักภาษี ณ ที่จ่าย')
+    expect(slip.advancePaidLine?.amountText).toBe('8,500.00')
     expect(slip.whtLabel).toBe('หักภาษี ณ ที่จ่าย')
     expect(slip.whtText).toBe('0.00')
   })
@@ -500,5 +503,31 @@ describe('สรุปรอบจ่าย: แยกเงินทดรอ�
 
     // ไม่มีเงินทดรอง ⇒ ไม่มีบรรทัด
     expect(buildPayslipDocs(batch([item()]), ISSUER)[0]?.advancePaidLine).toBeNull()
+  })
+
+  it('รีวิว F2-02 — ตารางรายการแสดงเฉพาะเงินได้: ผลรวมแถว = "รวมค่าตอบแทนก่อนหักภาษี" · ยอดโอนไม่เปลี่ยน · ป้าย WHT ไม่โชว์ฐานภาษีเพราะเงินทดรอง', () => {
+    const fuel = item({ id: 'item-fuel', sourceId: 'exp-2', description: 'ค่าน้ำมัน', grossSatang: 100_000, whtSatang: 3_000, netSatang: 97_000, transferSatang: 97_000 })
+    const items = [item(), fuel, advance]
+    const sumText = (texts: readonly string[]): number =>
+      texts.reduce((sum, text) => sum + Math.round(Number(text.replace(/,/g, '')) * 100), 0)
+    const toSatang = (text: string): number => Math.round(Number(text.replace(/,/g, '')) * 100)
+
+    const [slip] = buildPayslipDocs(batch(items), ISSUER)
+    expect(slip!.rows.some((row) => row.description.includes('เงินทดรอง'))).toBe(false)
+    expect(sumText(slip!.rows.map((row) => row.amountText))).toBe(toSatang(slip!.grossText))
+    expect(slip!.grossText).toBe('9,500.00')
+    expect(slip!.netText).toBe('13,215.00')
+
+    const [voucher] = buildPaymentVoucherDocs(batch(items), ISSUER)
+    expect(voucher!.lines.some((line) => (line.detail ?? '').includes('เงินทดรอง'))).toBe(false)
+    expect(sumText(voucher!.lines.map((line) => line.amountText))).toBe(toSatang(voucher!.grossText))
+    expect(voucher!.netText).toBe('13,215.00')
+    // ทุกรายการเงินได้อยู่ในฐาน ⇒ ไม่ต่อท้าย "(ฐานภาษี …)" แม้มีเงินทดรองในกลุ่ม
+    expect(voucher!.whtLabel).not.toContain('ฐานภาษี')
+
+    // รายการนอกฐานยังโชว์ฐานภาษีที่คิดจริง (ไม่รวมเงินทดรอง)
+    const hotel = item({ id: 'item-hotel', sourceId: 'exp-3', description: 'ค่าที่พัก', grossSatang: 50_000, whtSatang: 0, netSatang: 50_000, whtBaseIncluded: false, transferSatang: 50_000 })
+    const [withHotel] = buildPaymentVoucherDocs(batch([item(), hotel, advance]), ISSUER)
+    expect(withHotel!.whtLabel).toContain('(ฐานภาษี 8,500.00)')
   })
 })

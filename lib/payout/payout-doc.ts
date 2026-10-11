@@ -493,7 +493,8 @@ export function buildPaymentVoucherDocs(
     payeeName: group.payeeName,
     payee: payees.get(group.payeeId) ?? fallbackPayeeInfo(group),
     teamName: orDash(group.teamName),
-    lines: voucherLinesOf(group.items),
+    // รีวิว F2-02 — ตารางรายการแสดงเฉพาะเงินได้ (เงินทดรองจ่ายเป็นบรรทัดสรุป `advancePaidLine` แยก) ⇒ ผลรวมแถว = "รวมค่าตอบแทนก่อนหักภาษี"
+    lines: voucherLinesOf(incomeItemsOf(group.items)),
     whtLabel: whtLineLabel(group),
     whtDeductText: group.whtWithheldSatang === 0 ? fmtSatang(0) : `(${fmtSatang(group.whtWithheldSatang)})`,
     payerTaxLine: payerTaxLineOf(group),
@@ -537,7 +538,8 @@ function whtLineLabel(group: PayoutPayeeGroup): string {
     .filter((item) => item.source === 'expense' && item.whtBaseIncluded)
     .reduce((sum, item) => sum + payoutItemTaxSplit(item).compensationSatang, 0)
   const base =
-    group.whtWithheldSatang > 0 && baseSatang !== group.lineTotalSatang ? ` (ฐานภาษี ${fmtSatang(baseSatang)})` : ''
+    // รีวิว F2-02 — เทียบกับค่าตอบแทน (ไม่รวมเงินทดรองจ่าย) — เดิมเทียบยอดรวมบรรทัด ⇒ มีเงินทดรองก็โชว์ฐานภาษีทั้งที่ทุกรายการอยู่ในฐาน
+    group.whtWithheldSatang > 0 && baseSatang !== compensationOf(group) ? ` (ฐานภาษี ${fmtSatang(baseSatang)})` : ''
   return `หัก ภาษี ณ ที่จ่าย${rate}${base}`
 }
 
@@ -552,6 +554,11 @@ export const ADVANCE_PAID_LINE_LABEL = 'เงินทดรองจ่าย 
 /** ค่าตอบแทนก่อนหักภาษีของกลุ่ม = ยอดรวมบรรทัด − เงินทดรองจ่าย (นิยามเดียวกับสรุปรอบ mytester F-04) */
 function compensationOf(group: PayoutPayeeGroup): number {
   return group.lineTotalSatang - group.advancePaidSatang
+}
+
+/** รายการที่เป็นเงินได้ (ไม่ใช่เงินทดรองจ่าย) — แถวในตารางของใบสำคัญจ่าย/สลิป */
+function incomeItemsOf(items: readonly PayoutBatchItemDto[]): PayoutBatchItemDto[] {
+  return items.filter((item) => item.source !== 'advance')
 }
 
 function advancePaidLineOf(group: PayoutPayeeGroup): AdvancePaidLine | null {
@@ -569,17 +576,12 @@ function payerTaxLineOf(group: PayoutPayeeGroup): { label: string; amountText: s
   }
 }
 
-/** แถวรายการของใบสำคัญจ่าย — รวมตามประเภทรายการเบิก (+ แยกรายการนอกฐานภาษี/เงินทดรองจ่าย) ลำดับตามที่พบ */
+/** แถวรายการของใบสำคัญจ่าย — รวมตามประเภทรายการเบิก (+ แยกรายการนอกฐานภาษี) ลำดับตามที่พบ · ผู้เรียกส่งเฉพาะเงินได้ */
 function voucherLinesOf(items: readonly PayoutBatchItemDto[]): PayoutDocLine[] {
   const groups = new Map<string, { description: string; note: string | null; count: number; grossSatang: number }>()
   for (const item of items) {
     const description = item.description.trim() === '' ? 'ค่าตอบแทน' : item.description.trim()
-    const note =
-      item.source === 'advance'
-        ? 'เงินทดรองจ่าย — ไม่หักภาษี ณ ที่จ่าย'
-        : item.whtBaseIncluded
-          ? null
-          : 'ไม่อยู่ในฐานภาษีหัก ณ ที่จ่าย'
+    const note = item.whtBaseIncluded ? null : 'ไม่อยู่ในฐานภาษีหัก ณ ที่จ่าย'
     const key = `${description}|${note ?? ''}`
     const bucket = groups.get(key)
     // U105 — ยอดบรรทัด = ค่าตอบแทนของผู้รับ (ภาษีที่บริษัทออกให้แยกบรรทัดท้ายใบ)
@@ -679,7 +681,8 @@ export function buildPayslipDocs(
     ],
     netInWords: bahtInWords(group.transferSatang),
     paymentChannelText: `โอนเข้าบัญชี ${payeeBankLine(group)}`,
-    rows: group.items.map((item) => ({
+    // รีวิว F2-02 — เฉพาะเงินได้ (เงินทดรองจ่ายแยกบรรทัด `advancePaidLine`) ⇒ ผลรวมแถว = "รวมค่าตอบแทนก่อนหักภาษี"
+    rows: incomeItemsOf(group.items).map((item) => ({
       description: payslipRowLabel(item),
       amountText: fmtSatang(payoutItemTaxSplit(item).compensationSatang),
     })),
@@ -702,11 +705,10 @@ export function buildPayslipDocs(
 
 /**
  * บรรทัดรายการบนสลิป — ต่อท้ายเลขสัญญา/รอบติดตามเมื่อเป็นค่าตอบแทนจากเคส (B3: recycle จ่ายซ้ำได้
- * แต่ต้องแยกรอบ ⇒ ต้องอ่านออกว่าเป็นรอบติดตามไหน) · เงินทดรองกำกับไว้ว่าไม่ใช่เงินได้
+ * แต่ต้องแยกรอบ ⇒ ต้องอ่านออกว่าเป็นรอบติดตามไหน) · เงินทดรองไม่อยู่ในแถว (บรรทัด `advancePaidLine` กำกับว่าไม่ใช่เงินได้)
  */
 function payslipRowLabel(item: PayoutBatchItemDto): string {
   const base = item.description.trim() === '' ? 'ค่าตอบแทน' : item.description.trim()
-  if (item.source === 'advance') return `${base} (เงินทดรองจ่าย — ไม่หักภาษี ณ ที่จ่าย)`
   if (item.caseRef === null) return base
   return `${base} — เคส ${item.caseRef}${item.trackingRound > 1 ? ` (รอบติดตามที่ ${item.trackingRound})` : ''}`
 }
