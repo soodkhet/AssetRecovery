@@ -82,9 +82,29 @@ export function revenueStatusBadgeGroup(status: RevenueStatus): StatusBadgeGroup
 
 /** คอลัมน์ "VAT Flag" ของ `19` §8 — โหมดของบริษัทไฟแนนซ์ (`02` §5 `vat_mode`) */
 export const VAT_MODE_LABEL: Readonly<Record<VatMode, string>> = {
-  include_vat: 'Include VAT',
-  exclude_vat: 'Exclude VAT',
+  // mytester G-11 — ป้ายภาษาไทย (เดิม Include/Exclude VAT)
+  include_vat: 'ราคารวม VAT',
+  exclude_vat: 'ราคาไม่รวม VAT',
   no_vat: 'ไม่มี VAT',
+}
+
+/** mytester G-11 — รูปแบบค่าบริการบนหน้ารายได้ (ภาษาไทยล้วน — ป้ายหน้าตั้งค่าคงวงเล็บศัพท์เดิม) */
+export const REVENUE_FEE_MODEL_LABEL: Readonly<Record<'SUCCESS_FEE' | 'FLAT' | 'HYBRID', string>> = {
+  SUCCESS_FEE: 'คิดตามความสำเร็จ (%)',
+  FLAT: 'เหมาจ่ายรายเคส',
+  HYBRID: 'แบบผสม',
+}
+
+/**
+ * mytester G-12 — ยอดของแถวรอบวางบิล = ยอดตามเอกสาร (ใบแจ้งหนี้ − ใบลดหนี้ + ใบเพิ่มหนี้ · `19` §8) ตัวเดียวกับพอร์ทัล
+ * บรรทัดรองบอกยอดใบแจ้งหนี้เดิมเมื่อมีใบลด/เพิ่มหนี้ · ไม่ต่างกัน = `null`
+ */
+export function billingDocumentedAmountNote(
+  batch: Pick<BillingBatchDto, 'totalSatang' | 'documentedTotalSatang'>,
+): string | null {
+  if (batch.documentedTotalSatang === batch.totalSatang) return null
+  const direction = batch.documentedTotalSatang < batch.totalSatang ? 'หลังใบลดหนี้' : 'หลังใบเพิ่มหนี้'
+  return `${direction} · ตามใบแจ้งหนี้ ${fmtSatangSymbol(batch.totalSatang)}`
 }
 
 /**

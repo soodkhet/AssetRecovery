@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { summarizeArAging, type ArAgingRow } from '@/lib/finance/ar-calc'
 import { portalRevenueSummaryQuerySchema } from '@/lib/portal/finance-schemas'
 import { portalRevenueMonths } from '@/lib/portal/report-range'
-import { serializePortalArAging, serializePortalRevenueSummary } from '@/lib/portal/serializers'
+import { portalClosedCaseCounts, serializePortalArAging, serializePortalRevenueSummary } from '@/lib/portal/serializers'
 import { buildArAgingReport } from '@/lib/reports/finance/ar-aging-report'
 import { buildRevenueSummary, type RevenueSummaryEntry } from '@/lib/reports/finance/revenue-summary-report'
 
@@ -81,6 +81,25 @@ describe('serializePortalRevenueSummary', () => {
     expect(dto.total).toMatchObject({ revenueSatang: 1_600_000, caseCount: 3, successCount: 1, failCount: 1 })
     expect(JSON.stringify(dto)).not.toContain('__key')
     expect(Object.keys(dto).sort()).toEqual(['months', 'rangeEnd', 'rangeStart', 'total'])
+  })
+
+  it('mytester G-09 — เคสไม่สำเร็จที่ไม่คิดเงินนับใน "เคสทั้งหมด" ด้วย (ทั้งหมด ≥ สำเร็จ + ไม่สำเร็จ)', () => {
+    const { months, range } = portalRevenueMonths(1, new Date('2026-10-11T05:00:00Z'))
+    const entries = [entry('2026-10-01', 'c1', 'closed_success', 500_000)]
+    const failCases = [
+      { groupKey: '2026-10-01', groupLabel: '', groupSort: '2026-10-01', caseId: 'f1' },
+      { groupKey: '2026-10-01', groupLabel: '', groupSort: '2026-10-01', caseId: 'f2' },
+    ]
+    const report = buildRevenueSummary({ groupBy: 'month', entries, previousEntries: [], failCases })
+    const dto = serializePortalRevenueSummary({
+      report,
+      months,
+      rangeStart: range.startDate,
+      rangeEnd: range.endDate,
+      closedCaseCounts: portalClosedCaseCounts(entries, failCases),
+    })
+    expect(dto.months[0]).toMatchObject({ caseCount: 3, successCount: 1, failCount: 2, revenuePerCaseSatang: 500_000 })
+    expect(dto.total).toMatchObject({ caseCount: 3, successCount: 1, failCount: 2 })
   })
 })
 

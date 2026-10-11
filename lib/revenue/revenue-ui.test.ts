@@ -19,6 +19,7 @@ import {
   revenueStatusBadgeGroup,
   totalArOutstandingSatang,
   VAT_MODE_LABEL,
+  billingDocumentedAmountNote,
 } from '@/lib/revenue/revenue-ui'
 
 /** ป้าย/ปุ่ม/สีของแท็บรายได้และวางบิล (`19` §8) — ยามไม่ให้หน้าจอ if สถานะเอง */
@@ -96,14 +97,14 @@ describe('AR แดงเมื่อ > 0 (`19` §8)', () => {
 
 describe('ป้าย VAT อ่านจาก snapshot (มติ PO 03/10/2569 — UAT Q6, BUG-015)', () => {
   it('รายได้: โหมด + อัตราที่ snapshot ไว้ · no_vat ไม่แสดงอัตรา', () => {
-    expect(revenueVatLabel({ vatModeSnapshot: 'exclude_vat', vatRatePctUsed: 7 })).toBe('Exclude VAT 7.00%')
-    expect(revenueVatLabel({ vatModeSnapshot: 'include_vat', vatRatePctUsed: 7 })).toBe('Include VAT 7.00%')
+    expect(revenueVatLabel({ vatModeSnapshot: 'exclude_vat', vatRatePctUsed: 7 })).toBe('ราคาไม่รวม VAT 7.00%')
+    expect(revenueVatLabel({ vatModeSnapshot: 'include_vat', vatRatePctUsed: 7 })).toBe('ราคารวม VAT 7.00%')
     expect(revenueVatLabel({ vatModeSnapshot: 'no_vat', vatRatePctUsed: 0 })).toBe('ไม่มี VAT')
   })
 
   it('รอบวางบิล: รวมโหมดของรายได้ในรอบ (ปกติค่าเดียว)', () => {
-    expect(billingBatchVatLabel({ vatModes: ['exclude_vat'] })).toBe('Exclude VAT')
-    expect(billingBatchVatLabel({ vatModes: ['exclude_vat', 'include_vat'] })).toBe('Exclude VAT / Include VAT')
+    expect(billingBatchVatLabel({ vatModes: ['exclude_vat'] })).toBe('ราคาไม่รวม VAT')
+    expect(billingBatchVatLabel({ vatModes: ['exclude_vat', 'include_vat'] })).toBe('ราคาไม่รวม VAT / ราคารวม VAT')
     expect(billingBatchVatLabel({ vatModes: [] })).toBe('—')
   })
 })
@@ -162,5 +163,15 @@ describe('มติ O74 — ป้ายสถานะรอบสะท้อ�
       })
       expect(hasDebitNoteOutstanding(status, 10_700)).toBe(false)
     }
+  })
+})
+
+describe('mytester G-12 — ยอดแถวรอบวางบิล = ยอดตามเอกสาร', () => {
+  it('มีใบลดหนี้ ⇒ บรรทัดรองบอกยอดใบแจ้งหนี้เดิม · ไม่ต่าง ⇒ null', () => {
+    expect(billingDocumentedAmountNote({ totalSatang: 338_007, documentedTotalSatang: 318_007 })).toBe(
+      'หลังใบลดหนี้ · ตามใบแจ้งหนี้ ฿3,380.07',
+    )
+    expect(billingDocumentedAmountNote({ totalSatang: 338_007, documentedTotalSatang: 348_707 })).toContain('หลังใบเพิ่มหนี้')
+    expect(billingDocumentedAmountNote({ totalSatang: 338_007, documentedTotalSatang: 338_007 })).toBeNull()
   })
 })

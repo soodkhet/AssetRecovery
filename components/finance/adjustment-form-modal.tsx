@@ -16,7 +16,12 @@ import {
 import { cn } from '@/components/ui/cn'
 import { MODAL_BUSY_IGNORE } from '@/components/ui/modal-close-guard'
 import { ADJUSTMENT_TARGET_LABEL, ADJUSTMENT_TARGET_TYPES, type AdjustmentTargetType } from '@/lib/adjustments/adjustment'
-import { periodStatusBadgeGroup, periodStatusLabel, targetSearchState } from '@/lib/adjustments/adjustment-ui'
+import {
+  adjustmentAmountFieldLabel,
+  periodStatusBadgeGroup,
+  periodStatusLabel,
+  targetSearchState,
+} from '@/lib/adjustments/adjustment-ui'
 import type { AdjustmentDto, AdjustmentTargetDto } from '@/lib/adjustments/types'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { fmtDate } from '@/lib/format/datetime'
@@ -270,12 +275,12 @@ export function AdjustmentFormModal({
               value={adjustmentType}
               onChange={(event) => setAdjustmentType(event.target.value === 'decrease' ? 'decrease' : 'increase')}
             >
-              <option value="increase">เพิ่มยอด (increase)</option>
-              <option value="decrease">ลดยอด (decrease)</option>
+              <option value="increase">เพิ่มยอด</option>
+              <option value="decrease">ลดยอด</option>
             </Select>
           </Field>
 
-          <Field label="ยอดที่ปรับ (บาท — บวกเสมอ)" required>
+          <Field label={adjustmentAmountFieldLabel(targetType)} required>
             <Input
               numeric
               inputMode="decimal"

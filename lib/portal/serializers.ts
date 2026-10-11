@@ -691,13 +691,38 @@ function revenueFiguresOf(row: ReportRow | null | undefined): PortalRevenueSumma
   }
 }
 
+/**
+ * mytester G-09 — จำนวนเคสปิดไม่ซ้ำต่อเดือน (เคสที่มีรายได้ ∪ เคสปิดไม่สำเร็จที่ไม่คิดเงิน — U55)
+ * `caseCount` ของรายงานนับเฉพาะเคสที่มีรายได้ ⇒ ตารางพอร์ทัลขึ้น "ทั้งหมด 1 · สำเร็จ 1 · ไม่สำเร็จ 2"
+ * ช่อง "เคสทั้งหมด" ของพอร์ทัลใช้ค่านี้ (ทั้งหมด ≥ สำเร็จ + ไม่สำเร็จ เสมอ) · รายได้ต่อเคสยังหารด้วยเคสที่มีรายได้
+ */
+export function portalClosedCaseCounts(
+  entries: readonly { groupKey: string; caseId: string }[],
+  failCases: readonly { groupKey: string; caseId: string }[],
+): { byKey: Map<string, number>; total: number } {
+  const sets = new Map<string, Set<string>>()
+  const all = new Set<string>()
+  for (const row of [...entries, ...failCases]) {
+    const set = sets.get(row.groupKey) ?? new Set<string>()
+    set.add(row.caseId)
+    sets.set(row.groupKey, set)
+    all.add(row.caseId)
+  }
+  return { byKey: new Map([...sets].map(([key, set]) => [key, set.size])), total: all.size }
+}
+
 /** ผลของ `buildRevenueSummary({ groupBy: 'month' })` → DTO พอร์ทัล (whitelist) */
 export function serializePortalRevenueSummary(input: {
   report: ReportData
   months: readonly PortalRevenueSummaryMonth[]
   rangeStart: Date
   rangeEnd: Date
+  /** mytester G-09 — เคสปิดไม่ซ้ำ (`portalClosedCaseCounts`) · ไม่ส่ง = ใช้ `caseCount` ของรายงาน */
+  closedCaseCounts?: { byKey: ReadonlyMap<string, number>; total: number }
 }): PortalRevenueSummaryDto {
+  const closed = input.closedCaseCounts
+  const withClosed = (figures: PortalRevenueSummaryFigures, count: number | undefined): PortalRevenueSummaryFigures =>
+    count === undefined ? figures : { ...figures, caseCount: Math.max(figures.caseCount, count) }
   const byKey = new Map<string, ReportRow>()
   for (const row of input.report.rows) {
     const key = row[ROW_KEY]
@@ -709,9 +734,9 @@ export function serializePortalRevenueSummary(input: {
     months: input.months.map((month) => ({
       month: month.key,
       label: month.label,
-      ...revenueFiguresOf(byKey.get(month.key)),
+      ...withClosed(revenueFiguresOf(byKey.get(month.key)), closed?.byKey.get(month.key)),
     })),
-    total: revenueFiguresOf(input.report.totalRow),
+    total: withClosed(revenueFiguresOf(input.report.totalRow), closed?.total),
   }
 }
 

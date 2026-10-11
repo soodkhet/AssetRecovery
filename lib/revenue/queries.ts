@@ -244,6 +244,7 @@ function toBatchDto(
     period: row.period,
     status: row.status,
     totalSatang: row.totalSatang,
+    documentedTotalSatang: arTotalSatang,
     receivedSatang: row.receivedSatang,
     whtWithheldByCustomerSatang: row.whtWithheldByCustomerSatang,
     bankFeeWrittenOffSatang: row.bankFeeWrittenOffSatang,

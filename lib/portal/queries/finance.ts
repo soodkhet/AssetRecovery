@@ -5,6 +5,7 @@ import { documentedAmountsForBatches, documentedRevenueAmounts } from '@/lib/por
 import type { PortalContext } from '@/lib/portal/guard'
 import { portalRevenueMonths } from '@/lib/portal/report-range'
 import {
+  portalClosedCaseCounts,
   serializePortalArAging,
   serializePortalBillingBatches,
   serializePortalRevenueSummary,
@@ -238,7 +239,14 @@ export async function getPortalRevenueSummary(
     loadRevenueFailCases(ctx.user.organizationId, 'month', range, null, { companyId: ctx.companyId }),
   ])
   const report = buildRevenueSummary({ groupBy: 'month', entries, previousEntries, failCases })
-  return serializePortalRevenueSummary({ report, months, rangeStart: range.startDate, rangeEnd: range.endDate })
+  return serializePortalRevenueSummary({
+    report,
+    months,
+    rangeStart: range.startDate,
+    rangeEnd: range.endDate,
+    // mytester G-09 — "เคสทั้งหมด" = เคสปิดไม่ซ้ำ (รวมเคสไม่สำเร็จที่ไม่คิดเงิน)
+    closedCaseCounts: portalClosedCaseCounts(entries, failCases),
+  })
 }
 
 // ── GET /api/portal/reports/ar-aging ────────────────────────────────────────

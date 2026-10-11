@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  adjustmentAmountFieldLabel,
   ADJUSTMENT_STATUS_FILTERS,
   ADJUSTMENT_STATUS_LABEL,
   ADJUSTMENT_TARGET_FILTERS,
@@ -81,5 +82,13 @@ describe('canFillAdjustmentApproval (E-061)', () => {
 
   it('Superadmin เติมได้ทุกบทบาท', () => {
     expect(canFillAdjustmentApproval({ roleName: 'Superadmin', isSuperadmin: true }, ['บริหาร'])).toBe(true)
+  })
+})
+
+describe('mytester G-11 — ช่องยอดที่ปรับบอกฐาน VAT', () => {
+  it('รายได้/รอบวางบิล = ก่อน VAT · ค่าใช้จ่าย/รอบจ่าย ไม่พูดถึง VAT', () => {
+    expect(adjustmentAmountFieldLabel('revenue')).toContain('ก่อน VAT')
+    expect(adjustmentAmountFieldLabel('billing_batch')).toContain('ก่อน VAT')
+    expect(adjustmentAmountFieldLabel('expense')).not.toContain('VAT')
   })
 })

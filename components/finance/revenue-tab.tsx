@@ -39,11 +39,13 @@ import { REVENUE_TRIGGER_HINT } from '@/lib/revenue/pending'
 import { MANAGE_BILLING } from '@/lib/revenue/revenue'
 import {
   BILLING_STATUS_FILTERS,
+  billingDocumentedAmountNote,
   canDeleteBillingBatch,
   canSendBillingBatch,
   customerWhtSummary,
   isArOutstanding,
   isArOverdue,
+  REVENUE_FEE_MODEL_LABEL,
   REVENUE_STATUS_FILTERS,
   REVENUE_STATUS_LABEL,
   revenueStatusBadgeGroup,
@@ -54,7 +56,6 @@ import {
   type RevenueStatusFilter,
 } from '@/lib/revenue/revenue-ui'
 import type { BillingBatchDto } from '@/lib/revenue/types'
-import { SERVICE_FEE_MODEL_LABEL } from '@/lib/service-fee/template'
 
 /**
  * แท็บ "รายได้และวางบิล" (`19` §8 · mockup `finance.html` แท็บ `revenue`)
@@ -263,7 +264,13 @@ export function RevenueTab() {
                         </p>
                       </Td>
                       <Td numeric className="font-semibold">
-                        {fmtSatangSymbol(batch.totalSatang)}
+                        {/* mytester G-12 — ยอดตามเอกสาร (หลังใบลด/เพิ่มหนี้) ตัวเลขเดียวกับพอร์ทัล */}
+                        {fmtSatangSymbol(batch.documentedTotalSatang)}
+                        {billingDocumentedAmountNote(batch) !== null && (
+                          <p className="mt-0.5 text-[10px] font-normal text-slate-400">
+                            {billingDocumentedAmountNote(batch)}
+                          </p>
+                        )}
                         {batch.customerWhtIsEstimate && batch.customerWhtSatang > 0 && (
                           <p className="mt-0.5 text-[10px] font-normal text-slate-400">
                             ลูกค้าจะหัก (ประมาณ) {fmtSatangSymbol(batch.customerWhtSatang)} · คาดรับ{' '}
@@ -351,7 +358,7 @@ export function RevenueTab() {
                 <Th>Case Ref</Th>
                 <Th>วันที่รายได้</Th>
                 <Th>Model</Th>
-                <Th numeric>Gross</Th>
+                <Th numeric>ยอดก่อน VAT</Th>
                 <Th>VAT Flag</Th>
                 <Th>รอบที่ถูกรวม</Th>
                 <Th>สถานะ</Th>
@@ -379,7 +386,7 @@ export function RevenueTab() {
                       )}
                     </Td>
                     <Td>{fmtDate(revenue.revenueDate)}</Td>
-                    <Td className="text-xs">{SERVICE_FEE_MODEL_LABEL[revenue.feeModelSnapshot]}</Td>
+                    <Td className="text-xs">{REVENUE_FEE_MODEL_LABEL[revenue.feeModelSnapshot]}</Td>
                     <Td numeric className="font-semibold">
                       {fmtSatangSymbol(revenue.grossSatang)}
                       <p className="mt-0.5 text-[10px] text-slate-400">

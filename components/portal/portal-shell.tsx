@@ -300,7 +300,7 @@ function PortalMenuDrawer({
           <div className="flex justify-center">
             <LogoutButton />
           </div>
-          <div className="mt-3 text-center text-[13px] text-slate-400">โหมดดูอย่างเดียว (Read-only)</div>
+          <div className="mt-3 text-center text-[13px] text-slate-400">โหมดดูอย่างเดียว</div>
         </div>
       </div>
     </div>
@@ -348,7 +348,7 @@ export function PortalBottomNav({
 export function PortalReadOnlyNote({ companyName }: { companyName: string }) {
   return (
     <div className="mt-8 text-[11px] text-slate-400">
-      แสดงเฉพาะข้อมูลของ {companyName} · โหมดดูอย่างเดียว (Read-only)
+      แสดงเฉพาะข้อมูลของ {companyName} · โหมดดูอย่างเดียว
     </div>
   )
 }

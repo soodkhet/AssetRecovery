@@ -44,7 +44,10 @@ export interface BillingBatchDto {
   /** เช่น "มิถุนายน 2569" (พ.ศ.) */
   period: string
   status: BillingBatchStatus
+  /** ยอดตามใบแจ้งหนี้ที่ส่งจริง (ไม่รวมใบลด/เพิ่มหนี้) */
   totalSatang: number
+  /** mytester G-12 — ยอดตามเอกสาร (ใบแจ้งหนี้ − ใบลดหนี้ + ใบเพิ่มหนี้ · `19` §8) ตัวเดียวกับพอร์ทัล/AR */
+  documentedTotalSatang: number
   receivedSatang: number
   /** A1 — WHT ที่บริษัทไฟแนนซ์หักจากเรา (นับเป็นรับชำระแล้ว ไม่ใช่หนี้ค้าง) */
   whtWithheldByCustomerSatang: number
