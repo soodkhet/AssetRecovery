@@ -1,9 +1,10 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { FilterGroup } from '@/components/ui'
 import { ReportBarChart } from '@/components/reports/report-bar-chart'
 import { ReportView } from '@/components/reports/report-view'
+import { useUrlFilter } from '@/components/ui/use-url-filter'
 import {
   TAX_INVOICE_DIMENSIONS,
   TAX_INVOICE_DIMENSION_LABEL,
@@ -54,7 +55,8 @@ export function WhtSummaryScreen({ report }: ScreenProps) {
 // ── A2 — สรุปใบกำกับภาษี ────────────────────────────────────────────────────
 
 export function TaxInvoiceScreen({ report }: ScreenProps) {
-  const [dimension, setDimension] = useState<TaxInvoiceDimension>('month')
+  // มิติเก็บใน URL — รีเฟรช/ย้อนกลับแล้วยังเหมือนเดิม (mytester J-03)
+  const [dimension, setDimension] = useUrlFilter<TaxInvoiceDimension>('dimension', TAX_INVOICE_OPTIONS, 'month')
   const params = useMemo(() => ({ dimension }), [dimension])
 
   return (

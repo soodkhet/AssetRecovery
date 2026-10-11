@@ -38,9 +38,15 @@ describe('buildTaxInvoiceReport', () => {
       beforeVatSatang: 150_000_00,
       vatSatang: 10_500_00,
       totalSatang: 160_500_00,
-      cancelledCount: null,
+      // ไม่มีใบยกเลิก = 0 ไม่ใช่ "—" (mytester J-06)
+      cancelledCount: 0,
     })
-    expect(report.totalRow).toMatchObject({ group: 'รวมทั้งหมด', invoiceCount: 2, totalSatang: 160_500_00 })
+    expect(report.totalRow).toMatchObject({
+      group: 'รวมทั้งหมด',
+      invoiceCount: 2,
+      totalSatang: 160_500_00,
+      cancelledCount: 0,
+    })
   })
 
   it('ใบที่ยกเลิกไม่ถูกนับในยอดและใน "จำนวนใบ" แต่ขึ้นในคอลัมน์ยกเลิก (`31`)', () => {

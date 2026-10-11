@@ -1,9 +1,10 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { FilterGroup } from '@/components/ui'
 import { ReportBarChart } from '@/components/reports/report-bar-chart'
 import { ReportView } from '@/components/reports/report-view'
+import { useUrlFilter } from '@/components/ui/use-url-filter'
 import type { ReportDefinition } from '@/lib/reports/catalog'
 import {
   SUCCESS_RATE_DIMENSIONS,
@@ -32,7 +33,8 @@ const SUCCESS_RATE_OPTIONS = SUCCESS_RATE_DIMENSIONS.map((value) => ({
 // ── O1 — อัตราความสำเร็จ ────────────────────────────────────────────────────
 
 export function SuccessRateScreen({ report }: ScreenProps) {
-  const [dimension, setDimension] = useState<SuccessRateDimension>('team')
+  // มิติเก็บใน URL — รีเฟรช/ย้อนกลับแล้วยังเหมือนเดิม (mytester J-03)
+  const [dimension, setDimension] = useUrlFilter<SuccessRateDimension>('dimension', SUCCESS_RATE_OPTIONS, 'team')
   const params = useMemo(() => ({ dimension }), [dimension])
 
   return (

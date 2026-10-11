@@ -101,8 +101,8 @@ export function buildTaxInvoiceReport(input: {
     beforeVatSatang: bucket.beforeVatSatang,
     vatSatang: bucket.vatSatang,
     totalSatang: bucket.totalSatang,
-    // ไม่มีใบยกเลิกเลย ⇒ `null` (แสดง "—") ไม่ใช่ 0 — ตรงกับ mockup และอ่านง่ายกว่า
-    cancelledCount: bucket.cancelledCount === 0 ? null : bucket.cancelledCount,
+    // จำนวนใบเป็นข้อมูลจริงเสมอ — ไม่มีใบยกเลิก = 0 (เดิม `null` แสดง "—"/ช่องว่างใน Excel ขัดกับ KPI — mytester J-06)
+    cancelledCount: bucket.cancelledCount,
   }))
 
   const beforeVatTotal = sumSatang(sorted.map((bucket) => bucket.beforeVatSatang), 'ยอดก่อน VAT รวม')
@@ -135,7 +135,7 @@ export function buildTaxInvoiceReport(input: {
             beforeVatSatang: beforeVatTotal,
             vatSatang: vatTotal,
             totalSatang: netTotal,
-            cancelledCount: cancelledCount === 0 ? null : cancelledCount,
+            cancelledCount,
           },
     note:
       'ใบกำกับภาษีที่ถูกยกเลิกไม่ถูกนับในยอดและในจำนวนใบ แต่ยังแสดงจำนวนไว้ในคอลัมน์สุดท้าย (ห้ามลบใบที่ยกเลิก) · ' +

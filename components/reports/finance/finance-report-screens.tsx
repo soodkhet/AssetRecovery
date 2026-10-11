@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Field, FilterGroup, Select } from '@/components/ui'
 import { ReportBarChart } from '@/components/reports/report-bar-chart'
 import { ReportView, type ReportSlotContext } from '@/components/reports/report-view'
+import { useUrlFilter } from '@/components/ui/use-url-filter'
 import type { ReportDefinition } from '@/lib/reports/catalog'
 import {
   ADVANCE_AGING_GROUP_BYS,
@@ -73,7 +74,8 @@ function drilldownOptions(payload: ReportPayload | null): DrilldownOption[] {
 // ── F1 — กำไรขั้นต้น ────────────────────────────────────────────────────────
 
 export function GrossProfitScreen({ report }: ScreenProps) {
-  const [dimension, setDimension] = useState<ProfitDimension>('company')
+  // มิติ/การจัดกลุ่มเก็บใน URL — รีเฟรช/ย้อนกลับแล้วยังเหมือนเดิม (mytester J-03)
+  const [dimension, setDimension] = useUrlFilter<ProfitDimension>('dimension', PROFIT_DIMENSION_OPTIONS, 'company')
   const [dimensionId, setDimensionId] = useState('')
   /** ตัวเลือกล่าสุดตอนอยู่หน้าสรุป — ตอน drill-down payload เป็นรายเคสแล้วจึงต้องจำไว้ */
   const [options, setOptions] = useState<{ value: string; label: string }[]>([])
@@ -89,7 +91,7 @@ export function GrossProfitScreen({ report }: ScreenProps) {
     // มิติคนละชุด ⇒ id เดิมใช้ไม่ได้ กลับไปหน้าสรุปก่อนเสมอ
     setDimensionId('')
     setOptions([])
-  }, [])
+  }, [setDimension])
 
   const renderFilters = useCallback(
     ({ payload, loading }: ReportSlotContext) => (
@@ -193,7 +195,7 @@ function GrossProfitFilters({
 // ── F2 — สรุปรายได้ ─────────────────────────────────────────────────────────
 
 export function RevenueSummaryScreen({ report }: ScreenProps) {
-  const [groupBy, setGroupBy] = useState<RevenueGroupBy>('month')
+  const [groupBy, setGroupBy] = useUrlFilter<RevenueGroupBy>('groupBy', REVENUE_GROUP_OPTIONS, 'month')
   const params = useMemo(() => ({ groupBy }), [groupBy])
 
   return (
@@ -218,7 +220,7 @@ export function RevenueSummaryScreen({ report }: ScreenProps) {
 // ── F4 — สรุปค่าตอบแทน ──────────────────────────────────────────────────────
 
 export function CompensationScreen({ report }: ScreenProps) {
-  const [groupBy, setGroupBy] = useState<CompensationGroupBy>('team')
+  const [groupBy, setGroupBy] = useUrlFilter<CompensationGroupBy>('groupBy', COMPENSATION_GROUP_OPTIONS, 'team')
   const params = useMemo(() => ({ groupBy }), [groupBy])
 
   return (
@@ -233,7 +235,7 @@ export function CompensationScreen({ report }: ScreenProps) {
 // ── F5 — อายุเงินทดรองคงค้าง (มติ PO U96 #18) ───────────────────────────────
 
 export function AdvanceAgingScreen({ report }: ScreenProps) {
-  const [groupBy, setGroupBy] = useState<AdvanceAgingGroupBy>('advance')
+  const [groupBy, setGroupBy] = useUrlFilter<AdvanceAgingGroupBy>('groupBy', ADVANCE_AGING_GROUP_OPTIONS, 'advance')
   const params = useMemo(() => ({ groupBy }), [groupBy])
 
   return (
