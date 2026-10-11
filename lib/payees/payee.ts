@@ -337,18 +337,43 @@ export const WHT_RATE_SOURCE_FIELD = 'taxProfileId'
  * ผู้รับมีแหล่งอัตราภาษีหัก ณ ที่จ่ายที่ resolve ได้ไหม — ลำดับเดียวกับ `resolveWhtRate()` (`lib/finance/wht-calc.ts`)
  * ฝั่ง payee: Tax Profile รายคน (override) → ค่าเริ่มต้นตามประเภทผู้รับ (ฝั่ง × ชนิด) · หรืออัตรา 40(1)/40(2) รายคน
  * ของบุคคลธรรมดา (นิติบุคคลไม่มีเงินได้ 40(1)/40(2) — มติ U96 #2 ⇒ อัตรารายคนไม่นับ)
- * (อัตราของแผนเป็น fallback ชั่วคราวระดับรายการ — ไม่นับเป็นความพร้อมของผู้รับ)
+ * + มติชั่วคราว M4 (mytester A-10): ไม่มีทั้งรายคน/ค่าเริ่มต้น แต่ทีมของผู้รับผูกแผนค่าตอบแทน (แผนมีอัตราเสมอ) ⇒
+ *   นับว่ามีแหล่งอัตรา (fallback ไปอัตราแผน + คำเตือน `WHT_RATE_FALLBACK_TO_PLAN` — Rule 01 / `18` §6.3)
  * @param typeDefaultAvailable มีค่าเริ่มต้นตามประเภทสำหรับฝั่ง × ชนิดของผู้รับรายนี้ (`pickTaxProfileDefault() !== null`)
+ * @param planRateAvailable ทีมของผู้รับผูกแผนค่าตอบแทน (มีอัตราของแผนให้ fallback)
  */
-export function hasWhtRateSource(values: PayeeValues, typeDefaultAvailable: boolean): boolean {
+export function hasWhtRateSource(values: PayeeValues, typeDefaultAvailable: boolean, planRateAvailable = false): boolean {
+  return hasOwnWhtRateSource(values, typeDefaultAvailable) || planRateAvailable
+}
+
+/** แหล่งอัตราระดับผู้รับ (รายคน/ค่าเริ่มต้นตามประเภท/40(1)-40(2) รายคน) — ไม่นับอัตราของแผน */
+function hasOwnWhtRateSource(values: PayeeValues, typeDefaultAvailable: boolean): boolean {
   const normalized = normalizePayeeValues(values)
   if (normalized.taxProfileId !== null || typeDefaultAvailable) return true
   return normalized.payeeType === 'individual' && normalized.wht402Pct !== null
 }
 
-export function missingFieldsForVerification(values: PayeeValues, options: { typeDefaultAvailable?: boolean } = {}): string[] {
+/** มติชั่วคราว M4 — ผู้รับใช้อัตราของแผนแทน (ไม่มีแหล่งระดับผู้รับ แต่ทีมผูกแผน) ⇒ ต้องเตือนตอนยืนยัน */
+export function payeeWhtFallsBackToPlan(
+  values: PayeeValues,
+  typeDefaultAvailable: boolean,
+  planRateAvailable: boolean,
+): boolean {
+  return planRateAvailable && !hasOwnWhtRateSource(values, typeDefaultAvailable)
+}
+
+export function missingFieldsForVerification(
+  values: PayeeValues,
+  options: { typeDefaultAvailable?: boolean; planRateAvailable?: boolean } = {},
+): string[] {
   const normalized = normalizePayeeValues(values)
-  const missing: string[] = hasWhtRateSource(values, options.typeDefaultAvailable === true) ? [] : [WHT_RATE_SOURCE_FIELD]
+  const missing: string[] = hasWhtRateSource(
+    values,
+    options.typeDefaultAvailable === true,
+    options.planRateAvailable === true,
+  )
+    ? []
+    : [WHT_RATE_SOURCE_FIELD]
   return [...missing, ...REQUIRED_FOR_VERIFY.filter((field) => normalized[field] === null)]
 }
 
@@ -356,7 +381,7 @@ export function missingFieldsForVerification(values: PayeeValues, options: { typ
 export const WHT_RATE_SOURCE_MISSING_MESSAGE = {
   title: 'ยังไม่มีอัตราภาษีหัก ณ ที่จ่ายของผู้รับรายนี้',
   message:
-    'ผู้รับรายนี้ยังไม่มีกติกาภาษี (Tax Profile) ทั้งแบบรายคนและค่าเริ่มต้นตามประเภทผู้รับ — เลือก Tax Profile ให้ผู้รับ กรอกอัตรา 40(1)/40(2) รายคน หรือให้ผู้ดูแลตั้งค่าเริ่มต้นตามประเภทผู้รับก่อนยืนยัน',
+    'ผู้รับรายนี้ยังไม่มีกติกาภาษี (Tax Profile) ทั้งแบบรายคนและค่าเริ่มต้นตามประเภทผู้รับ และทีมยังไม่ผูกแผนค่าตอบแทน — เลือก Tax Profile ให้ผู้รับ กรอกอัตรา 40(1)/40(2) รายคน ให้ผู้ดูแลตั้งค่าเริ่มต้นตามประเภทผู้รับ หรือผูกทีมกับแผนค่าตอบแทนก่อนยืนยัน',
 } as const
 
 /** คำใบ้บนปุ่ม "ยืนยัน" ที่ยังกดไม่ได้ — `null` = ครบแล้ว (ใช้ร่วมหน้า Payee + ฟอร์มผู้ใช้ U131) */
@@ -375,8 +400,13 @@ export function assertPayeeReadyForVerification(input: {
   values: PayeeValues
   requireIdDocument: boolean
   typeDefaultAvailable?: boolean
+  /** มติชั่วคราว M4 — ทีมของผู้รับผูกแผนค่าตอบแทน (fallback อัตราแผน) */
+  planRateAvailable?: boolean
 }): void {
-  const missing = missingFieldsForVerification(input.values, { typeDefaultAvailable: input.typeDefaultAvailable })
+  const missing = missingFieldsForVerification(input.values, {
+    typeDefaultAvailable: input.typeDefaultAvailable,
+    planRateAvailable: input.planRateAvailable,
+  })
   if (missing.length > 0) {
     const onlyRateSource = missing.length === 1 && missing[0] === WHT_RATE_SOURCE_FIELD
     throw new PayeeError('REQUIRED_MISSING', {

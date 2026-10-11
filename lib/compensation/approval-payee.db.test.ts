@@ -341,21 +341,35 @@ suite('Phase 3.2 — Payee & Tax Profile (`18`)', () => {
     await expectCode(() => payees.verifyPayee(ctx(finance, 'ลองยืนยันทั้งที่ยังไม่ครบ'), payeeId), 'REQUIRED_MISSING')
   })
 
-  it('BUG-SF1 (U121) — ไม่มี Tax Profile รายคน: ไม่มีค่าเริ่มต้น ⇒ ยืนยันไม่ได้ · ตั้งค่าเริ่มต้นตามประเภทแล้ว ⇒ ยืนยันได้', async () => {
-    const payeeId = await seedPayee(AGENT_ID, { taxProfileId: null })
-    const before = await payees.getPayee(finance, payeeId)
-    expect(before.missingForVerification).toEqual(['taxProfileId'])
-    await expectCode(() => payees.verifyPayee(ctx(finance, 'ยังไม่มีอัตรา'), payeeId), 'REQUIRED_MISSING')
+  it('BUG-SF1 (U121) — ไม่มี Tax Profile รายคน: ไม่มีค่าเริ่มต้น + ทีมไม่ผูกแผน ⇒ ยืนยันไม่ได้ · ตั้งค่าเริ่มต้นตามประเภทแล้ว ⇒ ยืนยันได้', async () => {
+    await db().$executeRawUnsafe(`UPDATE teams SET compensation_plan_id = NULL WHERE id = '${TEAM_ID}'`)
+    try {
+      const payeeId = await seedPayee(AGENT_ID, { taxProfileId: null })
+      const before = await payees.getPayee(finance, payeeId)
+      expect(before.missingForVerification).toEqual(['taxProfileId'])
+      await expectCode(() => payees.verifyPayee(ctx(finance, 'ยังไม่มีอัตรา'), payeeId), 'REQUIRED_MISSING')
 
-    await db().$executeRawUnsafe(`
-      INSERT INTO tax_profile_default_history (organization_id, inhouse_individual_tax_profile_id, reason, created_by)
-      VALUES ('${ORG_ID}', '${TAX_PROFILE_ID}', 'ค่าเริ่มต้น inhouse', '${FINANCE_ID}')
-    `)
-    const after = await payees.getPayee(finance, payeeId)
-    expect(after.missingForVerification).toEqual([])
-    const verified = await payees.verifyPayee(ctx(finance, 'ใช้ค่าเริ่มต้นตามประเภท'), payeeId)
+      await db().$executeRawUnsafe(`
+        INSERT INTO tax_profile_default_history (organization_id, inhouse_individual_tax_profile_id, reason, created_by)
+        VALUES ('${ORG_ID}', '${TAX_PROFILE_ID}', 'ค่าเริ่มต้น inhouse', '${FINANCE_ID}')
+      `)
+      const after = await payees.getPayee(finance, payeeId)
+      expect(after.missingForVerification).toEqual([])
+      const verified = await payees.verifyPayee(ctx(finance, 'ใช้ค่าเริ่มต้นตามประเภท'), payeeId)
+      expect(verified.payee.isVerified).toBe(true)
+      expect(verified.payee.taxProfileId).toBeNull()
+      expect(verified.warning).toBeUndefined()
+    } finally {
+      await db().$executeRawUnsafe(`UPDATE teams SET compensation_plan_id = '${PLAN_ID}' WHERE id = '${TEAM_ID}'`)
+    }
+  })
+
+  it('มติชั่วคราว M4 (A-10) — ไม่มีอัตรารายคน/ค่าเริ่มต้น แต่ทีมผูกแผน ⇒ ยืนยันได้ พร้อมคำเตือน WHT_RATE_FALLBACK_TO_PLAN', async () => {
+    const payeeId = await seedPayee(AGENT_ID, { taxProfileId: null })
+    expect((await payees.getPayee(finance, payeeId)).missingForVerification).toEqual([])
+    const verified = await payees.verifyPayee(ctx(finance, 'ใช้อัตราแผนชั่วคราว'), payeeId)
     expect(verified.payee.isVerified).toBe(true)
-    expect(verified.payee.taxProfileId).toBeNull()
+    expect(verified.warning?.code).toBe('WHT_RATE_FALLBACK_TO_PLAN')
   })
 
   it('มติ PO U94 ข้อ 1 — ที่อยู่ไม่ครบ ⇒ ยืนยันไม่ได้ · กรอกครบแล้วยืนยันได้ · แก้ที่อยู่ ⇒ ต้องยืนยันใหม่', async () => {

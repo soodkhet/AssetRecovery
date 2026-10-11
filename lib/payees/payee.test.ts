@@ -10,6 +10,7 @@ import {
   normalizeAccountNumber,
   normalizePayeeValues,
   payeeAddressLine,
+  payeeWhtFallsBackToPlan,
   payeeDisplayName,
   shouldResetVerification,
   whtConditionAffectsFormula,
@@ -187,6 +188,19 @@ describe('assertPayeeReadyForVerification (`18` §9/§10)', () => {
     expect(() =>
       assertPayeeReadyForVerification({ values, requireIdDocument: false, typeDefaultAvailable: true }),
     ).not.toThrow()
+  })
+
+  it('มติชั่วคราว M4 (A-10): ไม่มีอัตรารายคน/ค่าเริ่มต้น แต่ทีมผูกแผน ⇒ ยืนยันได้ + ต้องเตือน fallback แผน', () => {
+    const values = complete({ taxProfileId: null })
+    expect(missingFieldsForVerification(values, { planRateAvailable: true })).toEqual([])
+    expect(() =>
+      assertPayeeReadyForVerification({ values, requireIdDocument: false, planRateAvailable: true }),
+    ).not.toThrow()
+    expect(payeeWhtFallsBackToPlan(values, false, true)).toBe(true)
+    // มีแหล่งระดับผู้รับแล้ว ⇒ ไม่ fallback · ไม่มีแผน ⇒ ไม่ fallback (และยืนยันไม่ได้ตามเดิม)
+    expect(payeeWhtFallsBackToPlan(values, true, true)).toBe(false)
+    expect(payeeWhtFallsBackToPlan(complete(), false, true)).toBe(false)
+    expect(payeeWhtFallsBackToPlan(values, false, false)).toBe(false)
   })
 
   it('บุคคลธรรมดาไม่มี Tax Profile แต่มีอัตรา 40(1)/40(2) รายคน ⇒ ยืนยันได้ · นิติบุคคลไม่นับอัตรานี้', () => {

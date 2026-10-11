@@ -1,5 +1,6 @@
 import { onUniqueViolation } from '@/lib/api/unique-violation'
 import { advanceReturnOutstandingSatang, payeeRecoveryOutstandingSatang } from '@/lib/finance/advance-offset-calc'
+import { WHT_PLAN_FALLBACK_WARNING } from '@/lib/finance/wht-calc'
 import type { ApiWarning } from '@/lib/api/envelope'
 import { emitAudit } from '@/lib/audit/audit'
 import { AuthError } from '@/lib/auth/errors'
@@ -17,6 +18,7 @@ import {
   missingFieldsForVerification,
   normalizePayeeValues,
   assertCorporateLegalName,
+  payeeWhtFallsBackToPlan,
   payeeAddressLine,
   payeeLegalName,
   shouldResetVerification,
@@ -92,7 +94,8 @@ const payeeSelect = {
     select: {
       fullName: true,
       role: { select: { name: true, roleGroup: true } },
-      team: { select: { name: true, side: true } },
+      // มติชั่วคราว M4 — ทีมผูกแผนค่าตอบแทน ⇒ มีอัตราของแผนให้ fallback
+      team: { select: { name: true, side: true, compensationPlanId: true } },
     },
   },
   taxProfile: { select: { id: true, name: true, whtPct: true } },
@@ -209,6 +212,26 @@ function rowTypeDefaultAvailable(row: PayeeRow, defaults: TaxProfileDefaults<unk
   })
 }
 
+/** มติชั่วคราว M4 (A-10) — ทีมของผู้รับผูกแผนค่าตอบแทน (แผนมีอัตราหัก ณ ที่จ่ายเสมอ) ⇒ fallback อัตราแผนได้ */
+function rowPlanRateAvailable(row: PayeeRow): boolean {
+  return (row.user.team?.compensationPlanId ?? null) !== null
+}
+
+/** คำเตือน `WHT_RATE_FALLBACK_TO_PLAN` เมื่อผู้รับที่ยืนยันแล้วไม่มีอัตราของตัวเอง (ใช้อัตราแผน) — ไม่ block */
+function planFallbackWarning(row: PayeeRow, typeDefaults: TaxProfileDefaults<unknown>): ApiWarning | undefined {
+  if (!payeeWhtFallsBackToPlan(toValues(row), rowTypeDefaultAvailable(row, typeDefaults), rowPlanRateAvailable(row))) {
+    return undefined
+  }
+  return { code: 'WHT_RATE_FALLBACK_TO_PLAN', title: 'ใช้อัตราหัก ณ ที่จ่ายของแผนค่าตอบแทน', message: WHT_PLAN_FALLBACK_WARNING }
+}
+
+/** รวมคำเตือน (envelope มีช่องเดียว) — ชื่อบัญชีไม่ตรงสำคัญกว่า (กันโอนผิดบัญชี) แล้วต่อท้ายข้อความ fallback */
+function combineWarnings(primary: ApiWarning | undefined, secondary: ApiWarning | undefined): ApiWarning | undefined {
+  if (primary === undefined) return secondary
+  if (secondary === undefined) return primary
+  return { ...primary, message: `${primary.message} · ${secondary.message}` }
+}
+
 /** ค่าเริ่มต้นตามประเภทผู้รับที่มีผลอยู่ (แค่ว่าแต่ละช่องมีหรือไม่) */
 async function loadTypeDefaults(organizationId: string): Promise<TaxProfileDefaults<unknown>> {
   return (await loadTaxProfileDefaults(organizationId)).profiles
@@ -254,6 +277,7 @@ function toDto(row: PayeeRow, canSeeFullAccount: boolean, typeDefaults: TaxProfi
     bankAccountNameMatches: checkBankAccountName(legalNameOf(row, row.user.fullName), row.accountName).matches,
     missingForVerification: missingFieldsForVerification(values, {
       typeDefaultAvailable: rowTypeDefaultAvailable(row, typeDefaults),
+      planRateAvailable: rowPlanRateAvailable(row),
     }),
     advanceReturnOutstandingSatang: row.advances.reduce(
       (total, advance) =>
@@ -597,6 +621,7 @@ function assertRowReadyForVerification(
     values: { ...toValues(row), idDocumentUrl: isIdDocumentVerified(row) ? row.idDocumentUrl : null },
     requireIdDocument: policy.requirePayeeIdDocument,
     typeDefaultAvailable: rowTypeDefaultAvailable(row, typeDefaults),
+    planRateAvailable: rowPlanRateAvailable(row),
   })
 }
 
@@ -700,7 +725,10 @@ export async function verifyPayee(context: PayeeMutationContext, payeeId: string
 
   return {
     payee: toDto(updated, true, typeDefaults),
-    warning: bankNameWarning(legalNameOf(updated, current.user.fullName), updated.accountName),
+    warning: combineWarnings(
+      bankNameWarning(legalNameOf(updated, current.user.fullName), updated.accountName),
+      planFallbackWarning(updated, typeDefaults),
+    ),
   }
 }
 
@@ -785,13 +813,22 @@ export async function writeUserPaymentInTx(
   } else {
     row = await updatePayeeInTx(tx, context, prepared.current, prepared.data)
   }
+  let verifiedNow = false
   if (prepared.input.verify && !row.isVerified) {
     // แถวอ่านใน tx เดียวกัน ⇒ ทีม/role ใหม่ของผู้ใช้มีผลกับค่าเริ่มต้นตามประเภทแล้ว
     const fresh = await tx.payeeProfile.findUniqueOrThrow({ where: { id: row.id }, select: payeeSelect })
     assertRowReadyForVerification(fresh, prepared.policy, prepared.typeDefaults)
     row = await markPayeeVerifiedInTx(tx, context, fresh)
+    verifiedNow = true
   }
-  return { payeeId: row.id, isVerified: row.isVerified, warning: bankNameWarning(legalNameOf(row, fullName), row.accountName) }
+  return {
+    payeeId: row.id,
+    isVerified: row.isVerified,
+    warning: combineWarnings(
+      bankNameWarning(legalNameOf(row, fullName), row.accountName),
+      verifiedNow ? planFallbackWarning(row, prepared.typeDefaults) : undefined,
+    ),
+  }
 }
 
 /**
@@ -814,7 +851,10 @@ export async function loadPayeeInfoGaps(
   for (const row of rows) {
     result.set(
       row.id,
-      missingFieldsForVerification(toValues(row), { typeDefaultAvailable: rowTypeDefaultAvailable(row, typeDefaults) }),
+      missingFieldsForVerification(toValues(row), {
+        typeDefaultAvailable: rowTypeDefaultAvailable(row, typeDefaults),
+        planRateAvailable: rowPlanRateAvailable(row),
+      }),
     )
   }
   return result
