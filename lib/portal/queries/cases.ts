@@ -7,6 +7,7 @@ import {
   type PortalCaseAssetSource,
   type PortalCaseDetailDto,
   type PortalCaseListItemDto,
+  type PortalCaseServiceFeeSource,
 } from '@/lib/portal/serializers'
 import { PORTAL_CASE_STATUS_CODES, type PortalCaseStatusCode } from '@/lib/portal/status-map'
 import { prisma } from '@/lib/prisma'
@@ -169,7 +170,24 @@ export async function findPortalCaseDetail(ctx: PortalContext, id: string): Prom
       assetColor: true,
       company: { select: { vatMode: true } },
       // มติชั่วคราว M9 — รายได้จริงของเคส (1 เคส = 1 รายได้)
-      revenues: { where: { deletedAt: null }, select: { totalSatang: true, vatSatang: true }, take: 1 },
+      revenues: {
+        where: { deletedAt: null },
+        select: {
+          totalSatang: true,
+          vatSatang: true,
+          // มติ PO 12/10/2569 I2-01 — ใบลดหนี้ที่ออกแล้ว (active) ที่ผูกกับรายได้ของเคสผ่าน Adjustment
+          // · Adjustment ที่ยังไม่มีใบลดหนี้ไม่สะท้อน · ใบยกเลิก/ใบเพิ่มหนี้ไม่นับ
+          adjustments: {
+            select: {
+              creditNotes: {
+                where: { organizationId: ctx.user.organizationId, status: 'active', noteType: 'credit' },
+                select: { creditNoteNumber: true, totalSatang: true, issueDate: true },
+              },
+            },
+          },
+        },
+        take: 1,
+      },
     },
   })
   if (row === null) return null
@@ -183,9 +201,28 @@ export async function findPortalCaseDetail(ctx: PortalContext, id: string): Prom
       assignmentStatus: row.assignments[0]?.status ?? null,
       asset,
       companyVatMode: row.company.vatMode,
-      revenue: row.revenues[0] ?? null,
+      revenue: portalCaseRevenueSource(row.revenues[0] ?? null),
     }),
   }
+}
+
+interface PortalCaseRevenueRow {
+  totalSatang: number
+  vatSatang: number
+  adjustments: { creditNotes: { creditNoteNumber: string; totalSatang: number; issueDate: Date }[] }[]
+}
+
+/** รวมใบลดหนี้ของทุก Adjustment ของรายได้เคส — เรียงวันที่ออก แล้วเลขที่ (มติ PO 12/10/2569 I2-01) */
+function portalCaseRevenueSource(revenue: PortalCaseRevenueRow | null): PortalCaseServiceFeeSource['revenue'] {
+  if (revenue === null) return null
+  const creditNotes = revenue.adjustments
+    .flatMap((adjustment) => adjustment.creditNotes)
+    .sort(
+      (a, b) =>
+        a.issueDate.getTime() - b.issueDate.getTime() || a.creditNoteNumber.localeCompare(b.creditNoteNumber),
+    )
+    .map((note) => ({ creditNoteNumber: note.creditNoteNumber, totalSatang: note.totalSatang }))
+  return { totalSatang: revenue.totalSatang, vatSatang: revenue.vatSatang, creditNotes }
 }
 
 /** นับเคส "กำลังดำเนินการติดตาม" ของบริษัท — การ์ด KPI ภาพรวม (`97` §5) */

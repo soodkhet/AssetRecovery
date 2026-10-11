@@ -1,4 +1,5 @@
 import { PrismaPg } from '@prisma/adapter-pg'
+import { TAX_INVOICE_FIXTURE_COLUMNS, taxInvoiceFixtureValues } from '@/tests/helpers/tax-invoice-fixture'
 import { NextRequest } from 'next/server'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SessionUser } from '@/lib/auth/types'
@@ -463,6 +464,95 @@ suite('Portal-P4 — GET /api/portal/cases/:id (`97` §6.1/§6.6 v4.1 · §12 ·
       await db().$executeRawUnsafe(`DELETE FROM case_assignments WHERE case_id = '${failedId}'`)
       await db().$executeRawUnsafe(`DELETE FROM cases WHERE id = '${failedId}'`)
     }
+  })
+
+  it('มติ PO 12/10/2569 I2-01 — ยอดจริงหักใบลดหนี้ที่ออกแล้วของเคส · ใบยกเลิก/Adjustment ไม่มีใบ/ใบระดับใบกำกับไม่นับ · บริษัทอื่นไม่เห็น', async () => {
+    const tx = db()
+    const co4 = await insertCompany(4)
+    const caseA = await insertCase({ company: co4, ref: `P4D-${RUN}-A`, status: 'closed_fail', assignment: 'closed_fail', approved: true })
+    const caseB = await insertCase({ company: co4, ref: `P4D-${RUN}-B`, status: 'closed_fail', assignment: 'closed_fail', approved: true })
+    const period = await tx.$queryRawUnsafe<{ id: string }[]>(`
+      INSERT INTO accounting_periods (organization_id, period_label, year_be, month, status, created_by)
+      VALUES ('${ORG_ID}', 'งวดทดสอบ P4', 2569, 10, 'collecting', '${INTERNAL_USER}')
+      ON CONFLICT (organization_id, year_be, month) DO UPDATE SET period_label = accounting_periods.period_label
+      RETURNING id
+    `)
+    const batch = await tx.$queryRawUnsafe<{ id: string }[]>(`
+      INSERT INTO billing_batches (organization_id, company_id, period, status, total_satang, received_satang, due_date, sent_at, created_by)
+      VALUES ('${ORG_ID}', '${co4}', 'ตุลาคม 2569', 'sent', 41400, 0, '2026-11-30', NOW(), '${INTERNAL_USER}') RETURNING id
+    `)
+    const batchId = batch[0]?.id ?? ''
+    const revenueOf = async (caseId: string, gross: number, vat: number): Promise<string> => {
+      const rows = await tx.$queryRawUnsafe<{ id: string }[]>(`
+        INSERT INTO revenues (organization_id, case_id, company_id, billing_batch_id, gross_satang, vat_satang, vat_rate_pct_used,
+                              total_satang, fee_model_snapshot, vat_mode_snapshot, status, revenue_date, created_by)
+        VALUES ('${ORG_ID}', '${caseId}', '${co4}', '${batchId}', ${gross}, ${vat}, 7.00, ${gross + vat}, 'HYBRID',
+                'include_vat', 'billed', '2026-10-05', '${INTERNAL_USER}') RETURNING id
+      `)
+      return rows[0]?.id ?? ''
+    }
+    const revA = await revenueOf(caseA, 18_692, 1_308)
+    const revB = await revenueOf(caseB, 20_000, 1_400)
+    const adjustmentOf = async (revenueId: string, amount: number): Promise<string> => {
+      const rows = await tx.$queryRawUnsafe<{ id: string }[]>(`
+        INSERT INTO adjustments (organization_id, adjustment_type, amount_satang, reason, status, revenue_id, created_by)
+        VALUES ('${ORG_ID}', 'decrease', ${amount}, 'ปรับลดทดสอบ I2-01', 'approved', '${revenueId}', '${INTERNAL_USER}') RETURNING id
+      `)
+      return rows[0]?.id ?? ''
+    }
+    const adjA = await adjustmentOf(revA, 18_692)
+    await adjustmentOf(revB, 5_000) // อนุมัติแล้วแต่ยังไม่ออกใบลดหนี้ ⇒ ไม่หัก
+    const sales = await tx.$queryRawUnsafe<{ id: string }[]>(`
+      INSERT INTO sales_records (organization_id, period_id, billing_batch_id, company_id, total_before_vat_satang, vat_satang,
+                                 total_satang, created_by)
+      VALUES ('${ORG_ID}', '${period[0]?.id}', '${batchId}', '${co4}', 38692, 2708, 41400, '${INTERNAL_USER}') RETURNING id
+    `)
+    const salesId = sales[0]?.id ?? ''
+    const invoice = await tx.$queryRawUnsafe<{ id: string }[]>(`
+      INSERT INTO tax_invoices (organization_id, sales_record_id, invoice_number, invoice_date, buyer_branch_code, seller_branch_code,
+                                status, created_by, ${TAX_INVOICE_FIXTURE_COLUMNS})
+      VALUES ('${ORG_ID}', '${salesId}', 'INVP4-${RUN}', '2026-10-05', '00000', '00000', 'active', '${INTERNAL_USER}',
+              ${taxInvoiceFixtureValues(salesId)}) RETURNING id
+    `)
+    const creditNote = async (number: string, beforeVat: number, vat: number, adjustmentId: string | null): Promise<string> => {
+      const rows = await tx.$queryRawUnsafe<{ id: string }[]>(`
+        INSERT INTO credit_notes (organization_id, tax_invoice_id, adjustment_id, credit_note_number, issue_date,
+                                  amount_before_vat_satang, vat_satang, total_satang, vat_rate_pct_used, reason, created_by,
+                                  buyer_branch_code)
+        VALUES ('${ORG_ID}', '${invoice[0]?.id}', ${adjustmentId === null ? 'NULL' : `'${adjustmentId}'`}, '${number}',
+                '2026-10-06', ${beforeVat}, ${vat}, ${beforeVat + vat}, 7.00, $$ลดหนี้ทดสอบ$$, '${INTERNAL_USER}', '00000')
+        RETURNING id
+      `)
+      return rows[0]?.id ?? ''
+    }
+    const cnNumber = `CN-P4-${RUN}`
+    // ใบที่ออกผิดแล้วยกเลิก (Adjustment เดียวกัน — active ได้ทีละใบ) ⇒ ไม่นับ
+    const cancelledId = await creditNote(`CNX-P4-${RUN}`, 1_000, 70, adjA)
+    await tx.$executeRawUnsafe(`
+      UPDATE credit_notes SET status = 'cancelled', cancel_reason = $$ออกผิด$$, cancelled_by = '${INTERNAL_USER}', cancelled_at = NOW()
+      WHERE id = '${cancelledId}'
+    `)
+    await creditNote(cnNumber, 18_692, 1_308, adjA)
+    await creditNote(`CNI-P4-${RUN}`, 1_000, 70, null) // ใบระดับใบกำกับ (ไม่ผูกรายได้ของเคส) ⇒ ไม่นับเป็นของเคสใด
+
+    getRawSessionUserMock.mockResolvedValue(portalUser(co4, FULL_CAPS))
+    const a = dataOf<{ serviceFee: Record<string, unknown> }>((await json(await call(caseA))).body)
+    expect(a.serviceFee).toMatchObject({
+      actualRevenueSatang: 0,
+      actualRevenueOriginalSatang: 20_000,
+      actualRevenueVatLabel: 'รวม VAT แล้ว',
+      actualRevenueCreditNotes: [{ creditNoteNumber: cnNumber, totalSatang: 20_000 }],
+    })
+    const b = dataOf<{ serviceFee: Record<string, unknown> }>((await json(await call(caseB))).body)
+    expect(b.serviceFee).toMatchObject({ actualRevenueSatang: 21_400, actualRevenueOriginalSatang: 21_400, actualRevenueCreditNotes: [] })
+
+    // scope เดิม — ผู้ใช้บริษัทอื่นเปิดเคสนี้ไม่ได้ และเคสของตัวเองไม่ถูกปนใบลดหนี้ของบริษัทอื่น
+    getRawSessionUserMock.mockResolvedValue(portalUser(co1, FULL_CAPS))
+    const cross = await json(await call(caseA))
+    expect(cross.status).toBe(403)
+    expect(JSON.stringify(cross.body).includes(cnNumber)).toBe(false)
+    const own = dataOf<{ serviceFee: Record<string, unknown> }>((await json(await call(caseIds.recovered))).body)
+    expect(own.serviceFee).toMatchObject({ actualRevenueSatang: null, actualRevenueCreditNotes: [] })
   })
 
   it('id ของ CO2 → 403 PERMISSION_DENIED + audit access_denied (cause cross_company)', async () => {

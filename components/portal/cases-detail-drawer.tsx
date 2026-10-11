@@ -173,6 +173,9 @@ function CaseDetailBody({ detail, canViewPhotos }: { detail: PortalCaseDetailDto
             {feeRows.map((row) => (
               <Row key={row.label} label={row.label}>
                 {row.value}
+                {row.detail !== undefined && (
+                  <span className="mt-0.5 block text-xs font-normal text-slate-500">{row.detail}</span>
+                )}
               </Row>
             ))}
           </dl>

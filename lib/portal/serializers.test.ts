@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { AssignmentStatus, CaseStatus, HandoverLotStatus } from '@/lib/generated/prisma/enums'
 import {
   portalAssetPhotoMeta,
+  portalCaseNetRevenueSatang,
   serializePortalBillingBatch,
   serializePortalBillingBatches,
   serializePortalCaseDetail,
@@ -304,6 +305,33 @@ describe('portal serializers — เนื้อหา', () => {
     expect(withRevenue).toMatchObject({ actualRevenueSatang: 21_400, actualRevenueVatLabel: 'รวม VAT แล้ว' })
     const noVat = serializePortalCaseDetail(caseRow('closed_success', { revenue: { totalSatang: 20_000, vatSatang: 0 } })).serviceFee
     expect(noVat?.actualRevenueVatLabel).toBe('ไม่มี VAT')
+  })
+
+  it('มติ PO 12/10/2569 I2-01 — ยอดจริงหักใบลดหนี้ที่ออกแล้ว (รวม VAT) + เก็บยอดเดิม/เลขใบ', () => {
+    const fee = serializePortalCaseDetail(
+      caseRow('closed_fail', {
+        assignmentStatus: 'closed_fail',
+        revenue: { totalSatang: 20_000, vatSatang: 1_308, creditNotes: [{ creditNoteNumber: 'CN-NDP-2569-0012', totalSatang: 20_000 }] },
+      }),
+    ).serviceFee
+    expect(fee).toMatchObject({
+      actualRevenueSatang: 0,
+      actualRevenueOriginalSatang: 20_000,
+      actualRevenueVatLabel: 'รวม VAT แล้ว',
+      actualRevenueCreditNotes: [{ creditNoteNumber: 'CN-NDP-2569-0012', totalSatang: 20_000 }],
+    })
+    const plain = serializePortalCaseDetail(caseRow('closed_success', { revenue: { totalSatang: 21_400, vatSatang: 1_400 } })).serviceFee
+    expect(plain).toMatchObject({ actualRevenueSatang: 21_400, actualRevenueOriginalSatang: 21_400, actualRevenueCreditNotes: [] })
+    const none = serializePortalCaseDetail(caseRow('active')).serviceFee
+    expect(none).toMatchObject({ actualRevenueSatang: null, actualRevenueOriginalSatang: null, actualRevenueCreditNotes: [] })
+  })
+
+  it('portalCaseNetRevenueSatang — หักทุกใบ · ไม่มีใบ = ยอดเดิม · ลดเกิน clamp 0', () => {
+    expect(portalCaseNetRevenueSatang(21_400, [])).toBe(21_400)
+    expect(portalCaseNetRevenueSatang(21_400, [{ creditNoteNumber: 'A', totalSatang: 5_350 }, { creditNoteNumber: 'B', totalSatang: 1_050 }])).toBe(15_000)
+    expect(portalCaseNetRevenueSatang(20_000, [{ creditNoteNumber: 'A', totalSatang: 20_000 }])).toBe(0)
+    expect(portalCaseNetRevenueSatang(20_000, [{ creditNoteNumber: 'A', totalSatang: 25_000 }])).toBe(0)
+    expect(Number.isInteger(portalCaseNetRevenueSatang(10_001, [{ creditNoteNumber: 'A', totalSatang: 3_333 }]))).toBe(true)
   })
 
   it('รูปทรัพย์เฉพาะ "ติดตามสำเร็จ" (ไม่ถูกตีกลับ)', () => {

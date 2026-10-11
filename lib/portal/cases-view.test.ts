@@ -138,6 +138,8 @@ describe('portalServiceFeeRows — ค่าบริการใน drawer', ()
     closedFail: false,
     actualRevenueSatang: null,
     actualRevenueVatLabel: null,
+    actualRevenueOriginalSatang: null,
+    actualRevenueCreditNotes: [],
   }
 
   it('มติชั่วคราว M9 (PT-01): เคสไม่สำเร็จ ⇒ ประมาณการ = ค่าบริการกรณีไม่สำเร็จ · ไม่ตั้ง = ไม่เรียกเก็บ', () => {
@@ -157,6 +159,49 @@ describe('portalServiceFeeRows — ค่าบริการใน drawer', ()
       expect(rows?.at(-1)).toEqual({ label: 'ค่าบริการ (ยอดจริง)', value: '฿214.00 (รวม VAT แล้ว)' })
       expect(rows?.some((row) => row.label === 'ค่าบริการโดยประมาณ')).toBe(false)
     }
+  })
+
+  it('มติ PO 12/10/2569 I2-01 — ไม่มีใบลดหนี้ ⇒ ไม่มีบรรทัดย่อย', () => {
+    const rows = portalServiceFeeRows({
+      ...base,
+      actualRevenueSatang: 20000,
+      actualRevenueOriginalSatang: 20000,
+      actualRevenueVatLabel: 'รวม VAT แล้ว',
+    })
+    expect(rows?.at(-1)).toEqual({ label: 'ค่าบริการ (ยอดจริง)', value: '฿200.00 (รวม VAT แล้ว)' })
+  })
+
+  it('มติ PO 12/10/2569 I2-01 — มีใบลดหนี้ ⇒ ยอดสุทธิ + บรรทัดย่อยยอดเดิม/เลขใบลดหนี้ทุกใบ', () => {
+    const one = portalServiceFeeRows({
+      ...base,
+      actualRevenueSatang: 0,
+      actualRevenueOriginalSatang: 20000,
+      actualRevenueVatLabel: 'รวม VAT แล้ว',
+      actualRevenueCreditNotes: [{ creditNoteNumber: 'CN-NDP-2569-0012', totalSatang: 20000 }],
+    })
+    expect(one?.at(-1)).toEqual({
+      label: 'ค่าบริการ (ยอดจริง)',
+      value: '฿0.00 (รวม VAT แล้ว)',
+      detail: 'ยอดเดิม ฿200.00 · ลดหนี้ CN-NDP-2569-0012 −฿200.00',
+    })
+    const many = portalServiceFeeRows({
+      ...base,
+      actualRevenueSatang: 15000,
+      actualRevenueOriginalSatang: 21400,
+      actualRevenueVatLabel: 'รวม VAT แล้ว',
+      actualRevenueCreditNotes: [
+        { creditNoteNumber: 'CN-1', totalSatang: 5350 },
+        { creditNoteNumber: 'CN-2', totalSatang: 1050 },
+      ],
+    })
+    expect(many?.at(-1)?.detail).toBe('ยอดเดิม ฿214.00 · ลดหนี้ CN-1 −฿53.50 · ลดหนี้ CN-2 −฿10.50')
+  })
+
+  it('มติ PO 12/10/2569 I2-01 — เคสไม่สำเร็จที่ไม่เรียกเก็บคงเดิม', () => {
+    expect(portalServiceFeeRows({ ...base, closedFail: true, failFeeSatang: null })?.at(-1)).toEqual({
+      label: 'ค่าบริการโดยประมาณ',
+      value: 'ไม่เรียกเก็บ',
+    })
   })
 
   it('staging E-073 — ค่าบริการโดยประมาณติดป้าย VAT ตามโหมดของบริษัท', () => {
