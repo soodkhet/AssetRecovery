@@ -46,6 +46,7 @@ import {
   filingDueLabel,
   filingMethodResolveDate,
   filingNominalDueDateOf,
+  certificateDocIncomeCategory,
   filingFormOf,
   filingOverdueWarning,
   filingSequenceNumber,
@@ -1020,7 +1021,8 @@ export interface CertificateTaxSnapshot {
 /**
  * ประเภทเงินได้/อัตราของใบที่ออกแล้ว — ใบต่อผู้รับต่อรอบ (`per_payee_batch`) อ่านจาก**รายการในฐานตัวแรก**ของผู้รับในรอบ
  * (กติกาเดียวกับ `certificateTaxSource()` ตอนออกใบ) ไม่ใช่จากจุดยึด ซึ่งอาจเป็นเงินทดรอง/ค่าที่พักนอกฐาน ·
- * ทุกรายการในฐานของผู้รับคนเดียวในรอบเดียวมีประเภท/อัตราเดียวกัน (snapshot ระดับผู้รับ) ⇒ ลำดับไม่มีผลต่อค่า
+ * ประเภทเงินได้เป็นระดับผู้รับ (ทุกรายการในฐานเหมือนกัน) · อัตราอาจปนกันได้ (40(8) ที่ fallback ไปอัตราของแผนต่างกัน)
+ * ⇒ อัตราไม่เท่ากันทุกรายการ = `whtPct: null` (ไม่เดาอัตราเดียวให้ทั้งใบ — แนวเดียวกับเอกสารรอบจ่าย)
  */
 export async function loadCertificateTaxSnapshots(
   organizationId: string,
@@ -1044,21 +1046,25 @@ export async function loadCertificateTaxSnapshots(
           select: { payoutBatchId: true, payeeId: true, whtIncomeCategory: true, whtPctSnapshot: true },
         })
   const firstInBase = new Map<string, (typeof items)[number]>()
+  const pctsOf = new Map<string, Set<string>>()
   for (const item of items) {
     const key = `${item.payoutBatchId}:${item.payeeId}`
     if (!firstInBase.has(key)) firstInBase.set(key, item)
+    const pcts = pctsOf.get(key) ?? new Set<string>()
+    pcts.add(item.whtPctSnapshot?.toString() ?? 'null')
+    pctsOf.set(key, pcts)
   }
   return new Map(
     certificates.map((cert) => {
+      const key = `${cert.payoutBatchId}:${cert.payeeId}`
       const source =
-        cert.issueMode === 'per_payee_batch' && cert.payoutBatchId !== null
-          ? firstInBase.get(`${cert.payoutBatchId}:${cert.payeeId}`)
-          : undefined
+        cert.issueMode === 'per_payee_batch' && cert.payoutBatchId !== null ? firstInBase.get(key) : undefined
+      const mixedRates = (pctsOf.get(key)?.size ?? 0) > 1
       return [
         cert.id,
         source === undefined
           ? { incomeCategory: cert.anchorIncomeCategory, whtPct: cert.anchorWhtPct }
-          : { incomeCategory: source.whtIncomeCategory, whtPct: source.whtPctSnapshot },
+          : { incomeCategory: source.whtIncomeCategory, whtPct: mixedRates ? null : source.whtPctSnapshot },
       ]
     }),
   )
@@ -1130,7 +1136,11 @@ export async function getWhtCertificateDocSource(
     whtSatang: certificate.whtSatang,
     issuedAt: certificate.createdAt,
     payeeType: certificate.payeeType,
-    incomeCategory: taxSnapshot?.incomeCategory ?? certificate.expenseRecord.payoutBatchItem.whtIncomeCategory,
+    incomeCategory: certificateDocIncomeCategory({
+      storedFilingForm: certificate.filingForm,
+      inBaseCategory: taxSnapshot?.incomeCategory,
+      anchorCategory: certificate.expenseRecord.payoutBatchItem.whtIncomeCategory,
+    }),
     whtCondition: certificate.whtCondition,
     filingSequence: await loadFilingSequence(user.organizationId, certificate),
     coverage,

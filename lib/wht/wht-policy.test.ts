@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildWhtCertificateDoc,
+  certificateDocIncomeCategory,
   certificateTaxSource,
   filingFormOf,
   groupCertificateSources,
@@ -254,5 +255,21 @@ describe('mytester F-01 — แหล่งข้อมูลภาษีขอ�
   it('certificateTaxSource: ไม่มีรายการในฐานเลย ⇒ รายการแรก · กลุ่มว่าง ⇒ error', () => {
     expect(certificateTaxSource([{ whtBaseIncluded: false, id: 'a' }, { whtBaseIncluded: false, id: 'b' }]).id).toBe('a')
     expect(() => certificateTaxSource([])).toThrow(RangeError)
+  })
+})
+
+describe('mytester F-01 รีวิว — ประเภทเงินได้บนแบบต้องสอดคล้องกับแบบยื่นในใบ', () => {
+  it('ใบใหม่ (แบบยื่นตรงรายการในฐาน) ⇒ ใช้รายการในฐาน', () => {
+    expect(certificateDocIncomeCategory({ storedFilingForm: 'PND1', inBaseCategory: 'sec_40_2', anchorCategory: null })).toBe('sec_40_2')
+    expect(certificateDocIncomeCategory({ storedFilingForm: 'PND3', inBaseCategory: 'sec_40_8', anchorCategory: null })).toBe('sec_40_8')
+  })
+
+  it('ใบเก่าที่ออกผิด (ภ.ง.ด.3 แต่ในฐานเป็น 40(2)) ⇒ ใช้ค่าจุดยึดเดิม ใบไม่ขัดกันเอง', () => {
+    expect(certificateDocIncomeCategory({ storedFilingForm: 'PND3', inBaseCategory: 'sec_40_2', anchorCategory: null })).toBeNull()
+  })
+
+  it('ภ.ง.ด.53 (นิติบุคคล) ⇒ ใช้รายการในฐาน · ไม่มี snapshot ⇒ จุดยึด', () => {
+    expect(certificateDocIncomeCategory({ storedFilingForm: 'PND53', inBaseCategory: 'sec_40_8', anchorCategory: null })).toBe('sec_40_8')
+    expect(certificateDocIncomeCategory({ storedFilingForm: 'PND1', inBaseCategory: undefined, anchorCategory: 'sec_40_1' })).toBe('sec_40_1')
   })
 })

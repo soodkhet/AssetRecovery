@@ -612,6 +612,20 @@ suite('Phase 4.5 — ยกเลิก/ออกใบแทน (`33` §10 · �
     ])
     expect(snapshots.get(original.id)?.whtPct?.toString()).toBe('3')
 
+    // อัตราปนกันในรอบเดียว (fallback ไปแผนต่างกัน) ⇒ ไม่เดาอัตราเดียวให้ทั้งใบ
+    const mixed = await seedBatch(
+      [
+        { payeeId: PAYEE_PERSON_ID, gross: 1_500_00, wht: 45_00, incomeCategory: 'sec_40_8', whtPct: 3 },
+        { payeeId: PAYEE_PERSON_ID, gross: 1_000_00, wht: 20_00, incomeCategory: 'sec_40_8', whtPct: 2 },
+      ],
+      'per_payee_batch',
+    )
+    const mixedSnap = await wht.loadCertificateTaxSnapshots(ORG_ID, [
+      { id: 'mixed', issueMode: 'per_payee_batch', payoutBatchId: mixed.batchId, payeeId: PAYEE_PERSON_ID, anchorIncomeCategory: null, anchorWhtPct: null },
+    ])
+    expect(mixedSnap.get('mixed')?.whtPct).toBeNull()
+    expect(mixedSnap.get('mixed')?.incomeCategory).toBe('sec_40_8')
+
     // ยกเลิกแล้วออกแทน ⇒ ใบใหม่ต้องถูกด้วย (H-01) · sync ซ้ำไม่ออกใบเพิ่ม (จุดยึดเดิม)
     const { replacement } = await wht.cancelWhtCertificate(ctx, original.id, { reason: 'ประเภทเงินได้ผิด', reissue: true })
     expect(replacement?.filingForm).toBe('PND1')

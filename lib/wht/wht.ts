@@ -264,6 +264,23 @@ export function certificateTaxSource<T extends Pick<CertificateSourceItem, 'whtB
   return members.find((member) => member.whtBaseIncluded) ?? first
 }
 
+/**
+ * **pure** — ประเภทเงินได้ที่พิมพ์บนแบบ 50 ทวิ ของใบที่ออกแล้ว (mytester F-01 รีวิว)
+ * ใช้ค่าจากรายการในฐาน (`loadCertificateTaxSnapshots`) เมื่อ**สอดคล้องกับแบบยื่นที่บันทึกในใบ** ·
+ * ใบเก่าที่ออกผิดก่อนแก้ (แบบยื่น ภ.ง.ด.3 แต่รายการในฐานเป็น 40(2)) ⇒ ใช้ค่าของจุดยึดเดิม ให้ทั้งใบตรงกันเอง
+ * (แก้ใบเหล่านั้นด้วยการยกเลิกแล้วออกแทน — ใบแทนออกจาก `taxSource` ที่ถูกต้อง)
+ */
+export function certificateDocIncomeCategory(input: {
+  storedFilingForm: WhtFilingForm
+  inBaseCategory: WhtIncomeCategory | null | undefined
+  anchorCategory: WhtIncomeCategory | null
+}): WhtIncomeCategory | null {
+  const candidate = input.inBaseCategory ?? input.anchorCategory
+  const candidateIsPnd1 = usesPerPayeeWhtRate(candidate)
+  if (input.storedFilingForm === 'PND53') return candidate
+  return candidateIsPnd1 === (input.storedFilingForm === 'PND1') ? candidate : input.anchorCategory
+}
+
 // ── เลขที่หนังสือรับรอง ──────────────────────────────────────────────────────
 // ตัวเดินเลขย้ายไปชุดเลขกลาง `document_number_series` ชนิด `wht_certificate` แล้ว (มติ PO U102 —
 // ค่าเริ่มต้น `WHT-<พ.ศ.>-NNN` รีเซ็ตรายปีตามปีที่จ่าย · ล็อกรูปแบบหลังออกฉบับแรก) — ดู `lib/document-numbering/`
