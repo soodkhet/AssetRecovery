@@ -194,3 +194,43 @@ describe('payeeEffectiveTaxRule', () => {
     })
   })
 })
+
+/** mytester2 A2-04 — ประเภทเงินได้รายคนชนะค่าองค์กร แบบเดียวกับรอบจ่าย (`resolveIncomeCategory()`) */
+describe('ประเภทเงินได้รายคน (income_category_override) บนหน้าผู้รับเงิน', () => {
+  it('outsource บุคคลธรรมดาตั้งรายคนเป็น 40(2) อัตรา 5% ⇒ หักตามอัตรารายคน ไม่ใช่ Tax Profile ค่าเริ่มต้น 3%', () => {
+    const line = payeeDefaultTaxRule('outsource', 'individual', BY_SIDE, DEFAULTS, 'sec_40_2')
+    const summary = payeeEffectiveTaxRule(line, { taxProfileName: null, whtPct: null, wht402Pct: 5 })
+    expect(summary).toMatchObject({ kind: 'per_payee_rate', label: 'หัก 40(2) ตามอัตรารายคน 5.00%', warning: false })
+    expect(summary.detail ?? '').not.toContain('ค่าเริ่มต้นตามประเภทผู้รับ')
+  })
+
+  it('อัตรารายคน 0% ⇒ แสดง 0.00% ตามจริง', () => {
+    const line = payeeDefaultTaxRule('outsource', 'individual', BY_SIDE, DEFAULTS, 'sec_40_2')
+    expect(payeeEffectiveTaxRule(line, { taxProfileName: null, whtPct: null, wht402Pct: 0 }).label).toBe(
+      'หัก 40(2) ตามอัตรารายคน 0.00%',
+    )
+  })
+
+  it('inhouse ตั้งรายคนเป็น 40(8) ⇒ ใช้ Tax Profile ค่าเริ่มต้น (ไม่ใช่อัตรารายคน)', () => {
+    const defaults = { ...DEFAULTS, inhouseIndividual: { name: 'Inhouse บุคคล 3%', whtPct: 3 } }
+    const line = payeeDefaultTaxRule('inhouse', 'individual', BY_SIDE, defaults, 'sec_40_8')
+    expect(line).toMatchObject({ kind: 'tax_profile', profile: { name: 'Inhouse บุคคล 3%', whtPct: 3 } })
+  })
+
+  it('นิติบุคคลไม่มีเงินได้ 40(2) — ค่ารายคนไม่มีผล', () => {
+    expect(payeeDefaultTaxRule('outsource', 'corporate', BY_SIDE, DEFAULTS, 'sec_40_2')).toMatchObject({ kind: 'tax_profile' })
+  })
+
+  it('ไม่มีฝั่ง + รายคน 40(2) ⇒ ยังหักตามอัตรารายคน · ไม่มีฝั่งและไม่ตั้ง 40(2) ⇒ null (เดิม)', () => {
+    expect(payeeDefaultTaxRule(null, 'individual', BY_SIDE, DEFAULTS, 'sec_40_2')).toMatchObject({
+      kind: 'per_payee_rate',
+      incomeLabel: 'มาตรา 40(2)',
+    })
+    expect(payeeDefaultTaxRule(null, 'individual', BY_SIDE, DEFAULTS, 'sec_40_8')).toBeNull()
+    expect(payeeDefaultTaxRule(null, 'individual', BY_SIDE, DEFAULTS)).toBeNull()
+  })
+
+  it('ไม่ส่งค่ารายคน ⇒ ผลเหมือนเดิม (ตามค่าองค์กร)', () => {
+    expect(payeeDefaultTaxRule('outsource', 'individual', BY_SIDE, DEFAULTS)).toMatchObject({ kind: 'tax_profile' })
+  })
+})

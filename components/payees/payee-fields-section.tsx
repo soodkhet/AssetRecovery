@@ -192,7 +192,14 @@ export function PayeeFieldsSection({
   const defaultLine =
     taxRule.data === null
       ? null
-      : payeeDefaultTaxRule(payoutSide, form.payeeType, taxRule.data.policy, taxRule.data.defaults)
+      : payeeDefaultTaxRule(
+          payoutSide,
+          form.payeeType,
+          taxRule.data.policy,
+          taxRule.data.defaults,
+          // ประเภทเงินได้รายคนในฟอร์มชนะค่าองค์กร — ตรงกับรอบจ่าย (mytester2 A2-04)
+          form.payeeType === 'individual' && form.incomeCategoryOverride !== '' ? form.incomeCategoryOverride : null,
+        )
   const defaultOptionLabel =
     taxRule.error !== null
       ? 'ตามค่าเริ่มต้นตามประเภทผู้รับ (โหลดค่าตั้งไม่สำเร็จ)'

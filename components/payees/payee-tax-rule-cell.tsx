@@ -24,7 +24,14 @@ export function PayeeTaxRuleCell({ payee, settings }: { payee: PayeeDto; setting
       </>
     )
   }
-  const line = payeeDefaultTaxRule(payee.payoutSide, payee.payeeType, settings.policy, settings.defaults)
+  // ประเภทเงินได้รายคนชนะค่าองค์กร — ลำดับเดียวกับรอบจ่าย (mytester2 A2-04)
+  const line = payeeDefaultTaxRule(
+    payee.payoutSide,
+    payee.payeeType,
+    settings.policy,
+    settings.defaults,
+    payee.incomeCategoryOverride,
+  )
   const summary = payeeEffectiveTaxRule(line, payee)
   return (
     <>
