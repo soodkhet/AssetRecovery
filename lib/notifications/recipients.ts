@@ -89,6 +89,22 @@ export async function usersWithCapability(
 }
 
 /**
+ * ผู้ถือ capability ใดก็ได้ในรายการ (ระดับ manage + scope เดียวกัน) — รวมแล้วตัดซ้ำ ลำดับตามที่พบครั้งแรก
+ * ใช้เมื่อเรื่องเดียวต้องถึงทั้งคนทำงานและคนปลดบล็อก (มติชั่วคราว M8 — exception critical)
+ */
+export async function usersWithAnyCapability(
+  organizationId: string,
+  capabilityCodes: readonly string[],
+  scope: RecipientScope = ORGANIZATION_SCOPE,
+  filter: RecipientFilter = {},
+): Promise<string[]> {
+  const lists = await Promise.all(
+    capabilityCodes.map((code) => usersWithCapability(organizationId, code, scope, filter)),
+  )
+  return [...new Set(lists.flat())]
+}
+
+/**
  * ผู้จัดการ + หัวหน้าของทีม (ผู้ดูแลงานมอบหมายของทีม — `40` §13) — ผู้รับ "พนักงานกดรับงานแล้ว" (`40` §15)
  * ไม่ผูก capability: หัวหน้าที่ settings ปิดสิทธิ์มอบหมายยังต้องเห็นความคืบหน้าทีมตน (read scope เสมอ — `40` §13)
  */

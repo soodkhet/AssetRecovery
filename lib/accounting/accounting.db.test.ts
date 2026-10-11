@@ -290,6 +290,39 @@ suite('Phase 4.1 — Exception (`34` §16)', () => {
     sourceRef: 'PB-2569-001',
   }
 
+  it('มติชั่วคราว M8 (J-08): exception critical ใหม่ แจ้งทั้งผู้จัดการ exception และผู้ถือ authorize_exception (ไม่ซ้ำ)', async () => {
+    await db().$executeRawUnsafe(`
+      INSERT INTO capabilities (code, label, module) VALUES
+        ('manage_exceptions', 'จัดการข้อยกเว้น', 'accounting'),
+        ('authorize_exception', 'อนุมัติข้อยกเว้น', 'accounting')
+      ON CONFLICT (code) DO NOTHING
+    `)
+    await db().$executeRawUnsafe(`
+      INSERT INTO role_capabilities (role_id, capability_id, access_level)
+      SELECT '${ROLE_ACCOUNTING}'::uuid, id, 'manage'::capability_access_level FROM capabilities WHERE code = 'manage_exceptions'
+      UNION ALL
+      SELECT '${ROLE_EXEC}'::uuid, id, 'manage'::capability_access_level FROM capabilities WHERE code IN ('authorize_exception', 'manage_exceptions')
+      ON CONFLICT DO NOTHING
+    `)
+    try {
+      const periodId = await seedPeriod()
+      await accounting.createException(ctx(), { ...draft, periodId }, IN_PERIOD)
+      await vi.waitFor(
+        async () => {
+          const rows = await db().notification.findMany({
+            where: { organizationId: ORG_ID, eventCode: 'exception.created' },
+            select: { userId: true },
+          })
+          expect(rows.map((row) => row.userId).sort()).toEqual([ACCOUNTING_ID, EXEC_ID].sort())
+        },
+        { timeout: 3000, interval: 50 },
+      )
+    } finally {
+      await db().$executeRawUnsafe(`DELETE FROM role_capabilities WHERE role_id IN ('${ROLE_ACCOUNTING}', '${ROLE_EXEC}')`)
+      await db().$executeRawUnsafe(`DELETE FROM notifications WHERE organization_id = '${ORG_ID}'`)
+    }
+  })
+
   it('authorize สำเร็จ ⇒ status เปลี่ยนเป็น `authorized` ทันที + เก็บเหตุผลลง audit', async () => {
     const periodId = await seedPeriod()
     const created = await accounting.createException(ctx(), { ...draft, periodId }, IN_PERIOD)

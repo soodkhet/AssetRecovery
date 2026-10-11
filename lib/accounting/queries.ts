@@ -57,7 +57,8 @@ import type { RequestMeta } from '@/lib/auth/request-meta'
 import type { SessionUser } from '@/lib/auth/types'
 import { Prisma } from '@/lib/generated/prisma/client'
 import type { AccountingPeriodStatus } from '@/lib/generated/prisma/enums'
-import { dispatchToCapability, ORGANIZATION_SCOPE } from '@/lib/notifications/dispatch'
+import { dispatchToCapability, dispatchToResolvedUsers, ORGANIZATION_SCOPE } from '@/lib/notifications/dispatch'
+import { usersWithAnyCapability } from '@/lib/notifications/recipients'
 import { exceptionCreatedMessage, periodSentToAccountantMessage } from '@/lib/notifications/messages'
 import { prisma } from '@/lib/prisma'
 import { exceptionLinkOf, exceptionModuleLabel } from '@/lib/reports/dashboard'
@@ -893,6 +894,9 @@ async function findException(user: SessionUser, exceptionId: string): Promise<Ex
   return row
 }
 
+/** ผู้รับแจ้งเตือน exception critical ใหม่ — ผู้จัดการ exception + ผู้มีสิทธิ์ authorize (มติชั่วคราว M8) */
+export const EXCEPTION_CREATED_RECIPIENT_CAPABILITIES = [MANAGE_EXCEPTIONS, AUTHORIZE_EXCEPTION] as const
+
 export async function createException(
   ctx: AccountingMutationContext,
   input: ExceptionCreateInput,
@@ -935,11 +939,12 @@ export async function createException(
   })
 
   // `90` §6.3 แถว 9 — เฉพาะระดับ critical (ตัวที่ยัง open จะบล็อก Export Pack ของ `37`)
+  // มติชั่วคราว M8 (J-08) — ส่งถึงผู้ถือ `authorize_exception` (ผู้บริหาร — คนเดียวที่ปลดบล็อกได้) ด้วย · ตัดซ้ำ
   if (created.level === 'critical') {
-    dispatchToCapability(
-      ctx.actor.organizationId,
-      MANAGE_EXCEPTIONS,
-      ORGANIZATION_SCOPE,
+    const organizationId = ctx.actor.organizationId
+    dispatchToResolvedUsers(
+      organizationId,
+      () => usersWithAnyCapability(organizationId, EXCEPTION_CREATED_RECIPIENT_CAPABILITIES, ORGANIZATION_SCOPE),
       exceptionCreatedMessage({ title: created.title, periodLabel: created.period.periodLabel }),
     )
   }
