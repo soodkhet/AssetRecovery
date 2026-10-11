@@ -1900,8 +1900,11 @@ suite('UAT Q21 — job `daily_field_allowance` (รายวันต่อพ�
     const tx = db()
     const today = todayIso()
     // วันลงพื้นที่ = 40 วันก่อน (เดือนก่อนหน้าเสมอ) · งวดของเดือนนั้นปิด · งวดเดือนนี้ไม่มี (= เปิด)
-    const past = new Date(Date.now() + 7 * 3_600_000 - 40 * 86_400_000).toISOString().slice(0, 10)
-    const past2 = new Date(Date.now() + 7 * 3_600_000 - 41 * 86_400_000).toISOString().slice(0, 10)
+    // วันที่สอง = วันก่อนหน้า ถ้าข้ามเดือน (40 วันก่อนตรงวันที่ 1) ใช้วันถัดไปแทน — ทั้งสองวันต้องอยู่งวดที่ล็อกเดียวกัน
+    const pastAt = Date.now() + 7 * 3_600_000 - 40 * 86_400_000
+    const past = new Date(pastAt).toISOString().slice(0, 10)
+    const dayBefore = new Date(pastAt - 86_400_000).toISOString().slice(0, 10)
+    const past2 = dayBefore.slice(0, 7) === past.slice(0, 7) ? dayBefore : new Date(pastAt + 86_400_000).toISOString().slice(0, 10)
     const [pastYear = '0', pastMonth = '0'] = past.split('-')
 
     await tx.$executeRawUnsafe(`
