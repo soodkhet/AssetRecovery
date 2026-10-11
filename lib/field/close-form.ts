@@ -154,6 +154,7 @@ const CLOSE_MISSING_LABEL: Readonly<Partial<Record<FieldErrorCode, string>>> = {
   CLOSE_VIDEO_REQUIRED: 'วิดีโออย่างน้อย 1 คลิป',
   CLOSE_PRODUCT_PHOTO_REQUIRED: 'รูปสินค้ายืนยันอย่างน้อย 1 รูป',
   CLOSE_FAIL_REASON_REQUIRED: 'เหตุผลที่ไม่สำเร็จ',
+  CLOSE_NO_EVIDENCE_REVISION: 'แก้ไขรูป/วิดีโอ/เสียง/รูปสินค้าอย่างน้อย 1 รายการ',
 }
 
 export function closeMissingLabel(code: FieldErrorCode): string {
@@ -175,10 +176,19 @@ export function hasCloseFormRevision(form: CloseFormState, detail: FieldCaseDeta
   return hasEvidenceRevision(detail.submittedEvidence, toMediaSnapshot(form))
 }
 
+/**
+ * ทุกเหตุที่ยังส่งไม่ได้ — หลักฐานที่ขาด + (โหมดตีกลับ) ยังไม่ได้แก้สื่อเลย
+ * ใช้ทั้งตัดสินปุ่มส่งและข้อความสรุปในฟอร์ม ⇒ กดส่งตอนยังไม่แก้อะไรต้องเห็นเหตุผลค้างบนฟอร์ม ไม่ใช่เงียบ (mytester DO-04)
+ */
+export function closeFormBlockers(form: CloseFormState, detail: FieldCaseDetailDto): FieldErrorCode[] {
+  const missing = closeFormMissing(form, detail)
+  if (isRevisionMode(detail) && !hasCloseFormRevision(form, detail)) return ['CLOSE_NO_EVIDENCE_REVISION', ...missing]
+  return missing
+}
+
 /** ปุ่มส่งกดได้ไหม — โหมดปกติ = หลักฐานครบ · โหมดตีกลับ = ต้องมีการแก้สื่อจริง */
 export function canSubmitCloseForm(form: CloseFormState, detail: FieldCaseDetailDto): boolean {
-  if (isRevisionMode(detail)) return hasCloseFormRevision(form, detail) && closeFormMissing(form, detail).length === 0
-  return closeFormMissing(form, detail).length === 0
+  return closeFormBlockers(form, detail).length === 0
 }
 
 // ── payload ของแต่ละปุ่ม (`45` §6.3) ────────────────────────────────────────

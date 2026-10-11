@@ -143,3 +143,12 @@ export function withWeekdayPrefix(dateIso: string, formattedDate: string): strin
   const weekday = WEEKDAY_NAMES_TH[weekdayIndex(dateIso)] ?? ''
   return `วัน${weekday} ${formattedDate}`
 }
+
+/**
+ * คำเรียกวันที่เลือกในกล่องยืนยันจัดวัน — ตรงกับวันนี้ (เวลาไทย) ⇒ "วันนี้" · วันอื่น ⇒ "วันที่ 12/10/2569"
+ * กันพนักงานเข้าใจผิดว่าจัดลงวันปัจจุบันทั้งที่เลือกวันในอนาคต (mytester DO-06)
+ * `formattedDate` มาจาก `fmtDate` ของ caller — ห้าม format เองที่นี่ (Rule 01)
+ */
+export function pickedDayPhrase(dateIso: string, todayIso: string, formattedDate: string): string {
+  return dateIso === todayIso ? 'วันนี้' : `วันที่ ${formattedDate}`
+}

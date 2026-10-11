@@ -8,6 +8,7 @@ import {
   canSubmitCloseForm,
   closeCasePayload,
   closeDraftPayload,
+  closeFormBlockers,
   closeFormMissing,
   closeFormMode,
   closeFormFromDetail,
@@ -275,6 +276,20 @@ describe('โหมดตีกลับ — ต้องแก้สื่อ�
     expect(hasCloseFormRevision(edited, detail)).toBe(true)
     expect(closeFormMissing(edited, detail)).toEqual(['CLOSE_PRODUCT_PHOTO_REQUIRED'])
     expect(canSubmitCloseForm(edited, detail)).toBe(false)
+  })
+
+  it('กดส่งตอนยังไม่แก้ ⇒ ข้อความสรุปบนฟอร์มบอกเหตุ ไม่เงียบ (mytester DO-04)', () => {
+    const form = closeFormFromDetail(detail)
+    expect(closeFormBlockers(form, detail)).toEqual(['CLOSE_NO_EVIDENCE_REVISION'])
+    expect(closeMissingSummary(closeFormBlockers(form, detail))).toBe(
+      'ยังขาด: แก้ไขรูป/วิดีโอ/เสียง/รูปสินค้าอย่างน้อย 1 รายการ',
+    )
+  })
+
+  it('โหมดปกติไม่มีเหตุ "ยังไม่ได้แก้" ปน', () => {
+    const normal = detailOf({ checkins: [checkin] })
+    const form = { ...closeFormFromDetail(normal), outcome: 'closed_success' as const }
+    expect(closeFormBlockers(form, normal)).toEqual(closeFormMissing(form, normal))
   })
 })
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   clampLatitude,
+  dragShiftLabel,
   formatCoordinates,
   metersPerPixel,
   panCenter,
@@ -63,5 +64,25 @@ describe('panCenter', () => {
 describe('formatCoordinates', () => {
   it('พิกัดบนหน้าจอเป็นทศนิยม 6 ตำแหน่งเสมอ', () => {
     expect(formatCoordinates({ latitude: 13.7, longitude: 100 })).toBe('13.700000, 100.000000')
+  })
+})
+
+describe('dragShiftLabel (mytester DI-02)', () => {
+  it('ลากไม่ถึงเกณฑ์ ⇒ null (ไม่บอกระยะ)', () => {
+    expect(dragShiftLabel(BANGKOK, 15, 2, -3)).toBeNull()
+  })
+
+  it('ลากพื้นลง ⇒ หมุดไปทางเหนือ · ระยะตามเมตรต่อพิกเซล ปัดหลักสิบ', () => {
+    const meters = 100 * metersPerPixel(BANGKOK.latitude, 15)
+    expect(dragShiftLabel(BANGKOK, 15, 0, 100)).toBe(`หมุดขยับ ~${Math.round(meters / 10) * 10} ม. ไปทางเหนือ`)
+  })
+
+  it('ลากพื้นไปขวา ⇒ หมุดไปทางตะวันตก · ลากซ้ายขึ้น ⇒ ตะวันออกเฉียงใต้', () => {
+    expect(dragShiftLabel(BANGKOK, 15, 50, 0)).toMatch(/ไปทางตะวันตก$/)
+    expect(dragShiftLabel(BANGKOK, 15, -50, -50)).toMatch(/ไปทางตะวันออกเฉียงใต้$/)
+  })
+
+  it('ไกลเกิน 1 กม. แสดงเป็นกิโลเมตร', () => {
+    expect(dragShiftLabel(BANGKOK, 15, 0, -1000)).toMatch(/^หมุดขยับ ~\d+\.\d กม\. ไปทางใต้$/)
   })
 })

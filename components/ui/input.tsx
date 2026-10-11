@@ -10,8 +10,9 @@ import { cn } from '@/components/ui/cn'
  */
 
 // จอสัมผัสใช้ 16px — iOS Safari ซูมทั้งหน้าทุกครั้งที่ focus ช่องที่เล็กกว่า 16px (preship PS-019)
+// + สูงอย่างน้อย 44px ให้แตะได้แม่นบนมือถือ (mytester DI-04/PT-05) — ใช้ pointer-coarse ⇒ desktop ที่ใช้เมาส์หน้าตาเดิม
 const FIELD_CLASS =
-  'focus-ring w-full rounded-lg border border-slate-300 px-3 py-2 text-sm pointer-coarse:text-base disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400'
+  'focus-ring w-full rounded-lg border border-slate-300 px-3 py-2 text-sm pointer-coarse:min-h-11 pointer-coarse:text-base disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400'
 const ERROR_CLASS = 'border-red-300 bg-red-50'
 
 export function Label({
@@ -104,7 +105,7 @@ export function Select({ invalid = false, className, children, ...rest }: Select
   return (
     <select
       aria-invalid={invalid || undefined}
-      className={cn(FIELD_CLASS, 'bg-white pointer-coarse:min-h-11', invalid && ERROR_CLASS, className)}
+      className={cn(FIELD_CLASS, 'bg-white', invalid && ERROR_CLASS, className)}
       {...rest}
     >
       {children}

@@ -6,6 +6,7 @@ import {
   assertLotMutable,
   canConfirmLot,
   initialLotStatus,
+  isLotConfirmedElsewhere,
   LOT_STATUSES,
   lotTab,
   missingLotDocuments,
@@ -119,5 +120,13 @@ describe('assertLotDeliveredAt (staging E-007)', () => {
     expect(codeOf(() => assertLotDeliveredAt(new Date('2025-10-09T03:00:00Z'), { now, lotCreatedAt }))).toBe(
       'LOT_DELIVERED_AT_BEFORE_LOT',
     )
+  })
+})
+
+describe('isLotConfirmedElsewhere (mytester WH-03)', () => {
+  it('LOT_ALREADY_CONFIRMED เท่านั้นที่ถือว่ามีคนยืนยันไปก่อน ⇒ ปิดหน้าต่าง + รีเฟรช', () => {
+    expect(isLotConfirmedElsewhere('LOT_ALREADY_CONFIRMED')).toBe(true)
+    expect(isLotConfirmedElsewhere('CONFIRM_TRANSACTION_FAILED')).toBe(false)
+    expect(isLotConfirmedElsewhere(undefined)).toBe(false)
   })
 })

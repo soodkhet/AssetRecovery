@@ -85,7 +85,7 @@ export function AdvanceFormModal({ open, onClose, onCreated }: {
     <Modal
       open
       onClose={onClose}
-      title="ขอเบิกเงินทดรองจ่าย (Advance Request)"
+      title="ขอเบิกเงินทดรองจ่าย"
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>

@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { cn } from '@/components/ui/cn'
+import { findDuplicateToast } from '@/components/ui/toast-dedupe'
 import { SESSION_EXPIRED_EVENT } from '@/lib/api/session-expiry'
 
 /**
@@ -54,11 +55,14 @@ export function ToastProvider({
   const [toasts, setToasts] = useState<readonly Toast[]>([])
   const nextId = useRef(1)
   const sessionLostAt = useRef<number | null>(null)
+  /** ค่าล่าสุดแบบ sync — คำขอสองตัวล้มใน tick เดียวกัน state ยังไม่ทันอัปเดต (ใช้ตรวจข้อความซ้ำ) */
+  const toastsRef = useRef<readonly Toast[]>([])
 
   useEffect(() => {
     const onSessionLost = () => {
       sessionLostAt.current = Date.now()
       // toast error ที่ขึ้นก่อน event (คำขอที่ตอบ 401 ก่อนหน้าเล็กน้อย) ก็เก็บออก
+      toastsRef.current = toastsRef.current.filter((toast) => toast.tone !== 'error')
       setToasts((current) => current.filter((toast) => toast.tone !== 'error'))
     }
     window.addEventListener(SESSION_EXPIRED_EVENT, onSessionLost)
@@ -66,6 +70,7 @@ export function ToastProvider({
   }, [])
 
   const dismissToast = useCallback((id: number) => {
+    toastsRef.current = toastsRef.current.filter((toast) => toast.id !== id)
     setToasts((current) => current.filter((toast) => toast.id !== id))
   }, [])
 
@@ -74,6 +79,10 @@ export function ToastProvider({
       const id = nextId.current++
       const lostAt = sessionLostAt.current
       if (tone === 'error' && lostAt !== null && Date.now() - lostAt < SESSION_LOST_TOAST_QUIET_MS) return id
+      // ข้อความเดียวกันที่ยังแสดงอยู่ ⇒ ไม่ซ้อนกล่องที่สอง (mytester DO-05)
+      const duplicate = findDuplicateToast(toastsRef.current, { tone, title, description })
+      if (duplicate !== null) return duplicate
+      toastsRef.current = [...toastsRef.current, { id, tone, title, description }]
       setToasts((current) => [...current, { id, tone, title, description }])
       if (durationMs > 0) {
         window.setTimeout(() => dismissToast(id), durationMs)
