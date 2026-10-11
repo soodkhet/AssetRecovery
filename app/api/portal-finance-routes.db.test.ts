@@ -612,7 +612,8 @@ suite('GET /api/portal/reports/*', () => {
     )
     expect(dto.months).toHaveLength(6)
     // รายได้ในรอบ draft ไม่รั่ว แต่เคส CO1 ที่ปิดไม่สำเร็จในช่วงเข้าตัวหาร % สำเร็จ (มติ PO U55 — นิยามเดียวกับ F2)
-    expect(dto.total).toMatchObject({ revenueSatang: 1_000_000, caseCount: 1, successCount: 1, failCount: 1, successPct: 50 })
+    // mytester G-09 — "เคสทั้งหมด" = เคสปิดไม่ซ้ำ (สำเร็จที่มีรายได้ 1 + ไม่สำเร็จ 1) ⇒ ทั้งหมด ≥ สำเร็จ + ไม่สำเร็จ
+    expect(dto.total).toMatchObject({ revenueSatang: 1_000_000, caseCount: 2, successCount: 1, failCount: 1, successPct: 50 })
     expect(dto.months.at(-1)?.revenueSatang).toBe(1_000_000)
     expect(dto.months.slice(0, 5).every((month) => month.revenueSatang === 0)).toBe(true)
     expect(forbiddenKeysIn(dto)).toEqual([])
