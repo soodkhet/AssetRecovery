@@ -5,6 +5,7 @@ import { documentedAmountsForBatches, documentedRevenueAmounts } from '@/lib/por
 import type { PortalContext } from '@/lib/portal/guard'
 import { portalRevenueMonths } from '@/lib/portal/report-range'
 import {
+  portalClosedCaseCounts,
   serializePortalArAging,
   serializePortalBillingBatches,
   serializePortalRevenueSummary,
@@ -69,12 +70,22 @@ export async function listPortalBillingBatches(ctx: PortalContext): Promise<Port
       dueDate: true,
       sentAt: true,
       // จำนวนเคสในรอบ (มติ U62) = รายการรายได้ที่ผูกรอบนี้ (1 เคส 1 รายการ — trigger idempotent ต่อเคส)
-      _count: { select: { revenues: { where: { deletedAt: null } } } },
+      // mytester G-04 — หนังสือ 50 ทวิ ที่ยังรอจากบริษัท (บันทึกรับแล้ว = ไม่ขอซ้ำ)
+      _count: {
+        select: {
+          revenues: { where: { deletedAt: null } },
+          customerWhtCertificates: { where: { deletedAt: null, status: 'pending' } },
+        },
+      },
     },
     orderBy: [{ dueDate: 'desc' }, { createdAt: 'desc' }],
     take: LIST_LIMIT,
   })
-  const withCounts = rows.map(({ _count, ...row }) => ({ ...row, caseCount: _count.revenues }))
+  const withCounts = rows.map(({ _count, ...row }) => ({
+    ...row,
+    caseCount: _count.revenues,
+    customerWhtCertificatePending: _count.customerWhtCertificates > 0,
+  }))
   return serializePortalBillingBatches(await withDocumentedTotals(ctx, withCounts))
 }
 
@@ -228,7 +239,14 @@ export async function getPortalRevenueSummary(
     loadRevenueFailCases(ctx.user.organizationId, 'month', range, null, { companyId: ctx.companyId }),
   ])
   const report = buildRevenueSummary({ groupBy: 'month', entries, previousEntries, failCases })
-  return serializePortalRevenueSummary({ report, months, rangeStart: range.startDate, rangeEnd: range.endDate })
+  return serializePortalRevenueSummary({
+    report,
+    months,
+    rangeStart: range.startDate,
+    rangeEnd: range.endDate,
+    // mytester G-09 — "เคสทั้งหมด" = เคสปิดไม่ซ้ำ (รวมเคสไม่สำเร็จที่ไม่คิดเงิน)
+    closedCaseCounts: portalClosedCaseCounts(entries, failCases),
+  })
 }
 
 // ── GET /api/portal/reports/ar-aging ────────────────────────────────────────

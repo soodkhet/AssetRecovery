@@ -24,12 +24,14 @@ import type { PayoutSummaryDoc } from '@/lib/payout/payout-doc'
  */
 
 const COLUMNS: readonly DocColumn[] = [
-  { label: 'ลำดับ', width: '6%', align: 'center' },
-  { label: 'ชื่อผู้รับเงิน', width: '21%' },
-  { label: 'ค่าตอบแทน', width: '14%', align: 'right' },
-  { label: 'ภาษีที่บริษัทออกให้', width: '17%', align: 'right' },
-  { label: 'หักภาษี ณ ที่จ่าย', width: '14%', align: 'right' },
-  { label: 'หักคืนเงินทดรอง', width: '14%', align: 'right' },
+  { label: 'ลำดับ', width: '5%', align: 'center' },
+  { label: 'ชื่อผู้รับเงิน', width: '19%' },
+  { label: 'ค่าตอบแทน', width: '12%', align: 'right' },
+  // mytester F-04 — เงินทดรองไม่ใช่เงินได้ ⇒ แยกคอลัมน์จากค่าตอบแทน
+  { label: 'เงินทดรองจ่าย', width: '12%', align: 'right' },
+  { label: 'ภาษีที่บริษัทออกให้', width: '13%', align: 'right' },
+  { label: 'หักภาษี ณ ที่จ่าย', width: '12%', align: 'right' },
+  { label: 'หักคืนเงินทดรอง', width: '13%', align: 'right' },
   { label: 'โอนสุทธิ', width: '14%', align: 'right' },
 ]
 
@@ -63,7 +65,7 @@ export function PayoutBatchSummary({ doc, letterhead }: { doc: PayoutSummaryDoc;
           <Meta label="ประเภท" value={doc.sideLabel} />
           <Meta label="จำนวนรายการ" value={doc.itemCountText} />
           <Meta label="ไฟล์โอน" value={doc.paymentFileLabel} />
-          <Meta label="Idempotency Key" value={doc.idempotencyKey} />
+          <Meta label="รหัสกันโอนซ้ำ" value={doc.idempotencyKey} />
         </View>
 
         <DocTable columns={COLUMNS}>
@@ -75,6 +77,7 @@ export function PayoutBatchSummary({ doc, letterhead }: { doc: PayoutSummaryDoc;
                 { main: String(row.no) },
                 { main: row.payeeName, detail: `${row.teamName} · ${row.itemCountText}` },
                 { main: row.compensationText },
+                { main: row.advancePaidText },
                 { main: row.whtPaidByPayerText },
                 { main: row.whtWithheldText },
                 { main: row.offsetCellText },
@@ -89,6 +92,7 @@ export function PayoutBatchSummary({ doc, letterhead }: { doc: PayoutSummaryDoc;
               { main: '' },
               { main: 'รวม :' },
               { main: doc.totalCompensationText },
+              { main: doc.totalAdvancePaidText },
               { main: doc.totalWhtPaidByPayerText },
               { main: doc.totalWhtWithheldText },
               { main: doc.totalOffsetCellText },

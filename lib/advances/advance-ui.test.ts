@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { advanceListQuerySchema } from '@/lib/advances/schemas'
 import {
   advanceCardAmounts,
+  advanceClearReviewWarning,
   advanceRequestErrorText,
   ADVANCE_STATUS_LABEL,
   advanceStatusBadgeGroup,
@@ -274,5 +275,34 @@ describe('advanceCardAmounts (staging E-053)', () => {
       headlineSatang: 300_000,
       requestedNoteSatang: null,
     })
+  })
+})
+
+describe('คำเตือนก่อน "ตรวจแล้ว" การเคลียร์ (mytester F-07)', () => {
+  const crt = {
+    id: 'crt-1',
+    receiptNumber: 'CRT-2569-0001',
+    status: 'pending_signature' as const,
+    totalSatang: 40_000,
+    issueDate: '2026-10-11',
+    signedAt: null,
+    cancelledAt: null,
+    cancelReason: null,
+    replacesReceiptNumber: null,
+    cancelledHistory: [],
+  }
+
+  it('ใบรับรองยังรอฉบับเซ็น ⇒ เตือนพร้อมเลข CRT', () => {
+    const warning = advanceClearReviewWarning(advance({ status: 'cleared', substituteReceipt: crt }))
+    expect(warning).toContain('CRT-2569-0001')
+    expect(warning).toContain('ฉบับเซ็น')
+  })
+
+  it('ไม่มีใบรับรอง / เซ็นแล้ว / ยกเลิกแล้ว ⇒ ไม่เตือน', () => {
+    expect(advanceClearReviewWarning(advance({ substituteReceipt: null }))).toBeNull()
+    expect(
+      advanceClearReviewWarning(advance({ substituteReceipt: { ...crt, status: 'signed', signedAt: '2026-10-11T03:00:00Z' } })),
+    ).toBeNull()
+    expect(advanceClearReviewWarning(advance({ substituteReceipt: { ...crt, status: 'cancelled' } }))).toBeNull()
   })
 })

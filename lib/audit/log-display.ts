@@ -283,3 +283,47 @@ export function auditValueText(value: unknown, field?: string): string {
   if (typeof value === 'number' || typeof value === 'boolean') return String(value)
   return JSON.stringify(value)
 }
+
+/**
+ * mytester H-06 — ชื่อฟิลด์ภาษาไทยในตาราง "ค่าก่อน / หลัง" (ชื่อคอลัมน์ภายในเช่น `authorize_note`/`period_id`)
+ * ฟิลด์ที่ไม่อยู่ในรายการ ⇒ คืนชื่อเดิม (ผู้ตรวจยังอ่านเทียบกับระบบได้)
+ */
+const AUDIT_FIELD_LABEL: Readonly<Record<string, string>> = {
+  status: 'สถานะ',
+  level: 'ระดับ',
+  reason: 'เหตุผล',
+  note: 'หมายเหตุ',
+  title: 'หัวข้อ',
+  description: 'รายละเอียด',
+  period_id: 'รอบบัญชี',
+  authorize_note: 'เหตุผลที่อนุมัติยกเว้น',
+  authorized_at: 'เวลาอนุมัติยกเว้น',
+  authorized_by: 'ผู้อนุมัติยกเว้น',
+  resolution_note: 'หมายเหตุการแก้ไข',
+  resolved_at: 'เวลาแก้ไข',
+  resolved_by: 'ผู้แก้ไข',
+  source_module: 'โมดูลต้นทาง',
+  amount_satang: 'ยอดเงิน',
+  match_note: 'หมายเหตุการจับคู่',
+  rejection_reason: 'เหตุผลที่ปฏิเสธ',
+  cancel_reason: 'เหตุผลที่ยกเลิก',
+}
+
+export function auditFieldLabel(field: string): string {
+  return AUDIT_FIELD_LABEL[field] ?? field
+}
+
+/** ค่าสถานะ/ระดับของข้อยกเว้นเป็นข้อความไทย (mytester H-06 — เดิมแสดง `open → authorized`) */
+const EXCEPTION_VALUE_LABEL: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  status: { open: 'เปิดอยู่', authorized: 'อนุมัติยกเว้นแล้ว', resolved: 'แก้ไขแล้ว' },
+  level: { critical: 'ต้องแก้ก่อนปิดงวด', warning: 'ควรแก้ไข', info: 'ข้อมูลทั่วไป' },
+}
+
+/** `auditValueText()` + แปลค่า enum ของเป้าหมายที่รู้จัก (ตอนนี้: ข้อยกเว้น) */
+export function auditValueDisplay(value: unknown, field: string, targetType: string | null): string {
+  if (targetType === 'exceptions' && typeof value === 'string') {
+    const label = EXCEPTION_VALUE_LABEL[field]?.[value]
+    if (label !== undefined) return label
+  }
+  return auditValueText(value, field)
+}

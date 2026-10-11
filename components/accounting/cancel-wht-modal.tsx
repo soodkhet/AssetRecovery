@@ -50,7 +50,7 @@ export function CancelWhtModal({
       title: `ยกเลิก ${certificate.certificateNumber} แล้ว`,
       description:
         replacement === null
-          ? 'ยอดของใบนี้ถูกตัดออกจาก ภ.ง.ด.3/53 ของรอบแล้ว'
+          ? 'ยอดของใบนี้ถูกตัดออกจาก ภ.ง.ด.1/3/53 ของรอบแล้ว'
           : `ออกใบแทนเลขที่ ${replacement.certificateNumber} เรียบร้อย`,
     })
     onCancelled()
@@ -116,7 +116,7 @@ export function CancelWhtModal({
         </label>
 
         <InlineAlert tone="error" title="การยกเลิกเป็นสถานะสุดท้าย">
-          ห้ามลบและห้ามย้อนกลับ — ยอดของใบนี้จะไม่ถูกนับใน ภ.ง.ด.3/53 ของรอบทันที
+          ห้ามลบและห้ามย้อนกลับ — ยอดของใบนี้จะไม่ถูกนับใน ภ.ง.ด.1/3/53 ของรอบทันที
         </InlineAlert>
       </div>
     </Modal>

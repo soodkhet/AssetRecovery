@@ -1,8 +1,9 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
 import { Button, InlineAlert, LoadingState, Modal } from '@/components/ui'
-import { readinessDescription } from '@/lib/accounting/period'
+import { READINESS_CHECK_LINK, readinessDescription } from '@/lib/accounting/period'
 import type { AccountingPeriodDto, PeriodReadinessDto } from '@/lib/accounting/types'
 import { callApi } from '@/lib/api/types'
 import { fmtDate } from '@/lib/format/datetime'
@@ -110,6 +111,15 @@ export function ReadinessModal({
                     {check.label}
                   </div>
                   <p className="mt-0.5 text-xs text-slate-500">{check.detail}</p>
+                  {/* mytester H-05 — เงื่อนไขที่ไม่ผ่านพาไปหน้าที่ต้องแก้ได้ทันที */}
+                  {!check.passed && READINESS_CHECK_LINK[check.key] !== null && (
+                    <Link
+                      href={READINESS_CHECK_LINK[check.key]?.href ?? '#'}
+                      className="mt-1 inline-block text-xs font-semibold text-blue-700 underline-offset-2 hover:underline"
+                    >
+                      {READINESS_CHECK_LINK[check.key]?.label} →
+                    </Link>
+                  )}
                 </div>
               </li>
             ))}

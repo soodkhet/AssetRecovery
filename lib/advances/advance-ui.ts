@@ -189,6 +189,17 @@ export function canReviewAdvanceClear(advance: Pick<AdvanceDto, 'status' | 'clea
 }
 
 /**
+ * mytester F-07 — คำเตือนก่อนกด "ตรวจแล้ว" เมื่อใบรับรองแทนใบเสร็จของการเคลียร์ยังไม่มีฉบับเซ็น
+ * (`15` §9.4 บังคับฉบับเซ็นเฉพาะก่อนอนุมัติใบเบิก — การเคลียร์เงินทดรองยังไม่กำหนด ⇒ เตือน ไม่บล็อก · รอมติ PO)
+ * ไม่มีใบรับรอง / ยกเลิกแล้ว / เซ็นแล้ว = `null`
+ */
+export function advanceClearReviewWarning(advance: Pick<AdvanceDto, 'substituteReceipt'>): string | null {
+  const receipt = advance.substituteReceipt
+  if (receipt === null || receipt.status !== 'pending_signature') return null
+  return `ใบรับรองแทนใบเสร็จ ${receipt.receiptNumber} ยังไม่ได้อัปโหลดฉบับเซ็น — ตรวจแล้วจะตีกลับการเคลียร์นี้ไม่ได้ ควรรอฉบับเซ็นก่อน`
+}
+
+/**
  * staging E-053 — ตัวเลขหลักบนการ์ดเงินทดรอง (มือถือ) = ยอดที่อนุมัติ (เงินที่ได้รับจริง) · ยังไม่อนุมัติ = ยอดที่ขอ
  * บรรทัดรอง "ขอ ฿…" แสดงเมื่อยอดอนุมัติต่างจากยอดที่ขอ
  */

@@ -229,7 +229,7 @@ export function duplicatePaymentFileWarning(previousGeneratedAt: Date): ApiWarni
   return {
     code: 'DUPLICATE_PAYMENT_FILE',
     title: 'รอบจ่ายนี้เคยสร้างไฟล์โอนแล้ว',
-    message: `Batch นี้สร้างไฟล์โอนไปแล้วเมื่อ ${fmtDateTime(previousGeneratedAt)} — ไฟล์ใหม่ใช้ Idempotency Key เดิม ตรวจสอบให้แน่ใจว่ายังไม่ได้อัปโหลดไฟล์เดิมเข้าระบบธนาคาร`,
+    message: `รอบจ่ายนี้สร้างไฟล์โอนไปแล้วเมื่อ ${fmtDateTime(previousGeneratedAt)} — ไฟล์ใหม่ใช้รหัสกันโอนซ้ำชุดเดิม ตรวจสอบให้แน่ใจว่ายังไม่ได้อัปโหลดไฟล์เดิมเข้าระบบธนาคาร`,
   }
 }
 
@@ -301,4 +301,27 @@ export function payoutItemTrackingRound(row: {
   case?: { trackingRound: number } | null
 }): number {
   return row.assignment?.trackingRound ?? row.case?.trackingRound ?? 1
+}
+
+/**
+ * mytester F-04 — ยอดเงินทดรองจ่ายในชุดรายการ (Σ gross ของรายการที่มาจากเงินทดรอง)
+ * เงินทดรองไม่ใช่เงินได้ ⇒ หน้าจอ/สรุปรอบแสดงแยกจาก "ค่าตอบแทน" · รายการเงินทดรองไม่มี WHT
+ * (`payoutItemTaxSplit()` นับ gross ของเงินทดรองเป็น compensation ⇒ ค่าตอบแทนจริง = compensation − ยอดนี้)
+ */
+export function payoutAdvancePaidSatang(items: ReadonlyArray<{ isAdvance: boolean; grossSatang: number }>): number {
+  return items.reduce((sum, item) => (item.isAdvance ? sum + item.grossSatang : sum), 0)
+}
+
+/**
+ * mytester F-08 (ชื่อฟิลด์ใน toast) — ช่องบัญชีผู้รับที่ยังขาดตอนสร้างไฟล์โอน ในรูป `fields: { ช่อง: ข้อความไทย }`
+ * (array ของชื่อช่องถูกต่อท้าย toast เป็นชื่อฟิลด์ภายใน "bank_name · account_number")
+ */
+export function missingPayeeBankFields(input: {
+  bankCode: string | null
+  accountNumber: string | null
+}): Record<string, string> {
+  return {
+    ...(input.bankCode === null ? { bank_name: 'ยังไม่ได้ระบุธนาคารของผู้รับ (หรือธนาคารที่ระบุไม่รองรับในไฟล์โอน)' } : {}),
+    ...(input.accountNumber === null ? { account_number: 'ยังไม่ได้กรอกเลขบัญชีของผู้รับ' } : {}),
+  }
 }

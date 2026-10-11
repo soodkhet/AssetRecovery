@@ -153,6 +153,10 @@ describe('billingCustomerWhtLines — ภาษีที่ลูกค้าห
     expect(full.paymentChannelText).toBe('โอนเข้าบัญชี ธนาคารกสิกรไทย · เลขที่บัญชี 123-4-56789-0')
     expect(full.customerWht?.whtText).toBe('(30.00)')
     expect(full.signers).toEqual(['ผู้วางบิล / ผู้ให้บริการ', 'ผู้รับวางบิล / ลูกค้า'])
+    // mytester G-04 — ขอ 50 ทวิ เฉพาะลูกค้าที่หักภาษี
+    expect(full.footnote).toContain('หนังสือรับรองการหักภาษี')
+    expect(plain.footnote).not.toContain('หนังสือรับรองการหักภาษี')
+    expect(buildBillingInvoiceDoc({ ...base, customerWhtPct: null }).footnote).not.toContain('หนังสือรับรอง')
   })
 })
 

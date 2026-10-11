@@ -30,7 +30,7 @@ const HTTP_STATUS: Record<FinanceErrorCode, number> = {
 const MESSAGES: Record<FinanceErrorCode, ErrorMessage> = {
   APPROVAL_STEP_OUT_OF_ORDER: {
     title: 'อนุมัติข้ามขั้น',
-    message: 'รายการนี้ยังไม่ถึงขั้นอนุมัติของคุณ — ต้องผ่านขั้นก่อนหน้าให้ครบก่อน',
+    message: 'รายการนี้ไม่ได้รออยู่ที่ขั้นอนุมัติของคุณ — ยังไม่ผ่านขั้นก่อนหน้า หรือขั้นของคุณอนุมัติไปแล้ว',
   },
   SEGREGATION_OF_DUTIES_VIOLATION: {
     title: 'ผู้อนุมัติซ้ำคนเดิม',
@@ -51,8 +51,13 @@ export function financeErrorMessage(code: FinanceErrorCode): ErrorMessage {
 }
 
 export class FinanceError extends ModuleError<FinanceErrorCode> {
-  constructor(code: FinanceErrorCode, options?: { detail?: string; context?: Record<string, unknown> }) {
-    super(code, MESSAGES[code], HTTP_STATUS[code], options)
+  /** `message` = ข้อความไทยเฉพาะเหตุ (แทนข้อความกลางของ code — mytester G-06) */
+  constructor(
+    code: FinanceErrorCode,
+    options?: { detail?: string; context?: Record<string, unknown>; message?: string },
+  ) {
+    const base = MESSAGES[code]
+    super(code, options?.message === undefined ? base : { ...base, message: options.message }, HTTP_STATUS[code], options)
     this.name = 'FinanceError'
   }
 }

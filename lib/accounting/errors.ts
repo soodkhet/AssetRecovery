@@ -77,7 +77,7 @@ const MESSAGES: Record<AccountingErrorCode, ErrorMessage> = {
   },
   NOT_READY_CRITICAL_OPEN: {
     title: 'ยังมีข้อยกเว้นระดับวิกฤตค้างอยู่',
-    message: 'ปิดงวดไม่ได้ — ต้องแก้ไขข้อยกเว้นระดับวิกฤต (critical) ที่ยังเปิดอยู่ให้หมดก่อน หรือให้ผู้บริหารอนุมัติยกเว้น',
+    message: 'ปิดงวดไม่ได้ — ต้องแก้ไขข้อยกเว้นระดับวิกฤตที่ยังเปิดอยู่ให้หมดก่อน หรือให้ผู้บริหารอนุมัติยกเว้น',
   },
   NOT_READY_RECONCILE_INCOMPLETE: {
     title: 'กระทบยอดธนาคารยังไม่ครบ',
@@ -105,7 +105,7 @@ const MESSAGES: Record<AccountingErrorCode, ErrorMessage> = {
   },
   EXPORT_BLOCKED_CRITICAL: {
     title: 'ส่งข้อมูลบัญชีไม่ได้',
-    message: 'ยังมีข้อยกเว้นระดับวิกฤต (critical) ที่เปิดอยู่ในรอบนี้ — แก้ไขให้เรียบร้อยหรือให้ผู้บริหารอนุมัติยกเว้นก่อน',
+    message: 'ยังมีข้อยกเว้นระดับวิกฤตที่เปิดอยู่ในรอบนี้ — แก้ไขให้เรียบร้อยหรือให้ผู้บริหารอนุมัติยกเว้นก่อน',
   },
   ACCOUNTANT_QUESTION_NOT_FOUND: {
     title: 'ไม่พบข้อซักถาม',

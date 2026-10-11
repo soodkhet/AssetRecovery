@@ -9,6 +9,7 @@ import {
   canTransitionException,
   exceptionActionsFor,
   EXCEPTION_TRANSITIONS,
+  sortExceptionsForDisplay,
   summarizeExceptions,
   type BlockingException,
   type ExceptionRow,
@@ -145,5 +146,18 @@ describe('ปุ่มบนแถวข้อยกเว้น (`34` §8)', ()
       canAuthorize: false,
     })
     expect(exceptionActionsFor('authorized', accountant).canEdit).toBe(false)
+  })
+})
+
+describe('mytester H-06 — ลำดับแสดงข้อยกเว้น', () => {
+  it('เปิดอยู่ก่อน · วิกฤตก่อนควรแก้ไข · ใหม่ก่อน', () => {
+    const at = (iso: string) => new Date(iso)
+    const rows = [
+      { id: 'w-new', status: 'open' as const, level: 'warning' as const, createdAt: at('2026-10-11T05:00:00Z') },
+      { id: 'c-old', status: 'open' as const, level: 'critical' as const, createdAt: at('2026-10-01T05:00:00Z') },
+      { id: 'c-auth', status: 'authorized' as const, level: 'critical' as const, createdAt: at('2026-10-12T05:00:00Z') },
+      { id: 'c-new', status: 'open' as const, level: 'critical' as const, createdAt: at('2026-10-10T05:00:00Z') },
+    ]
+    expect(sortExceptionsForDisplay(rows).map((row) => row.id)).toEqual(['c-new', 'c-old', 'w-new', 'c-auth'])
   })
 })

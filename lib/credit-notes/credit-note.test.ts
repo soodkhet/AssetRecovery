@@ -10,6 +10,7 @@ import {
   assertWithinInvoiceBalance,
   expectedCreditNoteVat,
   isAwaitingCreditNote,
+  isCreditNoteBlockedByOutstanding,
   maxCreditNoteTotalSatang,
   netInvoiceAmounts,
   requireCreditNoteCancelReason,
@@ -208,5 +209,14 @@ describe('adjustmentAmountMismatch — staging E-063', () => {
     expect(adjustmentAmountMismatch(10_000, null)).toBeNull()
     expect(adjustmentAmountMismatch(null, 10_000)).toBeNull()
     expect(adjustmentAmountMismatch(9_000, 10_000)).toEqual({ amountSatang: 9_000, adjustmentSatang: 10_000 })
+  })
+})
+
+describe('mytester G-10 — ปิดปุ่มบันทึกใบลดหนี้เมื่อลดได้สูงสุด ฿0', () => {
+  it('ใบลดหนี้ + ลดได้ 0 ⇒ บล็อก · ใบเพิ่มหนี้/ยังไม่รู้ยอดค้าง/ลดได้ > 0 ⇒ ไม่บล็อก', () => {
+    expect(isCreditNoteBlockedByOutstanding('credit', 0)).toBe(true)
+    expect(isCreditNoteBlockedByOutstanding('debit', 0)).toBe(false)
+    expect(isCreditNoteBlockedByOutstanding('credit', null)).toBe(false)
+    expect(isCreditNoteBlockedByOutstanding('credit', 15_000)).toBe(false)
   })
 })

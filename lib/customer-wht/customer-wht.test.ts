@@ -157,7 +157,9 @@ describe('U40/U41 — ปลายทางอัปโหลด (server ปร�
   it('path ของ target + อ่านเจ้าของจาก path ได้', () => {
     const cert = uploadTargetSchema.parse({ kind: 'customer_wht', certificateId: CERT_ID })
     const certPath = uploadTargetPath(cert, 'user', 'scan.PDF', 'k1')
-    expect(certPath).toBe(`customer-wht/${CERT_ID}/k1.pdf`)
+    // mytester H-07 — เก็บชื่อไฟล์เดิมต่อท้าย uuid (ชื่อไทยล้วน ⇒ รูปเดิม)
+    expect(certPath).toBe(`customer-wht/${CERT_ID}/k1-scan.pdf`)
+    expect(uploadTargetPath(cert, 'user', 'หนังสือ.pdf', 'k3')).toBe(`customer-wht/${CERT_ID}/k3.pdf`)
     expect(parseStoragePath(certPath)).toEqual({ kind: 'customer_wht', certificateId: CERT_ID })
 
     const refund = uploadTargetSchema.parse({ kind: 'bank_refund', transactionId: TX_ID })

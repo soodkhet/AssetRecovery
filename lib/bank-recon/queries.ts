@@ -7,6 +7,8 @@ import {
   allowedTargetKind,
   PROPOSAL_MATCH_NOTE,
   alreadyMatchedWithText,
+  billingMatchUnavailableMessage,
+  payoutUnmatchedSatang,
   canMoveToSuspense,
   debitNoteReferenceDate,
   findAutoMatch,
@@ -437,7 +439,11 @@ export async function listMatchCandidates(
     label: candidate.ref,
     amountSatang: candidate.amountSatang,
     altAmountSatang: candidate.altAmountSatang,
-    remainingAmountSatang: candidate.remainingAmountSatang ?? null,
+    // mytester G-07 — รอบจ่ายที่จับคู่ไปบางส่วนแล้ว ⇒ บอกยอดที่ยังไม่จับคู่ (แสดงผลเท่านั้น — ไม่เปลี่ยนเกณฑ์ยอดตรง)
+    remainingAmountSatang:
+      candidate.kind === 'payout'
+        ? payoutUnmatchedSatang(candidate.amountSatang, candidate.matchedTransactions, query.transactionId)
+        : (candidate.remainingAmountSatang ?? null),
     remainingAltAmountSatang: candidate.remainingAltAmountSatang ?? null,
     referenceDate: candidate.referenceDate?.toISOString() ?? null,
     exactAmount: isExactMatchAmount(transaction.amountSatang, candidate),
@@ -1155,9 +1161,22 @@ export async function matchBankTransaction(
   const candidates = await loadCandidates(ctx.actor.organizationId, input.targetKind)
   const candidate = candidates.find((item) => item.id === input.targetId)
   if (candidate === undefined) {
-    throw input.targetKind === 'billing'
-      ? new RevenueError('BILLING_BATCH_NOT_FOUND', { detail: `batch=${input.targetId}` })
-      : new PayoutError('PAYOUT_BATCH_NOT_FOUND', { detail: `batch=${input.targetId}` })
+    if (input.targetKind === 'billing') {
+      // mytester G-13 — รอบมีอยู่จริงแต่จับคู่ไม่ได้ (ชำระครบ/ยังเป็นร่าง) ⇒ บอกเหตุจริงแทน "ไม่พบ"
+      const existing = await prisma.billingBatch.findFirst({
+        where: { id: input.targetId, organizationId: ctx.actor.organizationId, deletedAt: null },
+        select: { status: true, batchNumber: true },
+      })
+      const unavailable = existing === null ? null : billingMatchUnavailableMessage(existing.status, existing.batchNumber)
+      if (unavailable !== null) {
+        throw new RevenueError('BILLING_BATCH_INVALID_STATUS', {
+          detail: `batch=${input.targetId} status=${existing?.status ?? '-'}`,
+          message: unavailable,
+        })
+      }
+      throw new RevenueError('BILLING_BATCH_NOT_FOUND', { detail: `batch=${input.targetId}` })
+    }
+    throw new PayoutError('PAYOUT_BATCH_NOT_FOUND', { detail: `batch=${input.targetId}` })
   }
 
   const exactAmount = isExactMatchAmount(transaction.amountSatang, candidate)

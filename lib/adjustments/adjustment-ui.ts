@@ -103,3 +103,13 @@ export function canFillAdjustmentApproval(
   if (session.isSuperadmin) return true
   return missingApproverRoles.includes(session.roleName.trim())
 }
+
+/**
+ * mytester G-11 — ป้ายช่องยอดที่ปรับ: ฝั่งรายได้/รอบวางบิลเป็นยอด**ก่อน VAT** (ใบลด/เพิ่มหนี้เทียบมูลค่าก่อน VAT กับยอดนี้)
+ * · ฝั่งค่าใช้จ่าย/รอบจ่ายไม่มี VAT
+ */
+export function adjustmentAmountFieldLabel(targetType: 'revenue' | 'expense' | 'billing_batch' | 'payout_batch'): string {
+  return targetType === 'revenue' || targetType === 'billing_batch'
+    ? 'ยอดที่ปรับ (บาท ก่อน VAT — กรอกเป็นบวก)'
+    : 'ยอดที่ปรับ (บาท — กรอกเป็นบวก)'
+}

@@ -135,7 +135,7 @@ export function CreatePayoutModal({
     <Modal
       open
       onClose={onClose}
-      title="สร้างรอบจ่ายเงิน (Create Payout Batch)"
+      title="สร้างรอบจ่ายเงิน"
       description="ระบบรวบรวมรายการที่อนุมัติแล้วภายในวันตัดรอบให้อัตโนมัติ"
       footer={
         <>

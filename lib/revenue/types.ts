@@ -44,7 +44,10 @@ export interface BillingBatchDto {
   /** เช่น "มิถุนายน 2569" (พ.ศ.) */
   period: string
   status: BillingBatchStatus
+  /** ยอดตามใบแจ้งหนี้ที่ส่งจริง (ไม่รวมใบลด/เพิ่มหนี้) */
   totalSatang: number
+  /** mytester G-12 — ยอดตามเอกสาร (ใบแจ้งหนี้ − ใบลดหนี้ + ใบเพิ่มหนี้ · `19` §8) ตัวเดียวกับพอร์ทัล/AR */
+  documentedTotalSatang: number
   receivedSatang: number
   /** A1 — WHT ที่บริษัทไฟแนนซ์หักจากเรา (นับเป็นรับชำระแล้ว ไม่ใช่หนี้ค้าง) */
   whtWithheldByCustomerSatang: number
@@ -108,4 +111,16 @@ export interface ArAgingReportDto {
   buckets: ArAgingBucketDto[]
   companies: ArAgingCompanyDto[]
   totalOutstandingSatang: number
+}
+
+/** `GET /api/billing-batches/preview` (staging E-049 · mytester G-05) — สรุปก่อนกดสร้างรอบวางบิล */
+export interface BillingBatchPreviewDto {
+  /** รายได้ที่จะถูกดึงเข้ารอบ (revenue_date ≤ วันตัดรอบ) */
+  revenueCount: number
+  totalSatang: number
+  /** รายได้ที่รอวางบิลแต่อยู่หลังวันตัดรอบ (ยังไม่ถูกดึง — เลื่อนวันตัดรอบเพื่อรวม) */
+  laterRevenueCount: number
+  laterTotalSatang: number
+  /** `YYYY-MM-DD` วันที่รายได้ล่าสุดที่อยู่หลังวันตัดรอบ · ไม่มี = `null` */
+  laterLatestRevenueDate: string | null
 }

@@ -78,16 +78,16 @@ export function DashboardTab() {
       {dashboard.data.exceptions.critical > 0 && (
         <InlineAlert
           tone="error"
-          title={`มี ${fmtCount(dashboard.data.exceptions.critical)} Critical Exception ที่ยังเปิดอยู่`}
+          title={`มีข้อยกเว้นระดับวิกฤตที่ยังเปิดอยู่ ${fmtCount(dashboard.data.exceptions.critical)} รายการ`}
         >
-          ต้องแก้ไขหรือให้ผู้บริหารรับความเสี่ยงก่อน จึงจะ Export Accounting Pack ได้
+          ต้องแก้ไขหรือให้ผู้บริหารอนุมัติยกเว้นก่อน จึงจะส่งออกชุดเอกสารบัญชีได้
         </InlineAlert>
       )}
 
       <div>
         <h3 className="mb-2 flex items-center gap-2 text-sm font-bold text-slate-800">
           <span className="h-2 w-2 rounded-full bg-red-500" />
-          Alerts ที่ต้องจัดการ (Exceptions)
+          รายการที่ต้องจัดการ (ข้อยกเว้น)
         </h3>
 
         <div className="overflow-x-auto rounded-lg border border-slate-200">

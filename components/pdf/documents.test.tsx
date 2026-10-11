@@ -409,6 +409,7 @@ function batch(items: PayoutBatchItemDto[]): PayoutBatchDetailDto {
     advanceOffsetSatang: sum('advanceOffsetSatang'),
     transferSatang: sum('transferSatang'),
     ...sumPayoutTaxSplit(items),
+    advancePaidSatang: items.reduce((total, row) => (row.source === 'advance' ? total + row.grossSatang : total), 0),
     itemCount: items.length,
     bankAccountId: 'acc-1',
     bankAccountLabel: 'ธนาคารกสิกรไทย xxx-x-x6789-x',

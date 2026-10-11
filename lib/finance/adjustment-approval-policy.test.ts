@@ -5,10 +5,11 @@ import {
   assertApprovalLevelSufficient,
   EXECUTIVE_ROLE,
   FINANCE_ROLE,
+  missingApproverMessage,
   missingApproverRoles,
   requiresSeparateAuditEntry,
 } from '@/lib/finance/adjustment-approval-policy'
-import { isFinanceError } from '@/lib/finance/errors'
+import { FinanceError, isFinanceError } from '@/lib/finance/errors'
 import { PERIOD_LOCK_POLICY } from '@/lib/settings/period-lock'
 
 /** `20` §6.2 + §16 · `13` §6.11 — ระดับผู้อนุมัติ Adjustment ตามสถานะรอบบัญชีของรายการต้นทาง */
@@ -105,5 +106,21 @@ describe('actorFillsMissingRole (E-061)', () => {
 
   it('งวด locked: การเงินไม่นับ', () => {
     expect(actorFillsMissingRole('locked', [], [FINANCE_ROLE])).toBe(false)
+  })
+})
+
+describe('ข้อความเมื่อบทบาทผู้กดไม่ใช่ผู้อนุมัติที่ยังขาด (mytester G-06)', () => {
+  it('บอกบทบาทที่ต้องอนุมัติจริง ไม่พูดถึง "ระดับสูงกว่า"', () => {
+    const message = missingApproverMessage([FINANCE_ROLE])
+    expect(message).toContain(FINANCE_ROLE)
+    expect(message).not.toContain('สูงกว่า')
+  })
+
+  it('FinanceError รับข้อความเฉพาะเหตุแทนข้อความกลาง — code/status คงเดิม', () => {
+    const error = new FinanceError('INSUFFICIENT_APPROVAL_LEVEL', { message: missingApproverMessage([FINANCE_ROLE]) })
+    expect(error.code).toBe('INSUFFICIENT_APPROVAL_LEVEL')
+    expect(error.status).toBe(403)
+    expect(error.userMessage).toContain(FINANCE_ROLE)
+    expect(new FinanceError('INSUFFICIENT_APPROVAL_LEVEL').userMessage).toContain('ระดับสูงกว่า')
   })
 })

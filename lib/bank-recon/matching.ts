@@ -486,8 +486,8 @@ export const BANK_MATCH_STATUS_GROUP: Readonly<Record<BankMatchStatus, StatusBad
 }
 
 export const MATCH_TARGET_LABEL: Readonly<Record<MatchTargetKind, string>> = {
-  billing: 'รอบวางบิล (Billing Batch)',
-  payout: 'รอบจ่ายเงิน (Payout Batch)',
+  billing: 'รอบวางบิล',
+  payout: 'รอบจ่ายเงิน',
 }
 
 /** capability ของโมดูลนี้ (`25` §7.5 — บัญชีจัดการ · การเงินดูอย่างเดียว) */
@@ -519,4 +519,51 @@ export function suspenseRefundCloseNote(refunded: {
   if (refunded.refundDate !== null) parts.push(`คืนเมื่อ ${fmtDate(refunded.refundDate)}`)
   if (refunded.refundNote !== null && refunded.refundNote.trim() !== '') parts.push(`อ้างอิง ${refunded.refundNote.trim()}`)
   return parts.join(' · ')
+}
+
+/**
+ * mytester G-07 — ยอดของรอบจ่ายที่ยังไม่ถูกจับคู่ = ยอดโอนของรอบ − ผลรวมรายการเดินบัญชีอื่นที่จับคู่ไปแล้ว
+ * (ไม่นับรายการที่กำลังจับคู่อยู่เอง · ไม่ติดลบ) · ยังไม่มีรายการอื่นจับคู่ = `null` (ใช้ยอดเต็มของรอบ)
+ */
+export function payoutUnmatchedSatang(
+  amountSatang: number,
+  matched: readonly MatchedTransactionRef[] | undefined,
+  currentTransactionId: string,
+): number | null {
+  const others = (matched ?? []).filter((entry) => entry.id !== currentTransactionId)
+  if (others.length === 0) return null
+  const matchedSatang = others.reduce((sum, entry) => sum + Math.abs(entry.amountSatang), 0)
+  return Math.max(0, amountSatang - matchedSatang)
+}
+
+/**
+ * mytester G-07 — ตัวอย่างเหตุผลเมื่อยอดไม่ตรงเป๊ะ ตามฝั่งของเงิน
+ * เงินเข้า (รอบวางบิล) = ลูกค้าหักค่าธรรมเนียม/ภาษี · เงินออก (รอบจ่าย) = โอนแยกหลายรายการ/ค่าธรรมเนียมโอน
+ */
+export function mismatchNoteExample(kind: MatchTargetKind): string {
+  return kind === 'billing'
+    ? 'เช่น ลูกค้าหักค่าธรรมเนียม/ภาษี ณ ที่จ่ายก่อนโอน'
+    : 'เช่น ธนาคารตัดโอนแยกหลายรายการ หรือหักค่าธรรมเนียมการโอน'
+}
+
+/**
+ * mytester G-13 — เหตุจริงเมื่อเลือกรอบวางบิลที่จับคู่เงินเข้าไม่ได้ (ไม่อยู่ในตัวเลือก) · ไม่รู้สถานะ = `null` (ใช้ "ไม่พบ")
+ */
+export function billingMatchUnavailableMessage(
+  status: string,
+  batchNumber: string,
+): { title: string; message: string } | null {
+  if (status === 'paid') {
+    return {
+      title: 'รอบวางบิลชำระครบแล้ว',
+      message: `รอบวางบิล ${batchNumber} รับชำระครบแล้ว — จับคู่เงินเข้าเพิ่มไม่ได้ ถ้าเป็นเงินโอนเกินหรือโอนซ้ำให้ตรวจสอบกับลูกค้า`,
+    }
+  }
+  if (status === 'draft') {
+    return {
+      title: 'รอบวางบิลยังไม่ได้ส่ง',
+      message: `รอบวางบิล ${batchNumber} ยังเป็นฉบับร่าง — ส่งบิลก่อนจึงจับคู่เงินเข้าได้`,
+    }
+  }
+  return null
 }

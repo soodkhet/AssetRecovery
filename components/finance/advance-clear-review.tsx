@@ -2,9 +2,9 @@
 
 import { useState } from 'react'
 import { ReasonConfirmModal } from '@/components/settings/reason-confirm-modal'
-import { Button, ConfirmModal, useToast } from '@/components/ui'
+import { Button, ConfirmModal, InlineAlert, useToast } from '@/components/ui'
 import { StoredFileButton } from '@/components/uploads/stored-file-button'
-import { canReviewAdvanceClear } from '@/lib/advances/advance-ui'
+import { advanceClearReviewWarning, canReviewAdvanceClear } from '@/lib/advances/advance-ui'
 import type { AdvanceDto } from '@/lib/advances/types'
 import { callApi, jsonRequest } from '@/lib/api/types'
 
@@ -27,6 +27,7 @@ export function AdvanceClearReviewActions({
   const [reason, setReason] = useState('')
   const [saving, setSaving] = useState(false)
   const reviewable = canManage && canReviewAdvanceClear(advance)
+  const reviewWarning = advanceClearReviewWarning(advance)
 
   async function submit(action: 'review' | 'reopen'): Promise<void> {
     setSaving(true)
@@ -76,7 +77,9 @@ export function AdvanceClearReviewActions({
         confirmLabel="ยืนยันตรวจแล้ว"
         confirmVariant="primary"
         loading={saving}
-      />
+      >
+        {reviewWarning !== null && <InlineAlert tone="warning">{reviewWarning}</InlineAlert>}
+      </ConfirmModal>
       <ReasonConfirmModal
         open={mode === 'reopen'}
         title={`ตีกลับการเคลียร์ ${advance.ref}`}

@@ -675,6 +675,7 @@ export async function settleAdvance(
             purpose: current.purpose,
             approvedSatang: current.approvedSatang ?? 0,
             usedSatang: input.usedSatang,
+            advanceNumber: current.advanceNumber,
           }),
           ...(await resolveTeamPlanSnapshot(tx as ExpenseTxClient, current.payeeId)),
         })

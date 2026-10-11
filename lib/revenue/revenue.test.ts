@@ -13,6 +13,7 @@ import {
   resolveBillingStatusAfterDocumentChange,
   resolveBillingStatusAfterReceipt,
   summarizeBillingBatch,
+  summarizeBillingPreview,
   toBangkokDateOnly,
 } from '@/lib/revenue/revenue'
 
@@ -239,5 +240,29 @@ describe('parseBillingPeriodLabel — อ่านงวดกลับจาก
     expect(parseBillingPeriodLabel('June 2026')).toBeNull()
     expect(parseBillingPeriodLabel('มิถุนายน')).toBeNull()
     expect(parseBillingPeriodLabel('')).toBeNull()
+  })
+})
+
+describe('สรุปก่อนสร้างรอบวางบิล (mytester G-05 · E-049)', () => {
+  const row = (date: string, total: number) => ({
+    revenueDate: new Date(`${date}T00:00:00Z`),
+    grossSatang: total - 700,
+    vatSatang: 700,
+    totalSatang: total,
+  })
+
+  it('แยกรายได้ถึงวันตัดรอบ (รวมวันตัดรอบ) กับหลังวันตัดรอบ', () => {
+    const preview = summarizeBillingPreview(
+      [row('2026-09-15', 10_700), row('2026-09-30', 10_700), row('2026-10-05', 21_400)],
+      new Date('2026-09-30T00:00:00Z'),
+    )
+    expect(preview.billable).toMatchObject({ revenueCount: 2, totalSatang: 21_400 })
+    expect(preview.later).toMatchObject({ revenueCount: 1, totalSatang: 21_400 })
+  })
+
+  it('วันที่เสนอไม่มีรายได้ (ทุกใบอยู่หลังวันตัดรอบ) ⇒ billable = 0', () => {
+    const preview = summarizeBillingPreview([row('2026-10-11', 5_000)], new Date('2026-09-30T00:00:00Z'))
+    expect(preview.billable.revenueCount).toBe(0)
+    expect(preview.later.revenueCount).toBe(1)
   })
 })

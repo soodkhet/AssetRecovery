@@ -6,7 +6,13 @@ import { Button, Field, InlineAlert, Modal, RefText, Select, Textarea, useToast 
 import { REASON_MIN_LENGTH } from '@/components/settings/reason-confirm-modal'
 import { callApi, jsonRequest, type ApiWarning } from '@/lib/api/types'
 import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
-import { hasAdvanceOffset, isDuplicatePaymentFile, payoutTransferText } from '@/lib/payout/payout-ui'
+import {
+  defaultPayoutBankAccountId,
+  hasAdvanceOffset,
+  isDuplicatePaymentFile,
+  paymentFileBankMismatchText,
+  payoutTransferText,
+} from '@/lib/payout/payout-ui'
 import type { PaymentFileResultDto, PayoutBatchDto } from '@/lib/payout/types'
 import type { BankAccountDto, BankFileFormatDto } from '@/lib/settings/types'
 import { defaultPaymentFileFormatId } from '@/lib/settings/bank-account'
@@ -43,6 +49,7 @@ export function PaymentFileModal({
   const [generated, setGenerated] = useState<PaymentFileResultDto | null>(null)
 
   const batchId = batch?.id ?? null
+  const previousAccountId = batch?.bankAccountId ?? null
 
   const loadOptions = useCallback(async () => {
     const [formatResult, accountResult] = await Promise.all([
@@ -64,15 +71,17 @@ export function PaymentFileModal({
       if (cancelled) return
       setFormats(options.formats)
       setAccounts(options.accounts)
-      const account = options.accounts.find((item) => item.isPrimary) ?? options.accounts[0]
-      setAccountId(account?.id ?? '')
+      // mytester F-06 — บัญชีเดิมของรอบ → บัญชีที่ผูกรูปแบบไฟล์โอน → บัญชีหลัก
+      const defaultAccountId = defaultPayoutBankAccountId(options.accounts, previousAccountId)
+      const account = options.accounts.find((item) => item.id === defaultAccountId)
+      setAccountId(defaultAccountId)
       // รูปแบบไฟล์โอนที่ตั้งไว้กับบัญชีต้นทาง (ตั้งค่า → บัญชีธนาคารบริษัท) ถูกเลือกให้ก่อน — Final ด่าน 5
       setFormatId(defaultPaymentFileFormatId(options.formats, account?.paymentFileFormatId))
     })()
     return () => {
       cancelled = true
     }
-  }, [batchId, loadOptions])
+  }, [batchId, previousAccountId, loadOptions])
 
   function changeAccount(nextId: string): void {
     setAccountId(nextId)
@@ -83,6 +92,10 @@ export function PaymentFileModal({
   if (batch === null) return null
 
   const wasGeneratedBefore = isDuplicatePaymentFile(batch)
+  const bankMismatch = paymentFileBankMismatchText(
+    formats.find((format) => format.id === formatId),
+    accounts.find((account) => account.id === accountId),
+  )
   const ready = formatId !== '' && accountId !== '' && reason.trim().length >= REASON_MIN_LENGTH
 
   async function submit(): Promise<void> {
@@ -241,6 +254,8 @@ export function PaymentFileModal({
                 </Select>
               </Field>
             </div>
+
+            {bankMismatch !== null && <InlineAlert tone="warning">{bankMismatch}</InlineAlert>}
 
             {accounts.length === 0 && (
               <InlineAlert tone="error">

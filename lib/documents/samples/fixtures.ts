@@ -334,6 +334,7 @@ export function samplePayoutBatch(context: DocumentSampleContext): PayoutBatchDe
     advanceOffsetSatang: sum('advanceOffsetSatang'),
     transferSatang: sum('transferSatang'),
     ...sumPayoutTaxSplit(items),
+    advancePaidSatang: items.reduce((total, row) => (row.source === 'advance' ? total + row.grossSatang : total), 0),
     itemCount: items.length,
     bankAccountId: SAMPLE_ID,
     bankAccountLabel: `${SAMPLE_BANK.bankName} xxx-x-x0000-x`,

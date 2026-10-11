@@ -122,7 +122,7 @@ export function ImportStatementModal({
     <Modal
       open
       onClose={onClose}
-      title="นำเข้า Bank Statement"
+      title="นำเข้ารายการเดินบัญชีธนาคาร"
       description="ระบบจะจับคู่อัตโนมัติให้เฉพาะรายการที่ยอดตรงและมีคู่ที่เป็นไปได้เพียงรายการเดียว"
       footer={
         <>

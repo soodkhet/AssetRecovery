@@ -42,6 +42,7 @@ const BATCH: PayoutBatchDetailDto = {
   compensationSatang: 850_000,
   whtWithheldSatang: 25_500,
   whtPaidByPayerSatang: 0,
+  advancePaidSatang: 0,
   itemCount: 1,
   bankAccountId: 'acc-1',
   bankAccountLabel: 'ธนาคารกสิกรไทย xxx-x-x9876-x',

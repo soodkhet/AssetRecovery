@@ -108,7 +108,7 @@ export function BankReconTab() {
           />
           {canManage && (
             <Button size="sm" onClick={() => setImportOpen(true)}>
-              Import Statement
+              นำเข้ารายการเดินบัญชี
             </Button>
           )}
         </div>
@@ -153,7 +153,7 @@ export function BankReconTab() {
             error={error}
             isEmpty={data.items.length === 0}
             emptyTitle="ยังไม่มีรายการเดินบัญชีตามตัวกรองนี้"
-            emptyDescription="กด “Import Statement” เพื่อนำเข้าไฟล์ statement ของบัญชีธนาคารบริษัท"
+            emptyDescription="กด “นำเข้ารายการเดินบัญชี” เพื่อนำเข้าไฟล์รายการเดินบัญชี (statement) ของบัญชีธนาคารบริษัท"
             colSpan={8}
           />
           <TBody>

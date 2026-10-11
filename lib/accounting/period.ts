@@ -359,6 +359,8 @@ export interface DraftBillingBatchSummary {
 export interface ReadinessInput {
   /** critical ที่ยัง `open` ของรอบนี้ (`34`) */
   criticalOpen: readonly { id: string; title: string; sourceModule: string }[]
+  /** mytester H-05 — critical ที่ผ่านเพราะผู้บริหารอนุมัติยกเว้น (`authorized`) · ไม่ระบุ = 0 */
+  criticalAuthorizedCount?: number
   /** warning ที่ยัง `open` — ผ่านได้แต่ต้องแสดงเตือน (`30` §6.2) */
   warningOpenCount: number
   /** รายการเดินบัญชีที่ยัง `unmatched` ของรอบนี้ (`unmatched_resolved` ถือว่าเคลียร์แล้ว — `35`) */
@@ -442,6 +444,23 @@ export function draftBillingBatchWarning(summary: DraftBillingBatchSummary): str
   )
 }
 
+/** mytester H-05 — ผ่านแบบมีข้อยกเว้นต้องบอกจำนวนเสมอ (`34` §6.3 มาตรการกัน "หายเงียบ") */
+function criticalPassedDetail(authorizedCount: number): string {
+  if (authorizedCount <= 0) return 'ไม่มีข้อยกเว้นระดับวิกฤตค้างในรอบนี้'
+  return `ไม่มีข้อยกเว้นระดับวิกฤตค้าง · ผ่านเพราะผู้บริหารอนุมัติยกเว้น ${fmtCount(authorizedCount)} รายการ`
+}
+
+/**
+ * mytester H-05 — หน้าที่ต้องไปแก้ของแต่ละเงื่อนไขความพร้อม (ลิงก์ในหน้าต่างตรวจความพร้อม) · ไม่มีหน้าที่แก้ได้ = `null`
+ */
+export const READINESS_CHECK_LINK: Readonly<Record<ReadinessCheckKey, { href: string; label: string } | null>> = {
+  period_ended: null,
+  billing_revenue_sync: { href: '/finance?tab=revenue', label: 'ไปหน้ารายได้และวางบิล' },
+  bank_reconcile: { href: '/accounting?tab=bank', label: 'ไปหน้ากระทบยอด' },
+  no_critical_exception: { href: '/accounting?tab=documents', label: 'ไปหน้าเอกสารไม่ครบ' },
+  no_open_payouts: { href: '/finance?tab=payout', label: 'ไปหน้ารอบจ่ายเงิน' },
+}
+
 /**
  * ประเมินความพร้อมปิดงวด — **pure** เพื่อให้เทสต์ยิงครบ 3 เงื่อนไขได้โดยไม่ต้องมี DB
  * เงื่อนไขทั้ง 3 เป็น blocker เท่ากันหมด (ไม่มีข้อไหน "ข้ามได้")
@@ -483,7 +502,7 @@ export function evaluateReadiness(input: ReadinessInput): ReadinessResult {
       label: 'ไม่มีข้อยกเว้นระดับวิกฤตที่เปิดอยู่',
       passed: criticalPassed,
       detail: criticalPassed
-        ? 'ไม่มีข้อยกเว้นระดับวิกฤตค้างในรอบนี้'
+        ? criticalPassedDetail(input.criticalAuthorizedCount ?? 0)
         : `ยังมี ${input.criticalOpen.length} รายการที่ต้องแก้หรือให้ผู้บริหารอนุมัติยกเว้น`,
     },
   )

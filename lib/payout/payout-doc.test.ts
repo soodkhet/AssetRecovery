@@ -66,6 +66,7 @@ function batch(items: readonly PayoutBatchItemDto[], overrides: Partial<PayoutBa
     advanceOffsetSatang: 0,
     transferSatang: gross - wht,
     ...sumPayoutTaxSplit(items),
+    advancePaidSatang: items.reduce((total, row) => (row.source === 'advance' ? total + row.grossSatang : total), 0),
     itemCount: items.length,
     bankAccountId: 'acc-1',
     bankAccountLabel: 'ธนาคารกสิกรไทย xxx-x-x9876-x',
@@ -436,5 +437,52 @@ describe('มติ PO U109 — สรุปรอบจ่ายแยก "ค�
     expect(normal.totalWhtPaidByPayerText).toBe('0.00')
     expect(normal.totalWhtWithheldText).toBe('255.00')
     expect(normal.hasPayerBorneTax).toBe(false)
+  })
+})
+
+describe('สรุปรอบจ่าย: แยกเงินทดรองจากค่าตอบแทน + ชื่อนิติบุคคล (mytester F-04)', () => {
+  const advance = item({
+    id: 'item-adv',
+    source: 'advance',
+    sourceId: 'adv-1',
+    description: 'สำรองค่าเดินทาง',
+    caseRef: null,
+    grossSatang: 400_000,
+    whtSatang: 0,
+    netSatang: 400_000,
+    whtCondition: null,
+    whtIncomeCategory: null,
+    whtPctSnapshot: null,
+    taxProfileId: null,
+    taxProfileName: null,
+    transferSatang: 400_000,
+  })
+
+  it('คอลัมน์ค่าตอบแทนไม่รวมเงินทดรอง · เงินทดรองแสดงแยก · ยอดโอนไม่เปลี่ยน', () => {
+    const doc = buildPayoutSummaryDoc(batch([item(), advance]), ISSUER)
+    expect(doc.rows[0]?.compensationText).toBe('8,500.00')
+    expect(doc.rows[0]?.advancePaidText).toBe('4,000.00')
+    expect(doc.totalCompensationText).toBe('8,500.00')
+    expect(doc.totalAdvancePaidText).toBe('4,000.00')
+    expect(doc.totalTransferText).toBe('12,245.00')
+  })
+
+  it('ใช้ชื่อผู้รับจากข้อมูลผู้รับ (ชื่อนิติบุคคลตามทะเบียน) เมื่อมี', () => {
+    const payees = new Map<string, PayoutPayeeDocInfo>([
+      [
+        'payee-1',
+        {
+          displayName: 'บริษัท สมพรรับเหมาติดตาม จำกัด',
+          taxId: '0105559999999',
+          isCorporate: true,
+          address: null,
+          branchLabel: 'สำนักงานใหญ่',
+          stats: { successCases: 0, fieldDays: 0, hotelNights: 0 },
+        },
+      ],
+    ])
+    const doc = buildPayoutSummaryDoc(batch([item()]), ISSUER, new Date('2026-10-11T03:00:00Z'), payees)
+    expect(doc.rows[0]?.payeeName).toBe('บริษัท สมพรรับเหมาติดตาม จำกัด')
+    expect(buildPayoutSummaryDoc(batch([item()]), ISSUER).rows[0]?.payeeName).toBe('ประยุทธ์ บุญมี')
   })
 })

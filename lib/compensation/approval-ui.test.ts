@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { advanceExcessClaimNote } from '@/lib/advances/advance'
 import { compensationListQuerySchema } from '@/lib/compensation/approval-types'
 import type { CompensationApprovalDto } from '@/lib/compensation/approval-types'
 import {
@@ -163,6 +164,23 @@ describe('ที่มาของรายการ (`15` §8)', () => {
   it('รายการที่กรอกเอง/ตามใบเสร็จ = บันทึกเอง', () => {
     expect(claimSourceLabel('manual')).toContain('บันทึกเอง')
     expect(claimSourceLabel('receipt')).toContain('บันทึกเอง')
+  })
+
+  it('mytester F-08 — คำขอเบิกส่วนเกินที่ระบบสร้างจากเงินทดรอง = อ้างเลข ADV ไม่ใช่ "บันทึกเอง"', () => {
+    const note = advanceExcessClaimNote({
+      purpose: 'ค่าเดินทาง',
+      approvedSatang: 400_000,
+      usedSatang: 450_000,
+      advanceNumber: 'ADV-2569-0003',
+    })
+    const label = claimSourceLabel('manual', note)
+    expect(label).toContain('ส่วนเกินเงินทดรอง ADV-2569-0003')
+    expect(label).not.toContain('บันทึกเอง')
+    // หมายเหตุรุ่นเก่า (ไม่มีเลข ADV) ยังบอกที่มาได้
+    expect(claimSourceLabel('manual', advanceExcessClaimNote({ purpose: 'x', approvedSatang: 1, usedSatang: 2 }))).toBe(
+      '↪ ส่วนเกินเงินทดรอง',
+    )
+    expect(claimSourceLabel('manual', 'ค่าทางด่วน')).toContain('บันทึกเอง')
   })
 })
 

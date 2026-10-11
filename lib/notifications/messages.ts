@@ -562,8 +562,9 @@ export function payoutPaidToPayeeMessage(input: {
 }): NotificationMessage {
   return {
     eventCode: 'payout.paid_to_payee',
-    title: 'โอนค่าตอบแทนเข้าบัญชีแล้ว',
-    body: `ยอดโอนสุทธิ ${fmtSatangSymbol(input.transferSatang)} — ตรวจรายการได้ที่หน้าสรุปรายได้`,
+    // mytester F-04 — ยอดโอนอาจรวมเงินทดรองจ่าย (ไม่ใช่ค่าตอบแทน) ⇒ หัวข้อไม่เรียกรวมว่า "ค่าตอบแทน"
+    title: 'โอนเงินเข้าบัญชีแล้ว',
+    body: `ยอดโอนสุทธิ ${fmtSatangSymbol(input.transferSatang)} — ตรวจรายการค่าตอบแทน/เงินทดรองได้ที่หน้าสรุปรายได้`,
     linkPath: '/field/income',
     dedupeKey: `payout-paid-${input.batchId}-${input.userId}`,
   }
@@ -700,7 +701,7 @@ export function whtFilingDueMessage(input: {
         : `เหลือ ${input.daysLeft} วัน`
   return {
     eventCode: 'wht.filing_due_reminder',
-    title: 'ใกล้ครบกำหนดยื่น ภ.ง.ด.3/53',
+    title: 'ใกล้ครบกำหนดยื่น ภ.ง.ด.1/3/53',
     body: `งวด ${input.periodLabel} · กำหนดนำส่ง ${fmtDate(input.filingDueDate)} ${WHT_FILING_METHOD_SUFFIX[input.filingMethod ?? 'online']} (${countdown})`,
     linkPath: '/accounting?tab=wht',
     // job รันทุกวัน ⇒ คีย์ = งวด + ขั้นของการเตือน (ดู `whtFilingReminderStage()`)

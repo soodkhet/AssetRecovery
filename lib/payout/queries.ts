@@ -48,7 +48,9 @@ import {
   nextPaymentFileVersion,
   nextPayoutBatchStatus,
   paymentFileName,
+  missingPayeeBankFields,
   paymentFileStoragePath,
+  payoutAdvancePaidSatang,
   payoutItemTrackingRound,
   resolvePayoutSide,
   whtFallbackWarning,
@@ -159,7 +161,7 @@ const batchSelect = {
   cancelledByUser: { select: { fullName: true } },
   _count: { select: { items: true } },
   // มติ PO U109 — แยกภาษีที่บริษัทออกให้ออกจากค่าตอบแทนของทั้งรอบ (snapshot ต่อรายการ)
-  items: { select: { grossSatang: true, whtSatang: true, netSatang: true, whtCondition: true } },
+  items: { select: { grossSatang: true, whtSatang: true, netSatang: true, whtCondition: true, advanceId: true } },
 } as const
 
 type BatchRow = Prisma.PayoutBatchGetPayload<{ select: typeof batchSelect }>
@@ -205,6 +207,20 @@ const itemSelect = {
 
 type ItemRow = Prisma.PayoutBatchItemGetPayload<{ select: typeof itemSelect }>
 
+/** ยอดแยกของทั้งรอบ (U109) + เงินทดรองแยกจากค่าตอบแทน (mytester F-04) */
+function batchAmountSplit(items: BatchRow['items']): {
+  compensationSatang: number
+  whtWithheldSatang: number
+  whtPaidByPayerSatang: number
+  advancePaidSatang: number
+} {
+  const split = sumPayoutTaxSplit(items)
+  const advancePaidSatang = payoutAdvancePaidSatang(
+    items.map((item) => ({ isAdvance: item.advanceId !== null, grossSatang: item.grossSatang })),
+  )
+  return { ...split, compensationSatang: split.compensationSatang - advancePaidSatang, advancePaidSatang }
+}
+
 function toBatchDto(row: BatchRow): PayoutBatchDto {
   return {
     id: row.id,
@@ -217,7 +233,7 @@ function toBatchDto(row: BatchRow): PayoutBatchDto {
     advanceOffsetSatang: row.advanceOffsetSatang,
     recoveryOffsetSatang: row.recoveryOffsetSatang,
     transferSatang: payoutTransferSatang(row.netSatang, row.advanceOffsetSatang, row.recoveryOffsetSatang),
-    ...sumPayoutTaxSplit(row.items),
+    ...batchAmountSplit(row.items),
     itemCount: row._count.items,
     bankAccountId: row.bankAccountId,
     bankAccountLabel:
@@ -392,6 +408,7 @@ async function payoutPayeeDocInfo(
         id: true,
         payeeType: true,
         nameTitle: true,
+        legalName: true,
         nationalId: true,
         branchCode: true,
         addressDetail: true,
@@ -420,7 +437,12 @@ async function payoutPayeeDocInfo(
       return [
         payee.id,
         {
-          displayName: payeeDisplayName({ name: payee.user.fullName, nameTitle: payee.nameTitle, payeeType: payee.payeeType }),
+          // mytester F-04 — นิติบุคคลใช้ชื่อตามทะเบียน (helper เดียวกับ 50 ทวิ) ไม่ใช่ชื่อผู้ใช้
+          displayName: payeeDisplayName({
+            name: payeeLegalName({ payeeType: payee.payeeType, legalName: payee.legalName, userFullName: payee.user.fullName }),
+            nameTitle: payee.nameTitle,
+            payeeType: payee.payeeType,
+          }),
           taxId: payee.nationalId,
           isCorporate,
           address: payeeAddressLine(payee),
@@ -1375,7 +1397,7 @@ export async function generatePaymentFile(
       throw new PayeeError('REQUIRED_MISSING', {
         detail: `payee=${payeeId} bank_name=${payee.bankName ?? ''}`,
         context: {
-          fields: ['bank_name', 'account_number'],
+          fields: missingPayeeBankFields({ bankCode, accountNumber: payee.accountNumber }),
           payees: [legalName],
         },
       })

@@ -19,8 +19,9 @@ import {
   auditRowDisplay,
   auditActorLabel,
   auditFieldChanges,
+  auditFieldLabel,
   auditTargetLabel,
-  auditValueText,
+  auditValueDisplay,
 } from '@/lib/audit/log-display'
 import { fmtDateTime } from '@/lib/format/datetime'
 
@@ -98,12 +99,13 @@ export function AuditDetailModal({ id, onClose }: { id: string | null; onClose: 
                 <TBody>
                   {changes.map((change) => (
                     <Tr key={change.field} className="align-top">
-                      <Td className="px-3 py-2 font-mono text-xs">{change.field}</Td>
+                      {/* mytester H-06 — ชื่อฟิลด์/ค่าเป็นภาษาไทยเมื่อรู้จัก */}
+                      <Td className="px-3 py-2 text-xs">{auditFieldLabel(change.field)}</Td>
                       <Td className="px-3 py-2 text-xs break-all text-slate-500">
-                        {auditValueText(change.before, change.field)}
+                        {auditValueDisplay(change.before, change.field, detail.targetType)}
                       </Td>
                       <Td className="px-3 py-2 text-xs font-medium break-all text-slate-800">
-                        {auditValueText(change.after, change.field)}
+                        {auditValueDisplay(change.after, change.field, detail.targetType)}
                       </Td>
                     </Tr>
                   ))}

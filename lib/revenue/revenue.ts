@@ -181,6 +181,27 @@ export function summarizeBillingBatch(revenues: readonly RevenueAmounts[]): Bill
 }
 
 /**
+ * staging E-049 / mytester G-05 — สรุปก่อนกดสร้างรอบวางบิล: รายได้ที่รอวางบิลของบริษัทแยกเป็น
+ * "ถึงวันตัดรอบ" (จะถูกดึงเข้ารอบ — กติกาเดียวกับ `billableRevenueDateFilter`) กับ "หลังวันตัดรอบ" (ยังไม่ถูกดึง)
+ * ผู้เรียกส่งเฉพาะรายได้ `ready_for_billing` ที่ยังไม่ผูกรอบ · ยอดใช้ `summarizeBillingBatch()` ตัวเดียวกับตอนสร้างจริง
+ */
+export interface BillingPreviewTotals {
+  billable: BillingBatchTotals
+  later: BillingBatchTotals
+}
+
+export function summarizeBillingPreview(
+  revenues: readonly (RevenueAmounts & { revenueDate: Date })[],
+  cutoffDate: Date,
+): BillingPreviewTotals {
+  const limit = billableRevenueDateFilter(cutoffDate).lte.getTime()
+  return {
+    billable: summarizeBillingBatch(revenues.filter((row) => row.revenueDate.getTime() <= limit)),
+    later: summarizeBillingBatch(revenues.filter((row) => row.revenueDate.getTime() > limit)),
+  }
+}
+
+/**
  * สถานะของรอบหลังรับชำระ (`19` §9.2) — **จุดเสียบของไฟล์ 35** (Phase 4.2) ไม่ใช่การกรอกมือ
  *
  * รับครบ/เกิน ⇒ `paid` · รับบางส่วน ⇒ `partially_paid` · ยังไม่รับ ⇒ คงสถานะเดิม

@@ -10,7 +10,7 @@ import { fmtSatangSymbol, parseBahtInput } from '@/lib/format/money'
 /**
  * Modal อนุมัติ / ปฏิเสธคำขอเงินทดรอง (`15` §9.1 · mockup `finance.html` `approve-advance`/`reject-advance`)
  *
- * - **อนุมัติ = เงินออกจริง** ⇒ ปรับลดยอดได้ (`approved_satang` แยกจาก `requested_satang`)
+ * - อนุมัติ = ยืนยันยอด (เงินโอนจริงในรอบจ่ายถัดไป — มติ PO U83 · mytester F-05) ⇒ ปรับลดยอดได้ (`approved_satang` แยกจาก `requested_satang`)
  *   เว้นว่าง = อนุมัติเต็มจำนวน · หน้าจอไม่คำนวณเงินเอง แค่แปลงบาท→สตางค์ (Rule 01)
  * - **ปฏิเสธต้องมีเหตุผลเสมอ** (`24` §6.4 `REJECTION_REASON_REQUIRED`) และเป็น terminal ไม่มีทางกลับ
  */
@@ -68,7 +68,7 @@ export function AdvanceReviewModal({
       title: mode === 'approve' ? 'อนุมัติเงินทดรองแล้ว' : 'ปฏิเสธคำขอแล้ว',
       description:
         mode === 'approve'
-          ? `${advance.requesterName} — รอเคลียร์ยอดภายใน ${fmtDate(advance.dueClearDate)}`
+          ? `${advance.requesterName} — เงินโอนในรอบจ่ายถัดไป · เคลียร์ยอดภายใน ${fmtDate(advance.dueClearDate)}`
           : `${advance.requesterName} — ขอเบิกรอบใหม่ได้ทันที`,
     })
     onDone()
@@ -91,7 +91,7 @@ export function AdvanceReviewModal({
             disabled={mode === 'approve' ? invalidAmount || exceedsRequest : reason.trim().length < 5}
             onClick={() => void submit()}
           >
-            {mode === 'approve' ? 'อนุมัติและปล่อยเงิน' : 'ยืนยันปฏิเสธ'}
+            {mode === 'approve' ? 'อนุมัติเงินทดรอง' : 'ยืนยันปฏิเสธ'}
           </Button>
         </>
       }
@@ -109,7 +109,7 @@ export function AdvanceReviewModal({
         {mode === 'approve' ? (
           <>
             <InlineAlert tone="warning">
-              อนุมัติแล้วถือว่า<b>เงินออกจริง</b> — ผู้ขอจะขอเบิกรอบใหม่ไม่ได้จนกว่าจะเคลียร์ยอดนี้เสร็จ
+              อนุมัติแล้วเงินจะ<b>โอนให้ผู้ขอในรอบจ่ายถัดไป</b> — ผู้ขอเคลียร์ยอดได้หลังรอบจ่ายนั้นยืนยันจ่ายแล้ว และจะขอเบิกใหม่ไม่ได้จนกว่าจะเคลียร์ยอดนี้เสร็จ
             </InlineAlert>
 
             <Field label="ยอดที่อนุมัติ (บาท) — เว้นว่าง = อนุมัติเต็มจำนวน">

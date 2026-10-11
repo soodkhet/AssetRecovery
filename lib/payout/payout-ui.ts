@@ -2,6 +2,7 @@ import { fmtSatangSymbol } from '@/lib/format/money'
 import type { PayoutBatchSide, PayoutBatchStatus, WhtThresholdScope } from '@/lib/generated/prisma/enums'
 import { canPayoutAction } from '@/lib/payout/payout'
 import type { PayoutBatchDto } from '@/lib/payout/types'
+import type { BankAccountDto, BankFileFormatDto } from '@/lib/settings/types'
 import type { StatusBadgeGroup } from '@/lib/ui/status-badge'
 
 /**
@@ -169,4 +170,41 @@ export function payoutWhtThresholdNote(scope: WhtThresholdScope): string {
   return scope === 'monthly_cumulative'
     ? 'เกณฑ์ขั้นต่ำ WHT นับยอดสะสมของผู้รับแต่ละคนทั้งเดือน (รวมรอบจ่ายก่อนหน้าในเดือนเดียวกัน) — ถึงเกณฑ์เมื่อไรหักจากยอดที่ยังไม่เคยหัก'
     : 'เกณฑ์ขั้นต่ำ WHT นับยอดรวมของผู้รับแต่ละคนในรอบจ่ายนี้เท่านั้น'
+}
+
+/**
+ * mytester F-06 — บัญชีจ่ายเริ่มต้นของหน้าต่างสร้างไฟล์โอน
+ * 1) รอบนี้เคยสร้างไฟล์แล้ว ⇒ บัญชีเดิมของรอบ (สร้างซ้ำไม่เด้งกลับบัญชีหลัก)
+ * 2) บัญชีที่ผูกรูปแบบไฟล์โอนไว้ (บัญชีหลักก่อน) — บัญชีที่ไม่ผูกรูปแบบสร้างไฟล์ให้ธนาคารรับไม่ได้แน่นอน
+ * 3) บัญชีหลัก · 4) บัญชีแรก · ไม่มีบัญชี = ''
+ */
+export function defaultPayoutBankAccountId(
+  accounts: readonly Pick<BankAccountDto, 'id' | 'isPrimary' | 'paymentFileFormatId'>[],
+  previousAccountId: string | null,
+): string {
+  if (previousAccountId !== null && accounts.some((account) => account.id === previousAccountId)) return previousAccountId
+  const withFormat = accounts.filter((account) => account.paymentFileFormatId !== null)
+  const pick =
+    withFormat.find((account) => account.isPrimary) ??
+    withFormat[0] ??
+    accounts.find((account) => account.isPrimary) ??
+    accounts[0]
+  return pick?.id ?? ''
+}
+
+function normalizeBankName(name: string): string {
+  return name.replace(/^ธนาคาร/, '').replace(/\s+/g, '').toLowerCase()
+}
+
+/**
+ * mytester F-06 — เตือนเมื่อธนาคารของรูปแบบไฟล์โอนไม่ตรงกับธนาคารของบัญชีที่จ่าย (เตือน ไม่บล็อก)
+ * ยังเลือกไม่ครบ / ตรงกัน = `null`
+ */
+export function paymentFileBankMismatchText(
+  format: Pick<BankFileFormatDto, 'bankName'> | undefined,
+  account: Pick<BankAccountDto, 'bankName'> | undefined,
+): string | null {
+  if (format === undefined || account === undefined) return null
+  if (normalizeBankName(format.bankName) === normalizeBankName(account.bankName)) return null
+  return `รูปแบบไฟล์เป็นของ ${format.bankName} แต่บัญชีที่จ่ายเป็น ${account.bankName} — ธนาคารอาจไม่รับไฟล์นี้ ตรวจสอบให้ตรงกันก่อนสร้าง`
 }

@@ -7,7 +7,7 @@ import { advanceOffsetLineLabel } from '@/lib/advances/advance'
 import type { PayoutBatchStatus } from '@/lib/generated/prisma/enums'
 import { bahtInWords } from '@/lib/payout/baht-text'
 import { PayoutError } from '@/lib/payout/errors'
-import { assertHasItemsToPay, PAYOUT_SIDE_LABEL, PAYOUT_STATUS_LABEL } from '@/lib/payout/payout'
+import { assertHasItemsToPay, PAYOUT_SIDE_LABEL, PAYOUT_STATUS_LABEL, payoutAdvancePaidSatang } from '@/lib/payout/payout'
 import type { PayoutBatchDetailDto, PayoutBatchItemDto } from '@/lib/payout/types'
 
 /**
@@ -185,6 +185,15 @@ export interface PayoutPayeeGroup {
   compensationSatang: number
   whtWithheldSatang: number
   whtPaidByPayerSatang: number
+  /**
+   * mytester F-04 — เงินทดรองจ่ายของกลุ่ม (รวมอยู่ใน `compensationSatang` ซึ่งใช้เป็นยอดบรรทัดของใบสำคัญจ่าย/สลิป)
+   * สรุปรอบจ่ายแสดงแยก: ค่าตอบแทน = `compensationSatang − advancePaidSatang`
+   */
+  advancePaidSatang: number
+}
+
+function advancePaidOf(items: readonly PayoutBatchItemDto[]): number {
+  return payoutAdvancePaidSatang(items.map((item) => ({ isAdvance: item.source === 'advance', grossSatang: item.grossSatang })))
 }
 
 /** ยอดแยกตามเงื่อนไขการหักของชุดรายการ (U105 · U109) */
@@ -251,6 +260,7 @@ export function groupPayoutItemsByPayee(items: readonly PayoutBatchItemDto[]): P
       transferSatang: payoutTransferSatang(totals.netSatang, advanceOffsetSatang, recoveryOffsetSatang),
       offsetLines: collectOffsetLines(bucket),
       ...taxSplitTotals(bucket),
+      advancePaidSatang: advancePaidOf(bucket),
     }
   })
 }
@@ -270,6 +280,8 @@ export interface PayoutSummaryDocRow {
    * · ภาษีที่บริษัทออกให้ · ภาษีที่หักจากผู้รับ — `grossText`/`whtText` (gross รวมภาษีที่ออกให้) คงไว้ให้ผู้ใช้เดิม
    */
   compensationText: string
+  /** mytester F-04 — เงินทดรองจ่าย (ไม่ใช่เงินได้ — แยกจากค่าตอบแทน) */
+  advancePaidText: string
   whtPaidByPayerText: string
   whtWithheldText: string
   /** มติ PO U30 — ยอดโอนจริง (= net เมื่อไม่มีการหัก) + ยอดหักคืนเงินทดรอง (`null` = ไม่มี) */
@@ -300,6 +312,7 @@ export interface PayoutSummaryDoc {
   totalNetText: string
   /** มติ PO U109 — ยอดรวมแยก ค่าตอบแทน / ภาษีที่บริษัทออกให้ / ภาษีที่หักจากผู้รับ */
   totalCompensationText: string
+  totalAdvancePaidText: string
   totalWhtPaidByPayerText: string
   totalWhtWithheldText: string
   /** `true` = มีผู้รับที่บริษัทออกภาษีให้อย่างน้อย 1 ราย (แสดงหมายเหตุใต้ตาราง) */
@@ -318,6 +331,8 @@ export function buildPayoutSummaryDoc(
   batch: PayoutBatchDetailDto,
   issuer: PayoutDocIssuer,
   printedAt: Date = new Date(),
+  /** mytester F-04 — ข้อมูลผู้รับ (ชื่อนิติบุคคลตามทะเบียน) · ไม่มี = ชื่อจากรายการ */
+  payees: ReadonlyMap<string, PayoutPayeeDocInfo> = new Map(),
 ): PayoutSummaryDoc {
   const groups = groupPayoutItemsByPayee(batch.items)
   // ยอดรวมของทั้งรอบคิดจาก "รายการทั้งหมด" ไม่ใช่ผลบวกของยอดกลุ่ม — ยามของ `22` §6.10
@@ -326,6 +341,7 @@ export function buildPayoutSummaryDoc(
   // ยอดหักคืนรวม = เงินทดรอง + ยอดเรียกคืน (staging E-014) ⇒ ยอดโอนในสรุปรอบตรงกับไฟล์โอน
   const totalOffset = groups.reduce((sum, group) => sum + group.advanceOffsetSatang + group.recoveryOffsetSatang, 0)
   const split = taxSplitTotals(batch.items)
+  const totalAdvancePaid = advancePaidOf(batch.items)
 
   return {
     title: PAYOUT_SUMMARY_TITLE,
@@ -345,13 +361,14 @@ export function buildPayoutSummaryDoc(
     idempotencyKey: orDash(batch.idempotencyKey),
     rows: groups.map((group, index) => ({
       no: index + 1,
-      payeeName: group.payeeName,
+      payeeName: payees.get(group.payeeId)?.displayName ?? group.payeeName,
       teamName: orDash(group.teamName),
       itemCountText: `${fmtCount(group.items.length)} รายการ`,
       grossText: fmtSatang(group.totals.grossSatang),
       whtText: fmtSatang(group.totals.whtSatang),
       netText: fmtSatang(group.totals.netSatang),
-      compensationText: fmtSatang(group.compensationSatang),
+      compensationText: fmtSatang(group.compensationSatang - group.advancePaidSatang),
+      advancePaidText: fmtSatang(group.advancePaidSatang),
       whtPaidByPayerText: fmtSatang(group.whtPaidByPayerSatang),
       whtWithheldText: fmtSatang(group.whtWithheldSatang),
       transferText: fmtSatang(group.transferSatang),
@@ -365,7 +382,8 @@ export function buildPayoutSummaryDoc(
     totalGrossText: fmtSatang(totals.grossSatang),
     totalWhtText: fmtSatang(totals.whtSatang),
     totalNetText: fmtSatang(totals.netSatang),
-    totalCompensationText: fmtSatang(split.compensationSatang),
+    totalCompensationText: fmtSatang(split.compensationSatang - totalAdvancePaid),
+    totalAdvancePaidText: fmtSatang(totalAdvancePaid),
     totalWhtPaidByPayerText: fmtSatang(split.whtPaidByPayerSatang),
     totalWhtWithheldText: fmtSatang(split.whtWithheldSatang),
     hasPayerBorneTax: split.whtPaidByPayerSatang > 0,

@@ -28,7 +28,7 @@ export const GET = withApiPermission<RouteContext>(
     assertPayoutDocReady(source.batch.status)
 
     const pdf = await renderPayoutBatchSummary(
-      buildPayoutSummaryDoc(source.batch, source.issuer),
+      buildPayoutSummaryDoc(source.batch, source.issuer, new Date(), source.payees),
       await currentLetterhead(user.organizationId),
     )
 

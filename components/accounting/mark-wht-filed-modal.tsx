@@ -55,8 +55,8 @@ export function MarkWhtFiledModal({
     <Modal
       open
       onClose={onClose}
-      title={`Mark ว่ายื่นแบบแล้ว — รอบ ${summary.periodLabel}`}
-      description="ยืนยันว่ายื่น ภ.ง.ด.3/53 ของรอบนี้ต่อกรมสรรพากรเรียบร้อยแล้ว (ยื่นจริงนอกระบบ)"
+      title={`บันทึกว่ายื่นแบบแล้ว — รอบ ${summary.periodLabel}`}
+      description="ยืนยันว่ายื่น ภ.ง.ด.1/3/53 ของรอบนี้ต่อกรมสรรพากรเรียบร้อยแล้ว (ยื่นจริงนอกระบบ)"
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>

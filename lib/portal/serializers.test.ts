@@ -161,6 +161,19 @@ describe('portal serializers — กันหลุด (deep-scan)', () => {
       statusDisplay: { code: 'paid', label: 'รับชำระบางส่วน', tone: 'partial' },
     })
     expect(serializePortalBillingBatch(billing)?.debitNoteOutstanding).toBe(false)
+    // mytester G-04 — ขอ 50 ทวิ เฉพาะเมื่อลูกค้าหักภาษีและหนังสือยังรออยู่
+    expect(
+      serializePortalBillingBatch({ ...billing, whtWithheldByCustomerSatang: 3_000, customerWhtCertificatePending: true })
+        ?.customerWhtCertificatePending,
+    ).toBe(true)
+    expect(
+      serializePortalBillingBatch({ ...billing, whtWithheldByCustomerSatang: 3_000, customerWhtCertificatePending: false })
+        ?.customerWhtCertificatePending,
+    ).toBe(false)
+    expect(
+      serializePortalBillingBatch({ ...billing, whtWithheldByCustomerSatang: 0, customerWhtCertificatePending: true })
+        ?.customerWhtCertificatePending,
+    ).toBe(false)
     deepScan(
       serializePortalTaxInvoice({
         ...FORBIDDEN,

@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import type { PayoutBatchDto } from '@/lib/payout/types'
+import { withFieldsSuffix } from '@/lib/api/types'
+import { missingPayeeBankFields } from '@/lib/payout/payout'
 import {
   payoutWhtThresholdNote,
   payoutWhtCertificateLinks,
   canCancelPayout,
+  defaultPayoutBankAccountId,
+  paymentFileBankMismatchText,
   canCompletePayout,
   canDownloadPaymentFile,
   canGeneratePaymentFile,
@@ -30,6 +34,7 @@ function batch(overrides: Partial<PayoutBatchDto> = {}): PayoutBatchDto {
     compensationSatang: 1_880_000,
     whtWithheldSatang: 56_400,
     whtPaidByPayerSatang: 0,
+    advancePaidSatang: 0,
     itemCount: 3,
     bankAccountId: null,
     bankAccountLabel: null,
@@ -158,5 +163,46 @@ describe('payoutWhtThresholdNote — staging E-054', () => {
   it('ข้อความตามวิธีนับที่ตั้งไว้', () => {
     expect(payoutWhtThresholdNote('monthly_cumulative')).toContain('ทั้งเดือน')
     expect(payoutWhtThresholdNote('per_batch')).toContain('ในรอบจ่ายนี้เท่านั้น')
+  })
+})
+
+describe('หน้าต่างสร้างไฟล์โอน — บัญชีจ่ายเริ่มต้น/เตือนธนาคารไม่ตรง (mytester F-06)', () => {
+  const kbank = { id: 'kbank', isPrimary: true, paymentFileFormatId: null }
+  const scb = { id: 'scb', isPrimary: false, paymentFileFormatId: 'fmt-scb' }
+
+  it('เลือกบัญชีที่ผูกรูปแบบไฟล์โอนก่อนบัญชีหลักที่ไม่ผูก', () => {
+    expect(defaultPayoutBankAccountId([kbank, scb], null)).toBe('scb')
+  })
+
+  it('สร้างซ้ำ ⇒ ใช้บัญชีเดิมของรอบ', () => {
+    expect(defaultPayoutBankAccountId([kbank, scb], 'kbank')).toBe('kbank')
+    // บัญชีเดิมถูกปิดใช้แล้ว ⇒ กลับไปกติกาปกติ
+    expect(defaultPayoutBankAccountId([kbank, scb], 'gone')).toBe('scb')
+  })
+
+  it('ไม่มีบัญชีผูกรูปแบบ ⇒ บัญชีหลัก · ไม่มีบัญชีเลย ⇒ ค่าว่าง', () => {
+    expect(defaultPayoutBankAccountId([{ ...scb, paymentFileFormatId: null }, kbank], null)).toBe('kbank')
+    expect(defaultPayoutBankAccountId([], null)).toBe('')
+  })
+
+  it('เตือนเมื่อธนาคารของรูปแบบไฟล์ไม่ตรงบัญชี (ไม่สนคำว่า "ธนาคาร" นำหน้า)', () => {
+    expect(paymentFileBankMismatchText({ bankName: 'ธนาคารไทยพาณิชย์' }, { bankName: 'ธนาคารกสิกรไทย' })).toContain(
+      'ธนาคารอาจไม่รับไฟล์',
+    )
+    expect(paymentFileBankMismatchText({ bankName: 'ไทยพาณิชย์' }, { bankName: 'ธนาคารไทยพาณิชย์' })).toBeNull()
+    expect(paymentFileBankMismatchText(undefined, { bankName: 'ธนาคารกสิกรไทย' })).toBeNull()
+  })
+})
+
+describe('mytester F-08 — ชื่อฟิลด์ใน toast ตอนบัญชีผู้รับไม่ครบ', () => {
+  it('ส่งเป็น { ช่อง: ข้อความไทย } เฉพาะช่องที่ขาด · toast ไม่มีชื่อฟิลด์ภายใน', () => {
+    const fields = missingPayeeBankFields({ bankCode: null, accountNumber: null })
+    expect(Object.keys(fields)).toEqual(['bank_name', 'account_number'])
+    expect(missingPayeeBankFields({ bankCode: '014', accountNumber: null })).toEqual({
+      account_number: 'ยังไม่ได้กรอกเลขบัญชีของผู้รับ',
+    })
+    const toast = withFieldsSuffix('ข้อมูลไม่ครบ', fields)
+    expect(toast).not.toMatch(/bank_name|account_number/)
+    expect(toast).toContain('เลขบัญชี')
   })
 })

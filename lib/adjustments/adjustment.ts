@@ -28,10 +28,11 @@ export const ADJUSTMENT_TARGET_TYPES = ['revenue', 'expense', 'billing_batch', '
 export type AdjustmentTargetType = (typeof ADJUSTMENT_TARGET_TYPES)[number]
 
 export const ADJUSTMENT_TARGET_LABEL: Readonly<Record<AdjustmentTargetType, string>> = {
-  revenue: 'รายได้ (Revenue)',
-  expense: 'ค่าใช้จ่าย (Expense/Claim)',
-  billing_batch: 'รอบวางบิล (Billing Batch)',
-  payout_batch: 'รอบจ่ายเงิน (Payout Batch)',
+  // mytester G-11 — ป้ายภาษาไทยล้วน (ไม่วงเล็บศัพท์ระบบ)
+  revenue: 'รายได้',
+  expense: 'ค่าใช้จ่าย/รายการเบิก',
+  billing_batch: 'รอบวางบิล',
+  payout_batch: 'รอบจ่ายเงิน',
 }
 
 export const ADJUSTMENT_TYPE_LABEL: Readonly<Record<AdjustmentType, string>> = {

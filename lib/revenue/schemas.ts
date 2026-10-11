@@ -44,6 +44,12 @@ export const billingBatchCreateSchema = z.object({
   reason: reasonSchema,
 })
 
+/** `GET /api/billing-batches/preview` (staging E-049 · mytester G-05) — สรุปก่อนสร้างรอบ · อ่านอย่างเดียว */
+export const billingBatchPreviewQuerySchema = z.object({
+  companyId: uuidSchema,
+  cutoffDate: dateOnlySchema('วันตัดรอบ'),
+})
+
 /** ส่งบิลจริง (`19` §9.1 `draft → sent`) — กระทบเงิน ⇒ `reason` บังคับ (`90` §13) */
 export const billingBatchSendSchema = z.object({
   reason: reasonSchema,
@@ -63,6 +69,7 @@ export const arAgingQuerySchema = z.object({
 export type RevenueListQuery = z.infer<typeof revenueListQuerySchema>
 export type BillingBatchListQuery = z.infer<typeof billingBatchListQuerySchema>
 export type BillingBatchCreateInput = z.infer<typeof billingBatchCreateSchema>
+export type BillingBatchPreviewQuery = z.infer<typeof billingBatchPreviewQuerySchema>
 export type BillingBatchSendInput = z.infer<typeof billingBatchSendSchema>
 export type BillingBatchDeleteInput = z.infer<typeof billingBatchDeleteSchema>
 export type ArAgingQuery = z.infer<typeof arAgingQuerySchema>

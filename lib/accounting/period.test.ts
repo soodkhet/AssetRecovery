@@ -10,6 +10,7 @@ import {
   assertUnlockAllowed,
   canTransitionPeriod,
   evaluateReadiness,
+  READINESS_CHECK_LINK,
   isPeriodEnded,
   nextPeriodKey,
   periodCloseAvailableFrom,
@@ -485,5 +486,23 @@ describe('readinessScore / readinessRowText — staging E-069', () => {
     expect(
       readinessRowText({ lastReadinessCheckedAt: '2026-10-10T03:15:00Z', lastReadinessPassedCount: 4, lastReadinessTotalCount: 5 }),
     ).toBe('ตรวจล่าสุด 10/10/2569 10:15 · ผ่าน 4/5')
+  })
+})
+
+describe('mytester H-05 — หน้าต่างตรวจความพร้อม', () => {
+  it('ผ่านเพราะผู้บริหารอนุมัติยกเว้น ⇒ บอกจำนวนเสมอ (ไม่หายเงียบ)', () => {
+    const check = evaluateReadiness({ ...readyInput, criticalAuthorizedCount: 1 }).checks.find(
+      (item) => item.key === 'no_critical_exception',
+    )
+    expect(check?.passed).toBe(true)
+    expect(check?.detail).toContain('อนุมัติยกเว้น 1 รายการ')
+    const plain = evaluateReadiness(readyInput).checks.find((item) => item.key === 'no_critical_exception')
+    expect(plain?.detail).not.toContain('อนุมัติยกเว้น')
+  })
+
+  it('เงื่อนไขที่แก้ได้มีลิงก์ไปหน้าที่เกี่ยว', () => {
+    expect(READINESS_CHECK_LINK.bank_reconcile?.href).toBe('/accounting?tab=bank')
+    expect(READINESS_CHECK_LINK.no_critical_exception?.href).toBe('/accounting?tab=documents')
+    expect(READINESS_CHECK_LINK.period_ended).toBeNull()
   })
 })

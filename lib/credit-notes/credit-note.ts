@@ -228,6 +228,14 @@ export function maxCreditNoteTotalSatang(invoiceCreditableTotalSatang: number, b
 }
 
 /**
+ * mytester G-10 — ฟอร์มใบลดหนี้ปิดปุ่มบันทึกเมื่อลดได้สูงสุด ฿0 (บิลชำระครบ — server ปฏิเสธอยู่แล้ว) ·
+ * ใบเพิ่มหนี้/ยังไม่รู้ยอดค้าง (`null`) ไม่บล็อก
+ */
+export function isCreditNoteBlockedByOutstanding(noteType: 'credit' | 'debit', maxCreditTotalSatang: number | null): boolean {
+  return noteType === 'credit' && maxCreditTotalSatang !== null && maxCreditTotalSatang <= 0
+}
+
+/**
  * มติ PO U171 — ใบลดหนี้ต้องไม่เกิน**ยอดค้างตามเอกสาร**ของรอบวางบิล ณ ตอนบันทึก (บิลชำระครบไม่มียอดค้าง ⇒ บันทึกไม่ได้)
  * ระบบไม่มีที่เก็บเครดิตลูกค้า/การคืนเงิน ⇒ ส่วนที่เกินให้สำนักงานบัญชีจัดการคืนเงินนอกระบบ · ใบเพิ่มหนี้ไม่ต้องเรียก
  */
