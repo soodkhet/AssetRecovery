@@ -1,6 +1,7 @@
 import type { CompanyStatus, InvoiceDeliveryFormat, VatMode } from '@/lib/finance-companies/company'
 import type { CompanyDocumentType, CompanyDocumentWarning } from '@/lib/finance-companies/documents'
 import type { CutoffRuleType, CycleScopeKind, DueRuleType } from '@/lib/generated/prisma/enums'
+import type { ServiceFeeModel } from '@/lib/service-fee/template'
 
 /**
  * รูปร่างข้อมูลที่ API ของโมดูลบริษัทไฟแนนซ์ส่งออก — **pure type ล้วน**
@@ -23,7 +24,8 @@ export interface FinanceCompanyDto {
   serviceFeeTemplateId: string
   /** ชื่อ + model ของเทมเพลตที่ผูกอยู่ (การ์ดบริษัทแสดง 2 ค่านี้ — `10` §8) */
   serviceFeeTemplateName: string | null
-  serviceFeeTemplateModel: string | null
+  /** แสดงผลผ่าน `SERVICE_FEE_MODEL_LABEL` เท่านั้น — ห้ามโชว์รหัสดิบ (ทดสอบซ้ำ local L-01) */
+  serviceFeeTemplateModel: ServiceFeeModel | null
   vatRegistered: boolean
   vatMode: VatMode
   /** % ที่ลูกค้าหักภาษี ณ ที่จ่ายก่อนโอน · `null` = ไม่หัก (มติ PO A1) */

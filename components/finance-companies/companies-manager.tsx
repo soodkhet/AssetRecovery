@@ -29,6 +29,7 @@ import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
 import { formatBranch, formatCustomerWhtPct, formatTaxId, vatModeLabel } from '@/lib/finance-companies/company'
 import type { FinanceCompanyDto } from '@/lib/finance-companies/types'
 import { portalViewAsHomePath, VIEW_CLIENT_PORTAL_AS_CAPABILITY } from '@/lib/portal/view-as'
+import { SERVICE_FEE_MODEL_LABEL } from '@/lib/service-fee/template'
 import type { ServiceFeeTemplateListDto } from '@/lib/service-fee/types'
 
 /**
@@ -294,7 +295,7 @@ export function CompaniesManager() {
                   <Detail label="เทมเพลตค่าบริการ">
                     <span className="font-bold text-slate-900">{company.serviceFeeTemplateName ?? '—'}</span>
                     {company.serviceFeeTemplateModel !== null && (
-                      <span className="ml-1 text-xs text-slate-500">({company.serviceFeeTemplateModel})</span>
+                      <span className="ml-1 text-xs text-slate-500">({SERVICE_FEE_MODEL_LABEL[company.serviceFeeTemplateModel]})</span>
                     )}
                   </Detail>
                   <Detail label="รูปแบบราคา/VAT">

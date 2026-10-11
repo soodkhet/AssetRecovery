@@ -19,6 +19,7 @@ import {
 } from '@/lib/finance-companies/company'
 import { financeCompanyCreateSchema } from '@/lib/finance-companies/schemas'
 import type { FinanceCompanyDto } from '@/lib/finance-companies/types'
+import { SERVICE_FEE_MODEL_LABEL } from '@/lib/service-fee/template'
 import type { ServiceFeeTemplateListDto } from '@/lib/service-fee/types'
 import { describeCutoffRule, describeDueRule } from '@/lib/settings/cycles'
 import type { CycleDto } from '@/lib/settings/types'
@@ -336,7 +337,7 @@ export function CompanyFormModal({
             <option value="">— เลือกเทมเพลตค่าบริการ —</option>
             {templates.map((template) => (
               <option key={template.id} value={template.id}>
-                {template.name} ({template.model} · v{template.version})
+                {template.name} ({SERVICE_FEE_MODEL_LABEL[template.model]} · v{template.version})
               </option>
             ))}
           </Select>

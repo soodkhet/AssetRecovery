@@ -177,7 +177,7 @@ describe('updateFinanceCompany — เปลี่ยน vat_mode / อัตร
     signerName: null,
     serviceFeeTemplateId: TEMPLATE_ID,
     serviceFeeTemplateName: 'มาตรฐาน',
-    serviceFeeTemplateModel: 'fixed',
+    serviceFeeTemplateModel: 'FLAT',
     vatRegistered: true,
     vatMode: 'exclude_vat',
     whtWithheldByCustomerPct: 3,
