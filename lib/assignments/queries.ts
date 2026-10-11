@@ -845,8 +845,10 @@ export async function swapAssignment(
       acceptedAt: outcome.acceptedAt,
       reassignedFrom: input.assignmentId,
       reassignReason: input.reason,
-      // timeout (ไม่มี actor) = ผู้ขอเปลี่ยน ไม่ใช่คนมอบหมายครั้งแรก (UAT BUG-043)
-      createdBy: input.actorId ?? input.requestedBy,
+      // ผู้มอบหมายงานใหม่ = ผู้ขอเปลี่ยนเสมอ ทั้งสาขายินยอมและ timeout (UAT BUG-043)
+      // — ไม่ใช่พนักงานคนเดิมที่กดยินยอม: `created_by` ของงานคือ "ผู้มอบหมาย" ที่แจ้งเตือนรับงาน/หน้ามอบหมายใช้ (mytester2 C2-01)
+      // ผู้ที่กดยินยอมจริงยังอยู่ใน audit (actor) และ `reassignment_history`
+      createdBy: input.requestedBy,
     },
     select: assignmentSelect,
   })

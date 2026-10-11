@@ -462,7 +462,10 @@ export function MainDashboard() {
     <div className="space-y-5">
       {overview.data?.fieldTracker === true && (
         <InlineAlert tone="info" title="งานภาคสนามของคุณอยู่ที่ Field Tracker">
-          <Link href={FIELD_TRACKER_PATH} className="font-semibold underline">
+          <Link
+            href={FIELD_TRACKER_PATH}
+            className="font-semibold underline pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:items-center"
+          >
             เปิด Field Tracker
           </Link>
         </InlineAlert>

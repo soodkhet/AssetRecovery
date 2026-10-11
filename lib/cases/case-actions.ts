@@ -173,6 +173,14 @@ export function caseModalActions(status: string, can: (capability: string) => bo
 }
 
 /**
+ * โหมดที่หน้าจอแสดงจริง — สถานะรอตัดสินแต่ผู้ใช้ไม่มีปุ่มตัดสินเลย (เช่น ธุรการเปิด "ดูรายละเอียด") ⇒ อ่านอย่างเดียว:
+ * ไม่มีคำว่า "ตัดสินใจได้ในหน้าเดียว" และไม่มีช่องเหตุผลที่กรอกแล้วไม่มีผล (mytester2 B2-01 · ต่อจาก staging E-025)
+ */
+export function caseDetailViewMode(status: string, actions: readonly CaseActionButton[]): CaseDetailMode {
+  return actions.length === 0 ? 'readonly' : caseDetailMode(status)
+}
+
+/**
  * ปุ่มเปิดรายละเอียดบนแถวชื่อ "พิจารณา" (เด่น) เฉพาะเคสที่รอการตัดสินใจ **และผู้ใช้กดตัดสินได้จริง**
  * — ธุรการเห็นปุ่ม "พิจารณา" แล้วเปิดไปไม่มีปุ่มตัดสินใจ (staging E-025) ⇒ คนอื่นเห็น "ดูรายละเอียด"
  */

@@ -45,6 +45,7 @@ import {
   CLOSE_FAIL_REASONS,
   type CloseFailReason,
 } from '@/lib/field/fail-reasons'
+import { createDeferredSave } from '@/lib/field/deferred-save'
 import { closeExpenseToastDescription } from '@/lib/field/expense-ui'
 import { currentPosition, GeolocationError } from '@/lib/field/geolocation'
 import { mapsPointHref } from '@/lib/field/field-ui'
@@ -556,6 +557,20 @@ export function CloseCaseModal({
     [caseId, dropRejectedUpload, showToast],
   )
 
+  /**
+   * autosave หน่วงสั้น ๆ — กด "ยืนยันปิดงาน" ขณะยังอยู่ในช่องข้อความ (blur) ต้องไม่ยิง close-draft ตามหลังปิดงาน
+   * (mytester2 DO2-01) · ปิดหน้าต่าง = ทำงานที่ค้างทันที ข้อความที่พิมพ์ไม่หาย (หลังปิดงาน `closingRef` กันซ้ำอีกชั้น)
+   */
+  const [draftSaver] = useState(createDeferredSave)
+  useEffect(() => () => draftSaver.flush(), [draftSaver])
+  const scheduleDraft = useCallback(
+    (next: CloseFormState, options?: { revision?: boolean }): void => {
+      if (options?.revision === true) return
+      draftSaver.schedule(() => void persistDraft(next, options))
+    },
+    [draftSaver, persistDraft],
+  )
+
   // โหลดรายละเอียด + ดึง GPS เป็นจุดเริ่มเดินทางทันทีที่เปิดฟอร์มครั้งแรกของเคส (`41` §7.6/§8)
   useEffect(() => {
     let cancelled = false
@@ -622,7 +637,7 @@ export function CloseCaseModal({
     formRef.current = next
     setForm(next)
     setShowMissing(false)
-    void persistDraft(next, { revision: mode?.revision === true })
+    scheduleDraft(next, { revision: mode?.revision === true })
   }
 
   /** ใช้หลัง `await` — คำนวณค่าใหม่จากฟอร์มล่าสุด (`formRef`) แทน `form` ที่ค้างจากตอนเริ่ม */
@@ -779,6 +794,7 @@ export function CloseCaseModal({
   }
 
   async function saveDraftAndClose(): Promise<void> {
+    draftSaver.cancel()
     setSubmitting(true)
     try {
       // บันทึกล้ม = ค้างฟอร์มไว้ (toast error ขึ้นจาก persistDraft แล้ว) ไม่ปิดหน้าต่างทิ้งข้อมูล
@@ -805,6 +821,8 @@ export function CloseCaseModal({
       return
     }
 
+    // ทิ้ง autosave ที่ค้าง (เช่น blur จากช่องบันทึกเพิ่มเติม) ก่อนส่งปิดงาน — ฟอร์มที่ส่งมีค่าเดียวกันอยู่แล้ว (DO2-01)
+    draftSaver.cancel()
     setSubmitting(true)
     closingRef.current = true
     try {
@@ -833,6 +851,8 @@ export function CloseCaseModal({
           title: response.error?.title ?? 'บันทึกไม่สำเร็จ',
           description: response.error?.message,
         })
+        // autosave ที่ถูกทิ้งตอนกดส่ง — เก็บฟอร์มล่าสุดเป็น draft ต่อ
+        scheduleDraft(formRef.current, { revision: mode.revision })
         return
       }
 
@@ -872,6 +892,13 @@ export function CloseCaseModal({
 
   /** ปิดด้วย X/พื้นหลัง — มีการบันทึกไปแล้ว ⇒ ให้รายการรีโหลดก่อน (DI-01) */
   function dismiss(): void {
+    if (draftSaver.hasPending()) {
+      // autosave ยังหน่วงอยู่ — บันทึกฟอร์มล่าสุดก่อน แล้วค่อยให้รายการรีโหลด (ป้าย Draft ขึ้นทันที)
+      draftSaver.cancel()
+      void persistDraft(formRef.current).then(() => onDone())
+      onClose()
+      return
+    }
     if (savedRef.current) onDone()
     onClose()
   }
@@ -1017,7 +1044,7 @@ export function CloseCaseModal({
                         href={mapsPointHref(originCenter.latitude, originCenter.longitude)}
                         target="_blank"
                         rel="noreferrer"
-                        className="focus-ring inline-flex items-center gap-1 text-[11px] font-extrabold text-blue-700 underline"
+                        className="focus-ring inline-flex items-center gap-1 text-[11px] font-extrabold text-blue-700 underline pointer-coarse:min-h-11"
                       >
                         <IconMap className="h-3.5 w-3.5" /> เปิดใน Google Maps
                       </a>
@@ -1165,7 +1192,7 @@ export function CloseCaseModal({
                   locked={mode.outcomeLocked}
                   onSelect={(failReason) => updateForm({ ...form, failReason })}
                   onDetailChange={(text) => setForm({ ...form, failReasonDetail: text === '' ? null : text })}
-                  onDetailBlur={() => void persistDraft(form, { revision: mode.revision })}
+                  onDetailBlur={() => scheduleDraft(form, { revision: mode.revision })}
                 />
               )}
 
@@ -1176,7 +1203,7 @@ export function CloseCaseModal({
                   maxLength={2000}
                   value={form.note ?? ''}
                   onChange={(event) => setForm({ ...form, note: event.target.value === '' ? null : event.target.value })}
-                  onBlur={() => void persistDraft(form, { revision: mode.revision })}
+                  onBlur={() => scheduleDraft(form, { revision: mode.revision })}
                   placeholder="รายละเอียดที่อยากบันทึกไว้กับการปิดงานครั้งนี้"
                 />
               </div>

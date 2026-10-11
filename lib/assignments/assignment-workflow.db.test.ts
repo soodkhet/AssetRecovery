@@ -461,6 +461,39 @@ suite('Phase 2.6 — reassign 2 สาขา (`40` §9 · §11 · §20)', () => 
     expect(await db().pendingReassignment.count({ where: { caseId, status: 'consented' } })).toBe(1)
   })
 
+  it('mytester2 C2-01 — ยินยอมแล้ว ผู้มอบหมายงานใหม่ = ผู้ขอ (ไม่ใช่พนักงานคนเดิม) · คนใหม่รับงาน แจ้งเตือนไม่ไปหาคนเดิม', async () => {
+    const caseId = await seedApprovedCase()
+    await queries.assignCase(manager, caseId, { agentId: AGENT_A }, { actor: manager, meta })
+    await queries.acceptAssignment(agentA, caseId, { actor: agentA, meta })
+    await queries.reassignCase(manager, caseId, { agentId: AGENT_B, reason: 'สลับพื้นที่' }, { actor: manager, meta })
+    await queries.respondReassignment(agentA, caseId, { decision: 'consent' }, { actor: agentA, meta })
+
+    const replacement = await db().caseAssignment.findFirstOrThrow({ where: { caseId, agentId: AGENT_B } })
+    expect(replacement.createdBy).toBe(MANAGER_ID)
+    // ผู้กดยินยอมจริงยังอยู่ใน audit
+    const audit = await db().auditLog.findFirst({
+      where: { organizationId: ORG_ID, targetType: 'case_assignments', actorId: AGENT_A, action: 'update' },
+      orderBy: { createdAt: 'desc' },
+    })
+    expect(audit).not.toBeNull()
+
+    await queries.acceptAssignment(agentB, caseId, { actor: agentB, meta })
+    const waitFor = async (): Promise<{ userId: string }[]> => {
+      for (let attempt = 0; attempt < 40; attempt += 1) {
+        const rows = await db().notification.findMany({
+          where: { organizationId: ORG_ID, eventCode: 'assignment.accepted' },
+          select: { userId: true },
+        })
+        if (rows.some((row) => row.userId === MANAGER_ID)) return rows
+        await new Promise((resolve) => setTimeout(resolve, 50))
+      }
+      return []
+    }
+    const notified = await waitFor()
+    expect(notified.some((row) => row.userId === MANAGER_ID)).toBe(true)
+    expect(notified.some((row) => row.userId === AGENT_A)).toBe(false)
+  })
+
   it('ไม่ยินยอม: ต้องมีเหตุผล และเคสไม่เปลี่ยนแปลงอะไรเลย', async () => {
     const caseId = await seedApprovedCase()
     await queries.assignCase(manager, caseId, { agentId: AGENT_A }, { actor: manager, meta })

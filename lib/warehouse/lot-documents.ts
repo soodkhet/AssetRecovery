@@ -124,10 +124,17 @@ export function lotDocumentSlots(lot: {
   status: HandoverLotStatus
   signedDocUrl?: string | null
   deliveryProofUrl?: string | null
+  signedDocAttached?: boolean
+  deliveryProofAttached?: boolean
 }): LotDocumentSlot[] {
   const urls: Readonly<Record<LotDocument, string | null>> = {
     signed_doc: emptyToNull(lot.signedDocUrl),
     delivery_proof: emptyToNull(lot.deliveryProofUrl),
+  }
+  // การ์ด (ไม่มี url) และผู้ดูที่ถูกซ่อนไฟล์ตามสิทธิ์ใช้ธงจาก server — แนบแล้วแต่ยังไม่ยืนยันต้องขึ้น "แนบแล้ว" (mytester2 E2-02)
+  const flags: Readonly<Record<LotDocument, boolean>> = {
+    signed_doc: lot.signedDocAttached === true,
+    delivery_proof: lot.deliveryProofAttached === true,
   }
   return requiredLotDocuments(lot.type).map((document) => ({
     document,
@@ -135,8 +142,30 @@ export function lotDocumentSlots(lot: {
     hint: LOT_DOCUMENT_HINT[document],
     ordinal: LOT_DOCUMENT_ORDINAL[document],
     fileUrl: urls[document],
-    attached: urls[document] !== null || isLotConfirmed(lot.status),
+    attached: urls[document] !== null || flags[document] || isLotConfirmed(lot.status),
   }))
+}
+
+/**
+ * ข้อความแจ้งบนหน้ารายละเอียดล็อตที่ยังไม่ยืนยัน (mytester2 E2-02)
+ * - `pending` — ยังขาดเอกสารอะไร หรือครบแล้วรอกดยืนยัน
+ * - `removalLocked` — ทำไมนำเครื่องออกจากล็อตไม่ได้ (มติชั่วคราว M5) · `null` = นำออกได้/ล็อตยืนยันแล้ว
+ */
+export function lotPendingNotice(
+  lot: { status: HandoverLotStatus; assetRemovalLocked?: boolean },
+  slots: readonly LotDocumentSlot[],
+): { pending: string; removalLocked: string | null } {
+  const missing = slots.filter((slot) => !slot.attached).map((slot) => slot.label)
+  const pending =
+    missing.length === 0
+      ? 'แนบเอกสารครบแล้ว รอยืนยันส่งมอบ — รายการเบิกของทีมภาคสนามและรายได้จะปลดล็อกเมื่อยืนยัน'
+      : `ต้องแนบ${missing.join(' + ')} แล้วยืนยัน — รายการเบิกของทีมภาคสนามและรายได้จะปลดล็อกเมื่อยืนยัน`
+  if (isLotConfirmed(lot.status) || lot.assetRemovalLocked !== true) return { pending, removalLocked: null }
+  const signedAttached = slots.some((slot) => slot.document === 'signed_doc' && slot.attached)
+  const removalLocked = signedAttached
+    ? 'แนบใบส่งมอบที่มีลายเซ็นผู้รับแล้ว — รายการเครื่องต้องตรงกับเอกสารที่ผู้รับเซ็น จึงนำเครื่องออกจากล็อตนี้ไม่ได้'
+    : 'เครื่องออกจากคลังไปแล้ว — นำเครื่องออกจากล็อตนี้ไม่ได้'
+  return { pending, removalLocked }
 }
 
 function emptyToNull(value: string | null | undefined): string | null {

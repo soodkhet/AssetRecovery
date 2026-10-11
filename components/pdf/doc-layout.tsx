@@ -409,6 +409,16 @@ export function DocTable({ columns, children }: { columns: readonly DocColumn[];
   )
 }
 
+/**
+ * ห้ามตัดบรรทัดตรงรอยต่อระหว่างอักษรต่างชุด (ไทย ↔ ละติน/วงเล็บ) ในเซลล์ตาราง (mytester2 E2-01)
+ *
+ * ฟอนต์ปิดการตัดคำภายในคำแล้ว (`thai-font.ts`) แต่ react-pdf แบ่งข้อความเป็นหลาย run ตามชุดอักษร และถือรอยต่อ run
+ * ที่ไม่มีช่องว่างเป็น "จุดตัดคำ" — ตัดตรงนั้นแล้ว**เติมขีด**ท้ายบรรทัด ("รอยบุบ (MT2-1011)" ⇒ "(-" / "MT2-1011)")
+ * ค่า penalty = อนันต์ของ Knuth–Plass (10000) ⇒ ตัดได้เฉพาะช่องว่าง/ขึ้นบรรทัดที่มีในข้อความ
+ * (เลขสัญญายาวยังขึ้นบรรทัดตาม `wrapReference` ซึ่งใช้ `\n` ไม่พึ่งจุดนี้)
+ */
+export const NO_RUN_BOUNDARY_BREAK = 10_000
+
 /** เซลล์หนึ่งช่อง — `main` บรรทัดหลัก · `detail` บรรทัดรองสีเทา · `mono` = เลขอ้างอิง/IMEI */
 export interface DocCell {
   main: string
@@ -436,9 +446,15 @@ export function DocRow({
             key={column.label}
             style={[layout.cell, ...(index === 0 ? [layout.cellFirst] : []), { width: column.width }, ...toneStyle(tone)]}
           >
-            <Text style={[alignStyle(column.align), ...(cell.mono === true ? [monoStyle(cell.main)] : [])]}>{cell.main}</Text>
+            <Text
+              hyphenationPenalty={NO_RUN_BOUNDARY_BREAK}
+              style={[alignStyle(column.align), ...(cell.mono === true ? [monoStyle(cell.main)] : [])]}
+            >
+              {cell.main}
+            </Text>
             {cell.detail === undefined || cell.detail === null || cell.detail === '' ? null : (
               <Text
+                hyphenationPenalty={NO_RUN_BOUNDARY_BREAK}
                 style={[
                   layout.muted,
                   alignStyle(column.align),
