@@ -94,8 +94,9 @@ export interface ApprovalWhtGroupInput extends ApprovalWhtInput {
 
 /**
  * **pure** — ยอด WHT ของหลายรายการพร้อมกัน (mytester F-03): รายการที่ยังไม่เข้ารอบของผู้รับคนเดียวกันคิดเป็นกลุ่มเดียว
- * ด้วย `calculatePayeeBatchWht()` (เกณฑ์ขั้นต่ำเทียบฐานรวม + ยอดสะสมของเดือนเมื่อส่ง `monthToDate`) ⇒ ตัวเลขต่อแถว/ผลรวม
- * ตรงกับรอบจ่ายที่จะสร้าง แทนการคิดเกณฑ์ทีละรายการ (เดิมค่าน้ำมัน/เบี้ยเสี่ยงโชว์ ฿0) · ลำดับผลลัพธ์ = ลำดับ input
+ * ด้วย `calculatePayeeBatchWht()` (เกณฑ์ขั้นต่ำเทียบฐานรวม + ยอดสะสมของเดือนเมื่อส่ง `monthToDate`) แทนการคิดเกณฑ์
+ * ทีละรายการ (เดิมค่าน้ำมัน/เบี้ยเสี่ยงโชว์ ฿0) · ผู้เรียกเลือกชุดรายการเอง — คิวใช้ `approvalWhtPreviewsForNextBatch()`
+ * · ขาดอัตรา 40(1)/40(2) ⇒ ทุกแถวของกลุ่มเตือน (รอบจ่ายปฏิเสธทั้งรอบของผู้รับ) · ลำดับผลลัพธ์ = ลำดับ input
  */
 export function approvalWhtPreviews(
   inputs: readonly ApprovalWhtGroupInput[],
@@ -183,6 +184,49 @@ export function approvalWhtPreviews(
 
   return result.map((preview) => {
     if (preview === undefined) throw new Error('approvalWhtPreviews: คำนวณ WHT ไม่ครบทุกรายการ')
+    return preview
+  })
+}
+
+export interface ApprovalWhtQueueInput extends ApprovalWhtGroupInput {
+  /** `expenses.status = approved` — รอบจ่ายหยิบเฉพาะรายการที่อนุมัติครบแล้ว */
+  approved: boolean
+}
+
+/**
+ * **pure** — ยอด WHT คาดการณ์ของคิวอนุมัติ "ถ้ารายการนี้เข้ารอบจ่ายถัดไป" (mytester F-03 รีวิว):
+ * รอบจ่ายหยิบเฉพาะรายการ `approved` ที่ยังไม่เข้ารอบ ⇒ กลุ่มของแต่ละแถว = รายการอนุมัติแล้วของผู้รับคนเดียวกัน
+ * (+ ตัวแถวเองถ้ายังไม่อนุมัติ) — รายการรออนุมัติอื่นไม่นับ เพราะยังไม่เข้ารอบ · รายการที่เข้ารอบแล้ว = ยอดของรอบ
+ */
+export function approvalWhtPreviewsForNextBatch(
+  inputs: readonly ApprovalWhtQueueInput[],
+  options: { monthToDate?: ReadonlyMap<string, MonthToDate> | null } = {},
+): ApprovalWhtPreview[] {
+  const result = new Array<ApprovalWhtPreview | undefined>(inputs.length)
+  const approvedByPayee = new Map<string, number[]>()
+  inputs.forEach((input, index) => {
+    if (input.payoutItem !== null) {
+      result[index] = approvalWhtPreviews([input], options)[0]
+      return
+    }
+    if (!input.approved) return
+    const members = approvedByPayee.get(input.payeeId) ?? []
+    members.push(index)
+    approvedByPayee.set(input.payeeId, members)
+  })
+  for (const members of approvedByPayee.values()) {
+    const previews = approvalWhtPreviews(members.map((index) => inputs[index]!), options)
+    members.forEach((index, position) => {
+      result[index] = previews[position]
+    })
+  }
+  inputs.forEach((input, index) => {
+    if (input.payoutItem !== null || input.approved) return
+    const approved = (approvedByPayee.get(input.payeeId) ?? []).map((member) => inputs[member]!)
+    result[index] = approvalWhtPreviews([...approved, input], options).at(-1)
+  })
+  return result.map((preview) => {
+    if (preview === undefined) throw new Error('approvalWhtPreviewsForNextBatch: คำนวณ WHT ไม่ครบทุกรายการ')
     return preview
   })
 }

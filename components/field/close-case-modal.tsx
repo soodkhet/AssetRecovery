@@ -532,6 +532,8 @@ export function CloseCaseModal({
           jsonRequest('POST', closeDraftPayload(payloadForm)),
         )
         if (response.error === undefined) return !dropped
+        // ปิดงานไปแล้วระหว่างรอ autosave (server ปฏิเสธเพราะสถานะเปลี่ยน) ⇒ เงียบ ไม่โชว์ error ทับ toast ปิดงานสำเร็จ
+        if (closingRef.current) return true
         const cleaned = dropRejectedUpload(payloadForm, response.error)
         if (cleaned === null) {
           showToast({ tone: 'error', title: response.error.title, description: response.error.message })

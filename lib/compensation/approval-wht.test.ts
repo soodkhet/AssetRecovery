@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   approvalWhtPreview,
   approvalWhtPreviews,
+  approvalWhtPreviewsForNextBatch,
   WHT_402_RATE_MISSING_WARNING,
   WHT_RATE_MISSING_WARNING,
   type ApprovalWhtInput,
@@ -157,5 +158,32 @@ describe('mytester F-03 — คิวอนุมัติคิดเกณฑ�
     expect(batched!.whtFromPayout).toBe(true)
     expect(batched!.whtSatang).toBe(1_500)
     expect(alone!.whtSatang).toBe(0)
+  })
+})
+
+describe('mytester F-03 รีวิว — คิวคิดแบบรอบจ่ายถัดไป (เฉพาะรายการอนุมัติแล้ว)', () => {
+  it('ค่าน้ำมันอนุมัติแล้ว + ค่าคอมยังรออนุมัติ ⇒ ค่าน้ำมันไม่ถูกหัก (รอบจ่ายตอนนี้มีแค่ค่าน้ำมัน) · ค่าคอมคิดรวมกับรายการอนุมัติแล้ว', () => {
+    const fuel = { ...input({ grossSatang: 9_300, expenseType: 'fuel' }), payeeId: 'p1', approved: true }
+    const commission = { ...input({ grossSatang: 100_000, expenseType: 'commission' }), payeeId: 'p1', approved: false }
+    const [fuelPreview, commissionPreview] = approvalWhtPreviewsForNextBatch([fuel, commission])
+    expect(fuelPreview!.whtSatang).toBe(0)
+    expect(fuelPreview!.whtBelowThreshold).toBe(true)
+    // ถ้าค่าคอมอนุมัติแล้วเข้ารอบเดียวกับค่าน้ำมัน: ฐาน 1,093 ⇒ หัก 3% ส่วนของค่าคอม
+    expect(commissionPreview!.whtSatang).toBe(approvalWhtPreviews([fuel, commission]).at(-1)!.whtSatang)
+    expect(commissionPreview!.whtSatang).toBeGreaterThan(0)
+  })
+
+  it('รายการรออนุมัติสองรายการไม่นับรวมกัน (ต่างคนต่างคิดกับชุดอนุมัติแล้ว)', () => {
+    const a = { ...input({ grossSatang: 60_000 }), payeeId: 'p2', approved: false }
+    const b = { ...input({ grossSatang: 60_000 }), payeeId: 'p2', approved: false }
+    expect(approvalWhtPreviewsForNextBatch([a, b]).map((preview) => preview.whtSatang)).toEqual([0, 0])
+  })
+
+  it('ขาดอัตรา 40(2) ⇒ ทุกแถวของกลุ่มเตือน รวมแถวนอกฐาน (รอบจ่ายปฏิเสธทั้งรอบของผู้รับ)', () => {
+    const policy = { ...DEFAULT_WHT_POLICY, incomeTypeMode: 'all_40_2' as const }
+    const commission = { ...input({ policy, expenseType: 'commission' }, { wht402Pct: null }), payeeId: 'p3' }
+    const hotel = { ...input({ policy, expenseType: 'hotel' }, { wht402Pct: null }), payeeId: 'p3' }
+    const previews = approvalWhtPreviews([commission, hotel])
+    expect(previews.every((preview) => preview.whtWarning === WHT_402_RATE_MISSING_WARNING)).toBe(true)
   })
 })

@@ -456,17 +456,17 @@ function serviceFeeSnapshotAudit(row: CaseDetailRow) {
   }
 }
 
-/**
- * `90` §13 บังคับ `reason` เมื่อ audit แตะฟิลด์ snapshot ค่าบริการ (หมวด money ใน `reason-policy.ts`)
- * แต่ `38` ไม่ได้บังคับให้ผู้พิจารณากรอกเหตุผลตอน "รับเคส" — การ snapshot เป็นผลอัตโนมัติตามสเปค
- * จึงเติมเหตุผลเชิงระบบที่ระบุ template/version ที่ใช้ (ยัง trace กลับได้ว่าใช้เงื่อนไขไหน)
- */
 /** **pure** — รวมเหตุผลหลายส่วนของ audit แถวเดียว (ข้ามค่าว่าง) */
 export function joinAuditReasons(...parts: readonly (string | null)[]): string | null {
   const kept = parts.map((part) => part?.trim() ?? '').filter((part) => part !== '')
   return kept.length === 0 ? null : kept.join(' · ')
 }
 
+/**
+ * `90` §13 บังคับ `reason` เมื่อ audit แตะฟิลด์ snapshot ค่าบริการ (หมวด money ใน `reason-policy.ts`)
+ * แต่ `38` ไม่ได้บังคับให้ผู้พิจารณากรอกเหตุผลตอน "รับเคส" — การ snapshot เป็นผลอัตโนมัติตามสเปค
+ * จึงเติมเหตุผลเชิงระบบที่ระบุ template/version ที่ใช้ (ยัง trace กลับได้ว่าใช้เงื่อนไขไหน)
+ */
 function snapshotReason(templateName: string, version: number): string {
   return `snapshot ค่าบริการอัตโนมัติตอนอนุมัติเคส — เทมเพลต "${templateName}" v${version}`
 }

@@ -37,7 +37,11 @@ import {
   type ApprovalMatrixCandidate,
 } from '@/lib/finance/approval-flow-resolver'
 import { FinanceError } from '@/lib/finance/errors'
-import { approvalWhtPreviews, type ApprovalWhtGroupInput, type ApprovalWhtPreview } from '@/lib/compensation/approval-wht'
+import {
+  approvalWhtPreviewsForNextBatch,
+  type ApprovalWhtGroupInput,
+  type ApprovalWhtPreview,
+} from '@/lib/compensation/approval-wht'
 import type { MonthToDate } from '@/lib/finance/wht-month-to-date'
 import { loadMonthToDate } from '@/lib/payout/month-to-date-queries'
 import { resolvePayoutSide } from '@/lib/payout/payout'
@@ -372,10 +376,33 @@ async function currentWhtPolicy(organizationId: string, payeeIds: readonly strin
   return { policy: policy.values, typeDefaults, monthToDate }
 }
 
-function whtOf(row: ExpenseRow, settings: ApprovalWhtSettings): ApprovalWhtPreview {
-  const [preview] = approvalWhtPreviews([whtInputOf(row, settings)], { monthToDate: settings.monthToDate })
-  if (preview === undefined) throw new Error('whtOf: คำนวณ WHT ไม่ได้')
-  return preview
+/**
+ * mytester F-03 — ยอด WHT คาดการณ์ของแถวในคิว คิดแบบรอบจ่ายถัดไป: รวมรายการ `approved` ที่ยังไม่เข้ารอบของผู้รับเดียวกัน
+ * (รวมที่อยู่นอกแท็บ/ตัวกรอง — ใช้ร่วมคิดเท่านั้น ไม่แสดง) + ยอดสะสมของเดือน · ใช้ทั้งรายการคิวและผลของ action
+ */
+async function whtPreviewsFor(
+  organizationId: string,
+  rows: readonly ExpenseRow[],
+  settings: ApprovalWhtSettings,
+): Promise<Map<string, ApprovalWhtPreview>> {
+  if (rows.length === 0) return new Map()
+  const others = await prisma.expense.findMany({
+    where: {
+      organizationId,
+      deletedAt: null,
+      payeeId: { in: [...new Set(rows.map((row) => row.payee.id))] },
+      status: 'approved',
+      payoutBatchItemId: null,
+      id: { notIn: rows.map((row) => row.id) },
+    },
+    select: expenseSelect,
+    take: 500,
+  })
+  const previews = approvalWhtPreviewsForNextBatch(
+    [...rows, ...others].map((row) => ({ ...whtInputOf(row, settings), approved: row.status === 'approved' })),
+    { monthToDate: settings.monthToDate },
+  )
+  return new Map(rows.map((row, index) => [row.id, previews[index]!]))
 }
 
 function whtInputOf(row: ExpenseRow, settings: ApprovalWhtSettings): ApprovalWhtGroupInput {
@@ -425,14 +452,13 @@ function toDto(
   viewer: CapabilityHolder,
   policy: ApprovalWhtSettings,
   payeeGaps: ReadonlyMap<string, readonly string[]>,
-  /** ยอด WHT ที่คิดเป็นกลุ่มต่อผู้รับไว้แล้ว (คิว) · ไม่ส่ง = คิดเฉพาะแถวนี้ */
-  precomputedWht?: ApprovalWhtPreview,
+  /** ยอด WHT จาก `whtPreviewsFor()` (คิดเป็นกลุ่มแบบรอบจ่ายถัดไป) */
+  wht: ApprovalWhtPreview,
 ): CompensationApprovalDto {
   const pendingStep = row.status === 'approved' ? null : row.approvalStepCurrent
   const pendingStepRole = pendingStep === null ? null : (flow.steps[pendingStep - 1] ?? null)
 
   // `22` §6.9 · `18` §6.3 — **Payee ชนะ Plan** + ฐาน/ประเภทเงินได้/เงื่อนไขการหัก ผ่านตัวคำนวณเดียวกับรอบจ่าย (BUG-176)
-  const wht = precomputedWht ?? whtOf(row, policy)
 
   return {
     id: row.id,
@@ -581,32 +607,13 @@ export async function listCompensationApprovals(
   if (rows.length === 0) return []
 
   const payeeIds = [...new Set(rows.map((row) => row.payee.id))]
-  const [candidates, policy, payeeGaps, fuelRoutes, otherUnbatched] = await Promise.all([
+  const [candidates, policy, payeeGaps, fuelRoutes] = await Promise.all([
     loadMatrixCandidates(user.organizationId),
     currentWhtPolicy(user.organizationId, payeeIds),
-    loadPayeeInfoGaps(
-      user.organizationId,
-      rows.map((row) => row.payee.id),
-    ),
+    loadPayeeInfoGaps(user.organizationId, payeeIds),
     loadFuelRoutes(user.organizationId, rows),
-    // mytester F-03 — รายการอื่นของผู้รับเดียวกันที่ยังไม่เข้ารอบ (นอกแท็บ/ตัวกรอง) ร่วมคิดเกณฑ์ขั้นต่ำ แต่ไม่แสดง
-    prisma.expense.findMany({
-      where: {
-        organizationId: user.organizationId,
-        deletedAt: null,
-        payeeId: { in: payeeIds },
-        status: { in: [...PIPELINE_STATUSES] },
-        payoutBatchItemId: null,
-        id: { notIn: rows.map((row) => row.id) },
-      },
-      select: expenseSelect,
-    }),
   ])
-  const previews = approvalWhtPreviews(
-    [...rows, ...otherUnbatched].map((row) => whtInputOf(row, policy)),
-    { monthToDate: policy.monthToDate },
-  )
-  const whtById = new Map(rows.map((row, index) => [row.id, previews[index]]))
+  const whtById = await whtPreviewsFor(user.organizationId, rows, policy)
   // `16` §10 — ผู้อนุมัติขั้น N เห็นเฉพาะรายการที่ถึงขั้นของตน (UAT R6-7) · กรองหลังรู้สายของแต่ละรายการ
   // (สาย snapshot/คาดการณ์ต่างกันรายแถว จึงกรองใน SQL ตรง ๆ ไม่ได้)
   return rows.flatMap((row) => {
@@ -617,7 +624,7 @@ export async function listCompensationApprovals(
       steps: flow.steps,
     })
     return visible
-      ? [{ ...toDto(row, flow, user, policy, payeeGaps, whtById.get(row.id)), fuelRoute: fuelRoutes.get(row.id) ?? [] }]
+      ? [{ ...toDto(row, flow, user, policy, payeeGaps, whtById.get(row.id)!), fuelRoute: fuelRoutes.get(row.id) ?? [] }]
       : []
   })
 }
@@ -866,13 +873,15 @@ export async function approveCompensationExpense(
     )
   }
 
+  const approvedSettings = await currentWhtPolicy(user.organizationId, [outcome.row.payee.id])
   return {
     expense: toDto(
       outcome.row,
       { ...flow, projected: false },
       user,
-      await currentWhtPolicy(user.organizationId, [outcome.row.payee.id]),
+      approvedSettings,
       await loadPayeeInfoGaps(user.organizationId, [outcome.row.payee.id]),
+      (await whtPreviewsFor(user.organizationId, [outcome.row], approvedSettings)).get(outcome.row.id)!,
     ),
     events: outcome.events,
     revenueEligibleCaseIds: outcome.revenueEligibleCaseIds,
@@ -1024,13 +1033,15 @@ async function rejectExpenseWith(
     }),
   )
 
+  const rejectedSettings = await currentWhtPolicy(user.organizationId, [updated.payee.id])
   return {
     expense: toDto(
       updated,
       flow ?? fallbackFlow(updated),
       user,
-      await currentWhtPolicy(user.organizationId, [updated.payee.id]),
+      rejectedSettings,
       await loadPayeeInfoGaps(user.organizationId, [updated.payee.id]),
+      (await whtPreviewsFor(user.organizationId, [updated], rejectedSettings)).get(updated.id)!,
     ),
     events: ['expense.rejected'],
   }
