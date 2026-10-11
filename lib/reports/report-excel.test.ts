@@ -64,3 +64,44 @@ describe('buildReportWorkbook — รูปแบบตัวเลข (BUG-134)
     expect(tat?.v ?? '').toBe('')
   })
 })
+
+describe('buildReportWorkbook — การ์ด KPI และหมายเหตุ (mytester J-05)', () => {
+  const WITH_KPI: ReportPayload = {
+    ...PAYLOAD,
+    kpis: [
+      { key: 'revenue', label: 'รายได้รวม', value: 363_000, type: 'money' },
+      { key: 'ar', label: 'AR ค้างรับ', value: 259_623, type: 'money', hint: 'ยอด ณ วันที่คำนวณ' },
+      { key: 'margin', label: 'Margin', value: null, type: 'percent' },
+    ],
+    note: 'นับเฉพาะเคสที่ปิดแล้ว',
+  }
+
+  function sheetOf(payload: ReportPayload) {
+    const workbook = read(buildReportWorkbook(payload, new Date('2026-10-04T03:00:00Z')), { cellNF: true })
+    const sheet = workbook.Sheets[workbook.SheetNames[0] ?? '']
+    if (sheet === undefined) throw new Error('ไม่มีชีต')
+    return sheet
+  }
+
+  it('แถว KPI อยู่ระหว่างหัวชีตกับหัวตาราง · เงินเป็นตัวเลขบาทพร้อมรูปแบบ', () => {
+    const sheet = sheetOf(WITH_KPI)
+    const cell = (r: number, c: number) => sheet[utils.encode_cell({ r, c })] as CellObject | undefined
+    expect(cell(5, 0)?.v).toBe('ตัวชี้วัดหลัก')
+    expect(cell(6, 0)?.v).toBe('รายได้รวม')
+    expect(cell(6, 1)).toMatchObject({ t: 'n', v: 3630, z: '#,##0.00' })
+    expect(cell(7, 1)).toMatchObject({ t: 'n', v: 2596.23 })
+    expect(cell(7, 2)?.v).toBe('ยอด ณ วันที่คำนวณ')
+    expect(cell(8, 0)?.v).toBe('Margin')
+    // หัวตารางเลื่อนลงต่อจากบรรทัดว่างหลัง KPI · แถวข้อมูลยังมีรูปแบบตัวเลข
+    expect(cell(10, 0)?.v).toBe('บริษัท')
+    expect(cell(11, 1)).toMatchObject({ t: 'n', v: 3630, z: '#,##0.00' })
+  })
+
+  it('หมายเหตุใต้ตารางอยู่ในไฟล์ด้วย', () => {
+    const sheet = sheetOf(WITH_KPI)
+    const values = Object.entries(sheet)
+      .filter(([key]) => !key.startsWith('!'))
+      .map(([, value]) => (value as CellObject).v)
+    expect(values).toContain('นับเฉพาะเคสที่ปิดแล้ว')
+  })
+})

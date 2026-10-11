@@ -336,7 +336,7 @@ function renderDashboard(){
       <div class="font-bold text-slate-800">อายุหนี้ (ยอดค้างชำระแยกตามจำนวนวัน)</div>
       <div class="text-xs text-slate-500">ณ วันที่ ${nowDate()}</div>
     </div>
-    <div class="text-xs text-slate-400 mb-4">ยอดที่ยังค้างชำระ นับจากวันที่วางบิลจนถึงวันนี้ ยิ่งอยู่คอลัมน์ขวายิ่งค้างนาน (AR = Accounts Receivable)</div>
+    <div class="text-xs text-slate-400 mb-4">ยอดที่ยังค้างชำระ แยกตามจำนวนวันนับจากวันครบกำหนดชำระจนถึงวันนี้ ยิ่งอยู่คอลัมน์ขวายิ่งค้างนาน (AR = Accounts Receivable)</div>
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
       ${kpi('0-30 วัน', '฿ '+money(store.arAging.b0_30), '', 'emerald')}
       ${kpi('31-60 วัน', '฿ '+money(store.arAging.b31_60), '', 'amber')}

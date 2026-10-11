@@ -26,11 +26,13 @@ import {
   EXECUTIVE_DASHBOARD_KPI_KEYS,
   pendingQueueItems,
   withArOver60Hint,
+  queueAsOfText,
   queueCountText,
   queueKpiItems,
   reportAsOfText,
   type DashboardOverviewDto,
   type DashboardQueueItemDto,
+  type DashboardSetupDto,
 } from '@/lib/dashboard/widgets'
 import { notificationHref } from '@/lib/field/push-client'
 import { fmtDateTime } from '@/lib/format/datetime'
@@ -257,7 +259,7 @@ function MyQueuesCard({ overview }: { overview: LoadState<DashboardOverviewDto> 
         description={
           overview.data === null
             ? 'คิวงานที่คุณลงมือทำได้'
-            : `ข้อมูล ณ ${fmtDateTime(overview.data.computedAt)}`
+            : queueAsOfText(overview.data.computedAt)
         }
         action={
           <Button variant="ghost" loading={overview.loading} onClick={() => void overview.reload()}>
@@ -419,6 +421,37 @@ function NotificationsCard() {
   )
 }
 
+// ── เริ่มต้นใช้งานระบบ (mytester A-05) ─────────────────────────────────────────
+
+/** ระบบยังตั้งค่าไม่ครบ (เปิดใช้วันแรก) — บอกลำดับขั้นพร้อมลิงก์ไปหน้าตั้งค่า · ครบแล้ว API ส่ง `null` การ์ดหายเอง */
+function SetupChecklistCard({ setup }: { setup: DashboardSetupDto }) {
+  return (
+    <Card>
+      <CardHeader
+        title="เริ่มต้นใช้งานระบบ"
+        description={`ตั้งค่าพื้นฐานให้ครบก่อนเริ่มรับเคส — เสร็จแล้ว ${fmtCount(setup.doneCount)} จาก ${fmtCount(setup.steps.length)} ขั้น`}
+      />
+      <ol className="mt-4 divide-y divide-slate-100">
+        {setup.steps.map((step, index) => (
+          <li key={step.id} className="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-xs text-slate-400">{index + 1}.</span>
+                <span className="text-sm font-semibold text-slate-800">{step.label}</span>
+                <StatusBadge group={step.done ? 'success' : 'pending'} label={step.done ? 'ตั้งค่าแล้ว' : 'ยังไม่ได้ตั้งค่า'} />
+              </div>
+              <p className="mt-0.5 text-xs text-slate-500">{step.description}</p>
+            </div>
+            <Link href={step.href} className={buttonClass(step.done ? 'ghost' : 'secondary', 'sm')}>
+              {step.done ? 'ดู/แก้ไข' : 'ไปตั้งค่า'}
+            </Link>
+          </li>
+        ))}
+      </ol>
+    </Card>
+  )
+}
+
 // ── หน้า ──────────────────────────────────────────────────────────────────────
 
 export function MainDashboard() {
@@ -434,6 +467,8 @@ export function MainDashboard() {
           </Link>
         </InlineAlert>
       )}
+
+      {overview.data?.setup != null && <SetupChecklistCard setup={overview.data.setup} />}
 
       {source === 'executive' ? (
         overview.data?.arOver60 === true ? (

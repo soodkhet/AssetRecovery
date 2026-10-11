@@ -35,6 +35,7 @@ import {
   parsePortalCasesFilters,
   portalCasesApiPath,
   portalCasesLastPage,
+  portalCasesOverflowPage,
   portalCasesPageQuery,
   portalCasesRange,
   type PortalCaseStatusFilter,
@@ -103,10 +104,18 @@ export function PortalCasesList({ canViewPhotos }: { canViewPhotos: boolean }) {
   const range = portalCasesRange(page, limit, items.length, total)
   const filtered = hasActivePortalCasesFilter(filters)
   const empty = !state.loading && state.error === null && items.length === 0
-  const emptyTitle = filtered ? 'ไม่พบเคสที่ตรงกับเงื่อนไข' : 'ยังไม่มีเคส'
-  const emptyDescription = filtered
-    ? 'ลองเปลี่ยนสถานะหรือคำค้นหา'
-    : 'เคสที่บริษัทส่งเข้าระบบจะแสดงที่นี่เมื่อเจ้าหน้าที่ได้รับเรื่องแล้ว'
+  // มีรายการแต่หน้าที่ขอเกินจำนวนหน้า (ลิงก์ `?page=999`) ⇒ พากลับหน้าสุดท้าย · ระหว่างนั้นไม่บอกว่า "ยังไม่มีเคส" (PT-03)
+  const overflowPage = state.loading || state.error !== null ? null : portalCasesOverflowPage(page, limit, items.length, total)
+  useEffect(() => {
+    if (overflowPage !== null) navigate({ ...filters, page: overflowPage })
+  }, [overflowPage, filters, navigate])
+  const emptyTitle = total > 0 ? 'ไม่มีรายการในหน้านี้' : filtered ? 'ไม่พบเคสที่ตรงกับเงื่อนไข' : 'ยังไม่มีเคส'
+  const emptyDescription =
+    total > 0
+      ? 'กำลังพากลับไปหน้าสุดท้ายที่มีรายการ'
+      : filtered
+        ? 'ลองเปลี่ยนสถานะหรือคำค้นหา'
+        : 'เคสที่บริษัทส่งเข้าระบบจะแสดงที่นี่เมื่อเจ้าหน้าที่ได้รับเรื่องแล้ว'
 
   // staging E-071 — ไม่พบ/ไม่มีสิทธิ์ ⇒ ข้อความกลาง ไม่มีปุ่มลองใหม่
   const errorView =

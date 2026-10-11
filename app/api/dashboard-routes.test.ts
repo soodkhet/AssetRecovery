@@ -16,7 +16,11 @@ const requireSessionMock = vi.hoisted(() => vi.fn())
 vi.mock('@/lib/auth/session', () => ({ requireSession: requireSessionMock }))
 
 const prismaMock = vi.hoisted(() => {
-  const model = () => ({ count: vi.fn(async () => 0), groupBy: vi.fn(async () => []) })
+  const model = () => ({
+    count: vi.fn(async () => 0),
+    groupBy: vi.fn(async () => []),
+    findUnique: vi.fn(async (): Promise<unknown> => null),
+  })
   return {
     case: model(),
     pendingReassignment: model(),
@@ -29,6 +33,12 @@ const prismaMock = vi.hoisted(() => {
     asset: model(),
     handoverLot: model(),
     job: model(),
+    // การ์ดเริ่มต้นใช้งานระบบของ Superadmin (mytester A-05)
+    organization: model(),
+    financeCompany: model(),
+    team: model(),
+    compensationPlan: model(),
+    payeeProfile: model(),
   }
 })
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
@@ -46,6 +56,7 @@ interface Envelope {
     queues: { id: string; count: number; capped: boolean }[]
     caseBoard: { rows: { status: string; count: number }[]; total: number; href: string | null } | null
     fieldTracker: boolean
+    setup: { steps: { id: string; done: boolean }[]; doneCount: number } | null
   }
   error: { code: string } | null
 }
@@ -68,6 +79,8 @@ beforeEach(() => {
     model.count.mockResolvedValue(0)
     model.groupBy.mockReset()
     model.groupBy.mockResolvedValue([])
+    model.findUnique.mockReset()
+    model.findUnique.mockResolvedValue(null)
   }
 })
 
@@ -195,5 +208,32 @@ describe('GET /api/dashboard — Superadmin', () => {
     expect(prismaMock.job.count).toHaveBeenCalledWith({
       where: { status: 'failed', OR: [{ organizationId: 'org-1' }, { organizationId: null }] },
     })
+  })
+
+  it('ระบบว่าง ⇒ การ์ดเริ่มต้นใช้งานระบบ · นับเฉพาะองค์กรตัวเองที่ยังไม่ถูกลบ (mytester A-05)', async () => {
+    requireSessionMock.mockResolvedValue(ROLE_USERS.superadmin())
+    prismaMock.organization.findUnique.mockResolvedValue({
+      name: 'AssetRecovery Co., Ltd.',
+      taxId: '0000000000000',
+      address: '(รอกรอกที่อยู่จริงก่อน go-live)',
+    })
+    prismaMock.financeCompany.count.mockResolvedValue(1)
+
+    const { body } = await call()
+
+    expect(body.data?.setup?.doneCount).toBe(1)
+    expect(body.data?.setup?.steps.find((step) => step.id === 'organization')?.done).toBe(false)
+    expect(body.data?.setup?.steps.find((step) => step.id === 'companies')?.done).toBe(true)
+    expect(prismaMock.team.count).toHaveBeenCalledWith({ where: { organizationId: 'org-1', deletedAt: null } })
+  })
+
+  it('role อื่นไม่ได้การ์ดเริ่มต้นใช้งาน และไม่ query สถานะการตั้งค่า', async () => {
+    requireSessionMock.mockResolvedValue(ROLE_USERS.finance())
+
+    const { body } = await call()
+
+    expect(body.data?.setup).toBeNull()
+    expect(prismaMock.organization.findUnique).not.toHaveBeenCalled()
+    expect(prismaMock.payeeProfile.count).not.toHaveBeenCalled()
   })
 })

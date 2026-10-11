@@ -72,6 +72,29 @@ export function reportSheetHeaderBlock(payload: ReportPayload, generatedAt: Date
   ]
 }
 
+/**
+ * การ์ด KPI เหนือตาราง (mytester J-05) — ตัวเลขหลักของหลายรายงานอยู่ที่การ์ดเท่านั้น (เช่น AR ค้างรับของ E1)
+ * จอและ PDF แสดงอยู่แล้ว ⇒ Excel ต้องมีด้วยเพื่อให้ไฟล์ตรงกับหน้าจอ · คอลัมน์ 2 เป็นค่า (เงินเป็นตัวเลขบาท)
+ * คอลัมน์ 3 เป็นคำอธิบายใต้การ์ด (ถ้ามี) · ไม่มี KPI ⇒ `[]` · มี ⇒ ปิดท้ายด้วยบรรทัดว่าง 1 แถว
+ */
+export function reportSheetKpiRows(payload: Pick<ReportPayload, 'kpis'>): (string | number)[][] {
+  if (payload.kpis.length === 0) return []
+  return [
+    ['ตัวชี้วัดหลัก'],
+    ...payload.kpis.map((kpi) => {
+      const row: (string | number)[] = [kpi.label, formatCellForSheet(kpi.value, kpi.type)]
+      if (kpi.hint !== undefined && kpi.hint !== '') row.push(kpi.hint)
+      return row
+    }),
+    [],
+  ]
+}
+
+/** ข้อความกำกับใต้ตาราง (เงื่อนไขการนับ — จอ/PDF แสดงอยู่แล้ว) — เว้น 1 แถว · ไม่มี ⇒ `[]` */
+export function reportSheetNoteRows(payload: Pick<ReportPayload, 'note'>): string[][] {
+  return payload.note === null || payload.note === '' ? [] : [[], [payload.note]]
+}
+
 /** แถวข้อมูลของชีต (ไม่รวมหัวชีต/หัวคอลัมน์) — ค่าเงินเป็นตัวเลขบาท ผู้ใช้ `SUM` ได้ */
 export function reportSheetRows(payload: ReportPayload): (string | number)[][] {
   const rows = payload.rows.map((row) =>

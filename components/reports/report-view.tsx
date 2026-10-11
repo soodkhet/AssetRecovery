@@ -1,12 +1,15 @@
 'use client'
 
-import { useCallback, useState } from 'react'
+import { usePathname, useSearchParams } from 'next/navigation'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button, Card, InlineAlert, PageHeader, Skeleton, useToast } from '@/components/ui'
 import { DateRangePicker, isReportRangeReady, reportRangeQuery, type ReportRangeValue } from '@/components/reports/date-range-picker'
 import { KpiCardRow } from '@/components/reports/kpi-card'
 import { ReconciliationLines } from '@/components/reports/reconciliation-lines'
 import { ReportTable } from '@/components/reports/report-table'
 import { useReportData } from '@/components/reports/use-report-data'
+import { browserSearchParams, replaceUrlParams } from '@/components/ui/url-state'
+import { useSearchQueryChange } from '@/components/ui/use-search-param-change'
 import { FetchTimeoutError, fetchWithTimeout } from '@/lib/api/fetch-with-timeout'
 import { noticeSessionLost } from '@/lib/api/session-expiry'
 import { readEnvelope } from '@/lib/api/envelope'
@@ -14,6 +17,7 @@ import { fmtDateTime } from '@/lib/format/datetime'
 import { reportEmptyDescription, type ReportDefinition } from '@/lib/reports/catalog'
 import type { ReportExportFormat } from '@/lib/reports/export'
 import type { ReportPayload } from '@/lib/reports/payload'
+import { reportRangeFromParams, reportRangeUrlUpdates, sameReportRange } from '@/lib/reports/range-url'
 
 /**
  * โครงหน้าจอกลางของทุกรายงาน (`96` §11) — **หน้ารายงานใน 6.2–6.5 ต้องใช้ตัวนี้ ห้ามทำตารางเอง**
@@ -40,6 +44,8 @@ const EXPORT_LABEL: Readonly<Record<ReportExportFormat, string>> = {
 export interface ReportSlotContext {
   payload: ReportPayload | null
   loading: boolean
+  /** ช่วงเวลาที่หน้ากำลังแสดง (อ่านจาก URL ได้) — กราฟที่ดึงรายงานอื่นประกอบต้องใช้ช่วงเดียวกัน */
+  range: ReportRangeValue
 }
 
 type ReportSlot = React.ReactNode | ((context: ReportSlotContext) => React.ReactNode)
@@ -62,12 +68,22 @@ export function ReportView({
   filters?: ReportSlot
   /** กราฟของรายงานนั้น — วางระหว่าง KPI กับตาราง (`96` §6 กำหนดเฉพาะบางรายงาน) */
   chart?: ReportSlot
+  /**
+   * ช่วงเวลาเริ่มต้นเมื่อ URL ไม่ระบุ (ไม่ส่ง = เดือนนี้) — ช่วงที่ผู้ใช้เลือกเก็บใน `?preset=&from=&to=`
+   * รีเฟรช/ย้อนกลับ/แชร์ลิงก์แล้วได้ช่วงเดิม (mytester J-03)
+   */
   initialRange?: ReportRangeValue
   /** ผู้ใช้เปลี่ยนช่วงเวลา — หน้าที่มี drill-down ใช้รีเซ็ตตัวกรองของตัวเองกลับหน้าสรุป */
   onRangeChange?: (range: ReportRangeValue) => void
 }) {
   const { showToast } = useToast()
-  const [range, setRange] = useState<ReportRangeValue>(initialRange ?? { preset: 'this_month', from: '', to: '' })
+  const pathname = usePathname()
+  const serverQuery = useSearchParams().toString()
+  const fallbackPreset = initialRange?.preset ?? 'this_month'
+  // ค่าแรกอ่านจาก URL จริงของ browser (Back กลับมา searchParams ของ Next อาจเป็นของเก่า) · ฝั่ง server ใช้ searchParams
+  const [range, setRange] = useState<ReportRangeValue>(() =>
+    reportRangeFromParams(browserSearchParams(pathname) ?? new URLSearchParams(serverQuery), fallbackPreset),
+  )
   const [exporting, setExporting] = useState<ReportExportFormat | null>(null)
 
   const ready = isReportRangeReady(range)
@@ -132,15 +148,34 @@ export function ReportView({
   )
 
   const cache = payload?.cache ?? null
-  const slotContext: ReportSlotContext = { payload, loading }
+  const slotContext: ReportSlotContext = { payload, loading, range }
+
+  /** ช่วงล่าสุดที่แจ้ง `onRangeChange` แล้ว — กันแจ้งซ้ำ */
+  const notifiedRange = useRef(range)
 
   const changeRange = useCallback(
     (next: ReportRangeValue) => {
+      notifiedRange.current = next
       setRange(next)
       onRangeChange?.(next)
     },
     [onRangeChange],
   )
+
+  // URL เปลี่ยนจากการนำทาง (Back/Forward · ลิงก์ที่พามาหน้าเดิม) ⇒ ช่วงเวลาตาม URL · ค่าที่หน้าเขียนเองวนกลับมาถูกข้าม
+  // (ตัวฟังทำงานระหว่าง render ⇒ set ได้แค่ state ของตัวเอง — แจ้งหน้าแม่ใน effect ด้านล่าง)
+  useSearchQueryChange((query) => {
+    const next = reportRangeFromParams(query, fallbackPreset)
+    if (!sameReportRange(next, range)) setRange(next)
+  })
+
+  useEffect(() => {
+    replaceUrlParams(reportRangeUrlUpdates(range, fallbackPreset))
+    if (!sameReportRange(notifiedRange.current, range)) {
+      notifiedRange.current = range
+      onRangeChange?.(range)
+    }
+  }, [range, fallbackPreset, onRangeChange])
 
   return (
     <div className="flex flex-col gap-4">

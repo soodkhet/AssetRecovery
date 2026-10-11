@@ -9,6 +9,7 @@ import {
   portalCaseDetailApiPath,
   portalCasesApiPath,
   portalCasesLastPage,
+  portalCasesOverflowPage,
   portalCasesPageQuery,
   portalCasesRange,
   portalServiceFeeRows,
@@ -182,5 +183,18 @@ describe('portalPhotoLabel — staging E-074', () => {
   it('ใช้ชื่อมุมถ้ามี ไม่งั้น "รูปที่ N"', () => {
     expect(portalPhotoLabel(['ด้านหน้า'], 0)).toBe('ด้านหน้า')
     expect(portalPhotoLabel(['ด้านหน้า'], 1)).toBe('รูปที่ 2')
+  })
+})
+
+describe('portalCasesOverflowPage (mytester PT-03)', () => {
+  it('หน้าเกินจำนวนจริงแต่มีรายการ ⇒ พากลับหน้าสุดท้าย', () => {
+    expect(portalCasesOverflowPage(999, 20, 0, 7)).toBe(1)
+    expect(portalCasesOverflowPage(5, 20, 0, 57)).toBe(3)
+  })
+
+  it('หน้าปกติ/ไม่มีรายการเลย ⇒ ไม่ต้องพาไปไหน', () => {
+    expect(portalCasesOverflowPage(1, 20, 7, 7)).toBeNull()
+    expect(portalCasesOverflowPage(1, 20, 0, 0)).toBeNull()
+    expect(portalCasesOverflowPage(999, 20, 0, 0)).toBeNull()
   })
 })

@@ -6,6 +6,7 @@ import type { DocLetterhead } from '@/lib/organization/profile'
 import { fmtDateTime } from '@/lib/format/datetime'
 import { reconciliationTextLines, reportTextRows } from '@/lib/reports/export'
 import { NUMERIC_COLUMN_TYPES, formatCellText, type ReportPayload } from '@/lib/reports/payload'
+import { reportPdfSafePayload } from '@/lib/reports/pdf-text'
 
 /**
  * PDF ของเมนูรายงาน (`96` §11 "ทุกรายงานมีปุ่ม Export PDF" · E13 "PDF ฝัง Noto Sans Thai")
@@ -135,7 +136,8 @@ export async function renderReportPdf(options: {
   ensureThaiFont()
   return renderToBuffer(
     <ReportDocument
-      payload={options.payload}
+      // ข้อความทุกช่องใช้อักษรที่ฟอนต์ PDF มี glyph (mytester J-04 — ลูกศรเคยพิมพ์เป็นกล่อง)
+      payload={reportPdfSafePayload(options.payload)}
       generatedAt={options.generatedAt}
       generatedByName={options.generatedByName}
       letterhead={options.letterhead}

@@ -245,5 +245,6 @@ export async function getPortalArAging(ctx: PortalContext, now: Date = new Date(
     buckets: policy.arAgingBuckets,
     asOf,
   })
-  return serializePortalArAging(report, asOf)
+  // จำนวนรอบที่เห็นได้ทั้งหมด (รวมที่ชำระครบ) — การ์ดแยก "ยังไม่มีรอบวางบิล" ออกจาก "ชำระครบแล้ว" (PT-02)
+  return serializePortalArAging(report, asOf, batches.length)
 }

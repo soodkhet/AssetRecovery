@@ -5,6 +5,8 @@ import {
   filterPortalBillingRows,
   isPortalBillingFilter,
   isPortalBillingOverdue,
+  PORTAL_AR_AGING_DESCRIPTION,
+  portalArAgingEmptyState,
   portalBillingFilterOptions,
   portalBillingSummary,
   portalShortMonthLabel,
@@ -93,5 +95,23 @@ describe('portalShortMonthLabel — ป้ายเดือนสั้นข�
   it('รูปแบบผิด → fallback', () => {
     expect(portalShortMonthLabel('พฤษภาคม 2569', 'พฤษภาคม 2569')).toBe('พฤษภาคม 2569')
     expect(portalShortMonthLabel('2026-13-01', 'x')).toBe('x')
+  })
+})
+
+describe('portalArAgingEmptyState (mytester PT-02)', () => {
+  it('ยังไม่เคยมีรอบวางบิล ≠ ชำระครบแล้ว', () => {
+    expect(portalArAgingEmptyState({ totalOutstandingSatang: 0, billedBatchCount: 0 })?.title).toBe('ยังไม่มีรอบวางบิล')
+    expect(portalArAgingEmptyState({ totalOutstandingSatang: 0, billedBatchCount: 2 })?.title).toBe('ไม่มียอดค้างชำระ')
+  })
+
+  it('มียอดค้าง ⇒ ไม่ใช่ empty state', () => {
+    expect(portalArAgingEmptyState({ totalOutstandingSatang: 100, billedBatchCount: 1 })).toBeNull()
+  })
+})
+
+describe('PORTAL_AR_AGING_DESCRIPTION (mytester G-08)', () => {
+  it('บอกว่านับจากวันครบกำหนดชำระ ไม่ใช่วันวางบิล', () => {
+    expect(PORTAL_AR_AGING_DESCRIPTION).toContain('วันครบกำหนดชำระ')
+    expect(PORTAL_AR_AGING_DESCRIPTION).not.toContain('วันที่วางบิล')
   })
 })

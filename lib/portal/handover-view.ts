@@ -143,6 +143,14 @@ export const PORTAL_LOT_DOCUMENTS: Readonly<
   delivery_proof: { label: 'ดาวน์โหลดหลักฐานการจัดส่ง', pathSegment: 'delivery-proof', fallbackSuffix: '-delivery-proof' },
 }
 
+/**
+ * ชื่อไฟล์ใบส่งมอบ PDF = เลขที่เอกสาร (DLV-…) ที่พิมพ์บนหัวกระดาษ — ลูกค้าจัดเก็บ/อ้างอิงด้วยเลขนี้ (mytester PT-04)
+ * แนวเดียวกับใบเซ็นรับ (`DLV-…-signed`) และหลักฐานการจัดส่ง (`DLV-…-delivery-proof`)
+ */
+export function portalDeliveryNoteFileName(docRef: string): string {
+  return `${docRef}${PORTAL_LOT_DOCUMENTS.delivery_note.fallbackSuffix}`
+}
+
 export function portalLotDocumentApiUrl(lotId: string, kind: PortalLotDocumentKind): string {
   return `/api/portal/handover-lots/${encodeURIComponent(lotId)}/${PORTAL_LOT_DOCUMENTS[kind].pathSegment}`
 }

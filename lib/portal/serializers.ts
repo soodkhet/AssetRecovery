@@ -724,13 +724,18 @@ export interface PortalArAgingDto {
   over90Satang: number
   /** จำนวนรอบวางบิลที่ยังค้างชำระ */
   batchCount: number
+  /**
+   * จำนวนรอบวางบิลทั้งหมดที่ส่งถึงบริษัทแล้ว (รวมที่ชำระครบ) — แยก "ยังไม่เคยมีบิล" ออกจาก "ชำระครบแล้ว"
+   * ในการ์ดอายุหนี้ (mytester PT-02) · นับเฉพาะรอบของบริษัทตัวเอง (ไม่ leak)
+   */
+  billedBatchCount: number
   buckets: PortalArAgingBucketDto[]
 }
 
 const AGING_BUCKET_KEY = /^bucket\d+$/
 
 /** ผลของ `buildArAgingReport()` (scope บริษัทเดียว) → DTO พอร์ทัล (whitelist) */
-export function serializePortalArAging(report: ReportData, asOf: Date): PortalArAgingDto {
+export function serializePortalArAging(report: ReportData, asOf: Date, billedBatchCount: number): PortalArAgingDto {
   const totalRow = report.totalRow ?? null
   return {
     asOf: dateOnly(asOf),
@@ -738,6 +743,7 @@ export function serializePortalArAging(report: ReportData, asOf: Date): PortalAr
     over60Satang: kpiNumber(report, 'over60'),
     over90Satang: kpiNumber(report, 'over90'),
     batchCount: cellNumber(totalRow, 'batchCount'),
+    billedBatchCount,
     buckets: report.columns
       .filter((column) => AGING_BUCKET_KEY.test(column.key))
       .map((column) => ({

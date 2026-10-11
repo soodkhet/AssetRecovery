@@ -11,6 +11,9 @@
  * - ค่าเงินที่ส่งเข้ามาเป็น **satang** เสมอ (Rule 01) — ฟังก์ชันนี้ไม่แปลงหน่วย เพราะเป็นอัตราส่วน
  */
 
+import { fmtSatangSymbol } from '@/lib/format/money'
+import { formatCellText, type ReportKpi } from '@/lib/reports/payload'
+
 export type MoMDirection = 'up' | 'down' | 'flat'
 
 export interface MoMComparison {
@@ -58,4 +61,13 @@ export function momToneClass(comparison: MoMComparison, higherIsBetter: boolean)
 export function ratioPct(numerator: number, denominator: number): number | null {
   if (denominator === 0) return null
   return Math.round((numerator * 10000) / denominator) / 100
+}
+
+/**
+ * ค่าที่แสดงบนการ์ด KPI — เงินมี ฿ นำหน้า ให้ตรงกับการ์ดเงินอื่นของระบบ (เดิม "รายได้รวม 0.00" ไม่มี ฿ ขณะ
+ * บรรทัดย่อยเป็น "฿0.00" — mytester A-05) · ชนิดอื่นใช้รูปแบบเดียวกับตาราง
+ */
+export function kpiValueText(kpi: Pick<ReportKpi, 'value' | 'type'>): string {
+  if (kpi.type === 'money' && typeof kpi.value === 'number') return fmtSatangSymbol(kpi.value)
+  return formatCellText(kpi.value, kpi.type)
 }

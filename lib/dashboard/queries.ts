@@ -5,6 +5,8 @@ import { listCompensationApprovals } from '@/lib/compensation/approval-queries'
 import {
   buildCaseBoard,
   buildQueueItems,
+  buildSetupChecklist,
+  canSeeSetupChecklist,
   canViewCaseBoard,
   caseBoardHref,
   canShowArOver60,
@@ -15,7 +17,9 @@ import {
   type CaseBoardStatus,
   type DashboardOverviewDto,
   type DashboardQueueId,
+  type DashboardSetupDto,
 } from '@/lib/dashboard/widgets'
+import { organizationProfileIssues } from '@/lib/organization/profile'
 import { endOfBangkokDay, startOfBangkokDay } from '@/lib/format/datetime'
 import { prisma } from '@/lib/prisma'
 import { resolveReportPeriod } from '@/lib/reports/period'
@@ -212,13 +216,37 @@ async function loadCaseBoard(user: SessionUser, now: Date): Promise<CaseBoardDto
   })
 }
 
+/**
+ * สถานะการตั้งค่าเริ่มต้น (mytester A-05) — นับแถวที่ยังใช้งานอยู่ขององค์กรนี้ (อ่านอย่างเดียว · ไม่มีเงิน)
+ * ข้อมูลองค์กรใช้เกณฑ์เดียวกับคำเตือนหน้าข้อมูลองค์กร (`organizationProfileIssues`)
+ */
+async function loadSetupChecklist(user: SessionUser): Promise<DashboardSetupDto | null> {
+  const organizationId = user.organizationId
+  const active = { organizationId, deletedAt: null }
+  const [organization, companies, teams, compensationPlans, payees] = await Promise.all([
+    prisma.organization.findUnique({ where: { id: organizationId }, select: { name: true, taxId: true, address: true } }),
+    prisma.financeCompany.count({ where: active }),
+    prisma.team.count({ where: active }),
+    prisma.compensationPlan.count({ where: active }),
+    prisma.payeeProfile.count({ where: active }),
+  ])
+  return buildSetupChecklist({
+    organizationIssues: organization === null ? 1 : organizationProfileIssues(organization).length,
+    companies,
+    teams,
+    compensationPlans,
+    payees,
+  })
+}
+
 /** `GET /api/dashboard` — ภาพรวมของผู้ใช้คนนี้ (คิวงาน + กระดานเคส + แหล่ง KPI) */
 export async function getDashboardOverview(user: SessionUser, now: Date = new Date()): Promise<DashboardOverviewDto> {
   const defs = visibleDashboardQueues(user)
 
-  const [countEntries, caseBoard] = await Promise.all([
+  const [countEntries, caseBoard, setup] = await Promise.all([
     Promise.all(defs.map(async (def) => [def.id, await QUEUE_COUNTERS[def.id](user)] as const)),
     canViewCaseBoard(user) ? loadCaseBoard(user, now) : Promise.resolve(null),
+    canSeeSetupChecklist(user) ? loadSetupChecklist(user) : Promise.resolve(null),
   ])
 
   return {
@@ -227,6 +255,7 @@ export async function getDashboardOverview(user: SessionUser, now: Date = new Da
     queues: buildQueueItems(defs, Object.fromEntries(countEntries)),
     caseBoard,
     fieldTracker: showFieldTrackerShortcut(user),
+    setup,
     computedAt: now.toISOString(),
   }
 }

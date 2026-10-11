@@ -1,13 +1,11 @@
 'use client'
 
-import { useCallback, useState } from 'react'
 import { ReportBarChart } from '@/components/reports/report-bar-chart'
 import { ReportLineChart } from '@/components/reports/report-line-chart'
-import { ReportView } from '@/components/reports/report-view'
+import { ReportView, type ReportSlotContext } from '@/components/reports/report-view'
 import { useReportData } from '@/components/reports/use-report-data'
 import type { ReportRangeValue } from '@/components/reports/date-range-picker'
 import type { ReportDefinition } from '@/lib/reports/catalog'
-import type { ReportRow } from '@/lib/reports/payload'
 
 /**
  * หน้าจอของ **Executive Dashboard** (`96` §6-E) — ห่อ `<ReportView>` เหมือนหมวด F/O/A
@@ -29,38 +27,33 @@ const INITIAL_RANGE: ReportRangeValue = { preset: 'this_year', from: '', to: '' 
 
 const TOP_COMPANY_COUNT = 5
 
+// ช่วงเวลามาจาก `<ReportView>` (ผูกกับ URL — mytester J-03) — กราฟ Top 5 ใช้ช่วงเดียวกับตารางเสมอ
+function renderCharts({ payload, range }: ReportSlotContext): React.ReactNode {
+  return payload === null || payload.rows.length === 0 ? null : (
+    <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <ReportLineChart
+          title={`รายได้รายเดือน (${payload.rows.length} เดือนย้อนหลัง)`}
+          rows={payload.rows}
+          labelKey="month"
+          valueKey="revenueSatang"
+        />
+        <ReportLineChart
+          title="% สำเร็จรายเดือน"
+          rows={payload.rows}
+          labelKey="month"
+          valueKey="successPct"
+          valueType="percent"
+          emptyDescription="ยังไม่มีเคสที่ปิดในช่วงนี้"
+        />
+      </div>
+      <TopCompaniesChart range={range} />
+    </div>
+  )
+}
+
 export function KpiSummaryScreen({ report }: ScreenProps) {
-  const [range, setRange] = useState<ReportRangeValue>(INITIAL_RANGE)
-
-  const renderCharts = useCallback(
-    ({ payload }: { payload: { rows: readonly ReportRow[] } | null }) =>
-      payload === null || payload.rows.length === 0 ? null : (
-        <div className="flex flex-col gap-4">
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <ReportLineChart
-              title={`รายได้รายเดือน (${payload.rows.length} เดือนย้อนหลัง)`}
-              rows={payload.rows}
-              labelKey="month"
-              valueKey="revenueSatang"
-            />
-            <ReportLineChart
-              title="% สำเร็จรายเดือน"
-              rows={payload.rows}
-              labelKey="month"
-              valueKey="successPct"
-              valueType="percent"
-              emptyDescription="ยังไม่มีเคสที่ปิดในช่วงนี้"
-            />
-          </div>
-          <TopCompaniesChart range={range} />
-        </div>
-      ),
-    [range],
-  )
-
-  return (
-    <ReportView report={report} initialRange={INITIAL_RANGE} onRangeChange={setRange} chart={renderCharts} />
-  )
+  return <ReportView report={report} initialRange={INITIAL_RANGE} chart={renderCharts} />
 }
 
 /**

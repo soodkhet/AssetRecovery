@@ -2,8 +2,8 @@
 
 import { StatCard } from '@/components/ui'
 import { cn } from '@/components/ui/cn'
-import { momLabel, momToneClass } from '@/lib/reports/kpi'
-import { formatCellText, type ReportKpi } from '@/lib/reports/payload'
+import { kpiValueText, momLabel, momToneClass } from '@/lib/reports/kpi'
+import type { ReportKpi } from '@/lib/reports/payload'
 
 /**
  * KPI card + badge เทียบงวดก่อน (`96` §11 "KPI cards มีเปรียบเทียบกับเดือนก่อน (MoM %) แสดงเป็น ↑↓ badge")
@@ -16,7 +16,7 @@ export function KpiCard({ kpi }: { kpi: ReportKpi }) {
   return (
     <StatCard
       label={kpi.label}
-      value={formatCellText(kpi.value, kpi.type)}
+      value={kpiValueText(kpi)}
       hint={
         kpi.mom === undefined ? (
           kpi.hint
