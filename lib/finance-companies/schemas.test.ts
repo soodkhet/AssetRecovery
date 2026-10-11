@@ -79,8 +79,8 @@ describe('financeCompanyCreateSchema', () => {
   })
 
   it('ช่องที่ไม่บังคับส่งค่าว่างมาได้ → เก็บเป็น null', () => {
-    const parsed = financeCompanyCreateSchema.parse({ ...validInput, address: '', signerName: null, email: '' })
-    expect(parsed.address).toBeNull()
+    const parsed = financeCompanyCreateSchema.parse({ ...validInput, signerName: null, email: '' })
+    expect(parsed.address).toBe('123 ถนนสีลม กรุงเทพฯ')
     expect(parsed.signerName).toBeNull()
     expect(parsed.email).toBeNull()
   })
@@ -127,4 +127,15 @@ describe('มติ PO U77 — branchCode (สำนักงานใหญ่/
     expect(fieldsOf({ ...validInput, branchCode: '0000A' })).toEqual(['branchCode'])
     expect(fieldsOf({ ...validInput, branchCode: '000001' })).toEqual(['branchCode'])
   })
+})
+
+describe('mytester A-08 — ที่อยู่ตามที่จดทะเบียนบังคับ (`10` §7.1)', () => {
+  it.each([['', 'ว่าง'], ['   ', 'ช่องว่าง'], ['กทม.', 'สั้นเกินไป'], [null, 'null'], [undefined, 'ไม่ส่ง']])(
+    'ปฏิเสธที่อยู่ %j (%s)',
+    (address, _label) => {
+      const result = financeCompanyCreateSchema.safeParse({ ...validInput, address })
+      expect(result.success).toBe(false)
+      if (!result.success) expect(result.error.issues.some((issue) => issue.path[0] === 'address')).toBe(true)
+    },
+  )
 })

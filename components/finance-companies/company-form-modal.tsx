@@ -304,7 +304,7 @@ export function CompanyFormModal({
         </div>
         <SettingHelp help={companyBranchHelp()} />
 
-        <Field id="co-address" label="ที่อยู่ตามที่จดทะเบียน (ใช้ออกเอกสารทางการ)" error={errors.address}>
+        <Field id="co-address" label="ที่อยู่ตามที่จดทะเบียน (ใช้ออกเอกสารทางการ)" required error={errors.address}>
           <Textarea maxLength={500} id="co-address" value={form.address} onChange={(event) => set('address', event.target.value)} />
         </Field>
 

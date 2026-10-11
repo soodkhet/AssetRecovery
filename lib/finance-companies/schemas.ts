@@ -48,7 +48,8 @@ const companyFields = z.object({
   shortName: z.string().trim().min(1, 'ต้องระบุชื่อย่อ').max(20, 'ชื่อย่อยาวเกินไป'),
   taxId: taxIdSchema,
   branchCode: branchCodeSchema,
-  address: optionalText(500),
+  // `10` §7.1 — ที่อยู่ตามที่จดทะเบียนเป็นช่องบังคับ (พิมพ์บนใบกำกับภาษี/ใบแจ้งหนี้ — ม.86/4) · mytester A-08
+  address: z.string().trim().min(10, 'กรุณากรอกที่อยู่ตามที่จดทะเบียนให้ครบ (ใช้ออกใบกำกับภาษี)').max(500, 'ที่อยู่ยาวเกินไป'),
   phone: optionalText(20),
   // ฟอร์มส่ง '' มาเมื่อไม่กรอก — แปลงเป็น null **ก่อน** ตรวจรูปแบบ ไม่งั้นค่าว่างจะติด error อีเมล
   email: z.preprocess(

@@ -66,6 +66,7 @@ const baseBody = {
   name: 'บริษัท ทดสอบไฟแนนซ์ จำกัด',
   shortName: 'TF',
   taxId: '0105512345678',
+  address: '99 ถ.พหลโยธิน แขวงจตุจักร เขตจตุจักร กรุงเทพมหานคร 10900',
   serviceFeeTemplateId: TEMPLATE_ID,
   reason: 'เพิ่มบริษัทคู่ค้าใหม่ (ไม่หักภาษี ราคารวม VAT)',
 }
