@@ -17,6 +17,10 @@ export async function loadHotelMatchedCases(
       organizationId,
       agentId: { in: agentIds },
       scheduledDate: { in: dates.map((date) => new Date(`${date}T00:00:00.000Z`)) },
+      // รีวิวเฟส 4 ข้อ 5 — งานที่ถูกโอนไปคนอื่นแล้ว (`reassigned_away` — รวมกรณีไม่ยินยอมแล้วถูกโอน) ไม่ใช่งานของผู้เบิก
+      // · เคสที่ถูกลบไม่ใช่หลักฐานการเข้าพัก
+      status: { not: 'reassigned_away' },
+      case: { deletedAt: null },
     },
     select: { agentId: true, caseId: true, scheduledDate: true, case: { select: { caseRef: true } } },
   })
