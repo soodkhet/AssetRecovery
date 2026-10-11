@@ -851,6 +851,42 @@ suite('Phase 2.13 — ยืนยันส่งมอบ = $transaction 4 ข�
     ...overrides,
   })
 
+  it('มติชั่วคราว M5 (WH-05) — นำเครื่องออกจากล็อตที่ยังไม่ยืนยัน: เหตุผลบังคับ · เครื่องกลับ in_custody · audit · ล็อตว่างยืนยันไม่ได้', async () => {
+    const { assetId, lotId } = await seedPendingLot()
+    await expectCode(
+      () => warehouse.removeAssetFromLot(admin, lotId, { assetId, reason: '   ' }, ctx(admin)),
+      'REQUIRED_MISSING',
+    )
+
+    const updated = await warehouse.removeAssetFromLot(admin, lotId, { assetId, reason: 'จัดเข้าล็อตผิดบริษัท' }, ctx(admin))
+    expect(updated.assets).toHaveLength(0)
+    const asset = await db().asset.findUniqueOrThrow({ where: { id: assetId } })
+    expect(asset).toMatchObject({ assetStatus: 'in_custody', lotId: null })
+    const audits = await db().auditLog.findMany({
+      where: { organizationId: ORG_ID, targetId: { in: [lotId, assetId] }, reason: 'จัดเข้าล็อตผิดบริษัท' },
+      select: { targetType: true },
+    })
+    expect(audits.map((row) => row.targetType).sort()).toEqual(['assets', 'handover_lots'])
+
+    // เครื่องไม่อยู่ในล็อตนี้แล้ว = ไม่พบ · ล็อตว่างยืนยันไม่ได้ (ล็อตไม่ขยับ)
+    await expectCode(
+      () => warehouse.removeAssetFromLot(admin, lotId, { assetId, reason: 'ซ้ำ' }, ctx(admin)),
+      'ASSET_NOT_FOUND',
+    )
+    await expectCode(() => warehouse.confirmLot(admin, lotId, confirmInput(), ctx(admin)), 'EMPTY_LOT')
+    expect((await db().handoverLot.findUniqueOrThrow({ where: { id: lotId } })).status).toBe('pending_attach')
+  })
+
+  it('มติชั่วคราว M5 — ล็อตที่ยืนยันแล้วนำเครื่องออกไม่ได้ = LOT_ALREADY_CONFIRMED', async () => {
+    const { assetId, lotId } = await seedPendingLot()
+    await warehouse.confirmLot(admin, lotId, confirmInput(), ctx(admin))
+    await expectCode(
+      () => warehouse.removeAssetFromLot(admin, lotId, { assetId, reason: 'สาย' }, ctx(admin)),
+      'LOT_ALREADY_CONFIRMED',
+    )
+    expect((await db().asset.findUniqueOrThrow({ where: { id: assetId } })).assetStatus).toBe('handed_over')
+  })
+
   it('T09 — ยืนยันโดยไม่แนบใบเซ็นรับ = LOT_MISSING_SIGNED_DOC (ล็อตไม่ขยับ)', async () => {
     const { lotId } = await seedPendingLot()
     await expectCode(

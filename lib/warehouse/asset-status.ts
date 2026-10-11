@@ -12,6 +12,7 @@ import { WarehouseError } from '@/lib/warehouse/errors'
  * intake_rejected  → in_custody       (กด "รับใหม่" แล้วรับเข้าในขั้นตอนเดียว · §8.2 retry)
  * in_custody       → handover_pending (ถูกใส่เข้าล็อต)
  * handover_pending → handed_over      (ล็อต confirmed — terminal · §11)
+ * handover_pending → in_custody       (นำออกจากล็อตที่ยังไม่ยืนยัน — เหตุผลบังคับ · มติชั่วคราว M5)
  * ```
  *
  * ⚠️ `intake_rejected → in_custody` ตรง ๆ ต่างจาก diagram ของ §9.1 ที่วาดผ่าน `pending_intake` ก่อน
@@ -30,7 +31,7 @@ export const ASSET_STATUSES = [
 ] as const satisfies readonly AssetStatus[]
 
 /** action ที่ทำให้ `asset_status` ขยับ (`44` §9.1) */
-export const ASSET_ACTIONS = ['intake', 'reject_intake', 'attach_to_lot', 'hand_over'] as const
+export const ASSET_ACTIONS = ['intake', 'reject_intake', 'attach_to_lot', 'detach_from_lot', 'hand_over'] as const
 export type AssetAction = (typeof ASSET_ACTIONS)[number]
 
 interface AssetTransitionRule {
@@ -43,6 +44,8 @@ export const ASSET_TRANSITIONS: Readonly<Record<AssetAction, AssetTransitionRule
   intake: { from: ['pending_intake', 'intake_rejected'], to: 'in_custody', label: 'รับเข้าคลัง' },
   reject_intake: { from: ['pending_intake'], to: 'intake_rejected', label: 'ตีกลับ' },
   attach_to_lot: { from: ['in_custody'], to: 'handover_pending', label: 'จัดเข้าล็อตส่งมอบ' },
+  // มติชั่วคราว M5 (mytester WH-05) — ล็อตที่จัดผิดแต่ยังไม่ยืนยัน: นำเครื่องกลับไปรอจัดล็อต (ไม่มีสถานะใหม่)
+  detach_from_lot: { from: ['handover_pending'], to: 'in_custody', label: 'นำออกจากล็อต' },
   hand_over: { from: ['handover_pending'], to: 'handed_over', label: 'ยืนยันส่งมอบ' },
 }
 

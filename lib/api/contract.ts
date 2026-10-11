@@ -424,6 +424,13 @@ export const API_CONTRACT = {
     source: '44 §15 · 45 §6.5',
     summary: 'สร้าง Lot + นัดวัน (1 Lot = 1 บริษัทไฟแนนซ์ เสมอ)',
   },
+  'lot.remove_asset': {
+    method: 'PATCH',
+    path: '/api/handover-lots/:id/remove-asset',
+    module: 'warehouse',
+    source: '44 §15 · 45 §6.5 (มติชั่วคราว M5)',
+    summary: 'นำเครื่องออกจากล็อตที่ยังไม่ยืนยัน (เหตุผลบังคับ) → เครื่องกลับไปรอจัดล็อต',
+  },
   'lot.confirm': {
     method: 'PATCH',
     path: '/api/handover-lots/:id/confirm',

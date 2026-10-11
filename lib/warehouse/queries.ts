@@ -54,6 +54,7 @@ import type {
   AssetListQuery,
   AssetRejectIntakeInput,
   LotConfirmInput,
+  LotRemoveAssetInput,
   LotCreateInput,
   LotDocumentAttachInput,
   LotCompanySummaryQuery,
@@ -881,6 +882,91 @@ export async function createLot(
   return getLot(user, lotId)
 }
 
+// ── PATCH /api/handover-lots/:id/remove-asset (มติชั่วคราว M5 · mytester WH-05) ──
+
+/**
+ * นำเครื่องออกจากล็อตที่**ยังไม่ยืนยัน** ⇒ เครื่อง `handover_pending → in_custody` + `lot_id = NULL` (กลับไปรอจัดล็อต)
+ *
+ * - สิทธิ์เดียวกับจัดการล็อต (`create_handover_lot`) · scope เดียวกับการเห็นล็อต/เครื่อง (นอก scope = ไม่พบ)
+ * - ล็อต `confirmed` = `LOT_ALREADY_CONFIRMED` · ยึดล็อตด้วยสถานะเดิมในทรานแซกชัน กันแข่งกับคนกดยืนยัน
+ * - เหตุผลบังคับ (`REQUIRED_MISSING`) · audit 2 แถว: ล็อต (`lot.asset_removed`) + เครื่อง (สถานะเดิม/ใหม่) พร้อมเหตุผล
+ * - ล็อตว่างยังอยู่ (ไม่มีสถานะยกเลิก) แต่ยืนยันไม่ได้ (`EMPTY_LOT`) — ใส่เครื่องใหม่ได้ด้วยการสร้างล็อตใหม่
+ */
+export async function removeAssetFromLot(
+  user: SessionUser,
+  lotId: string,
+  input: LotRemoveAssetInput,
+  context: WarehouseMutationContext,
+): Promise<LotDetailDto> {
+  const reason = input.reason.trim()
+  if (reason === '') {
+    throw new WarehouseError('REQUIRED_MISSING', {
+      messages: { title: 'ต้องระบุเหตุผล', message: 'ต้องระบุเหตุผลที่นำเครื่องออกจากล็อต' },
+      context: { fields: { reason: 'ต้องระบุเหตุผลที่นำเครื่องออกจากล็อต' } },
+    })
+  }
+  const current = await loadLot(user, lotId)
+  assertLotMutable(current.status)
+
+  const asset = await prisma.asset.findFirst({
+    where: { id: input.assetId, lotId, organizationId: user.organizationId, deletedAt: null, ...assetScopeWhere(user) },
+    select: { id: true, assetStatus: true, caseRef: true },
+  })
+  if (asset === null) throw new WarehouseError('ASSET_NOT_FOUND')
+  const nextStatus = nextAssetStatus(asset.assetStatus, 'detach_from_lot')
+
+  await prisma.$transaction(async (tx) => {
+    const claimed = await tx.handoverLot.updateMany({
+      where: { id: lotId, status: current.status },
+      data: { updatedBy: context.actor.id },
+    })
+    if (claimed.count === 0) throw new WarehouseError('LOT_ALREADY_CONFIRMED')
+
+    const detached = await tx.asset.updateMany({
+      where: { id: asset.id, lotId, assetStatus: asset.assetStatus },
+      data: { lotId: null, assetStatus: nextStatus, updatedBy: context.actor.id },
+    })
+    if (detached.count === 0) throw new WarehouseError('ASSET_INVALID_STATUS')
+
+    await emitAudit(
+      {
+        organizationId: user.organizationId,
+        actorId: context.actor.id,
+        actorRole: context.actor.roleName,
+        action: 'update',
+        targetType: 'handover_lots',
+        targetId: lotId,
+        before: { assetId: asset.id, caseRef: asset.caseRef },
+        after: { removedAssetId: asset.id, events: ['lot.asset_removed'] },
+        reason,
+        ipAddress: context.meta.ipAddress,
+        userAgent: context.meta.userAgent,
+        diffOnly: false,
+      },
+      tx as WarehouseTxClient,
+    )
+    await emitAudit(
+      {
+        organizationId: user.organizationId,
+        actorId: context.actor.id,
+        actorRole: context.actor.roleName,
+        action: 'update',
+        targetType: 'assets',
+        targetId: asset.id,
+        before: { assetStatus: asset.assetStatus, lotId },
+        after: { assetStatus: nextStatus, lotId: null },
+        reason,
+        ipAddress: context.meta.ipAddress,
+        userAgent: context.meta.userAgent,
+        diffOnly: false,
+      },
+      tx as WarehouseTxClient,
+    )
+  })
+
+  return getLot(user, lotId)
+}
+
 // ── POST /api/handover-lots/:id/documents (`44` §6.4 · มติ PO 03/10/2569 UAT Q13) ──
 
 const LOT_DOCUMENT_COLUMNS: Readonly<Record<LotDocument, { url: 'signedDocUrl' | 'deliveryProofUrl'; hash: 'signedDocHash' | 'deliveryProofHash' }>> = {
@@ -1080,6 +1166,8 @@ export async function confirmLot(
         where: { lotId, deletedAt: null },
         select: { id: true, caseId: true },
       })
+      // มติชั่วคราว M5 — ล็อตที่นำเครื่องออกหมดแล้วยืนยันไม่ได้ (rollback การยึดล็อต)
+      if (assets.length === 0) throw new WarehouseError('EMPTY_LOT')
       const assetIds = assets.map((asset) => asset.id)
       const caseIds = [...new Set(assets.map((asset) => asset.caseId))]
 

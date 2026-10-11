@@ -27,6 +27,7 @@
 | v1.12 | 10/10/2569 | **staging E-011 (มติ PO 10/10/2569)** — ขึ้นทะเบียน event `payout.paid_to_payee` · `advance.approved` · `advance.rejected` (กลุ่ม Notification §7 · `90` §6.3 v4.9): แจ้งผู้รับเงิน/ผู้ขอโดยตรง — ไม่มี endpoint ใหม่ |
 | v1.13 | 11/10/2569 | **staging E-035** — §6.3 เพิ่ม `GET /api/field/me/payee` (ข้อมูลรับเงินของผู้เรียกเอง · สิทธิ์ `perform_field_work` view · scope ตัวเอง · ปิดบัง) |
 | v1.14 | 11/10/2569 | **staging E-027** — §6.1 เพิ่ม `GET /api/cases/ref-check` (สิทธิ์รับเคส · อ่านอย่างเดียว · normalize แบบเดียวกับการกันซ้ำ · ผู้ใช้ฝั่งบริษัทถามได้เฉพาะบริษัทตัวเอง) |
+| v1.15 | 11/10/2569 | **มติชั่วคราว M5 (mytester WH-05 — Claude ตัดสินแทน PO รอยืนยัน)** — §6.5 เติม `PATCH /api/handover-lots/:id/remove-asset` นำเครื่องออกจากล็อตที่ยังไม่ยืนยัน (เหตุผลบังคับ · audit · สิทธิ์ `create_handover_lot`) · ล็อตว่างยืนยันไม่ได้ (`EMPTY_LOT`) |
 
 ขอบเขตเอกสารนี้: รวม API Endpoint ทั้งหมดของโมดูล Case Workflow (รับเคส/มอบหมาย/ภาคสนาม) และ Warehouse (คลังสินค้า) เป็นรายการเดียว จัดกลุ่มตาม resource เพื่อให้ backend implement ตาม REST convention เดียวกันทั้งระบบ — คู่กันกับ `27-finance-api-contracts.md` ที่รวม endpoint ฝั่ง Finance/Accounting
 
@@ -121,6 +122,7 @@ GET    /api/handover-lots/company-summary    ยอดรวมต่อบร�
 GET    /api/handover-lots/:id                รายละเอียด lot + assets
 POST   /api/handover-lots                    สร้าง Lot + นัดวัน (body: companyId, assetIds[], type, scheduledAt, contactPerson, deliveryAddr, trackingNo, note) — auth: ธุรการ
 POST   /api/handover-lots/:id/documents      ผูกเอกสารที่อัปโหลดแล้วเข้าล็อต (body: document = signed_doc|delivery_proof, fileUrl, fileHash?) — server ตรวจไฟล์เอง + เก็บ SHA-256 · path ต่อเวอร์ชันไม่ทับ · ล็อต confirmed แล้วแนบไม่ได้ (มติ PO 03/10/2569 Q13) — auth: ธุรการ
+PATCH  /api/handover-lots/:id/remove-asset  นำเครื่องออกจากล็อตที่ยังไม่ยืนยัน (body: assetId, reason บังคับ) → เครื่อง in_custody · auth: ผู้ถือ create_handover_lot (มติชั่วคราว M5)
 PATCH  /api/handover-lots/:id/confirm        ยืนยัน + แนบเอกสาร → trigger unlock expense + Revenue (body: deliveredAt, signedDocUrl, deliveryProofUrl) — auth: ธุรการ
 GET    /api/handover-lots/:id/pdf            ดาวน์โหลดใบส่งมอบ PDF — auth: ธุรการ+
 GET    /api/handover-lots/:id/export-excel   Export รายการเครื่องใน Lot — auth: ธุรการ+

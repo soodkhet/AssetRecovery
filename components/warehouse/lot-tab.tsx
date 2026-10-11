@@ -25,6 +25,7 @@ import { cn } from '@/components/ui/cn'
 import { AssetDetailModal } from '@/components/warehouse/asset-detail-modal'
 import { AttachDocModal } from '@/components/warehouse/attach-doc-modal'
 import { DeliveredLotGroups } from '@/components/warehouse/delivered-lot-groups'
+import { RemoveFromLotModal } from '@/components/warehouse/remove-from-lot-modal'
 import { ViewAttachedDocModal } from '@/components/warehouse/view-attached-doc-modal'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, type ApiCallError } from '@/lib/api/types'
@@ -46,7 +47,11 @@ import {
   type LotFilterState,
 } from '@/lib/warehouse/lot-filters'
 import { LOT_STATUS_LABELS, isLotConfirmed, type LotTab as LotTabId } from '@/lib/warehouse/lot-status'
-import { WAREHOUSE_CONFIRM_LOT_CAPABILITY, WAREHOUSE_EXPORT_CAPABILITIES } from '@/lib/warehouse/permissions'
+import {
+  WAREHOUSE_CONFIRM_LOT_CAPABILITY,
+  WAREHOUSE_CREATE_LOT_CAPABILITY,
+  WAREHOUSE_EXPORT_CAPABILITIES,
+} from '@/lib/warehouse/permissions'
 import type {
   AssetDetailDto,
   AssetListItemDto,
@@ -110,7 +115,12 @@ export function LotTab({
   const [detailAsset, setDetailAsset] = useState<AssetDetailDto | null>(null)
   const [openingAssetId, setOpeningAssetId] = useState<string | null>(null)
 
+  /** มติชั่วคราว M5 — เครื่องที่กำลังจะนำออกจากล็อต (`null` = ปิด modal) */
+  const [removeAsset, setRemoveAsset] = useState<AssetListItemDto | null>(null)
+
   const canConfirm = can('manage', WAREHOUSE_CONFIRM_LOT_CAPABILITY)
+  // สิทธิ์เดียวกับจัดการล็อต — server ตรวจซ้ำ
+  const canManageLot = can('manage', WAREHOUSE_CREATE_LOT_CAPABILITY)
   const canExport = WAREHOUSE_EXPORT_CAPABILITIES.some((capability) => can('view', capability))
 
   const listPath = useMemo(
@@ -242,6 +252,21 @@ export function LotTab({
       )}
       {docsLot !== null && <ViewAttachedDocModal open lot={docsLot} onClose={() => setDocsLot(null)} />}
       {detailAsset !== null && <AssetDetailModal open asset={detailAsset} onClose={() => setDetailAsset(null)} />}
+      {removeAsset !== null && openLot !== null && (
+        <RemoveFromLotModal
+          key={removeAsset.id}
+          open
+          lot={openLot}
+          asset={removeAsset}
+          onClose={() => setRemoveAsset(null)}
+          onDone={(updated) => {
+            setRemoveAsset(null)
+            setOpenLot(updated)
+            onChanged()
+            reload()
+          }}
+        />
+      )}
     </>
   )
 
@@ -388,6 +413,11 @@ export function LotTab({
                     >
                       ดู
                     </Button>
+                    {!confirmed && canManageLot && (
+                      <Button variant="secondary" size="sm" className="ml-2" onClick={() => setRemoveAsset(asset)}>
+                        นำออกจากล็อต
+                      </Button>
+                    )}
                   </Td>
                 </Tr>
               ))}

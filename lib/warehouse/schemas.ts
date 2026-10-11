@@ -216,6 +216,24 @@ export const lotConfirmSchema = z.object({
 
 export type LotConfirmInput = z.infer<typeof lotConfirmSchema>
 
+/** ความยาวสูงสุดของเหตุผลนำเครื่องออกจากล็อต — schema กับช่องกรอกใช้ค่าเดียวกัน */
+export const LOT_REMOVE_ASSET_REASON_MAX = 1000
+
+/**
+ * `PATCH /api/handover-lots/:id/remove-asset` — มติชั่วคราว M5 (mytester WH-05): นำเครื่องออกจากล็อตที่ยังไม่ยืนยัน
+ * เครื่องกลับไป "ในคลัง" รอจัดล็อตใหม่ · เหตุผลบังคับ (ลง audit)
+ */
+export const lotRemoveAssetSchema = z.object({
+  assetId: z.guid('รหัสเครื่องไม่ถูกต้อง'),
+  reason: z
+    .string({ error: () => 'ต้องระบุเหตุผลที่นำเครื่องออกจากล็อต' })
+    .trim()
+    .min(1, 'ต้องระบุเหตุผลที่นำเครื่องออกจากล็อต')
+    .max(LOT_REMOVE_ASSET_REASON_MAX, `เหตุผลยาวได้ไม่เกิน ${LOT_REMOVE_ASSET_REASON_MAX} ตัวอักษร`),
+})
+
+export type LotRemoveAssetInput = z.infer<typeof lotRemoveAssetSchema>
+
 /**
  * `POST /api/handover-lots/:id/documents` — ผูกเอกสารที่อัปโหลดแล้วเข้าล็อต (มติ PO 03/10/2569 — UAT Q13 · หนี้ #1)
  * server ตรวจไฟล์เอง (มีจริง · อยู่ใต้ `handover-lots/<lotId>/<ชนิด>/` · ชนิดจากเนื้อไฟล์ · ขนาด) แล้วเก็บ SHA-256

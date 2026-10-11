@@ -29,6 +29,10 @@ describe('nextAssetStatus', () => {
   it('เข้าล็อตได้เฉพาะเครื่องในคลัง แล้วจบที่ handed_over', () => {
     expect(nextAssetStatus('in_custody', 'attach_to_lot')).toBe('handover_pending')
     expect(nextAssetStatus('handover_pending', 'hand_over')).toBe('handed_over')
+    // มติชั่วคราว M5 — นำออกจากล็อตที่ยังไม่ยืนยัน กลับไปรอจัดล็อต
+    expect(nextAssetStatus('handover_pending', 'detach_from_lot')).toBe('in_custody')
+    expect(() => nextAssetStatus('in_custody', 'detach_from_lot')).toThrowError(/ASSET_INVALID_STATUS/)
+    expect(() => nextAssetStatus('handed_over', 'detach_from_lot')).toThrowError(/ASSET_INVALID_STATUS/)
   })
 
   it('เครื่องที่ส่งมอบแล้วขยับต่อไม่ได้ (terminal) — `ASSET_INVALID_STATUS`', () => {

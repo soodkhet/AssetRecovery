@@ -27,6 +27,7 @@
 | v2.10 | 10/10/2569 | **staging E-007 (มติ PO 10/10/2569)**: §12 เพิ่ม `LOT_DELIVERED_AT_IN_FUTURE` / `LOT_DELIVERED_AT_BEFORE_LOT` — วันเวลาส่งมอบจริงตอนยืนยันล็อตต้องไม่เกินเวลาปัจจุบัน (เผื่อ 5 นาที) และไม่ก่อนวันสร้างล็อต · server ตรวจ · หน้าจอจำกัดช่องเวลา + ถามยืนยันก่อนยืนยันล็อต (ย้อนไม่ได้) |
 | v2.11 | 11/10/2569 | **staging E-043/E-047** — §8 ค้นหา IMEI คงแบบตรงครบ 15 หลัก (Rule 10) · พิมพ์ตัวเลข 6–14 หลักแล้วไม่พบ ⇒ บอกว่า "IMEI ต้องพิมพ์ครบ 15 หลัก" · หน้าต่างดูรูปรับเข้าใช้หัวเรื่อง "ชื่อมุม — เลขเคส" แทนชื่อไฟล์ |
 | v2.12 | 11/10/2569 | **staging E-041/E-042/E-046 (มติ PO 10/10/2569)** — §8.2 ช่องรูป 7 มุมแสดง**ภาพย่อ** (signed URL) ทั้งตอนรับเข้าและหน้ารายละเอียดเครื่อง · §14 ตีกลับการรับเข้าแจ้ง**ผู้จัดการ/หัวหน้าทีมของเคส**ด้วย (ลิงก์หน้าคลัง · ประสานส่งเครื่องใหม่นอกระบบ) · รายละเอียดล็อตส่ง `documentsRestricted` ให้หน้าจอบอก "เอกสารทั้งล็อตดูได้เฉพาะคลังและการเงิน" แทน "ไม่พบไฟล์" (scope ทีม — U22) |
+| v2.13 | 11/10/2569 | **มติชั่วคราว M5 (mytester WH-05 — Claude ตัดสินแทน PO รอยืนยัน)**: §9.1 เพิ่ม transition `handover_pending → in_custody` (นำเครื่องออกจากล็อตที่**ยังไม่ยืนยัน** — ไม่มีสถานะใหม่) · §15 `PATCH /api/handover-lots/:id/remove-asset` (เหตุผลบังคับ · audit · สิทธิ์เดียวกับจัดการล็อต) · ปุ่ม "นำออกจากล็อต" ในรายละเอียดล็อต · ล็อตที่ไม่มีเครื่องเหลือยืนยันไม่ได้ (`EMPTY_LOT`) · ยังไม่มีสถานะ "ยกเลิกล็อต" (ต้องแก้ state machine — รอ PO) |
 
 ขอบเขตเอกสารนี้: โมดูลบริหารจัดการสินทรัพย์ที่ยึดคืนจากเคส `closed_success` ตั้งแต่รับเข้าคลัง ตรวจสภาพ จัดล็อตส่งมอบ จนถึงยืนยันส่งมอบคืนบริษัทไฟแนนซ์ — พร้อม trigger ปลดล็อก expense และสร้าง Revenue อัตโนมัติเมื่อล็อต confirmed
 
@@ -346,6 +347,7 @@ stateDiagram-v2
     in_custody --> handover_pending : ถูกใส่เข้า HandoverLot
 
     handover_pending --> handed_over : HandoverLot.status = confirmed
+    handover_pending --> in_custody : นำออกจากล็อตที่ยังไม่ยืนยัน (เหตุผลบังคับ · มติชั่วคราว M5)
 
     note right of handed_over
         Terminal State
@@ -398,7 +400,7 @@ stateDiagram-v2
 | IMEI Exact Match | ตัดเฉพาะช่องว่าง/ขีด/จุด แล้วต้องเหลือตัวเลข 15 หลักพอดี (ไม่งั้นปฏิเสธว่ารูปแบบผิด — มติ PO U24) · เปรียบเทียบ 15 หลักตรงกันเป๊ะ ห้าม fuzzy |
 | Reject Requires Reason | reject_reason บังคับ ห้าม null/empty string |
 | Condition Note | บังคับถ้า condition = damaged หรือ partial_loss |
-| Lot Must Have Assets | ห้ามสร้าง Lot ที่ asset_ids ว่าง (EMPTY_LOT) |
+| Lot Must Have Assets | ห้ามสร้าง Lot ที่ asset_ids ว่าง (EMPTY_LOT) · ล็อตที่นำเครื่องออกหมดแล้ว (มติชั่วคราว M5) ยืนยันไม่ได้ (EMPTY_LOT) |
 | 1 Lot = 1 Company | ทุก Asset ใน Lot ต้องมี company_id เดียวกัน (MIXED_COMPANY_LOT) |
 | Asset Must Be in_custody | ห้ามใส่ Asset ที่ไม่ใช่ `in_custody` เข้า Lot |
 | Asset Already in Lot | ห้ามใส่ Asset ที่มี `lot_id` แล้วเข้า Lot อื่น |
@@ -456,7 +458,7 @@ WHEN HandoverLot.status → confirmed:
 | `INTAKE_MISSING_NOTE` | condition = damaged/partial_loss ไม่มี note | reject — inline error |
 | `REJECT_MISSING_REASON` | กดตีกลับโดยไม่กรอก reason | reject — inline error |
 | `MIXED_COMPANY_LOT` | Asset ใน Lot มี company_id ต่างกัน | reject — show mismatched companies |
-| `EMPTY_LOT` | สร้าง Lot โดยไม่เลือก Asset | reject |
+| `EMPTY_LOT` | สร้าง Lot โดยไม่เลือก Asset · ยืนยันล็อตที่ไม่มีเครื่องเหลือ (มติชั่วคราว M5) | reject |
 | `ASSET_NOT_IN_CUSTODY` | เลือก Asset ที่ไม่ใช่ in_custody | reject — ระบุ asset IDs |
 | `ASSET_ALREADY_IN_LOT` | Asset มี lot_id แล้ว | reject — ระบุ lot number |
 | `LOT_MISSING_SIGNED_DOC` | ยืนยัน Lot ไม่แนบใบเซ็นรับ | reject — บังคับทุกประเภท |
@@ -561,6 +563,7 @@ limit?:     number   (default: 50)
 | GET | `/api/handover-lots/:id` | internal | Get lot + assets |
 | POST | `/api/handover-lots` | ธุรการ | สร้าง Lot + นัดวัน |
 | POST | `/api/handover-lots/:id/documents` | ธุรการ | ผูกเอกสารที่อัปโหลดแล้ว (body: `document`, `fileUrl`, `fileHash?`) — server ตรวจไฟล์ + เก็บ SHA-256 · ล็อต confirmed แล้วไม่ได้ (§6.4 · มติ PO 03/10/2569 Q13) |
+| PATCH | `/api/handover-lots/:id/remove-asset` | ผู้ถือ `create_handover_lot` | นำเครื่องออกจากล็อตที่ยังไม่ยืนยัน (`assetId` + `reason` บังคับ) → เครื่อง `in_custody` · audit ล็อต (`lot.asset_removed`) + เครื่อง (มติชั่วคราว M5) |
 | PATCH | `/api/handover-lots/:id/confirm` | ธุรการ | ยืนยัน + แนบเอกสาร → trigger side effects |
 | GET | `/api/handover-lots/:id/pdf` | ธุรการ+ | ดาวน์โหลดใบส่งมอบ PDF |
 | GET | `/api/handover-lots/:id/export-excel` | ธุรการ+ | Export รายการเครื่องใน Lot |
