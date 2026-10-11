@@ -1,6 +1,6 @@
 'use client'
 
-import { Bar, BarChart, CartesianGrid, Cell, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { Bar, BarChart, CartesianGrid, Cell, Legend, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { Card, EmptyState } from '@/components/ui'
 import { fmtSatang } from '@/lib/format/money'
 import { formatCellText, type ReportColumnType, type ReportRow } from '@/lib/reports/payload'
@@ -23,13 +23,30 @@ const NEGATIVE = '#dc2626'
 const SECONDARY = '#f87171'
 
 /**
- * โดเมนแกนค่าของกราฟแท่งต้องรวม 0 เสมอ — แท่งวาดจากเส้นฐาน 0 ถ้าทุกค่าติดลบ (F1 เจาะลึกรายเคสที่ขาดทุนทุกเคส)
- * แล้วปล่อยให้ Recharts คำนวณโดเมนเอง แกนจะไม่ครอบ 0 และแท่งไม่ถูกวาดเลย (mytester2 J2-01)
+ * ขีดแกนค่าของกราฟแท่ง — **รวม 0 เสมอ** และเป็นเลขกลม (ขั้น 1/2/5 × 10ⁿ)
+ *
+ * - แท่งวาดจากเส้นฐาน 0 ถ้าแกนไม่ครอบ 0 (ขาดทุนทุกเคส) แท่งจะไม่ถูกวาดเลย (mytester2 J2-01)
+ * - ปล่อยให้ Recharts ใช้ min/max ของข้อมูลเป็นขอบแกน ⇒ ป้ายเป็นเลขไม่กลม (283.32 / −56.17) และไม่มีป้าย 0
+ *   ทั้งที่มีแท่งบวกและลบ (mytester2 LR-02) — จึงคำนวณขีดเองแล้วส่ง `ticks` + `domain` ให้แกน
+ * - `minStep` = ขั้นเล็กสุดในหน่วยข้อมูล: เงินเป็น satang ⇒ 100 (ขั้นละ 1 บาทขึ้นไป ไม่มีสตางค์บนแกน)
  */
-export const VALUE_AXIS_DOMAIN: [(dataMin: number) => number, (dataMax: number) => number] = [
-  (dataMin) => Math.min(0, dataMin),
-  (dataMax) => Math.max(0, dataMax),
-]
+export function valueAxisTicks(values: readonly number[], minStep = 1, targetCount = 5): number[] {
+  const finite = values.filter((value) => Number.isFinite(value))
+  const lo = Math.min(0, ...finite)
+  const hi = Math.max(0, ...finite)
+  if (lo === hi) return [0, minStep]
+  const raw = (hi - lo) / Math.max(1, targetCount - 1)
+  const magnitude = 10 ** Math.floor(Math.log10(raw))
+  const fraction = raw / magnitude
+  const nice = fraction <= 1 ? 1 : fraction <= 2 ? 2 : fraction <= 5 ? 5 : 10
+  const step = Math.max(nice * magnitude, minStep)
+  const first = Math.floor(lo / step)
+  const last = Math.ceil(hi / step)
+  const ticks: number[] = []
+  // ทำงานเป็นจำนวนเต็มเท่าของขั้นแล้วค่อยคูณ — กันเศษทศนิยมสะสม (0.1 + 0.2)
+  for (let i = first; i <= last; i++) ticks.push(Number((i * step).toPrecision(12)) || 0)
+  return ticks
+}
 
 export function ReportBarChart({
   title,
@@ -58,6 +75,16 @@ export function ReportBarChart({
     stacked: stack === undefined ? 0 : typeof row[stack.valueKey] === 'number' ? row[stack.valueKey] : 0,
   }))
 
+  // โหมดซ้อนแท่ง ⇒ ยอดสูงสุดคือผลรวมสองชุด ไม่ใช่ค่าชุดเดียว
+  const axisTicks = valueAxisTicks(
+    data.flatMap((entry) => {
+      const base = typeof entry.value === 'number' ? entry.value : 0
+      const stacked = typeof entry.stacked === 'number' ? entry.stacked : 0
+      return stack === undefined ? [base] : [base, base + stacked]
+    }),
+    valueType === 'money' ? 100 : 1,
+  )
+
   const nameOf = (key: string): string =>
     stack === undefined ? title : key === 'value' ? stack.baseLabel : stack.valueLabel
 
@@ -81,11 +108,15 @@ export function ReportBarChart({
                 textAnchor={(xAxis?.angle ?? -15) <= -30 ? 'end' : 'middle'}
               />
               <YAxis
-                domain={VALUE_AXIS_DOMAIN}
+                domain={[axisTicks[0] ?? 0, axisTicks[axisTicks.length - 1] ?? 0]}
+                ticks={axisTicks}
+                interval={0}
+                allowDataOverflow
                 tick={{ fontSize: 11, fill: '#64748b' }}
                 width={80}
                 tickFormatter={(value: number) => formatCellText(value, valueType)}
               />
+              <ReferenceLine y={0} stroke="#94a3b8" />
               <Tooltip
                 cursor={{ fill: '#f1f5f9' }}
                 formatter={(value, name) => {
