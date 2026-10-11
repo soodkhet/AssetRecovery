@@ -17,6 +17,7 @@ import {
   periodKeyOf,
   signedAdjustmentSatang,
   type AdjustmentTargetType,
+  viewerCanApproveAdjustment,
 } from '@/lib/adjustments/adjustment'
 import { isAdjustmentError } from '@/lib/adjustments/errors'
 import type { AdjustmentStatus, AdjustmentType } from '@/lib/generated/prisma/enums'
@@ -154,6 +155,36 @@ describe('ระดับสิทธิ์ผู้อนุมัติ (`20` 
       'บริหาร',
     ])
     expect(approverRolesOf({ roleName: 'การเงิน', isSuperadmin: false }, 'sent_to_accountant')).toEqual(['การเงิน'])
+  })
+})
+
+describe('ทดสอบซ้ำ local L-05 — ผู้ดูอนุมัติรายการที่รออยู่ได้จริงไหม (คิวแดชบอร์ด)', () => {
+  const finance = { ...FINANCE, roleName: 'การเงิน' }
+  const executive = { ...EXECUTIVE, roleName: 'บริหาร' }
+  const superadmin = { ...SUPERADMIN, roleName: 'Superadmin' }
+
+  it('งวด collecting รอการเงินเท่านั้น ⇒ ผู้บริหารไม่นับ', () => {
+    expect(viewerCanApproveAdjustment(finance, 'collecting', [])).toBe(true)
+    expect(viewerCanApproveAdjustment(executive, 'collecting', [])).toBe(false)
+    expect(viewerCanApproveAdjustment(executive, null, [])).toBe(false)
+  })
+
+  it('งวด sent_to_accountant — บทบาทที่อนุมัติไปแล้วไม่นับซ้ำ', () => {
+    expect(viewerCanApproveAdjustment(finance, 'sent_to_accountant', [])).toBe(true)
+    expect(viewerCanApproveAdjustment(executive, 'sent_to_accountant', [])).toBe(true)
+    expect(viewerCanApproveAdjustment(finance, 'sent_to_accountant', ['การเงิน'])).toBe(false)
+    expect(viewerCanApproveAdjustment(executive, 'sent_to_accountant', ['การเงิน'])).toBe(true)
+  })
+
+  it('งวด locked ⇒ ผู้บริหารเท่านั้น (ต้องถือ capability ของระดับนั้นด้วย)', () => {
+    expect(viewerCanApproveAdjustment(finance, 'locked', [])).toBe(false)
+    expect(viewerCanApproveAdjustment(executive, 'locked', [])).toBe(true)
+    expect(viewerCanApproveAdjustment({ ...executive, capabilities: { [APPROVE_ADJUSTMENT]: 'manage' } }, 'locked', [])).toBe(false)
+  })
+
+  it('Superadmin อนุมัติได้ทุกระดับ', () => {
+    expect(viewerCanApproveAdjustment(superadmin, 'collecting', [])).toBe(true)
+    expect(viewerCanApproveAdjustment(superadmin, 'locked', [])).toBe(true)
   })
 })
 

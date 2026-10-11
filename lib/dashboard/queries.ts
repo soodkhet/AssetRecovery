@@ -1,4 +1,6 @@
 import type { SessionUser } from '@/lib/auth/types'
+import { parsePeriodStatusSnapshot, viewerCanApproveAdjustment } from '@/lib/adjustments/adjustment'
+import { approverRolesByAdjustment } from '@/lib/adjustments/queries'
 import { assignmentStateFilter } from '@/lib/assignments/queries'
 import { caseScopeWhere } from '@/lib/cases/queries'
 import { listCompensationApprovals } from '@/lib/compensation/approval-queries'
@@ -95,6 +97,27 @@ async function countReassignWaiting(user: SessionUser): Promise<QueueCount> {
   return { count }
 }
 
+/**
+ * ทดสอบซ้ำ local L-05 — "รายการปรับปรุงรออนุมัติ" นับเฉพาะรายการที่**ผู้ดูคนนี้อนุมัติได้จริง**
+ * (นโยบายเดียวกับปุ่มบนหน้าปรับปรุงและ API — `viewerCanApproveAdjustment`) เช่น งวด collecting
+ * ที่รอการเงิน ไม่นับให้ผู้บริหาร · บทบาทที่อนุมัติไปแล้วไม่นับซ้ำ
+ */
+async function countAdjustmentsAwaitingViewer(user: SessionUser): Promise<QueueCount> {
+  const rows = await prisma.adjustment.findMany({
+    where: { organizationId: user.organizationId, status: 'pending_approval' },
+    select: { id: true, periodStatusAtTarget: true },
+  })
+  const approvals = await approverRolesByAdjustment(
+    prisma,
+    user.organizationId,
+    rows.map((row) => row.id),
+  )
+  const count = rows.filter((row) =>
+    viewerCanApproveAdjustment(user, parsePeriodStatusSnapshot(row.periodStatusAtTarget), approvals.get(row.id) ?? []),
+  ).length
+  return { count }
+}
+
 const QUEUE_COUNTERS: Readonly<Record<DashboardQueueId, (user: SessionUser) => Promise<QueueCount>>> = {
   case_draft: (user) => countCasesWithStatus(user, 'draft'),
   case_need_info: (user) => countCasesWithStatus(user, 'need_info'),
@@ -122,11 +145,7 @@ const QUEUE_COUNTERS: Readonly<Record<DashboardQueueId, (user: SessionUser) => P
       },
     }),
   }),
-  adjustment_pending: async (user) => ({
-    count: await prisma.adjustment.count({
-      where: { organizationId: user.organizationId, status: 'pending_approval' },
-    }),
-  }),
+  adjustment_pending: countAdjustmentsAwaitingViewer,
   exception_critical_open: async (user) => ({
     count: await prisma.exception.count({
       where: { organizationId: user.organizationId, level: 'critical', status: 'open' },

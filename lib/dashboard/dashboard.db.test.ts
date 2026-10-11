@@ -86,6 +86,8 @@ function inOrg(user: SessionUser): SessionUser {
 }
 
 async function cleanup(): Promise<void> {
+  await db().$executeRawUnsafe(`DELETE FROM adjustments WHERE organization_id = '${ORG_ID}'`)
+  await db().$executeRawUnsafe(`DELETE FROM payout_batches WHERE organization_id = '${ORG_ID}'`)
   await db().$executeRawUnsafe(`DELETE FROM case_assignments WHERE organization_id = '${ORG_ID}'`)
   await db().$executeRawUnsafe(`DELETE FROM cases WHERE organization_id = '${ORG_ID}'`)
 }
@@ -180,5 +182,40 @@ suite('getDashboardOverview — DB จริง', () => {
 
     const overview = await overviewOf(inOrg(ROLE_USERS.superadmin()), NOW)
     expect(overview.queues.find((queue) => queue.id === 'case_awaiting_assignment')?.count).toBe(2)
+  })
+  it('ทดสอบซ้ำ local L-05 — รายการปรับปรุงรออนุมัติ นับเฉพาะรายการที่ผู้ดูคนนั้นอนุมัติได้จริง', async () => {
+    const batches = await db().$queryRawUnsafe<{ id: string }[]>(`
+      INSERT INTO payout_batches (organization_id, name, side, status, gross_satang, wht_satang, net_satang, created_by)
+      VALUES ('${ORG_ID}', 'PB-L05', 'outsource', 'draft', 100000, 0, 100000, '${USER_ID}')
+      RETURNING id::text AS id
+    `)
+    const batchId = batches[0]?.id ?? ''
+    async function seedAdjustment(periodStatus: string): Promise<string> {
+      const rows = await db().$queryRawUnsafe<{ id: string }[]>(`
+        INSERT INTO adjustments (organization_id, adjustment_type, amount_satang, reason, status,
+                                 payout_batch_id, period_status_at_target, created_by)
+        VALUES ('${ORG_ID}', 'decrease', 10000, 'ทดสอบ L-05', 'pending_approval', '${batchId}', '${periodStatus}', '${USER_ID}')
+        RETURNING id::text AS id
+      `)
+      return rows[0]?.id ?? ''
+    }
+    await seedAdjustment('collecting')
+    await seedAdjustment('sent_to_accountant')
+    const financeDone = await seedAdjustment('sent_to_accountant')
+    await seedAdjustment('locked')
+    // การเงินอนุมัติขั้นแรกของรายการนี้ไปแล้ว (ทะเบียนผู้อนุมัติอ่านจาก audit log)
+    await db().$executeRawUnsafe(`
+      INSERT INTO audit_logs (organization_id, actor_id, actor_role, action, target_type, target_id, reason)
+      VALUES ('${ORG_ID}', '${USER_ID}', 'การเงิน', 'approve', 'adjustments', '${financeDone}', 'ทดสอบ L-05')
+    `)
+
+    const countFor = async (user: SessionUser): Promise<number | undefined> =>
+      (await overviewOf(inOrg(user), NOW)).queues.find((queue) => queue.id === 'adjustment_pending')?.count
+
+    // บริหาร: ไม่นับงวด collecting (รอการเงินเท่านั้น) ⇒ sent ×2 + locked
+    expect(await countFor(ROLE_USERS.executive())).toBe(3)
+    // การเงิน: collecting + sent ที่ยังไม่อนุมัติ (locked ต้องบริหาร · อีกตัวอนุมัติไปแล้ว)
+    expect(await countFor(ROLE_USERS.finance())).toBe(2)
+    expect(await countFor(ROLE_USERS.superadmin())).toBe(4)
   })
 })

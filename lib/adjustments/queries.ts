@@ -439,7 +439,7 @@ async function fullyPaidBills(organizationId: string, rows: readonly AdjustmentR
 
 type AuditReader = Pick<typeof prisma, 'auditLog'>
 
-async function approverRolesByAdjustment(
+export async function approverRolesByAdjustment(
   client: AuditReader,
   organizationId: string,
   adjustmentIds: readonly string[],

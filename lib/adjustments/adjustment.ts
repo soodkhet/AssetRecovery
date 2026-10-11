@@ -1,6 +1,7 @@
 import { hasCapability, type CapabilityHolder } from '@/lib/auth/permission'
 import { AdjustmentError } from '@/lib/adjustments/errors'
 import {
+  actorFillsMissingRole,
   adjustmentApprovalPolicyFor,
   EXECUTIVE_ROLE,
   FINANCE_ROLE,
@@ -92,6 +93,21 @@ export function approverRolesOf(
 ): string[] {
   if (!actor.isSuperadmin) return [actor.roleName.trim()]
   return [...adjustmentApprovalPolicyFor(periodStatus).requiredRoles]
+}
+
+/**
+ * ทดสอบซ้ำ local L-05 — ผู้ใช้คนนี้ "อนุมัติรายการที่รออยู่นี้ได้จริง" ไหม (ใช้กับตัวนับคิวแดชบอร์ด)
+ * = ถือ capability ของระดับนั้น (`approvalCapabilityFor`) **และ** บทบาทของผู้ใช้เติมบทบาทที่ยังขาดได้
+ * (`actorFillsMissingRole` — นโยบายเดียวกับ API `approveAdjustment` / ปุ่มบนหน้าปรับปรุง)
+ * เช่น งวด `collecting` ต้องการการเงินเท่านั้น ⇒ ผู้บริหารไม่นับ · บทบาทที่อนุมัติไปแล้วไม่นับซ้ำ
+ */
+export function viewerCanApproveAdjustment(
+  viewer: CapabilityHolder & { roleName: string },
+  periodStatus: AccountingPeriodStatus | null,
+  approvedRoles: readonly string[],
+): boolean {
+  if (!hasCapability(viewer, 'manage', approvalCapabilityFor(periodStatus))) return false
+  return actorFillsMissingRole(periodStatus, approvedRoles, approverRolesOf(viewer, periodStatus))
 }
 
 /** บทบาทของ Adjustment มีแค่ 2 ตัวตาม `20` §6.2 — ชื่อชุดเดียวกับ seed (`07` §5) */
