@@ -4,6 +4,7 @@ import {
   caseActionSuccessTitle,
   caseDetailDescription,
   caseDetailMode,
+  caseDetailViewMode,
   caseModalActions,
   caseReasonFieldLabel,
   caseRowActions,
@@ -80,6 +81,18 @@ describe('caseRowActions', () => {
   it('ไม่มีปุ่มพิจารณา/รีไซเคิลหลุดมาอยู่บนแถว (อยู่บน modal เท่านั้น)', () => {
     expect(caseRowActions('pending_review', approver)).toEqual([])
     expect(caseRowActions('closed_fail', approver)).toEqual([])
+  })
+})
+
+describe('caseDetailViewMode — mytester2 B2-01', () => {
+  it('ธุรการเปิดเคสรอพิจารณา (ไม่มีปุ่มตัดสิน) ⇒ อ่านอย่างเดียว ไม่บอก "ตัดสินใจได้ในหน้าเดียว"', () => {
+    const mode = caseDetailViewMode('pending_review', caseModalActions('pending_review', admin))
+    expect(mode).toBe('readonly')
+    expect(caseDetailDescription(mode)).not.toContain('ตัดสินใจได้ในหน้าเดียว')
+  })
+
+  it('เจ้าหน้าที่อนุมัติเคส ⇒ โหมดพิจารณาตามเดิม', () => {
+    expect(caseDetailViewMode('pending_review', caseModalActions('pending_review', approver))).toBe('review')
   })
 })
 

@@ -30,7 +30,7 @@ import {
   CASE_ACTION_CONFIRM,
   caseActionSuccessTitle,
   caseDetailDescription,
-  caseDetailMode,
+  caseDetailViewMode,
   caseModalActions,
   caseReasonFieldLabel,
   recycleHistoryLine,
@@ -189,11 +189,12 @@ export function CaseDetailModal({
   }, [open, caseId, load, retryKey])
 
   const status = detail?.status ?? ''
-  const mode = caseDetailMode(status)
   const actions =
     detail === null || hideWorkflowActions
       ? []
       : caseModalActions(status, (capability) => can('manage', capability))
+  // ไม่มีปุ่มตัดสิน = อ่านอย่างเดียว (คำบรรยาย + ซ่อนช่องเหตุผล — mytester2 B2-01)
+  const mode = caseDetailViewMode(status, actions)
 
   async function runAction(button: CaseActionButton): Promise<void> {
     if (detail === null) return
@@ -419,7 +420,7 @@ export function CaseDetailModal({
             {/* staging E-004 — ประวัติสถานะ (จาก audit ฝั่ง server) + ประวัติการแก้ไข */}
             {(detail.statusHistory.length > 0 || detail.editHistory.length > 0) && <CaseHistorySection detail={detail} />}
 
-            {showsReasonBox(status) && (
+            {showsReasonBox(status) && mode !== 'readonly' && (
               <section>
                 <h3 className="mb-3 border-b border-slate-100 pb-2 text-sm font-bold text-slate-800">
                   เหตุผล / หมายเหตุ
