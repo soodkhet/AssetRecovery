@@ -137,7 +137,7 @@ export function isThaiProvince(value: string | null | undefined): boolean {
  */
 export const DISTRICT_DATA: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>> = {
   กรุงเทพมหานคร: {
-    บางนา: ['บางนา', 'บางนาเหนือ'],
+    บางนา: ['บางนาเหนือ', 'บางนาใต้'],
     จตุจักร: ['จตุจักร', 'เสนานิคม'],
     ลาดพร้าว: ['ลาดพร้าว', 'จรเข้บัว'],
   },
