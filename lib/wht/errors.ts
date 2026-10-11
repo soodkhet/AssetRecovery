@@ -50,7 +50,7 @@ const MESSAGES: Record<WhtErrorCode, ErrorMessage> = {
   },
   WHT_FILING_SUMMARY_NOT_FOUND: {
     title: 'ไม่พบสรุปรอบนำส่ง',
-    message: 'ไม่พบสรุปรอบนำส่ง ภ.ง.ด.3/53 ของงวดนี้ หรือคุณไม่มีสิทธิ์เข้าถึง',
+    message: 'ไม่พบสรุปรอบนำส่ง ภ.ง.ด.1/3/53 ของงวดนี้ หรือคุณไม่มีสิทธิ์เข้าถึง',
   },
   WHT_FILING_ALREADY_FILED: {
     title: 'รอบนี้ mark ว่ายื่นแล้ว',

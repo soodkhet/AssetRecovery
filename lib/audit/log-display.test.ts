@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import {
+  auditFieldLabel,
+  auditValueDisplay,
   auditActionLabel,
   auditActorLabel,
   auditFieldChanges,
@@ -159,5 +161,20 @@ describe('login ที่ล้มเหลวแยกจาก login สำเ
     expect(auditActorLabel(null, null, { code: 'INVALID_CREDENTIALS', identifier: '<invalid>' })).toBe('ไม่ระบุตัวตน')
     expect(auditActorLabel(null, null)).toBe('ระบบ (งานอัตโนมัติ)')
     expect(auditRowDisplay({ action: 'login', targetType: 'users', reason: null, loginFailure: null }).label).toBe('เข้าสู่ระบบ')
+  })
+})
+
+describe('mytester H-06 — ชื่อฟิลด์/ค่าในรายละเอียดบันทึกการใช้งาน', () => {
+  it('ฟิลด์ที่รู้จักเป็นไทย · ไม่รู้จักคงชื่อเดิม', () => {
+    expect(auditFieldLabel('authorize_note')).toBe('เหตุผลที่อนุมัติยกเว้น')
+    expect(auditFieldLabel('period_id')).toBe('รอบบัญชี')
+    expect(auditFieldLabel('custom_x')).toBe('custom_x')
+  })
+
+  it('สถานะ/ระดับของข้อยกเว้นเป็นไทย · เป้าหมายอื่นคงค่าเดิม', () => {
+    expect(auditValueDisplay('authorized', 'status', 'exceptions')).toBe('อนุมัติยกเว้นแล้ว')
+    expect(auditValueDisplay('critical', 'level', 'exceptions')).toBe('ต้องแก้ก่อนปิดงวด')
+    expect(auditValueDisplay('open', 'status', 'cases')).toBe('open')
+    expect(auditValueDisplay(150_000, 'amount_satang', 'exceptions')).toBe('฿1,500.00')
   })
 })

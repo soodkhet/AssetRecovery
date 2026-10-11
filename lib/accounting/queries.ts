@@ -9,6 +9,7 @@ import {
   exceptionStatusLabel,
   MANAGE_EXCEPTIONS,
   summarizeExceptionCounts,
+  sortExceptionsForDisplay,
   summarizeExceptions,
   type ExceptionCountInput,
   type ExceptionSummary,
@@ -500,8 +501,9 @@ async function readinessOf(organizationId: string, row: PeriodRow, now: Date): P
     unmappedCostCenter,
   ] = await Promise.all([
     prisma.exception.findMany({
-      where: { organizationId, periodId: row.id, status: 'open' },
-      select: { id: true, level: true, title: true, sourceModule: true },
+      // mytester H-05 — รวม `authorized` ด้วยเพื่อบอกจำนวนที่ผ่านเพราะผู้บริหารอนุมัติยกเว้น (กัน "หายเงียบ" — `34` §6.3)
+      where: { organizationId, periodId: row.id, status: { in: ['open', 'authorized'] } },
+      select: { id: true, level: true, status: true, title: true, sourceModule: true },
       orderBy: { createdAt: 'asc' },
     }),
     prisma.bankTransaction.count({ where: { organizationId, periodId: row.id, matchStatus: 'unmatched' } }),
@@ -550,9 +552,13 @@ async function readinessOf(organizationId: string, row: PeriodRow, now: Date): P
 
   return evaluateReadiness({
     criticalOpen: openExceptions
-      .filter((exception) => exception.level === 'critical')
+      .filter((exception) => exception.level === 'critical' && exception.status === 'open')
       .map((exception) => ({ id: exception.id, title: exception.title, sourceModule: exception.sourceModule })),
-    warningOpenCount: openExceptions.filter((exception) => exception.level === 'warning').length,
+    criticalAuthorizedCount: openExceptions.filter(
+      (exception) => exception.level === 'critical' && exception.status === 'authorized',
+    ).length,
+    warningOpenCount: openExceptions.filter((exception) => exception.level === 'warning' && exception.status === 'open')
+      .length,
     unmatchedBankCount,
     billingMismatches,
     periodEnd: { key, now },
@@ -875,7 +881,7 @@ export async function listExceptions(user: SessionUser, query: ExceptionListQuer
     orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
     select: EXCEPTION_SELECT,
   })
-  return { items: rows.map(toExceptionDto), summary: summarizeExceptions(rows) }
+  return { items: sortExceptionsForDisplay(rows).map(toExceptionDto), summary: summarizeExceptions(rows) }
 }
 
 async function findException(user: SessionUser, exceptionId: string): Promise<ExceptionRecord> {

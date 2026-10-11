@@ -33,7 +33,7 @@ import { PERIOD_CLOSED_CANCEL_HINT } from '@/lib/accounting/period'
 import { fmtDate } from '@/lib/format/datetime'
 import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
 import type { WhtCertificateDto, WhtFilingSummaryDto } from '@/lib/wht/types'
-import { MANAGE_WHT, whtFilingDeadlineNote } from '@/lib/wht/wht'
+import { MANAGE_WHT, WHT_FILING_FORM_SHORT_LABEL, WHT_FILING_FORMS_TEXT, whtFilingDeadlineNote } from '@/lib/wht/wht'
 
 /**
  * แท็บ "เอกสาร & WHT" (`33` §8 · mockup `accounting.html` แท็บ `wht`)
@@ -76,8 +76,8 @@ export function WhtTab() {
           tone={pending.isOverdue ? 'error' : 'warning'}
           title={
             pending.isOverdue
-              ? `เลยกำหนดนำส่ง ภ.ง.ด.3/53 ของรอบ ${pending.periodLabel} แล้ว ${Math.abs(pending.daysRemaining)} วัน`
-              : `เหลือ ${pending.daysRemaining} วัน ก่อนกำหนดนำส่ง ภ.ง.ด.3/53 ของรอบ ${pending.periodLabel}`
+              ? `เลยกำหนดนำส่ง ${WHT_FILING_FORMS_TEXT} ของรอบ ${pending.periodLabel} แล้ว ${Math.abs(pending.daysRemaining)} วัน`
+              : `เหลือ ${pending.daysRemaining} วัน ก่อนกำหนดนำส่ง ${WHT_FILING_FORMS_TEXT} ของรอบ ${pending.periodLabel}`
           }
         >
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -88,7 +88,7 @@ export function WhtTab() {
             {canManage &&
               (pending.canMarkFiledNow ? (
                 <Button size="sm" variant={pending.isOverdue ? 'danger' : 'secondary'} onClick={() => setMarking(pending)}>
-                  Mark ว่ายื่นแล้ว
+                  บันทึกว่ายื่นแล้ว
                 </Button>
               ) : (
                 <MarkFiledNotYet availableFrom={pending.markFiledAvailableFrom} />
@@ -193,7 +193,7 @@ export function WhtTab() {
                         canManage &&
                         (row.canMarkFiledNow ? (
                           <Button size="sm" variant="success" onClick={() => setMarking(row)}>
-                            Mark Filed
+                            บันทึกว่ายื่นแล้ว
                           </Button>
                         ) : (
                           <MarkFiledNotYet availableFrom={row.markFiledAvailableFrom} />
@@ -272,7 +272,7 @@ export function WhtTab() {
                       {fmtSatangSymbol(row.whtSatang)}
                     </Td>
                     <Td>
-                      <Badge>{row.filingForm}</Badge>
+                      <Badge>{WHT_FILING_FORM_SHORT_LABEL[row.filingForm]}</Badge>
                     </Td>
                     <Td>
                       <StatusBadge status={row.status} label={row.statusLabel} />
@@ -312,7 +312,7 @@ export function WhtTab() {
 
       <InlineAlert tone="info" title="หลักการ">
         ใบที่ออกแล้วแก้ยอดไม่ได้ — ต้องยกเลิกพร้อมเหตุผลแล้วออกใบใหม่ที่อ้างกลับฉบับเดิม · ยอดของใบที่ยกเลิกจะ
-        ไม่ถูกนับใน ภ.ง.ด.3/53 · การยื่นแบบจริงทำนอกระบบผ่านสำนักงานบัญชี ระบบเตรียมข้อมูลและเตือนกำหนดเท่านั้น
+        ไม่ถูกนับใน {WHT_FILING_FORMS_TEXT} · การยื่นแบบจริงทำนอกระบบผ่านสำนักงานบัญชี ระบบเตรียมข้อมูลและเตือนกำหนดเท่านั้น
       </InlineAlert>
 
       <CancelWhtModal
@@ -347,7 +347,7 @@ function MarkFiledNotYet({ availableFrom }: { availableFrom: string }) {
   return (
     <div className="flex flex-col items-end gap-0.5">
       <Button size="sm" variant="secondary" disabled>
-        Mark ว่ายื่นแล้ว
+        บันทึกว่ายื่นแล้ว
       </Button>
       <span className="text-[10px] text-slate-400">ทำได้ตั้งแต่ {fmtDate(availableFrom)}</span>
     </div>

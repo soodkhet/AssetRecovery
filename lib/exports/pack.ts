@@ -711,11 +711,16 @@ export interface CustomerWhtExportRow {
   certificateFileUrl?: string | null
 }
 
-/** ชื่อไฟล์ท้าย path ใน Storage (ไม่เปิดเผยโครง path ภายใน) · ว่าง/`null` ⇒ `null` */
+const UUID_PREFIX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-(?=.)/i
+
+/**
+ * ชื่อไฟล์ท้าย path ใน Storage (ไม่เปิดเผยโครง path ภายใน) · ว่าง/`null` ⇒ `null`
+ * mytester H-07 (E-066) — ตัด `<uuid>-` ที่ระบบเติมหน้าชื่อไฟล์ ⇒ เหลือชื่อไฟล์ที่ผู้ใช้อัปโหลด (ไฟล์ที่ path มีแต่ uuid คงเดิม)
+ */
 export function storedFileName(path: string | null | undefined): string | null {
   const trimmed = (path ?? '').trim()
   if (trimmed === '') return null
-  const name = trimmed.split('/').pop() ?? ''
+  const name = (trimmed.split('/').pop() ?? '').replace(UUID_PREFIX, '')
   return name === '' ? null : name
 }
 
@@ -1045,9 +1050,8 @@ export interface AdvanceReturnExportRow {
 
 /** ชื่อไฟล์หลักฐาน (ไม่เปิดเผย path ใน bucket) */
 export function evidenceFileName(path: string | null): string | null {
-  if (path === null) return null
-  const name = path.slice(path.lastIndexOf('/') + 1).trim()
-  return name === '' ? null : name
+  // mytester H-07 — ชื่อเดียวกับ `storedFileName()` (ตัด `<uuid>-` หน้าชื่อไฟล์)
+  return path === null ? null : storedFileName(path)
 }
 
 export function advanceReturnCsv(rows: readonly AdvanceReturnExportRow[]): string {

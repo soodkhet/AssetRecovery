@@ -116,6 +116,23 @@ export function summarizeExceptionCounts(rows: readonly ExceptionCountInput[]): 
   return summary
 }
 
+const STATUS_DISPLAY_ORDER: Readonly<Record<ExceptionStatus, number>> = { open: 0, authorized: 1, resolved: 2 }
+
+/**
+ * mytester H-06 — ลำดับแสดงในแท็บข้อยกเว้น: ยังเปิดก่อน → ระดับวิกฤตก่อนควรแก้ไข → ใหม่ก่อน
+ * (เดิมเรียงแค่สถานะ+เวลา ⇒ "ควรแก้ไข" ขึ้นก่อน "ต้องแก้ก่อนปิดงวด")
+ */
+export function sortExceptionsForDisplay<T extends { status: ExceptionStatus; level: ExceptionLevel; createdAt: Date }>(
+  rows: readonly T[],
+): T[] {
+  return [...rows].sort(
+    (a, b) =>
+      STATUS_DISPLAY_ORDER[a.status] - STATUS_DISPLAY_ORDER[b.status] ||
+      compareExceptionLevel(a.level, b.level) ||
+      b.createdAt.getTime() - a.createdAt.getTime(),
+  )
+}
+
 export function summarizeExceptions(rows: readonly ExceptionRow[]): ExceptionSummary {
   return summarizeExceptionCounts(rows.map((row) => ({ ...row, count: 1 })))
 }

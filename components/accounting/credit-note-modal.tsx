@@ -26,6 +26,7 @@ import {
   adjustmentAmountMismatch,
   creditableInvoiceBalance,
   CREDIT_NOTE_TYPE_LABEL,
+  isCreditNoteBlockedByOutstanding,
   maxCreditNoteTotalSatang,
   netInvoiceAmounts,
 } from '@/lib/credit-notes/credit-note'
@@ -105,7 +106,10 @@ export function CreditNoteModal({
   const vatError = bahtInputError(vatText, isDebit ? 'ภาษีที่เพิ่ม' : 'ภาษีที่ลด')
   const amountSatang = parseBahtInput(amountText)
   const vatSatang = parseBahtInput(vatText)
+  // mytester G-10 — ลดได้สูงสุด ฿0 ⇒ ปิดปุ่ม (มีคำเตือนบอกเหตุอยู่แล้ว)
+  const blockedByOutstanding = isCreditNoteBlockedByOutstanding(noteType, maxCreditTotal)
   const canSubmit =
+    !blockedByOutstanding &&
     creditNoteNumber.trim() !== '' &&
     issueDate !== '' &&
     reason.trim() !== '' &&
@@ -240,7 +244,7 @@ export function CreditNoteModal({
             </div>
           </div>
 
-          {!isDebit && maxCreditTotal === 0 && (
+          {blockedByOutstanding && (
             <InlineAlert tone="warning" title="รอบวางบิลนี้ไม่มียอดค้างชำระ">
               บันทึกใบลดหนี้ไม่ได้ เพราะใบลดหนี้ต้องไม่เกินยอดค้างชำระของรอบวางบิล — ถ้าต้องคืนเงินให้ลูกค้า
               ขอให้สำนักงานบัญชีจัดการคืนเงินนอกระบบ

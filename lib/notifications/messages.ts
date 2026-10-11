@@ -701,7 +701,7 @@ export function whtFilingDueMessage(input: {
         : `เหลือ ${input.daysLeft} วัน`
   return {
     eventCode: 'wht.filing_due_reminder',
-    title: 'ใกล้ครบกำหนดยื่น ภ.ง.ด.3/53',
+    title: 'ใกล้ครบกำหนดยื่น ภ.ง.ด.1/3/53',
     body: `งวด ${input.periodLabel} · กำหนดนำส่ง ${fmtDate(input.filingDueDate)} ${WHT_FILING_METHOD_SUFFIX[input.filingMethod ?? 'online']} (${countdown})`,
     linkPath: '/accounting?tab=wht',
     // job รันทุกวัน ⇒ คีย์ = งวด + ขั้นของการเตือน (ดู `whtFilingReminderStage()`)

@@ -81,7 +81,12 @@ export function ExportPackModal({
           <Button variant="secondary" onClick={onClose}>
             ปิด
           </Button>
-          <Button loading={saving} disabled={targetId === ''} onClick={() => void submit()}>
+          {/* mytester H-06 — ถูกบล็อกด้วยข้อยกเว้นวิกฤต/ยังไม่รู้สถานะ ⇒ ปิดปุ่ม (server ตรวจซ้ำ) */}
+          <Button
+            loading={saving}
+            disabled={targetId === '' || selected === undefined || criticalCount > 0}
+            onClick={() => void submit()}
+          >
             ดาวน์โหลดไฟล์ (.zip)
           </Button>
         </>
@@ -104,12 +109,12 @@ export function ExportPackModal({
             โหลดรายชื่อรอบบัญชีไม่สำเร็จ หรือยังไม่มีรอบให้ส่งออก — ปิดหน้าต่างแล้วลองใหม่อีกครั้ง
           </InlineAlert>
         ) : criticalCount > 0 ? (
-          <InlineAlert tone="error" title={`ไม่สามารถ Export ได้ — มี ${fmtCount(criticalCount)} Critical Exception เปิดอยู่`}>
-            แก้ไขให้เรียบร้อยหรือขอ Authorized Exception จากผู้บริหารก่อน
+          <InlineAlert tone="error" title={`ส่งออกชุดเอกสารไม่ได้ — มีข้อยกเว้นระดับวิกฤตเปิดอยู่ ${fmtCount(criticalCount)} รายการ`}>
+            แก้ไขให้เรียบร้อย หรือขอให้ผู้บริหารอนุมัติยกเว้นก่อน
           </InlineAlert>
         ) : (
-          <InlineAlert tone="success" title="ไม่มี Critical Exception — พร้อม Export">
-            รายการระดับ warning ไม่บล็อกการส่งมอบ แต่ยังแสดงไว้ในไฟล์ 08_Document_Checklist.xlsx
+          <InlineAlert tone="success" title="ไม่มีข้อยกเว้นระดับวิกฤต — พร้อมส่งออก">
+            รายการระดับควรแก้ไขไม่บล็อกการส่งมอบ แต่ยังแสดงไว้ในไฟล์ 08_Document_Checklist.xlsx
           </InlineAlert>
         )}
         {/* staging E-058 — ยังไม่ map ศูนย์ต้นทุน ⇒ เตือน ไม่บล็อก */}

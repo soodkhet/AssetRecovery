@@ -60,6 +60,7 @@ import {
   ADVANCE_RETURN_HEADERS,
   advanceReturnCsv,
   evidenceFileName,
+  storedFileName,
   TAX_INVOICE_HEADERS,
   taxInvoiceCsv,
   UNBILLED_REVENUE_HEADERS,
@@ -1042,6 +1043,15 @@ describe('13_Advance_Returns.csv (มติ PO 05/10/2569 U68)', () => {
     expect(evidenceFileName('a/b/c.jpg')).toBe('c.jpg')
     expect(evidenceFileName(null)).toBeNull()
     expect(evidenceFileName('a/')).toBeNull()
+    // mytester H-07 — ตัด uuid ที่ระบบเติมหน้าชื่อไฟล์ ⇒ ชื่อที่ผู้ใช้อัปโหลด
+    expect(evidenceFileName('expenses/u1/receipts/5658a5db-c91d-4b8b-b784-5c715cbcd863-hotel-in2.jpg')).toBe('hotel-in2.jpg')
+    expect(storedFileName('customer-wht/c1/b60dae70-d5ac-4463-9d66-29058efe0434-mtj-50tawi-scan.pdf')).toBe(
+      'mtj-50tawi-scan.pdf',
+    )
+    // ไฟล์เก่าที่ path มีแต่ uuid คงชื่อเดิม (ไม่มีชื่อเดิมให้คืน)
+    expect(storedFileName('customer-wht/c1/b60dae70-d5ac-4463-9d66-29058efe0434.pdf')).toBe(
+      'b60dae70-d5ac-4463-9d66-29058efe0434.pdf',
+    )
   })
 })
 

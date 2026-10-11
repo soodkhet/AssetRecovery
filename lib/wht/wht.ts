@@ -72,6 +72,11 @@ export const WHT_FILING_FORM_LABEL: Record<WhtFilingForm, string> = {
   PND1: 'ภ.ง.ด.1 (เงินได้ 40(1)/40(2))',
 }
 
+/**
+ * mytester V1-01 — ชื่อรวมของแบบนำส่งภาษีหัก ณ ที่จ่ายที่ระบบเตรียมข้อมูล (มีใบ ภ.ง.ด.1 แล้ว — เดิมเขียนแค่ ภ.ง.ด.3/53)
+ */
+export const WHT_FILING_FORMS_TEXT = 'ภ.ง.ด.1/3/53'
+
 /** ชื่อแบบสั้น (ไม่มีคำอธิบาย) — ใช้ในประโยคท้ายใบ 50 ทวิ */
 export const WHT_FILING_FORM_SHORT_LABEL: Record<WhtFilingForm, string> = {
   PND3: 'ภ.ง.ด.3',
@@ -387,7 +392,7 @@ export function filingOverdueWarning(
   const overdueDays = Math.abs(daysUntilFilingDue(summary.filingDueDate, now))
   return {
     code: 'FILING_OVERDUE_WARNING',
-    title: `เลยกำหนดนำส่ง ภ.ง.ด.3/53 ของรอบ ${summary.periodLabel} แล้ว`,
+    title: `เลยกำหนดนำส่ง ${WHT_FILING_FORMS_TEXT} ของรอบ ${summary.periodLabel} แล้ว`,
     message:
       `กำหนดนำส่งคือ ${filingDueLabel(summary.filingDueDate, summary.filingMethod ?? 'online', summary.filingNominalDueDate)} (เลยมา ${overdueDays} วัน) — ` +
       'ยื่นล่าช้ามีเบี้ยปรับ/เงินเพิ่มตามประมวลรัษฎากร ให้ประสานสำนักงานบัญชีทันที',
