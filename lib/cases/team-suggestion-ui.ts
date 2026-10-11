@@ -35,3 +35,12 @@ export function teamSelectionView(input: {
 export function otherMatchedHeading(remainingMatched: number): string | null {
   return remainingMatched > 0 ? `ทีมอื่นที่ดูแลจังหวัดนี้ (${remainingMatched})` : null
 }
+
+/**
+ * ปุ่ม toggle รายการทีมที่ไม่ตรงจังหวัด — นับหลังตัดทีมที่เลือก (ตัวเลขตรงกับรายการที่เปิดออกมาจริง)
+ * · ไม่มีทีมนอกพื้นที่ให้เลือกและยังไม่เปิดอยู่ ⇒ `null` (ไม่แสดงปุ่ม) — กันหัวข้อ (1) คู่กับปุ่ม (0) (mytester C-05)
+ */
+export function outOfAreaToggleLabel(remainingOutOfArea: number, showing: boolean): string | null {
+  if (showing) return 'ซ่อนทีมที่ไม่ตรงจังหวัด'
+  return remainingOutOfArea > 0 ? `ดูทีมที่ไม่ตรงจังหวัด (${remainingOutOfArea})` : null
+}

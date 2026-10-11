@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Badge, Button, ErrorState, Input, LoadingState, Select, StatusBadge } from '@/components/ui'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, type ApiCallError } from '@/lib/api/types'
-import { THAI_PROVINCES } from '@/lib/address/thai-address'
 import {
   assignmentStateBadgeGroup,
   assignmentStateLabel,
@@ -84,6 +83,12 @@ export function KanbanBoard({
     }
   }, [fetchBoard])
 
+  // จังหวัดที่ทีมดูแล/มีเคส (ไม่ใช่ 77 จังหวัด) · คงค่าที่เลือกอยู่ไว้แม้ไม่อยู่ในรายการ (mytester C-03)
+  const provinceOptions = useMemo(() => {
+    const options = board?.provinces ?? []
+    return province !== 'all' && !options.includes(province) ? [province, ...options] : options
+  }, [board, province])
+
   const columns = (board?.columns ?? []).filter((column) =>
     agentSearch.trim() === '' ? true : column.fullName.toLowerCase().includes(agentSearch.trim().toLowerCase()),
   )
@@ -151,7 +156,7 @@ export function KanbanBoard({
             }}
           >
             <option value="all">ทุกจังหวัด</option>
-            {THAI_PROVINCES.map((item) => (
+            {provinceOptions.map((item) => (
               <option key={item} value={item}>
                 {item}
               </option>

@@ -63,7 +63,7 @@ import { fmtCount, fmtSatang } from '@/lib/format/money'
 const PAGE_SIZE = 20
 
 const KPI_STATES = [
-  { state: 'ready_to_assign', hint: 'รอผู้จัดการเลือกพนักงาน' },
+  { state: 'ready_to_assign', hint: 'รอเลือกพนักงาน' },
   { state: 'assigned', hint: 'ส่งให้พนักงานแล้ว รอกดรับ' },
   { state: 'accepted', hint: 'พนักงานรับงานแล้ว' },
 ] as const

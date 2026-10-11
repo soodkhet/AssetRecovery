@@ -177,7 +177,7 @@ export function AssignmentModal({
                         maxLength={ASSIGNMENT_REASON_MAX}
                         id="reassign-reason"
                         value={reason}
-                        placeholder="ระบุเหตุผล — ถูกบันทึกลง audit log และแจ้งพนักงานคนเดิม"
+                        placeholder="ระบุเหตุผล — บันทึกในประวัติการแก้ไขและแจ้งพนักงานคนเดิม"
                         onChange={(event) => setReason(event.target.value)}
                       />
                     </Field>
@@ -191,6 +191,8 @@ export function AssignmentModal({
           blocked || target.teamId === null ? null : (
             <Button
               loading={busy}
+              // จอแคบสูง ≥ 44px เสมอ — บางเบราว์เซอร์มือถือไม่รายงาน pointer: coarse (mytester C-07)
+              className="max-sm:min-h-11"
               disabled={busy || agent === null || (reasonRequired && !isAssignmentReasonLongEnough(reason))}
               title={
                 agent === null

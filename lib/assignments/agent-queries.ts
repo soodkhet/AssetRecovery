@@ -1,7 +1,7 @@
 import { FIELD_AGENT_ROLE_NAME } from '@/lib/auth/constants'
 import { isWithinScope } from '@/lib/auth/scope'
 import type { SessionUser } from '@/lib/auth/types'
-import { ACTIVE_ASSIGNMENT_STATUSES, assignmentStateOf } from '@/lib/assignments/assignment'
+import { ACTIVE_ASSIGNMENT_STATUSES, assignmentStateOf, kanbanProvinceOptions } from '@/lib/assignments/assignment'
 import { AssignmentError } from '@/lib/assignments/errors'
 import type { KanbanQuery } from '@/lib/assignments/schemas'
 import { successRate, toDecisionSupport } from '@/lib/assignments/success-rate'
@@ -228,6 +228,7 @@ export async function getTeamKanban(
       : await prisma.case.findMany({
           where: heldCasesWhere(user.organizationId, agentIds),
           select: {
+            addrProvince: true,
             assignments: {
               where: { status: { in: [...ACTIVE_ASSIGNMENT_STATUSES] } },
               orderBy: { createdAt: 'desc' as const },
@@ -256,6 +257,11 @@ export async function getTeamKanban(
     teamId: team.id,
     teamName: team.name,
     teamSide: team.side,
+    // ตัวเลือกกรองจังหวัด = จังหวัดที่ทีมดูแล + จังหวัดของเคสที่ทีมถืออยู่ (ไม่ใช่ 77 จังหวัด — mytester C-03)
+    provinces: kanbanProvinceOptions(
+      team.provinces,
+      countRows.map((row) => row.addrProvince),
+    ),
     columns: agents.map((agent) => ({
       agentId: agent.id,
       fullName: agent.fullName,
