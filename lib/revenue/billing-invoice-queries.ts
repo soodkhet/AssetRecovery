@@ -4,6 +4,7 @@ import { pickReceivingAccount, type DocBankAccount } from '@/lib/organization/ba
 import { parseSellerProfileSnapshot } from '@/lib/organization/profile'
 import { parseDocumentTemplateSnapshot } from '@/lib/settings/tax-doc-template'
 import {
+  revenueLineOutcome,
   billingInvoicePartiesOf,
   parseBillingInvoiceDetailSnapshot,
   type BillingInvoiceSource,
@@ -63,6 +64,7 @@ export async function getBillingInvoiceSource(user: SessionUser, billingBatchId:
               select: {
                 id: true,
                 revenueDate: true,
+                trackingRound: true,
                 grossSatang: true,
                 vatSatang: true,
                 totalSatang: true,
@@ -71,6 +73,8 @@ export async function getBillingInvoiceSource(user: SessionUser, billingBatchId:
                   select: {
                     caseRef: true,
                     assetDescription: true,
+                    trackingRound: true,
+                    outcome: true,
                     // ใบส่งมอบของเครื่องในเคส (มติ PO U100 — บรรทัดรองของรายการ) · ล็อตยืนยันแล้วก่อน
                     assets: {
                       where: { deletedAt: null, lotId: { not: null } },
@@ -109,6 +113,11 @@ export async function getBillingInvoiceSource(user: SessionUser, billingBatchId:
       vatSatang: revenue.vatSatang,
       totalSatang: revenue.totalSatang,
       vatRatePct: revenue.vatRatePctUsed.toString(),
+      outcome: revenueLineOutcome({
+        revenueTrackingRound: revenue.trackingRound,
+        caseTrackingRound: revenue.case.trackingRound,
+        caseOutcome: revenue.case.outcome,
+      }),
       ...(detail?.lines.get(revenue.id) ?? {
         assetDescription: revenue.case.assetDescription,
         handoverDocRef: revenue.case.assets[0]?.lot?.docRef ?? null,

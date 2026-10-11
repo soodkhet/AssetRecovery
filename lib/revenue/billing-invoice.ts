@@ -7,6 +7,7 @@ import type { SellerProfileSnapshot } from '@/lib/organization/profile'
 import type { DocumentTemplateSnapshot } from '@/lib/settings/tax-doc-template'
 import { bahtInWords } from '@/lib/payout/baht-text'
 import { summarizeSalesAmounts, vatLabelOf, type SalesAmounts } from '@/lib/sales/sales'
+import type { CaseOutcome } from '@/lib/generated/prisma/enums'
 
 /**
  * **ใบแจ้งหนี้/ใบวางบิล** (มติ PO 06/10/2569 U95 · U96 #12) — **pure ล้วน ไม่มี I/O**
@@ -208,6 +209,8 @@ export interface BillingInvoiceLineSource {
   assetDescription?: string | null
   /** เลขที่ใบส่งมอบ `DLV-<พ.ศ.>-XXX` ของล็อตที่ส่งมอบเครื่องของเคสนี้ · ไม่มี = ไม่พิมพ์ */
   handoverDocRef?: string | null
+  /** ผลของรอบติดตามที่ทำให้เกิดรายได้ (`revenueLineOutcome()`) · ไม่ระบุ = ไม่ทราบ (คำอธิบายกลาง) */
+  outcome?: CaseOutcome | null
 }
 
 export interface BillingInvoiceSource {
@@ -237,6 +240,8 @@ export interface BillingInvoiceLine {
   caseRef: string
   revenueDateLabel: string
   beforeVatText: string
+  /** คำอธิบายรายการตามผลของรอบ — `invoiceLineDescription()` */
+  description: string
   /** บรรทัดรองใต้รายการ: "รุ่นเครื่อง · ใบส่งมอบ DLV-…" (ไม่มีข้อมูล = `null`) */
   detail: string | null
 }
@@ -302,6 +307,31 @@ export function billingCustomerWhtLines(input: {
   }
 }
 
+export const INVOICE_LINE_SUCCESS = 'ค่าบริการติดตามทรัพย์คืนสำเร็จ'
+export const INVOICE_LINE_FAIL = 'ค่าบริการติดตามทรัพย์ กรณีติดตามไม่สำเร็จ'
+export const INVOICE_LINE_GENERIC = 'ค่าบริการติดตามทรัพย์'
+
+/**
+ * **pure** — ผลของรอบที่ทำให้เกิดรายได้ใบนี้ (mytester G-03)
+ * รายได้ของรอบก่อนหน้า (`revenue.tracking_round` < รอบปัจจุบันของเคส) = `closed_fail` เสมอ — รีไซเคิลได้จาก
+ * `closed_fail` เท่านั้น และตอนขึ้นรอบใหม่ `cases.outcome` ถูกล้าง · รอบเดียวกัน = `cases.outcome`
+ */
+export function revenueLineOutcome(input: {
+  revenueTrackingRound: number
+  caseTrackingRound: number
+  caseOutcome: CaseOutcome | null
+}): CaseOutcome | null {
+  if (input.revenueTrackingRound < input.caseTrackingRound) return 'closed_fail'
+  return input.caseOutcome
+}
+
+/** **pure** — คำอธิบายรายการบนใบแจ้งหนี้ตามผลของรอบ (เคสไม่สำเร็จเรียกเก็บค่ากรณีไม่สำเร็จ ห้ามพิมพ์ว่า "สำเร็จ") */
+export function invoiceLineDescription(outcome: CaseOutcome | null | undefined): string {
+  if (outcome === 'closed_success') return INVOICE_LINE_SUCCESS
+  if (outcome === 'closed_fail') return INVOICE_LINE_FAIL
+  return INVOICE_LINE_GENERIC
+}
+
 function lineDetail(line: BillingInvoiceLineSource): string | null {
   const parts = [
     (line.assetDescription ?? '').trim(),
@@ -339,6 +369,7 @@ export function buildBillingInvoiceDoc(source: BillingInvoiceSource): BillingInv
       caseRef: line.caseRef,
       revenueDateLabel: fmtDate(line.revenueDate),
       beforeVatText: fmtSatang(line.grossSatang),
+      description: invoiceLineDescription(line.outcome),
       detail: lineDetail(line),
     })),
     amounts,

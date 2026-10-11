@@ -5,6 +5,11 @@ import {
   billingInvoicePartiesOf,
   billingPartySnapshotOf,
   buildBillingInvoiceDoc,
+  INVOICE_LINE_FAIL,
+  INVOICE_LINE_GENERIC,
+  INVOICE_LINE_SUCCESS,
+  invoiceLineDescription,
+  revenueLineOutcome,
 } from '@/lib/revenue/billing-invoice'
 
 /** ใบแจ้งหนี้/ใบวางบิล (มติ PO U95 · U96 #12) — ไม่ใช่เอกสารภาษี · VAT เป็นยอดประมาณการ */
@@ -148,5 +153,23 @@ describe('billingCustomerWhtLines — ภาษีที่ลูกค้าห
     expect(full.paymentChannelText).toBe('โอนเข้าบัญชี ธนาคารกสิกรไทย · เลขที่บัญชี 123-4-56789-0')
     expect(full.customerWht?.whtText).toBe('(30.00)')
     expect(full.signers).toEqual(['ผู้วางบิล / ผู้ให้บริการ', 'ผู้รับวางบิล / ลูกค้า'])
+  })
+})
+
+describe('mytester G-03 — คำอธิบายรายการตามผลของรอบ', () => {
+  it('รอบเดียวกัน = ผลของเคส · รอบก่อนรีไซเคิล = ไม่สำเร็จเสมอ', () => {
+    expect(revenueLineOutcome({ revenueTrackingRound: 1, caseTrackingRound: 1, caseOutcome: 'closed_success' })).toBe('closed_success')
+    expect(revenueLineOutcome({ revenueTrackingRound: 1, caseTrackingRound: 1, caseOutcome: 'closed_fail' })).toBe('closed_fail')
+    // รีไซเคิลแล้ว outcome ของเคสถูกล้าง/เป็นของรอบใหม่ — รายได้รอบ 1 เกิดจาก closed_fail
+    expect(revenueLineOutcome({ revenueTrackingRound: 1, caseTrackingRound: 2, caseOutcome: null })).toBe('closed_fail')
+    expect(revenueLineOutcome({ revenueTrackingRound: 1, caseTrackingRound: 2, caseOutcome: 'closed_success' })).toBe('closed_fail')
+  })
+
+  it('ใบแจ้งหนี้: เคสไม่สำเร็จไม่พิมพ์ว่า "สำเร็จ"', () => {
+    expect(invoiceLineDescription('closed_success')).toBe(INVOICE_LINE_SUCCESS)
+    expect(invoiceLineDescription('closed_fail')).toBe(INVOICE_LINE_FAIL)
+    expect(invoiceLineDescription('closed_fail')).not.toContain('สำเร็จ ')
+    expect(invoiceLineDescription(null)).toBe(INVOICE_LINE_GENERIC)
+    expect(invoiceLineDescription(undefined)).toBe(INVOICE_LINE_GENERIC)
   })
 })

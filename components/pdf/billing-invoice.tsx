@@ -75,7 +75,7 @@ function BillingInvoiceCopy({
             cells={[
               { main: line.no },
               { main: line.caseRef, mono: true, detail: `รับรู้รายได้ ${line.revenueDateLabel}` },
-              { main: 'ค่าบริการติดตามทรัพย์คืนสำเร็จ', detail: line.detail },
+              { main: line.description, detail: line.detail },
               { main: line.beforeVatText },
             ]}
           />
