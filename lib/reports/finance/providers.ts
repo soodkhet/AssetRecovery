@@ -528,7 +528,9 @@ const arAgingProvider: ReportProvider = async (ctx: ReportContext): Promise<Repo
     return buildArAgingReport({ companies: [], buckets: policy.arAgingBuckets, asOf })
   }
 
-  const companies = await loadArAgingCompanies(ctx.user.organizationId)
+  // mytester J-01 — ช่วงย้อนหลัง (วันสิ้นสุดก่อนวันนี้) = ยอด ณ วันนั้น ไม่ใช่ยอดปัจจุบันที่คิดอายุย้อนหลัง
+  const historical = asOf.getTime() < bangkokBusinessDate(ctx.now).getTime()
+  const companies = await loadArAgingCompanies(ctx.user.organizationId, historical ? { asOf } : {})
   return buildArAgingReport({ companies, buckets: policy.arAgingBuckets, asOf })
 }
 

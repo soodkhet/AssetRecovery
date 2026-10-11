@@ -80,6 +80,7 @@ async function loadCreditNoteTotals(
   organizationId: string,
   billingBatchIds: readonly string[],
   client: DocumentedReadClient = prisma,
+  asOf?: Date,
 ): Promise<NoteTotalsByBatch> {
   const credit = new Map<string, DocumentAmounts>()
   const debit = new Map<string, DocumentAmounts>()
@@ -91,8 +92,8 @@ async function loadCreditNoteTotals(
   if (invoices.length === 0) return { credit, debit }
   const ids = invoices.map((invoice) => invoice.id)
   const [creditTotals, debitTotals] = await Promise.all([
-    sumCreditNotesByInvoice(ids, { organizationId, noteType: 'credit', client }),
-    sumCreditNotesByInvoice(ids, { organizationId, noteType: 'debit', client }),
+    sumCreditNotesByInvoice(ids, { organizationId, noteType: 'credit', client, ...(asOf === undefined ? {} : { asOf }) }),
+    sumCreditNotesByInvoice(ids, { organizationId, noteType: 'debit', client, ...(asOf === undefined ? {} : { asOf }) }),
   ])
   const accumulate = (
     target: Map<string, DocumentAmounts>,
@@ -120,6 +121,8 @@ export async function documentedAmountsForBatches(
   organizationId: string,
   billingBatchIds: readonly string[],
   client: DocumentedReadClient = prisma,
+  /** mytester J-01 — นับใบลด/เพิ่มหนี้ที่มีผล ณ วันนั้น (ไม่ส่ง = ปัจจุบัน) */
+  asOf?: Date,
 ): Promise<Map<string, DocumentedBillingAmounts>> {
   const result = new Map<string, DocumentedBillingAmounts>()
   if (billingBatchIds.length === 0) return result
@@ -146,7 +149,7 @@ export async function documentedAmountsForBatches(
         revenues: { where: { deletedAt: null }, select: { grossSatang: true, vatSatang: true } },
       },
     }),
-    loadCreditNoteTotals(organizationId, ids, client),
+    loadCreditNoteTotals(organizationId, ids, client, asOf),
   ])
 
   for (const batch of batches) {
@@ -359,11 +362,14 @@ export async function withDocumentedArTotals<T extends { id: string; totalSatang
   organizationId: string,
   rows: readonly T[],
   client: DocumentedReadClient = prisma,
+  /** mytester J-01 — ยอดตามเอกสาร ณ วันนั้น (ไม่ส่ง = ปัจจุบัน) */
+  asOf?: Date,
 ): Promise<T[]> {
   const documented = await documentedAmountsForBatches(
     organizationId,
     rows.map((row) => row.id),
     client,
+    asOf,
   )
   return rows.map((row) => ({ ...row, totalSatang: documented.get(row.id)?.documented.totalSatang ?? row.totalSatang }))
 }

@@ -1,6 +1,7 @@
 import type { CreditNoteTotals } from '@/lib/credit-notes/types'
 import type { CreditNoteType } from '@/lib/generated/prisma/enums'
 import { prisma } from '@/lib/prisma'
+import { endOfBangkokDay } from '@/lib/format/datetime'
 
 /**
  * ยอดรวมใบลดหนี้/ใบเพิ่มหนี้ **active** ต่อใบกำกับ — แยกจาก `lib/credit-notes/queries.ts` เพราะยอดค้างตามเอกสาร
@@ -21,6 +22,11 @@ export async function sumCreditNotesByInvoice(
     noteType?: CreditNoteType
     /** มติ O75 — อ่านใน transaction เดียวกับการบันทึก/ยกเลิกเอกสาร (ไม่ส่ง = `prisma`) */
     client?: Pick<typeof prisma, 'creditNote'>
+    /**
+     * mytester J-01 — ยอด ณ วันที่ (วันตามปฏิทินไทย แบบ date-only UTC): ใบที่ออกไม่เกินวันนั้น และยังมีผล ณ วันนั้น
+     * (active · หรือถูกยกเลิกหลังวันนั้น) · ไม่ส่ง = ใบ active ปัจจุบัน (พฤติกรรมเดิม)
+     */
+    asOf?: Date
   } = {},
 ): Promise<Map<string, CreditNoteTotals>> {
   const result = new Map<string, CreditNoteTotals>(taxInvoiceIds.map((id) => [id, { ...EMPTY_CREDIT_NOTE_TOTALS }]))
@@ -29,7 +35,12 @@ export async function sumCreditNotesByInvoice(
     by: ['taxInvoiceId'],
     where: {
       taxInvoiceId: { in: [...taxInvoiceIds] },
-      status: 'active',
+      ...(options.asOf === undefined
+        ? { status: 'active' as const }
+        : {
+            issueDate: { lte: options.asOf },
+            OR: [{ status: 'active' as const }, { cancelledAt: { gt: endOfBangkokDay(options.asOf) } }],
+          }),
       noteType: options.noteType ?? 'credit',
       ...(options.organizationId === undefined ? {} : { organizationId: options.organizationId }),
     },

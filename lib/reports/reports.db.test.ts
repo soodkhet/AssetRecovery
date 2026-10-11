@@ -562,6 +562,42 @@ suite('Dashboard KPI (`14` §6.1/§16)', () => {
     expect(kpi('ar_outstanding')?.amountSatang).toBe(totalArOutstandingSatang(f3.flatMap((entry) => entry.batches)))
   })
 
+  it('mytester J-01 — F3 ย้อนหลัง = ยอด ณ วันนั้น: ไม่นับรอบที่ส่งทีหลัง · เงินรับตามวันรับ', async () => {
+    const { loadArAgingCompanies } = await import('@/lib/reports/finance/ar-source')
+    const { totalArOutstandingSatang } = await import('@/lib/finance/ar-calc')
+    const tx = db()
+    // รอบ A ส่ง 10/09 ยอด 10,000 — รับ 4,000 วันที่ 20/09 และ 6,000 วันที่ 05/10 (ปัจจุบันชำระครบ)
+    const a = await seedBillingBatch({ totalSatang: 10_000_00, receivedSatang: 10_000_00, status: 'paid' })
+    // รอบ B ส่ง 02/10 ยอด 5,000 ยังไม่ชำระ
+    const b = await seedBillingBatch({ totalSatang: 5_000_00 })
+    await tx.$executeRawUnsafe(`UPDATE billing_batches SET sent_at = '2026-09-10T03:00:00Z' WHERE id = '${a}'`)
+    await tx.$executeRawUnsafe(`UPDATE billing_batches SET sent_at = '2026-10-02T03:00:00Z' WHERE id = '${b}'`)
+    const periods = await tx.$queryRawUnsafe<{ id: string }[]>(`
+      INSERT INTO accounting_periods (organization_id, period_label, year_be, month, status, created_by)
+      VALUES ('${ORG_ID}', 'งวดทดสอบ J-01', 2569, 9, 'collecting', '${FINANCE_ID}') RETURNING id`)
+    const periodId = periods[0]?.id ?? ''
+    try {
+      await tx.$executeRawUnsafe(`
+        INSERT INTO cash_receipts (organization_id, period_id, billing_batch_id, amount_satang, received_date, created_by)
+        VALUES ('${ORG_ID}', '${periodId}', '${a}', 400000, '2026-09-20', '${FINANCE_ID}'),
+               ('${ORG_ID}', '${periodId}', '${a}', 600000, '2026-10-05', '${FINANCE_ID}')`)
+
+      const current = await loadArAgingCompanies(ORG_ID)
+      expect(totalArOutstandingSatang(current.flatMap((entry) => entry.batches))).toBe(5_000_00)
+
+      const endOfSeptember = await loadArAgingCompanies(ORG_ID, { asOf: new Date('2026-09-30T00:00:00.000Z') })
+      const batches = endOfSeptember.flatMap((entry) => entry.batches)
+      expect(batches).toHaveLength(1)
+      expect(totalArOutstandingSatang(batches)).toBe(6_000_00)
+
+      const beforeAnyBill = await loadArAgingCompanies(ORG_ID, { asOf: new Date('2026-09-01T00:00:00.000Z') })
+      expect(beforeAnyBill).toEqual([])
+    } finally {
+      await tx.$executeRawUnsafe(`DELETE FROM cash_receipts WHERE organization_id = '${ORG_ID}'`)
+      await tx.$executeRawUnsafe(`DELETE FROM accounting_periods WHERE id = '${periodId}'`)
+    }
+  })
+
   it('ไม่มีข้อมูลเลย ⇒ ศูนย์ทุกการ์ด และ margin เป็น null (ไม่หารศูนย์)', async () => {
     const dashboard = await reports.getDashboardKpi(finance, { refresh: true }, NOW)
 
