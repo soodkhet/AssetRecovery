@@ -4,6 +4,7 @@ import { canAccess } from '@/lib/portal/access'
 import type { PortalContext } from '@/lib/portal/guard'
 import { countPortalCasesInProgress } from '@/lib/portal/queries/cases'
 import { loadPortalDocumentedBatches, PORTAL_VISIBLE_BILLING_STATUSES } from '@/lib/portal/queries/finance'
+import { PORTAL_VISIBLE_LOT_WHERE } from '@/lib/portal/queries/handover'
 import { serializePortalDashboard, type PortalDashboardDto, type PortalDashboardSource } from '@/lib/portal/serializers'
 import { prisma } from '@/lib/prisma'
 
@@ -54,6 +55,8 @@ async function pendingLotCountOf(ctx: PortalContext): Promise<number> {
       companyId: ctx.companyId,
       deletedAt: null,
       status: { in: [...PENDING_LOT_STATUSES] },
+      // ทดสอบซ้ำ local L-02 — ล็อตว่าง (นำเครื่องออกหมด) ไม่นับ (พอร์ทัลไม่แสดง)
+      AND: [PORTAL_VISIBLE_LOT_WHERE],
     },
   })
 }

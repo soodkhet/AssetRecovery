@@ -28,6 +28,7 @@ import { downloadUploadedFile } from '@/lib/uploads/storage'
 import { buildHandoverDoc } from '@/lib/warehouse/handover-doc'
 import { documentExtension, lotDocumentMime } from '@/lib/warehouse/lot-documents'
 import { getHandoverDocSourceForCompany } from '@/lib/warehouse/queries'
+import { assertLotHasAssetsForDocument, isEmptyOpenLot } from '@/lib/warehouse/lot-status'
 
 /**
  * ชั้น query ของหมวด "ส่งมอบทรัพย์" ในพอร์ทัลบริษัทไฟแนนซ์ (`97` §6.4 · §10.2 · §17 · มติ PO 05/10/2569 O43 D6/D8 · O44)
@@ -87,6 +88,15 @@ export interface PortalLotListResult {
   limit: number
 }
 
+/**
+ * ทดสอบซ้ำ local L-02 (ต่อมติชั่วคราว M5) — พอร์ทัล**ไม่แสดงล็อตว่าง** (ยังไม่ยืนยัน + นำเครื่องออกหมดแล้ว)
+ * = ล็อตที่ยืนยันแล้ว หรือยังมีเครื่องอยู่ · ใช้ร่วมกับรายการ/ตัวนับแดชบอร์ด/รายละเอียด ให้เห็นตรงกันทุกหน้า
+ * (นิยามเดียวกับ `isEmptyOpenLot()` ฝั่ง pure)
+ */
+export const PORTAL_VISIBLE_LOT_WHERE = {
+  OR: [{ status: 'confirmed' }, { assets: { some: { deletedAt: null } } }],
+} as const satisfies Prisma.HandoverLotWhereInput
+
 const lotListSelect = {
   id: true,
   lotNumber: true,
@@ -103,6 +113,7 @@ export async function listPortalLots(ctx: PortalContext, query: PortalLotListQue
     organizationId: ctx.user.organizationId,
     companyId: ctx.companyId,
     deletedAt: null,
+    AND: [PORTAL_VISIBLE_LOT_WHERE],
     ...(query.status === undefined ? {} : { status: { in: internalLotStatusesFor(query.status) } }),
     ...(query.dateFrom === undefined && query.dateTo === undefined
       ? {}
@@ -189,6 +200,10 @@ export async function getPortalLotDetail(
     select: lotAssetSelect,
     orderBy: [{ caseRef: 'asc' }, { id: 'asc' }],
   })
+  // ทดสอบซ้ำ local L-02 — ล็อตว่างไม่แสดงในพอร์ทัล (รายการกรองด้วย PORTAL_VISIBLE_LOT_WHERE) · เปิดด้วย id ตรง ๆ = EMPTY_LOT
+  if (isEmptyOpenLot({ status: lot.status, assetCount: assets.length })) {
+    assertLotHasAssetsForDocument({ id: lot.id, assetCount: 0 })
+  }
   return serializePortalLotDetail({ ...lot, hasDeliveryProof: hasDeliveryProof(lot.type, deliveryProofUrl), assets })
 }
 

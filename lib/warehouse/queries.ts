@@ -45,6 +45,7 @@ import {
   assertLotAssetRemovable,
   assertLotConfirmDocuments,
   assertLotDeliveredAt,
+  assertLotHasAssetsForDocument,
   assertLotMutable,
   initialLotStatus,
   isLotAssetRemovalLocked,
@@ -1319,6 +1320,8 @@ export async function getHandoverDocSource(user: SessionUser, lotId: string): Pr
 }
 
 async function withHandoverParties(organizationId: string, lot: LotDetailDto): Promise<HandoverDocSource> {
+  // ทดสอบซ้ำ local L-02 — ล็อตว่าง (นำเครื่องออกหมด · M5) ออกใบส่งมอบ PDF/Excel ไม่ได้ ทั้งภายในและพอร์ทัล
+  assertLotHasAssetsForDocument(lot)
   const [organization, company, snapshotRow] = await Promise.all([
     prisma.organization.findUniqueOrThrow({
       where: { id: organizationId },

@@ -263,6 +263,9 @@ beforeAll(async () => {
   await insertAsset(lots.co1Confirmed, CO1, 1, IMEI_CO1, SERIAL_CO1)
   await insertAsset(lots.co1Confirmed, CO1, 2, '356938035643817', 'SN-P6-SECRET-002')
   await insertAsset(lots.co2Confirmed, CO2, 3, '356938035643825', 'SN-P6-SECRET-003')
+  // ทดสอบซ้ำ local L-02 — ล็อตที่ยังไม่ยืนยันต้องมีเครื่อง (ล็อตว่างไม่แสดงในพอร์ทัล)
+  await insertAsset(lots.co1Pending, CO1, 4, '356938035643833', 'SN-P6-SECRET-004')
+  await insertAsset(lots.co1Dispatched, CO1, 5, '356938035643841', 'SN-P6-SECRET-005')
 })
 
 afterAll(async () => {
@@ -466,9 +469,11 @@ suite('มติ U13 — ใบส่งมอบ PDF จากระบบ + �
   beforeAll(async () => {
     if (!url) return
     lots.co1Pickup = await insertLot('005', CO1, 'pending_attach', '2026-09-03T03:00:00Z', null, { type: 'finance_pickup' })
+    await insertAsset(lots.co1Pickup, CO1, 6, '356938035643858', 'SN-P6-SECRET-006')
   })
   afterAll(async () => {
     if (!url || lots.co1Pickup === '') return
+    await db().$executeRawUnsafe(`DELETE FROM assets WHERE lot_id = '${lots.co1Pickup}'`)
     await db().$executeRawUnsafe(`DELETE FROM handover_lots WHERE id = '${lots.co1Pickup}'`)
   })
 
@@ -552,5 +557,42 @@ suite('มติ U13 — ใบส่งมอบ PDF จากระบบ + �
     const missing = await proofRoute.GET(req(`/api/portal/handover-lots/${lots.co1Dispatched}/delivery-proof`), params(lots.co1Dispatched))
     expect(missing.status).toBe(400)
     expect(await errorCode(missing)).toBe('LOT_MISSING_DELIVERY_PROOF')
+  })
+})
+
+suite('ทดสอบซ้ำ local L-02 — ล็อตว่าง (นำเครื่องออกหมด · มติชั่วคราว M5) ไม่แสดงในพอร์ทัล', () => {
+  let emptyLot = ''
+  beforeAll(async () => {
+    if (!url) return
+    emptyLot = await insertLot('006', CO1, 'pending_attach', '2026-09-04T03:00:00Z', null, { type: 'finance_pickup' })
+  })
+  afterAll(async () => {
+    if (!url || emptyLot === '') return
+    await db().$executeRawUnsafe(`DELETE FROM handover_lots WHERE id = '${emptyLot}'`)
+  })
+
+  it('รายการไม่มีล็อตว่าง · ล็อตที่ยังมีเครื่องยังแสดงครบ', async () => {
+    getRawSessionUserMock.mockResolvedValue(co1Manager)
+    const data = (await json(await listRoute.GET(req('/api/portal/handover-lots'), undefined))).data as {
+      items: Array<{ id: string }>
+      total: number
+    }
+    expect(data.items.map((item) => item.id)).not.toContain(emptyLot)
+    expect(data.total).toBe(3)
+  })
+
+  it('เปิดรายละเอียด/ดาวน์โหลดใบส่งมอบของล็อตว่างด้วย id ตรง ๆ → EMPTY_LOT', async () => {
+    getRawSessionUserMock.mockResolvedValue(co1Manager)
+    const detail = await detailRoute.GET(req(`/api/portal/handover-lots/${emptyLot}`), params(emptyLot))
+    expect(detail.status).toBe(400)
+    expect(await errorCode(detail)).toBe('EMPTY_LOT')
+    const note = await noteRoute.GET(req(`/api/portal/handover-lots/${emptyLot}/delivery-note`), params(emptyLot))
+    expect(note.status).toBe(400)
+    expect(await errorCode(note)).toBe('EMPTY_LOT')
+  })
+
+  it('ภายใน: ใบส่งมอบ (PDF/Excel ใช้ข้อมูลชุดเดียวกัน) ของล็อตว่าง → EMPTY_LOT', async () => {
+    const { getHandoverDocSourceForCompany } = await import('@/lib/warehouse/queries')
+    await expect(getHandoverDocSourceForCompany(ORG_ID, CO1, emptyLot)).rejects.toMatchObject({ code: 'EMPTY_LOT' })
   })
 })

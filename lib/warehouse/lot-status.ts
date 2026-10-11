@@ -59,6 +59,28 @@ export function isLotConfirmed(status: HandoverLotStatus): boolean {
 }
 
 /**
+ * ทดสอบซ้ำ local L-02 (ต่อมติชั่วคราว M5) — "ล็อตว่าง" = ยังไม่ยืนยันและไม่มีเครื่องเหลือ (นำเครื่องออกหมดแล้ว)
+ * ไม่ใช่สถานะใหม่ — คำนวณจากสถานะ + จำนวนเครื่อง · หน้าคลังติดป้าย "ล็อตว่าง" · พอร์ทัลไม่แสดง · ออกใบส่งมอบไม่ได้
+ */
+export function isEmptyOpenLot(lot: { status: HandoverLotStatus; assetCount: number }): boolean {
+  return !isLotConfirmed(lot.status) && lot.assetCount === 0
+}
+
+export const EMPTY_LOT_BADGE_LABEL = 'ล็อตว่าง'
+
+/** ใบส่งมอบของล็อตที่ไม่มีเครื่อง = เอกสารเปล่า ⇒ `EMPTY_LOT` (ทั้งภายในและพอร์ทัล — ทดสอบซ้ำ local L-02) */
+export function assertLotHasAssetsForDocument(lot: { id: string; assetCount: number }): void {
+  if (lot.assetCount > 0) return
+  throw new WarehouseError('EMPTY_LOT', {
+    detail: `lot=${lot.id} asset_count=0 (handover document)`,
+    messages: {
+      title: 'ล็อตนี้ไม่มีเครื่อง',
+      message: 'ล็อตนี้ไม่มีเครื่องเหลือแล้ว (นำออกหมด) — ไม่มีรายการให้แสดงและออกใบส่งมอบไม่ได้',
+    },
+  })
+}
+
+/**
  * ยืนยันล็อตแล้วได้ error นี้ = มีคน/อีกแท็บยืนยันล็อตเดียวกันไปก่อน (mytester WH-03) — หน้าจอต้องปิดหน้าต่างแล้วรีเฟรชรายการ
  * ไม่ค้างแถบแดงให้กดซ้ำ (ข้อมูลฝั่ง server ถูกต้องอยู่แล้ว)
  */

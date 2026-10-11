@@ -46,7 +46,13 @@ import {
   type LotCompanyRef,
   type LotFilterState,
 } from '@/lib/warehouse/lot-filters'
-import { LOT_STATUS_LABELS, isLotConfirmed, type LotTab as LotTabId } from '@/lib/warehouse/lot-status'
+import {
+  EMPTY_LOT_BADGE_LABEL,
+  LOT_STATUS_LABELS,
+  isEmptyOpenLot,
+  isLotConfirmed,
+  type LotTab as LotTabId,
+} from '@/lib/warehouse/lot-status'
 import {
   WAREHOUSE_CONFIRM_LOT_CAPABILITY,
   WAREHOUSE_CREATE_LOT_CAPABILITY,
@@ -273,6 +279,8 @@ export function LotTab({
   // ── Drill-down: รายการเครื่องในล็อตเดียว (`44` §8.4 · §8.5) ────
   if (openLot !== null) {
     const confirmed = isLotConfirmed(openLot.status)
+    // ทดสอบซ้ำ local L-02 — ล็อตที่นำเครื่องออกหมดแล้ว (M5): ไม่มีใบส่งมอบ/ยืนยันไม่ได้ · empty state บอกตามจริง ไม่ใช่ "ไม่พบตามคำค้น"
+    const emptyLot = isEmptyOpenLot({ status: openLot.status, assetCount: openLot.assets.length })
     const assets = openLot.assets.filter((asset) => matchesAssetSearch(asset, detailSearch))
     const slots = lotDocumentSlots(openLot)
 
@@ -298,6 +306,7 @@ export function LotTab({
                   group={lotStatusBadgeGroup(openLot.status)}
                   label={LOT_STATUS_LABELS[openLot.status]}
                 />
+                {emptyLot && <StatusBadge group="neutral" label={EMPTY_LOT_BADGE_LABEL} />}
               </div>
               <div className="text-sm font-semibold text-slate-700">{openLot.companyName}</div>
               <div className="mt-0.5 text-xs text-slate-400">
@@ -312,7 +321,7 @@ export function LotTab({
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              {canExport && (
+              {canExport && !emptyLot && (
                 <>
                   <a
                     href={apiPath('lot.exportExcel', { id: openLot.id })}
@@ -330,7 +339,7 @@ export function LotTab({
                   </a>
                 </>
               )}
-              {!confirmed && canConfirm && (
+              {!confirmed && !emptyLot && canConfirm && (
                 <Button variant="primary" onClick={() => setAttachLot(openLot)}>
                   แนบเอกสาร &amp; ยืนยัน
                 </Button>
@@ -379,8 +388,12 @@ export function LotTab({
               loading={false}
               error={null}
               isEmpty={assets.length === 0}
-              emptyTitle="ไม่พบเครื่องตามคำค้น"
-              emptyDescription={imeiSearchHint(detailSearch) ?? 'ลองล้างคำค้นเพื่อดูรายการทั้งหมดของล็อตนี้'}
+              emptyTitle={openLot.assets.length === 0 ? 'ล็อตนี้ยังไม่มีเครื่อง' : 'ไม่พบเครื่องตามคำค้น'}
+              emptyDescription={
+                openLot.assets.length === 0
+                  ? 'เครื่องถูกนำออกจากล็อตหมดแล้ว — ล็อตนี้ยืนยันส่งมอบไม่ได้และไม่แสดงในพอร์ทัลลูกค้า · จะส่งมอบเครื่องให้สร้างล็อตใหม่ หรือปล่อยล็อตนี้ไว้'
+                  : (imeiSearchHint(detailSearch) ?? 'ลองล้างคำค้นเพื่อดูรายการทั้งหมดของล็อตนี้')
+              }
             />
             <TBody>
               {assets.map((asset) => (
@@ -591,6 +604,7 @@ function LotCard({
   onViewDocs: () => void
 }) {
   const confirmed = isLotConfirmed(lot.status)
+  const emptyLot = isEmptyOpenLot(lot)
   const slots = lotDocumentSlots(lot)
 
   return (
@@ -618,6 +632,7 @@ function LotCard({
           {typeIcon(lot)} {HANDOVER_TYPE_SHORT_LABEL[lot.type]}
         </Badge>
         <StatusBadge group={lotStatusBadgeGroup(lot.status)} label={LOT_STATUS_LABELS[lot.status]} />
+        {emptyLot && <StatusBadge group="neutral" label={EMPTY_LOT_BADGE_LABEL} />}
       </div>
 
       <div className="mb-3 space-y-1 rounded-lg border border-slate-100 bg-slate-50 p-2.5 text-[10px]">
@@ -652,7 +667,8 @@ function LotCard({
             เอกสาร
           </Button>
         ) : (
-          canConfirm && (
+          canConfirm &&
+          !emptyLot && (
             <Button variant="primary" size="sm" className="flex-1" onClick={onAttach}>
               แนบเอกสาร
             </Button>

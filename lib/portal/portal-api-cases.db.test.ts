@@ -337,10 +337,17 @@ beforeAll(async () => {
     VALUES ('${ORG_ID}', '${co1}', 'กันยายน 2569', 'draft', 999900, 0, '2026-10-31', '${INTERNAL_USER}'),
            ('${ORG_ID}', '${co1}', 'สิงหาคม 2569', 'sent', 100000, 30000, '2026-09-30', '${INTERNAL_USER}')
   `)
-  // ล็อตรอส่งมอบ 1 ล็อต
-  await tx.$executeRawUnsafe(`
+  // ล็อตรอส่งมอบ 1 ล็อต (มีเครื่อง — ล็อตว่างไม่นับในพอร์ทัล · ทดสอบซ้ำ local L-02)
+  const pendingLot = await tx.$queryRawUnsafe<{ id: string }[]>(`
     INSERT INTO handover_lots (organization_id, company_id, lot_number, doc_ref, type, status, created_by)
     VALUES ('${ORG_ID}', '${co1}', 'LOT-P4-${RUN}', 'DLV-P4-${RUN}', 'finance_pickup', 'pending_attach', '${INTERNAL_USER}')
+    RETURNING id
+  `)
+  await insertAsset(caseIds.tracking, co1, 4, { lotId: pendingLot[0]?.id })
+  // ล็อตว่าง (นำเครื่องออกหมดแล้ว) — ต้องไม่ถูกนับเป็นล็อตรอส่งมอบ
+  await tx.$executeRawUnsafe(`
+    INSERT INTO handover_lots (organization_id, company_id, lot_number, doc_ref, type, status, created_by)
+    VALUES ('${ORG_ID}', '${co1}', 'LOT-P4E-${RUN}', 'DLV-P4E-${RUN}', 'finance_pickup', 'pending_attach', '${INTERNAL_USER}')
   `)
 })
 

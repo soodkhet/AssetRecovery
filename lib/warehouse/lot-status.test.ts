@@ -4,8 +4,11 @@ import {
   assertLotAssetRemovable,
   assertLotConfirmDocuments,
   assertLotDeliveredAt,
+  assertLotHasAssetsForDocument,
   assertLotMutable,
   canConfirmLot,
+  EMPTY_LOT_BADGE_LABEL,
+  isEmptyOpenLot,
   initialLotStatus,
   isLotAssetRemovalLocked,
   isLotConfirmedElsewhere,
@@ -158,5 +161,27 @@ describe('isLotAssetRemovalLocked / assertLotAssetRemovable (มติชั่�
     expect(isLotAssetRemovalLocked({ status: 'pending_delivery_proof', signedDocUrl: null })).toBe(true)
     expect(isLotAssetRemovalLocked({ status: 'confirmed', signedDocUrl: doc })).toBe(true)
     expect(() => assertLotAssetRemovable({ status: 'pending_delivery_proof', signedDocUrl: null })).toThrow(WarehouseError)
+  })
+})
+
+describe('ล็อตว่าง — isEmptyOpenLot / assertLotHasAssetsForDocument (ทดสอบซ้ำ local L-02)', () => {
+  it('ยังไม่ยืนยัน + ไม่มีเครื่อง = ล็อตว่าง · ยืนยันแล้วหรือยังมีเครื่อง = ไม่ใช่', () => {
+    expect(isEmptyOpenLot({ status: 'pending_attach', assetCount: 0 })).toBe(true)
+    expect(isEmptyOpenLot({ status: 'pending_delivery_proof', assetCount: 0 })).toBe(true)
+    expect(isEmptyOpenLot({ status: 'pending_attach', assetCount: 1 })).toBe(false)
+    expect(isEmptyOpenLot({ status: 'confirmed', assetCount: 0 })).toBe(false)
+    expect(EMPTY_LOT_BADGE_LABEL).toBe('ล็อตว่าง')
+  })
+
+  it('ใบส่งมอบของล็อตที่ไม่มีเครื่อง ⇒ EMPTY_LOT (ข้อความไม่มีเลขอ้างอิงสเปค)', () => {
+    expect(() => assertLotHasAssetsForDocument({ id: 'lot-1', assetCount: 2 })).not.toThrow()
+    try {
+      assertLotHasAssetsForDocument({ id: 'lot-1', assetCount: 0 })
+      expect.unreachable()
+    } catch (error) {
+      expect(error).toBeInstanceOf(WarehouseError)
+      expect((error as WarehouseError).code).toBe('EMPTY_LOT')
+      expect((error as WarehouseError).userMessage).not.toMatch(/§|`\d{2}`/)
+    }
   })
 })
