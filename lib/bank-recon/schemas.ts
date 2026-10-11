@@ -89,6 +89,15 @@ export const refundSuspenseSchema = z.object({
   filePath: z.string().min(1, 'แนบหลักฐานการคืนเงิน').max(MAX_STORAGE_PATH_LENGTH),
 })
 
+/**
+ * ตรวจช่องของการคืนเงินผู้โอน **ก่อนอัปโหลดหลักฐาน** ด้วย schema เดียวกับ server (mytester2 H2-02)
+ * — server ปฏิเสธหลังไฟล์ขึ้น Storage แล้ว = ไฟล์ค้าง (แนวเดียวกับ A-14) · คืนข้อความแรกที่ผิด หรือ `null` = ผ่าน
+ */
+export function refundSuspenseInputProblem(input: { refundDate: string; reason: string }): string | null {
+  const result = refundSuspenseSchema.omit({ filePath: true }).safeParse(input)
+  return result.success ? null : (result.error.issues[0]?.message ?? 'ข้อมูลไม่ถูกต้อง')
+}
+
 export const matchCandidateQuerySchema = z.object({
   transactionId: uuidSchema,
   /** คำค้นจาก dropdown (`35` §8) — เลขที่รอบ/ชื่อบริษัท */

@@ -456,7 +456,10 @@ export interface PaymentVoucherDoc {
   batchName: string
   methodLabel: string
   payDateLabel: string
+  /** รวมค่าตอบแทนก่อนหักภาษี — **ไม่รวมเงินทดรองจ่าย** (ไม่ใช่เงินได้ · mytester2 F2-02) */
   grossText: string
+  /** บรรทัด "เงินทดรองจ่าย" แยกจากค่าตอบแทน (บวกกลับในยอดโอน) · `null` = ไม่มี */
+  advancePaidLine: AdvancePaidLine | null
   whtText: string
   /** สุทธิหลังหักภาษี (ก่อนหักคืนเงินทดรอง) */
   netAfterWhtText: string
@@ -503,7 +506,9 @@ export function buildPaymentVoucherDocs(
     methodLabel: 'โอนผ่านธนาคาร (Bank Transfer)',
     payDateLabel: fmtDate(payDate),
     // U105 — ค่าตอบแทนที่ผู้รับได้ (ไม่รวมภาษีที่บริษัทออกให้ — แยกบรรทัด `payerTaxLine`)
-    grossText: fmtSatang(group.lineTotalSatang),
+    // mytester2 F2-02 — ไม่รวมเงินทดรองจ่าย (ไม่ใช่เงินได้) แยกบรรทัด `advancePaidLine`
+    grossText: fmtSatang(compensationOf(group)),
+    advancePaidLine: advancePaidLineOf(group),
     whtText: fmtSatang(group.whtWithheldSatang),
     netAfterWhtText: fmtSatang(group.totals.netSatang),
     offsetLines: group.offsetLines.map((line) => ({ label: line.label, amountText: `(${fmtSatang(line.amountSatang)})` })),
@@ -534,6 +539,24 @@ function whtLineLabel(group: PayoutPayeeGroup): string {
   const base =
     group.whtWithheldSatang > 0 && baseSatang !== group.lineTotalSatang ? ` (ฐานภาษี ${fmtSatang(baseSatang)})` : ''
   return `หัก ภาษี ณ ที่จ่าย${rate}${base}`
+}
+
+/** บรรทัดเงินทดรองจ่ายบนใบสำคัญจ่าย/สลิป — ไม่ใช่เงินได้ แยกจาก "รวมค่าตอบแทนก่อนหักภาษี" (mytester2 F2-02) */
+export interface AdvancePaidLine {
+  label: string
+  amountText: string
+}
+
+export const ADVANCE_PAID_LINE_LABEL = 'เงินทดรองจ่าย (ไม่ใช่เงินได้ — ไม่หักภาษี ณ ที่จ่าย)'
+
+/** ค่าตอบแทนก่อนหักภาษีของกลุ่ม = ยอดรวมบรรทัด − เงินทดรองจ่าย (นิยามเดียวกับสรุปรอบ mytester F-04) */
+function compensationOf(group: PayoutPayeeGroup): number {
+  return group.lineTotalSatang - group.advancePaidSatang
+}
+
+function advancePaidLineOf(group: PayoutPayeeGroup): AdvancePaidLine | null {
+  if (group.advancePaidSatang === 0) return null
+  return { label: ADVANCE_PAID_LINE_LABEL, amountText: fmtSatang(group.advancePaidSatang) }
 }
 
 /** U105 — "ภาษีที่บริษัทออกให้ 3.00% (ไม่หักจากผู้รับ)" · ไม่มี = `null` */
@@ -610,7 +633,10 @@ export interface PayslipDoc {
   netInWords: string
   paymentChannelText: string
   rows: readonly PayslipDocRow[]
+  /** รวมค่าตอบแทนก่อนหักภาษี — **ไม่รวมเงินทดรองจ่าย** (ไม่ใช่เงินได้ · mytester2 F2-02) */
   grossText: string
+  /** บรรทัด "เงินทดรองจ่าย" แยกจากค่าตอบแทน (บวกกลับในยอดโอน) · `null` = ไม่มี */
+  advancePaidLine: AdvancePaidLine | null
   whtLabel: string
   /** ยอดหักแสดงในวงเล็บตามตัวอย่าง 06 — `(255.90)` */
   whtText: string
@@ -657,7 +683,8 @@ export function buildPayslipDocs(
       description: payslipRowLabel(item),
       amountText: fmtSatang(payoutItemTaxSplit(item).compensationSatang),
     })),
-    grossText: fmtSatang(group.lineTotalSatang),
+    grossText: fmtSatang(compensationOf(group)),
+    advancePaidLine: advancePaidLineOf(group),
     whtLabel:
       group.whtPctSnapshot === null || group.whtWithheldSatang === 0
         ? 'หักภาษี ณ ที่จ่าย'

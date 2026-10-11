@@ -102,9 +102,10 @@ export function ExpenseDetailModal({ item, onClose }: { item: CompensationApprov
             ใบเสร็จเดิมของรายการนี้เป็นลิงก์ที่พิมพ์เอง ไม่ผ่านการตรวจไฟล์ — ระบบถือว่าไม่มีใบเสร็จ ให้ผู้เบิกแนบไฟล์ใหม่
           </InlineAlert>
         )}
-        {item.rejectReason !== null && (
+        {/* mytester2 F2-03 — ส่งใหม่แล้ว rejectReason ถูกล้าง ⇒ แสดงเหตุผลครั้งก่อน (previousRejectReason) แทน */}
+        {(item.rejectReason ?? item.previousRejectReason) !== null && (
           <Row label="เหตุผลที่ตีกลับล่าสุด">
-            <span className="text-orange-700">{item.rejectReason}</span>
+            <span className="text-orange-700">{item.rejectReason ?? item.previousRejectReason}</span>
           </Row>
         )}
         <Row label="บันทึกเมื่อ">{fmtDateTime(item.createdAt)}</Row>

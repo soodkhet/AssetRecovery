@@ -486,6 +486,16 @@ suite('อนุมัติ/ปฏิเสธ + scope (`15` §12/§16)', () =>
     )
   })
 
+  it('mytester2 DI2-01 — ผลปฏิเสธบอกเงินทดรองที่ผู้ขอยังค้างเคลียร์ (ห้ามเบิกซ้อน)', async () => {
+    const first = await advances.createAdvance(ctx(agent), createInput())
+    const second = await advances.createAdvance(ctx(agent), createInput())
+    const approved = await advances.approveAdvance(ctx(finance), first.id, { approvedSatang: null, note: null })
+
+    const rejected = await advances.rejectAdvance(ctx(finance), second.id, { rejectionReason: 'ขอซ้อนกับรายการที่ยังไม่เคลียร์' })
+    expect(rejected.status).toBe('rejected')
+    expect(rejected.requesterUnclearedRefs).toEqual([approved.ref])
+  })
+
   it('ปฏิเสธแล้วเป็น terminal — อนุมัติต่อไม่ได้', async () => {
     const created = await advances.createAdvance(ctx(agent), createInput())
     const rejected = await advances.rejectAdvance(ctx(finance), created.id, {
@@ -493,6 +503,8 @@ suite('อนุมัติ/ปฏิเสธ + scope (`15` §12/§16)', () =>
     })
     expect(rejected.status).toBe('rejected')
     expect(rejected.rejectionReason).toBe('วัตถุประสงค์ไม่ชัดเจน กรุณาระบุใหม่')
+    // mytester2 DI2-01 — ไม่มีเงินทดรองค้างเคลียร์ ⇒ ว่าง (toast บอกว่าขอใหม่ได้ทันที)
+    expect(rejected.requesterUnclearedRefs).toEqual([])
 
     await expectCode(
       () => advances.approveAdvance(ctx(finance), created.id, { approvedSatang: null, note: null }),

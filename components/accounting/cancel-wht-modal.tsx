@@ -6,6 +6,7 @@ import { callApi, jsonRequest } from '@/lib/api/types'
 import { fmtDate } from '@/lib/format/datetime'
 import { fmtSatangSymbol } from '@/lib/format/money'
 import type { WhtCertificateDto } from '@/lib/wht/types'
+import { WHT_FILING_FORM_SHORT_LABEL } from '@/lib/wht/wht'
 
 /**
  * Modal "ยกเลิกหนังสือรับรอง" (`33` §10 · mockup `accounting.html` `cancel-wht-cert`)
@@ -83,7 +84,7 @@ export function CancelWhtModal({
           <div className="flex justify-between">
             <span className="text-slate-400">วันที่จ่าย / แบบ:</span>
             <span className="font-mono">
-              {fmtDate(certificate.paymentDate)} · {certificate.filingForm}
+              {fmtDate(certificate.paymentDate)} · {WHT_FILING_FORM_SHORT_LABEL[certificate.filingForm]}
             </span>
           </div>
           <div className="flex justify-between">

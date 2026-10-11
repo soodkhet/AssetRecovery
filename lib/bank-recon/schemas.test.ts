@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { isDateOnlyAfterBangkokToday, refundSuspenseSchema } from '@/lib/bank-recon/schemas'
+import {
+  isDateOnlyAfterBangkokToday,
+  REFUND_DATE_IN_FUTURE_MESSAGE,
+  refundSuspenseInputProblem,
+  refundSuspenseSchema,
+} from '@/lib/bank-recon/schemas'
 
 describe('วันที่คืนเงินผู้โอนห้ามเกินวันนี้ (มติชั่วคราว M6 H-03)', () => {
   // 11/10/2569 20:00 เวลาไทย = 13:00Z
@@ -21,5 +26,13 @@ describe('วันที่คืนเงินผู้โอนห้าม�
     expect(result.success).toBe(false)
     expect(result.error?.issues[0]?.path).toEqual(['refundDate'])
     expect(refundSuspenseSchema.safeParse({ refundDate: '2020-01-01', reason: 'คืน', filePath: 'a/b.pdf' }).success).toBe(true)
+  })
+})
+
+describe('refundSuspenseInputProblem — ตรวจก่อนอัปโหลดสลิป (mytester2 H2-02)', () => {
+  it('วันที่อนาคต ⇒ ข้อความเดียวกับ server (ไม่อัปโหลด) · ข้อมูลครบถูกต้อง ⇒ null', () => {
+    expect(refundSuspenseInputProblem({ refundDate: '2999-01-01', reason: 'โอนผิดบัญชี' })).toBe(REFUND_DATE_IN_FUTURE_MESSAGE)
+    expect(refundSuspenseInputProblem({ refundDate: '2020-01-01', reason: '   ' })).toBe('ต้องระบุเหตุผลที่คืนเงิน')
+    expect(refundSuspenseInputProblem({ refundDate: '2020-01-01', reason: 'โอนผิดบัญชี' })).toBeNull()
   })
 })

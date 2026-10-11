@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { advanceExcessClaimNote } from '@/lib/advances/advance'
-import { compensationListQuerySchema } from '@/lib/compensation/approval-types'
+import { compensationBulkPreviewQuerySchema, compensationListQuerySchema } from '@/lib/compensation/approval-types'
 import type { CompensationApprovalDto } from '@/lib/compensation/approval-types'
 import {
   approvalErrorToast,
@@ -8,6 +8,7 @@ import {
   approvalStepText,
   approvalStepTone,
   whtAmountHint,
+  whtAmountLabel,
   claimSourceLabel,
   CLAIM_STATUS_FILTERS,
   bulkApprovableIds,
@@ -308,5 +309,25 @@ describe('อนุมัติหลายรายการ + ป้ายส�
     expect(isResubmittedClaim({ status: 'pending_approval', resubmitNote: 'แนบใบเสร็จใหม่แล้ว' })).toBe(true)
     expect(isResubmittedClaim({ status: 'pending_approval', resubmitNote: null })).toBe(false)
     expect(isResubmittedClaim({ status: 'approved', resubmitNote: 'x' })).toBe(false)
+  })
+})
+
+describe('mytester2 F2-01 — ป้ายยอดภาษีบนแถวบอกว่าเป็นประมาณการเมื่อยังไม่เข้ารอบจ่าย', () => {
+  it('ยังไม่เข้ารอบ = "(ประมาณการ)" · เข้ารอบแล้ว = ป้ายเดิม · บริษัทออกให้คงข้อความเดิม', () => {
+    expect(whtAmountLabel({ whtPayerBorne: false, whtFromPayout: false })).toBe('WHT (ประมาณการ)')
+    expect(whtAmountLabel({ whtPayerBorne: false, whtFromPayout: true })).toBe('WHT')
+    expect(whtAmountLabel({ whtPayerBorne: true, whtFromPayout: false })).toBe('ภาษีที่บริษัทออกให้ (ประมาณการ)')
+    expect(whtAmountLabel({ whtPayerBorne: true })).toBe('ภาษีที่บริษัทออกให้')
+  })
+})
+
+describe('mytester2 F2-01 — query ของยอดสรุป "อนุมัติที่เลือก"', () => {
+  const A = '3fa85f64-5717-4562-b3fc-2c963f66afa6'
+  const B = '3fa85f64-5717-4562-b3fc-2c963f66afa7'
+  it('ids คั่นจุลภาค ตัดซ้ำ/ช่องว่าง · ว่าง/รหัสผิดรูป = ไม่ผ่าน', () => {
+    expect(compensationBulkPreviewQuerySchema.parse({ ids: `${A}, ${B},${A}` }).ids).toEqual([A, B])
+    expect(compensationBulkPreviewQuerySchema.safeParse({ ids: '' }).success).toBe(false)
+    expect(compensationBulkPreviewQuerySchema.safeParse({ ids: 'abc' }).success).toBe(false)
+    expect(compensationBulkPreviewQuerySchema.safeParse({}).success).toBe(false)
   })
 })

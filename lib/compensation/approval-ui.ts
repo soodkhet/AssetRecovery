@@ -153,8 +153,10 @@ export function approvalErrorToast(error: ApiCallError): { title: string; messag
 /**
  * ป้ายช่องภาษีบนคิวอนุมัติ/ค่าตอบแทน (BUG-176) — เงื่อนไข (2)/(3) บริษัทออกภาษีให้ ⇒ ไม่ใช่ยอด "หัก" จากผู้รับ
  */
-export function whtAmountLabel(item: { whtPayerBorne: boolean }): string {
-  return item.whtPayerBorne ? 'ภาษีที่บริษัทออกให้' : 'WHT'
+export function whtAmountLabel(item: { whtPayerBorne: boolean; whtFromPayout?: boolean }): string {
+  const label = item.whtPayerBorne ? 'ภาษีที่บริษัทออกให้' : 'WHT'
+  // mytester2 F2-01 — ยังไม่เข้ารอบจ่าย = ยอดคาดการณ์ (เกณฑ์ขั้นต่ำเทียบยอดรวมของผู้รับในรอบจริง) ต้องบอกบนแถว
+  return item.whtFromPayout === false ? `${label} (ประมาณการ)` : label
 }
 
 /** ที่มาของอัตรา (มติ PO U121 — เพิ่มค่าเริ่มต้นตามประเภทผู้รับ / ไม่ได้ใช้อัตรา) */

@@ -33,7 +33,7 @@ import { PERIOD_CLOSED_CANCEL_HINT } from '@/lib/accounting/period'
 import { fmtDate } from '@/lib/format/datetime'
 import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
 import type { WhtCertificateDto, WhtFilingSummaryDto } from '@/lib/wht/types'
-import { MANAGE_WHT, WHT_FILING_FORM_SHORT_LABEL, WHT_FILING_FORMS_TEXT, whtFilingDeadlineNote } from '@/lib/wht/wht'
+import { MANAGE_WHT, WHT_FILING_FORM_SHORT_LABEL, WHT_FILING_FORMS_TEXT, whtCertificateIssueNote, whtFilingDeadlineNote } from '@/lib/wht/wht'
 
 /**
  * แท็บ "เอกสาร & WHT" (`33` §8 · mockup `accounting.html` แท็บ `wht`)
@@ -216,7 +216,7 @@ export function WhtTab() {
           <div>
             <h2 className="text-base font-semibold text-slate-900">หนังสือรับรองการหัก ณ ที่จ่าย (ใบ 50 ทวิ)</h2>
             <p className="mt-0.5 text-xs text-slate-500">
-              ออกอัตโนมัติ 1 ใบต่อรายการจ่ายที่มีการหักภาษี เมื่อรอบจ่ายเงินจ่ายจริงแล้ว
+              {whtCertificateIssueNote(certificates.items.map((row) => row.issueMode))}
             </p>
           </div>
           <FilterGroup options={STATUS_FILTERS} value={status} onChange={(value) => setStatus(value as WhtStatusFilter)} />

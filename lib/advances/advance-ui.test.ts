@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { advanceListQuerySchema } from '@/lib/advances/schemas'
 import {
+  advanceRejectedToastText,
   advanceCardAmounts,
   advanceClearReviewWarning,
   advanceRequestErrorText,
@@ -304,5 +305,18 @@ describe('คำเตือนก่อน "ตรวจแล้ว" การ
       advanceClearReviewWarning(advance({ substituteReceipt: { ...crt, status: 'signed', signedAt: '2026-10-11T03:00:00Z' } })),
     ).toBeNull()
     expect(advanceClearReviewWarning(advance({ substituteReceipt: { ...crt, status: 'cancelled' } }))).toBeNull()
+  })
+})
+
+describe('toast หลังปฏิเสธคำขอเงินทดรอง (mytester2 DI2-01)', () => {
+  it('ยังมีเงินทดรองค้างเคลียร์ ⇒ ไม่บอกว่าขอใหม่ได้ทันที · ระบุรายการที่ต้องเคลียร์', () => {
+    const text = advanceRejectedToastText('อนันต์ ตามทรัพย์', ['ADV-2569-0001'])
+    expect(text).not.toContain('ขอเบิกรอบใหม่ได้ทันที')
+    expect(text).toContain('ADV-2569-0001')
+  })
+
+  it('ไม่มีรายการค้าง ⇒ ขอเบิกรอบใหม่ได้ทันที · ไม่รู้สถานะ ⇒ ไม่บอกว่าขอใหม่ได้', () => {
+    expect(advanceRejectedToastText('อนันต์ ตามทรัพย์', [])).toBe('อนันต์ ตามทรัพย์ — ขอเบิกรอบใหม่ได้ทันที')
+    expect(advanceRejectedToastText('อนันต์ ตามทรัพย์', null)).not.toContain('ได้ทันที')
   })
 })

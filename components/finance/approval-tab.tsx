@@ -8,6 +8,7 @@ import { usePermission } from '@/components/auth/permission-provider'
 import { AdvanceFormModal } from '@/components/finance/advance-form-modal'
 import { AdvanceReviewModal } from '@/components/finance/advance-review-modal'
 import { CalcDetailModal } from '@/components/finance/calc-detail-modal'
+import { BulkApproveSummary } from '@/components/finance/bulk-approve-summary'
 import { ExpenseDetailModal } from '@/components/finance/expense-detail-modal'
 import { ManualClaimModal } from '@/components/finance/manual-claim-modal'
 import { SettleAdvanceButton } from '@/components/finance/settle-advance-button'
@@ -504,12 +505,10 @@ export function ApprovalTab() {
         confirmLabel={`ยืนยันอนุมัติ ${bulkSummary.count} รายการ`}
         confirmVariant="primary"
       >
-        <dl className="grid grid-cols-2 gap-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs">
-          <dt className="text-slate-500">ยอดก่อนหักภาษีรวม</dt>
-          <dd className="text-right font-semibold text-slate-800">{fmtSatangSymbol(bulkSummary.grossSatang)}</dd>
-          <dt className="text-slate-500">ยอดสุทธิรวม</dt>
-          <dd className="text-right font-semibold text-emerald-700">{fmtSatangSymbol(bulkSummary.netSatang)}</dd>
-        </dl>
+        {/* mytester2 F2-01 — ยอดสุทธิคิดชุดที่เลือกรวมกลุ่มต่อผู้รับแบบรอบจ่าย (server) · ประมาณการ */}
+        {bulkConfirmOpen && (
+          <BulkApproveSummary ids={selectedForApproval.map((item) => item.id)} grossSatang={bulkSummary.grossSatang} />
+        )}
       </ConfirmModal>
 
       <ReasonConfirmModal

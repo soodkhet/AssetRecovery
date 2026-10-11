@@ -230,3 +230,44 @@ export function approvalWhtPreviewsForNextBatch(
     return preview
   })
 }
+
+export interface ApprovalSelectionInput extends ApprovalWhtQueueInput {
+  /** อยู่ในชุดที่ผู้ใช้เลือก "อนุมัติที่เลือก" */
+  selected: boolean
+}
+
+export interface ApprovalSelectionTotals {
+  count: number
+  grossSatang: number
+  /** ยอดภาษีที่หักจากผู้รับเพิ่มขึ้นเพราะชุดที่เลือก (= gross − net) · บริษัทออกภาษีให้ (2)/(3) ไม่นับ */
+  whtDeductedSatang: number
+  /** ยอดสุทธิที่รอบจ่ายถัดไปเพิ่มขึ้นเพราะชุดที่เลือก */
+  netSatang: number
+}
+
+/**
+ * **pure** — ยอดสรุปของหน้าต่าง "อนุมัติที่เลือก (N)" (mytester2 F2-01) คิดแบบรอบจ่ายถัดไป:
+ * รายการที่เลือก**ทั้งชุด**รวมกลุ่มต่อผู้รับกับรายการ `approved` ที่ยังไม่เข้ารอบ (+ ยอดสะสมของเดือน — `22` §6.9 E-054)
+ * แล้วเทียบเกณฑ์ขั้นต่ำครั้งเดียวด้วย `approvalWhtPreviews()` (สูตรเดียวกับรอบจ่าย ห้ามคิดซ้ำ)
+ *
+ * ยอดสุทธิของชุดที่เลือก = ยอดสุทธิรวมของ (อนุมัติแล้ว + ที่เลือก) − ยอดสุทธิของ (อนุมัติแล้ว) เพียงลำพัง
+ * ⇒ ส่วนที่รอบจ่ายเพิ่มขึ้นจริงเมื่ออนุมัติชุดนี้ (รวมกรณีชุดที่เลือกดันฐานรวมข้ามเกณฑ์จนรายการเดิมโดนหักด้วย)
+ * · เดิมรวมยอดสุทธิรายแถว (แต่ละแถวคิดกับรายการอนุมัติแล้วโดยไม่รวมแถวที่เลือกอื่น) ⇒ หักน้อยกว่ารอบจริง
+ * · ยังเป็น**ประมาณการ** — รายการที่ยังเหลือขั้นอนุมัติ/วันตัดรอบ ทำให้รายการที่เข้ารอบจริงต่างจากชุดนี้ได้
+ */
+export function approvalWhtSelectionTotals(
+  inputs: readonly ApprovalSelectionInput[],
+  options: { monthToDate?: ReadonlyMap<string, MonthToDate> | null } = {},
+): ApprovalSelectionTotals {
+  const selected = inputs.filter((input) => input.selected)
+  const pendingBase = inputs.filter((input) => !input.selected && input.approved && input.payoutItem === null)
+  const pendingSelected = selected.filter((input) => input.payoutItem === null)
+  const netOf = (group: readonly ApprovalWhtGroupInput[]): number =>
+    group.length === 0 ? 0 : approvalWhtPreviews(group, options).reduce((sum, preview) => sum + preview.netSatang, 0)
+
+  // รายการที่เลือกแต่เข้ารอบแล้ว (ไม่ควรเกิด — คิวเลือกได้เฉพาะรายการรออนุมัติ) ⇒ ยอดของรอบ (snapshot)
+  const snapshotNet = selected.reduce((sum, input) => sum + (input.payoutItem?.netSatang ?? 0), 0)
+  const grossSatang = selected.reduce((sum, input) => sum + input.grossSatang, 0)
+  const netSatang = netOf([...pendingBase, ...pendingSelected]) - netOf(pendingBase) + snapshotNet
+  return { count: selected.length, grossSatang, whtDeductedSatang: grossSatang - netSatang, netSatang }
+}

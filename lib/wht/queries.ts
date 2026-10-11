@@ -1116,7 +1116,8 @@ export async function getWhtCertificateDocSource(
           itemCount: await prisma.expenseRecord.count({
             where: {
               organizationId: user.organizationId,
-              payoutBatchItem: { payoutBatchId: certificate.payoutBatchId, payeeId: certificate.payeeId },
+              // mytester2 F2-04 — เงินทดรองจ่ายไม่ใช่เงินได้ ไม่นับเป็นรายการของใบ
+              payoutBatchItem: { payoutBatchId: certificate.payoutBatchId, payeeId: certificate.payeeId, advanceId: null },
             },
           }),
         }
