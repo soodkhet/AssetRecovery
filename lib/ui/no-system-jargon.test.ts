@@ -15,6 +15,7 @@ const ROOT = process.cwd()
 /** วลีต้องห้ามบนหน้าจอ — `issue` = ที่มาของรายการ */
 const BANNED: readonly { phrase: RegExp; issue: string }[] = [
   { phrase: /แก้ mapping/, issue: 'B2-02' },
+  { phrase: /รอบ (collecting|locked)|\(collecting → sent\)|ที่ locked|mark filed|map Cost Center \(manual\)|resolve\)/, issue: 'A2-01' },
 ]
 
 function walk(dir: string, filter: (file: string) => boolean, out: string[] = []): string[] {

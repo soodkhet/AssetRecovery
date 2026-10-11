@@ -36,6 +36,23 @@ export function roleBadgeText(roleName: string, roleGroup: RoleGroup): string {
   return roleGroup === 'system' ? roleName : `${roleName} · ${ROLE_GROUP_LABEL[roleGroup]}`
 }
 
+/** ตัวย่อกลุ่มบนชิปบทบาทในตารางสิทธิ์ — กัน role ชื่อซ้ำข้ามกลุ่มอ่านแล้วสับสน (`07` §5) */
+const ROLE_GROUP_CHIP: Readonly<Record<string, string>> = {
+  system: '',
+  inhouse: 'IN',
+  outsource: 'OUT',
+  finance_company: 'บริษัทไฟแนนซ์',
+} satisfies Record<RoleGroup, string>
+
+/**
+ * ป้ายชิปบทบาทในตารางสิทธิ์ตามฟังก์ชัน — **ไม่แสดงรหัสกลุ่มดิบ** (เดิมคีย์ `finance` ไม่ตรง enum
+ * `finance_company` จึงหลุด "· finance_company" ขึ้นจอ — mytester2 A2-01) · กลุ่มที่ไม่รู้จักแสดงแค่ชื่อบทบาท
+ */
+export function roleChipText(roleName: string, roleGroup: string): string {
+  const short = ROLE_GROUP_CHIP[roleGroup] ?? ''
+  return short === '' ? roleName : `${roleName} · ${short}`
+}
+
 export const ROLE_GROUP_TABS: readonly RoleGroupTab[] = [
   { id: 'admin', label: 'แอดมิน', roleGroups: ['system'], hasSubToggle: false },
   {

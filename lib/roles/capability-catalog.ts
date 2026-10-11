@@ -26,11 +26,11 @@ export const CAPABILITIES: readonly CapabilitySeed[] = [
   { code: 'perform_field_work', label: 'รับงาน/ปิดงานภาคสนาม', module: 'field', functionalGroup: FunctionalGroup.ops },
   { code: 'reject_evidence', label: 'ตีกลับหลักฐานปิดงาน', module: 'field', functionalGroup: FunctionalGroup.ops, description: 'กระทบ Revenue' },
   { code: 'approve_recycle', label: 'อนุมัติ/ปฏิเสธ Recycle', module: 'case', functionalGroup: FunctionalGroup.ops },
-  { code: 'view_own_company_data', label: 'ดูสถานะเคส/วางบิลของบริษัทตัวเอง', module: 'portal', functionalGroup: FunctionalGroup.ops, description: 'own scope เท่านั้น' },
+  { code: 'view_own_company_data', label: 'ดูสถานะเคส/วางบิลของบริษัทตัวเอง', module: 'portal', functionalGroup: FunctionalGroup.ops, description: 'เห็นเฉพาะข้อมูลของบริษัทตัวเอง' },
 
   // ── กลุ่ม การเงิน (Finance) — 12 ──
   { code: 'approve_expense_manager', label: 'อนุมัติ Claim ขั้น Manager', module: 'expense', functionalGroup: FunctionalGroup.finance, description: 'ขั้น 1 — เฉพาะทีมตัวเอง' },
-  { code: 'approve_expense_finance', label: 'อนุมัติ/ตีกลับ Claim ขั้น Finance', module: 'expense', functionalGroup: FunctionalGroup.finance, description: 'ขั้น 2 — pending_finance_approval' },
+  { code: 'approve_expense_finance', label: 'อนุมัติ/ตีกลับ Claim ขั้น Finance', module: 'expense', functionalGroup: FunctionalGroup.finance, description: 'ขั้น 2 — รายการที่รอการเงินอนุมัติ' },
   { code: 'approve_expense_executive', label: 'อนุมัติ Claim ที่เกินเพดาน', module: 'expense', functionalGroup: FunctionalGroup.finance, description: 'Executive เท่านั้น — Approval Matrix' },
   { code: 'request_advance', label: 'ขอเงินทดรองจ่าย / เคลียร์ยอด', module: 'advance', functionalGroup: FunctionalGroup.finance, description: 'Field Agent เจ้าของคำขอ · การเงินตรวจสอบ' },
   { code: 'manage_payout_batch', label: 'จัดการ Payout Batch', module: 'payout', functionalGroup: FunctionalGroup.finance },
@@ -38,22 +38,22 @@ export const CAPABILITIES: readonly CapabilitySeed[] = [
   { code: 'manage_payee_profile', label: 'จัดการ Payee Profile', module: 'payee', functionalGroup: FunctionalGroup.finance, description: 'Field Agent ดูได้เฉพาะของตัวเอง' },
   { code: 'manage_billing', label: 'จัดการ Billing Batch', module: 'billing', functionalGroup: FunctionalGroup.finance },
   { code: 'create_adjustment', label: 'สร้าง Adjustment', module: 'adjustment', functionalGroup: FunctionalGroup.finance },
-  { code: 'approve_adjustment', label: 'อนุมัติ Adjustment (รอบ collecting/sent)', module: 'adjustment', functionalGroup: FunctionalGroup.finance, description: 'บริหารอนุมัติได้เมื่อรอบเป็น sent' },
-  { code: 'approve_adjustment_locked', label: 'อนุมัติ Adjustment (รอบ locked)', module: 'adjustment', functionalGroup: FunctionalGroup.finance, description: '🔒 Executive เท่านั้น — Period Lock Policy' },
+  { code: 'approve_adjustment', label: 'อนุมัติ Adjustment (งวดที่ยังไม่ล็อก)', module: 'adjustment', functionalGroup: FunctionalGroup.finance, description: 'งวดที่ส่งสำนักงานบัญชีแล้ว ผู้บริหารเป็นผู้อนุมัติ' },
+  { code: 'approve_adjustment_locked', label: 'อนุมัติ Adjustment (งวดที่ล็อกแล้ว)', module: 'adjustment', functionalGroup: FunctionalGroup.finance, description: '🔒 Executive เท่านั้น — Period Lock Policy' },
   { code: 'view_finance_dashboard', label: 'ดู Dashboard / Profitability Report', module: 'report', functionalGroup: FunctionalGroup.finance, description: 'ดูอย่างเดียวทุกฝ่าย' },
 
   // ── กลุ่ม บัญชี (Accounting) — 11 ──
-  { code: 'manage_accounting_period', label: 'จัดการรอบบัญชี (collecting → sent)', module: 'accounting', functionalGroup: FunctionalGroup.accounting },
-  { code: 'unlock_period', label: 'ปลดล็อกรอบบัญชีที่ locked', module: 'accounting', functionalGroup: FunctionalGroup.accounting, description: '🔒 Executive เท่านั้น + บันทึก audit' },
-  { code: 'manage_tax_invoice', label: 'ออก/ยกเลิกใบกำกับภาษี', module: 'tax_invoice', functionalGroup: FunctionalGroup.accounting, description: 'เลขที่ห้าม gap' },
-  { code: 'manage_wht', label: 'ออกหนังสือรับรอง WHT / mark filed', module: 'wht', functionalGroup: FunctionalGroup.accounting },
+  { code: 'manage_accounting_period', label: 'จัดการงวดบัญชี (กำลังรวบรวม → ส่งสำนักงานบัญชี)', module: 'accounting', functionalGroup: FunctionalGroup.accounting },
+  { code: 'unlock_period', label: 'ปลดล็อกงวดบัญชีที่ล็อกแล้ว', module: 'accounting', functionalGroup: FunctionalGroup.accounting, description: '🔒 ผู้บริหารเท่านั้น + บันทึกประวัติการใช้งาน' },
+  { code: 'manage_tax_invoice', label: 'ออก/ยกเลิกใบกำกับภาษี', module: 'tax_invoice', functionalGroup: FunctionalGroup.accounting, description: 'เลขที่เอกสารต้องเรียงต่อเนื่อง ห้ามข้าม' },
+  { code: 'manage_wht', label: 'ออกหนังสือรับรองหัก ณ ที่จ่าย / บันทึกว่ายื่นแล้ว', module: 'wht', functionalGroup: FunctionalGroup.accounting },
   { code: 'manage_sales_expenses', label: 'จัดการ Sales/Receipts/Expenses', module: 'accounting', functionalGroup: FunctionalGroup.accounting },
-  { code: 'map_cost_center', label: 'map Cost Center (manual)', module: 'accounting', functionalGroup: FunctionalGroup.accounting },
-  { code: 'manage_exceptions', label: 'จัดการ Exception (สร้าง/แก้/resolve)', module: 'exception', functionalGroup: FunctionalGroup.accounting },
+  { code: 'map_cost_center', label: 'กำหนดศูนย์ต้นทุนของค่าใช้จ่าย', module: 'accounting', functionalGroup: FunctionalGroup.accounting },
+  { code: 'manage_exceptions', label: 'จัดการข้อยกเว้น (บันทึก/แก้/ปิดข้อยกเว้น)', module: 'exception', functionalGroup: FunctionalGroup.accounting },
   { code: 'authorize_exception', label: 'สร้าง Authorized Exception', module: 'exception', functionalGroup: FunctionalGroup.accounting, description: '🔒 Executive เท่านั้น — รับความเสี่ยงข้าม exception' },
   { code: 'manage_bank_reconciliation', label: 'Import statement / จับคู่ Bank Reconcile', module: 'bank', functionalGroup: FunctionalGroup.accounting, description: 'รวมปิดรายการโดยไม่จับคู่' },
   { code: 'manage_accountant_questions', label: 'บันทึก/ตอบ Accountant Question', module: 'accounting', functionalGroup: FunctionalGroup.accounting },
-  { code: 'export_accounting_pack', label: 'Export Accounting Pack', module: 'export', functionalGroup: FunctionalGroup.accounting, description: 'critical exception ที่ยัง open = block' },
+  { code: 'export_accounting_pack', label: 'Export Accounting Pack', module: 'export', functionalGroup: FunctionalGroup.accounting, description: 'ถ้ามีข้อยกเว้นระดับวิกฤตที่ยังเปิดอยู่ จะส่งออกไม่ได้' },
 
   // ── กลุ่ม บริหาร (Management/Admin) — 8 ──
   { code: 'manage_companies', label: 'จัดการ Finance Company', module: 'master_data', functionalGroup: FunctionalGroup.admin, description: '🔒 Superadmin เท่านั้น' },
@@ -113,3 +113,21 @@ export const MATRIX_CAPABILITIES: readonly CapabilitySeed[] = CAPABILITIES.filte
 )
 
 export const CAPABILITY_CODES: ReadonlySet<string> = new Set(CAPABILITIES.map((capability) => capability.code))
+
+const CATALOG_BY_CODE: ReadonlyMap<string, CapabilitySeed> = new Map(
+  CAPABILITIES.map((capability) => [capability.code, capability]),
+)
+
+/**
+ * ป้าย/คำอธิบาย capability ที่แสดงบนหน้าจอยึดแคตตาล็อกนี้เป็นหลัก — ฐานที่ seed ไว้ก่อนแก้ข้อความ
+ * (เช่น "รอบ collecting/sent" · "mark filed" — mytester2 A2-01) จึงแสดงข้อความใหม่ทันทีโดยไม่ต้อง seed ซ้ำ
+ * · code ที่ไม่อยู่ในแคตตาล็อกใช้ค่าจากฐานตามเดิม
+ */
+export function withCatalogText<T extends { code: string; label: string; description: string | null }>(
+  rows: readonly T[],
+): T[] {
+  return rows.map((row) => {
+    const seed = CATALOG_BY_CODE.get(row.code)
+    return seed === undefined ? row : { ...row, label: seed.label, description: seed.description ?? null }
+  })
+}

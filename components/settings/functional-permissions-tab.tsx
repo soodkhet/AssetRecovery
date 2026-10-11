@@ -25,6 +25,7 @@ import { cn } from '@/components/ui/cn'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { MATRIX_LEVELS, MATRIX_LEVEL_LABEL, isSuperadminRole, type MatrixLevel } from '@/lib/roles/matrix'
 import { REASON_MIN_LENGTH } from '@/components/settings/reason-confirm-modal'
+import { roleChipText } from '@/lib/roles/role-groups'
 import type { FunctionalMatrixDto, FunctionalMatrixRoleDto, FunctionalMatrixRowDto } from '@/lib/settings/types'
 
 /**
@@ -44,17 +45,8 @@ const LEVEL_CHIP_CLASS: Readonly<Record<Exclude<MatrixLevel, 'none'>, string>> =
   view: 'bg-blue-100 text-blue-800',
 }
 
-/** ตัวย่อกลุ่มของ role — กัน role ชื่อซ้ำข้ามกลุ่มอ่านแล้วสับสน (`07` §5) */
-const ROLE_GROUP_SHORT: Readonly<Record<string, string>> = {
-  system: '',
-  inhouse: 'IN',
-  outsource: 'OUT',
-  finance: 'FC',
-}
-
 function roleChipLabel(role: FunctionalMatrixRoleDto): string {
-  const short = ROLE_GROUP_SHORT[role.roleGroup] ?? role.roleGroup
-  return short === '' ? role.name : `${role.name} · ${short}`
+  return roleChipText(role.name, role.roleGroup)
 }
 
 export function FunctionalPermissionsTab() {
