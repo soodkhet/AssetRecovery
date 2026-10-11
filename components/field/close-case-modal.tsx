@@ -45,7 +45,7 @@ import {
   CLOSE_FAIL_REASONS,
   type CloseFailReason,
 } from '@/lib/field/fail-reasons'
-import { createDeferredSave } from '@/lib/field/deferred-save'
+import { createDeferredSave, flushOnPageHide } from '@/lib/field/deferred-save'
 import { closeExpenseToastDescription } from '@/lib/field/expense-ui'
 import { currentPosition, GeolocationError } from '@/lib/field/geolocation'
 import { mapsPointHref } from '@/lib/field/field-ui'
@@ -563,6 +563,11 @@ export function CloseCaseModal({
    */
   const [draftSaver] = useState(createDeferredSave)
   useEffect(() => () => draftSaver.flush(), [draftSaver])
+  // รีวิว DO2-01 — สลับแอป/ปิดแท็บ/ล็อกจอระหว่างหน่วง ⇒ บันทึกทันที · ส่งปิดงานแล้ว ⇒ ทิ้งงานค้าง (ไม่ยิง draft ตามหลัง)
+  useEffect(
+    () => flushOnPageHide(draftSaver, window, document, () => !closingRef.current),
+    [draftSaver],
+  )
   const scheduleDraft = useCallback(
     (next: CloseFormState, options?: { revision?: boolean }): void => {
       if (options?.revision === true) return

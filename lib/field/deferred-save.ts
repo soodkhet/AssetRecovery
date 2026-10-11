@@ -47,3 +47,31 @@ export function createDeferredSave(delayMs: number = CLOSE_DRAFT_AUTOSAVE_DELAY_
     hasPending: () => pending !== null,
   }
 }
+
+type ListenerTarget = Pick<EventTarget, 'addEventListener' | 'removeEventListener'>
+
+/**
+ * รีวิว DO2-01 — ผู้ใช้สลับแอป/ปิดแท็บ/ล็อกจอระหว่างที่ autosave ยังหน่วงอยู่ ⇒ unmount ของ React ไม่เกิด ข้อความหาย
+ * ⇒ ฟัง `pagehide` + `visibilitychange` (เมื่อ hidden) แล้ว `flush()` ทันที · `shouldFlush()` = false (เช่น ส่งปิดงานแล้ว)
+ * ⇒ ทิ้งงานที่ค้างแทน · คืนฟังก์ชันถอด listener (เรียกตอน unmount)
+ */
+export function flushOnPageHide(
+  saver: Pick<DeferredSave, 'flush' | 'cancel'>,
+  win: ListenerTarget,
+  doc: ListenerTarget & { readonly visibilityState: DocumentVisibilityState },
+  shouldFlush: () => boolean = () => true,
+): () => void {
+  const handle = (): void => {
+    if (shouldFlush()) saver.flush()
+    else saver.cancel()
+  }
+  const onVisibility = (): void => {
+    if (doc.visibilityState === 'hidden') handle()
+  }
+  win.addEventListener('pagehide', handle)
+  doc.addEventListener('visibilitychange', onVisibility)
+  return () => {
+    win.removeEventListener('pagehide', handle)
+    doc.removeEventListener('visibilitychange', onVisibility)
+  }
+}
