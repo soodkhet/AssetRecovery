@@ -105,7 +105,7 @@ import { buildPaymentVoucherDocs, buildPayslipDocs } from '@/lib/payout/payout-d
 import { resolvePayoutSide } from '@/lib/payout/payout'
 import { getPayoutDocSource } from '@/lib/payout/queries'
 import { resolveWhtPolicyForPayout } from '@/lib/settings/queries/wht-policy'
-import { getWhtCertificateDocSource } from '@/lib/wht/queries'
+import { getWhtCertificateDocSource, loadCertificateTaxSnapshots, type CertificateTaxSnapshot } from '@/lib/wht/queries'
 import { buildWhtCertificateDoc } from '@/lib/wht/wht'
 import {
   downloadPackFile,
@@ -552,12 +552,19 @@ const WHT_EXPORT_SELECT = {
   payeeBranchCode: true,
   whtCondition: true,
   replaces: { select: { certificateNumber: true } },
-  expenseRecord: { select: { periodId: true, payoutBatchItem: { select: { whtPctSnapshot: true } } } },
+  issueMode: true,
+  payoutBatchId: true,
+  payeeId: true,
+  expenseRecord: {
+    select: { periodId: true, payoutBatchItem: { select: { whtPctSnapshot: true, whtIncomeCategory: true } } },
+  },
 } satisfies Prisma.WhtCertificateSelect
 
 type WhtExportSource = Prisma.WhtCertificateGetPayload<{ select: typeof WHT_EXPORT_SELECT }>
 
-function toWhtExportRow(row: WhtExportSource): WhtExportRow {
+/** แปลงใบเป็นแถว `05_WHT_Data` · `whtPct` มาจาก `loadCertificateTaxSnapshots()` (รายการในฐาน ไม่ใช่จุดยึด — mytester H-02) */
+function toWhtExportRow(row: WhtExportSource, taxSnapshots: Map<string, CertificateTaxSnapshot>): WhtExportRow {
+  const whtPct = taxSnapshots.get(row.id)?.whtPct ?? row.expenseRecord.payoutBatchItem.whtPctSnapshot
   return {
     certificateNumber: row.certificateNumber,
     payeeName: row.payeeName,
@@ -566,7 +573,7 @@ function toWhtExportRow(row: WhtExportSource): WhtExportRow {
     incomeType: row.incomeType,
     grossSatang: row.grossSatang,
     whtSatang: row.whtSatang,
-    whtPct: row.expenseRecord.payoutBatchItem.whtPctSnapshot?.toString() ?? null,
+    whtPct: whtPct?.toString() ?? null,
     filingForm: row.filingForm,
     payeeTitle: row.payeeNameTitle,
     payeeAddress: row.payeeAddress,
@@ -648,10 +655,22 @@ async function whtRows(
       (sentBefore(row.expenseRecord.periodId, row.cancelledAt) || issuedLate.some((issued) => issued.id === row.id)),
   )
 
+  const taxSnapshots = await loadCertificateTaxSnapshots(
+    organizationId,
+    [...paidInPeriod, ...lateEvents].map((row) => ({
+      id: row.id,
+      issueMode: row.issueMode,
+      payoutBatchId: row.payoutBatchId,
+      payeeId: row.payeeId,
+      anchorIncomeCategory: row.expenseRecord.payoutBatchItem.whtIncomeCategory,
+      anchorWhtPct: row.expenseRecord.payoutBatchItem.whtPctSnapshot,
+    })),
+  )
+  const toRow = (row: WhtExportSource): WhtExportRow => toWhtExportRow(row, taxSnapshots)
   const exportRows: WhtExportRow[] = [
-    ...paidInPeriod.map(toWhtExportRow),
-    ...issuedLate.map(toWhtExportRow),
-    ...reversed.map((row) => whtReversalRow(toWhtExportRow(row))),
+    ...paidInPeriod.map(toRow),
+    ...issuedLate.map(toRow),
+    ...reversed.map((row) => whtReversalRow(toRow(row))),
   ]
 
   // `payee_tax_id` ต้องเป็นเลข 13 หลักล้วนทุกแถว (DEC-006/D10) — ขาดแม้แถวเดียวคือหยุด ไม่ส่งช่องว่างออกไป

@@ -195,6 +195,11 @@ export interface CertificateGroupingOptions {
 export interface CertificateGroup<T extends CertificateSourceItem> {
   /** รายการแรกของกลุ่ม (ลำดับ input) — ใบผูก `expense_record_id` กับรายการนี้ (กันออกซ้ำด้วย unique เดิม) */
   anchor: T
+  /**
+   * รายการที่ใช้เป็นแหล่งข้อมูลภาษีของใบ (ประเภทเงินได้ · Tax Profile · แบบยื่น · อัตรา) = `certificateTaxSource()`
+   * แยกจาก `anchor` — แถวแรกอาจเป็นเงินทดรอง/ค่าที่พักที่อยู่นอกฐาน ไม่มีประเภทเงินได้ (mytester F-01)
+   */
+  taxSource: T
   members: T[]
   mode: WhtCertificateMode
   /** ยอดเงินได้ที่จ่าย = ผลรวม gross ของรายการที่อยู่ในฐาน */
@@ -233,18 +238,30 @@ export function groupCertificateSources<T extends CertificateSourceItem>(
       mode === 'per_item'
         ? incomeOf(members[0]!)
         : members.filter((member) => member.whtBaseIncluded).reduce((sum, member) => sum + incomeOf(member), 0)
+    const taxSource = certificateTaxSource(members)
     const zeroRate402 = shouldIssueZeroRate402Certificate({
       issueZeroRate402Certificate,
-      // ประเภทเงินได้เป็นระดับผู้รับต่อรอบ ⇒ ทุกรายการของผู้รับเหมือนกัน
-      incomeCategory: members[0]!.incomeCategory ?? null,
+      // ประเภทเงินได้เป็นระดับผู้รับต่อรอบ — อ่านจากรายการในฐาน (รายการนอกฐานไม่มีประเภทเงินได้)
+      incomeCategory: taxSource.incomeCategory ?? null,
       whtSatang,
       // เฉพาะเงินได้ในฐาน — รายการนอกฐาน (ค่าที่พัก/เบิกตามใบเสร็จ) ไม่ใช่เงินได้ ไม่ทำให้เกิดใบ
       grossSatang: members.filter((member) => member.whtBaseIncluded).reduce((sum, m) => sum + m.grossSatang, 0),
     })
     if (!shouldIssueCertificate({ whtSatang }) && !zeroRate402) continue
-    groups.push({ anchor: members[0]!, members, mode, grossSatang, whtSatang })
+    groups.push({ anchor: members[0]!, taxSource, members, mode, grossSatang, whtSatang })
   }
   return groups
+}
+
+/**
+ * แหล่งข้อมูลภาษีของใบ = รายการแรกที่อยู่ในฐาน WHT (เงินได้จริง) · ไม่มีเลย ⇒ รายการแรก
+ * รายการนอกฐาน (เงินทดรอง · ค่าที่พัก/เบิกตามใบเสร็จ) ไม่มีประเภทเงินได้/Tax Profile — ถ้าใช้เป็นแหล่ง ใบจะออกผิดประเภท
+ * (40(2) กลายเป็น 40(8)/ภ.ง.ด.3) และอัตราใน export เป็น 0 (mytester 11/10/2569 F-01 · H-01 · H-02)
+ */
+export function certificateTaxSource<T extends Pick<CertificateSourceItem, 'whtBaseIncluded'>>(members: readonly T[]): T {
+  const first = members[0]
+  if (first === undefined) throw new RangeError('กลุ่มใบ 50 ทวิ ต้องมีอย่างน้อย 1 รายการ')
+  return members.find((member) => member.whtBaseIncluded) ?? first
 }
 
 // ── เลขที่หนังสือรับรอง ──────────────────────────────────────────────────────

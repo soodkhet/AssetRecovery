@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildWhtCertificateDoc,
+  certificateTaxSource,
   filingFormOf,
   groupCertificateSources,
   incomeTypeOf,
@@ -202,5 +203,56 @@ describe('U33 — เงินได้ 40(1) ใช้กติกาเดี�
   it('ป้ายแบบ: ภ.ง.ด.1 ครอบ 40(1)/40(2) · ชื่อสั้นท้ายใบตรงแบบจริง (ภ.ง.ด.1 ไม่กลายเป็น ภ.ง.ด.53)', () => {
     expect(WHT_FILING_FORM_LABEL.PND1).toContain('40(1)')
     expect(WHT_FILING_FORM_SHORT_LABEL).toEqual({ PND1: 'ภ.ง.ด.1', PND3: 'ภ.ง.ด.3', PND53: 'ภ.ง.ด.53' })
+  })
+})
+
+describe('mytester F-01 — แหล่งข้อมูลภาษีของใบ = รายการแรกในฐาน (ไม่ใช่จุดยึดนอกฐาน)', () => {
+  // out1 (40(2)) — แถวแรกของผู้รับในรอบเป็นเงินทดรอง (นอกฐาน · ไม่มีประเภทเงินได้) ตามด้วยค่าคอม/เบี้ยเสี่ยงในฐาน
+  const advanceFirst: CertificateSourceItem[] = [
+    { id: 'adv', payeeId: 'out1', grossSatang: 400_000, whtSatang: 0, whtBaseIncluded: false, incomeCategory: null },
+    { id: 'com1', payeeId: 'out1', grossSatang: 150_000, whtSatang: 4500, whtBaseIncluded: true, incomeCategory: 'sec_40_2' },
+    { id: 'risk', payeeId: 'out1', grossSatang: 30_000, whtSatang: 900, whtBaseIncluded: true, incomeCategory: 'sec_40_2' },
+    // in2 (40(8)) — แถวแรกเป็นค่าที่พักนอกฐาน
+    { id: 'hotel', payeeId: 'in2', grossSatang: 75_050, whtSatang: 0, whtBaseIncluded: false, incomeCategory: 'sec_40_8' },
+    { id: 'com2', payeeId: 'in2', grossSatang: 100_000, whtSatang: 3000, whtBaseIncluded: true, incomeCategory: 'sec_40_8' },
+  ]
+
+  it('ใบต่อรอบ: จุดยึดคงเป็นแถวแรก (กันออกซ้ำ) แต่ taxSource เป็นแถวแรกในฐาน', () => {
+    const groups = groupCertificateSources(advanceFirst, 'per_payee_batch')
+    const out1 = groups.find((group) => group.anchor.payeeId === 'out1')!
+    expect(out1.anchor.id).toBe('adv')
+    expect(out1.taxSource.id).toBe('com1')
+    expect(out1.taxSource.incomeCategory).toBe('sec_40_2')
+    // 40(2) จากแหล่งที่ถูก ⇒ ภ.ง.ด.1 (เดิมได้ ภ.ง.ด.3 เพราะอ่านจากแถวเงินทดรอง)
+    expect(filingFormOf({ taxProfileFilingForm: null, payeeType: 'individual', incomeCategory: out1.taxSource.incomeCategory ?? null })).toBe('PND1')
+    expect(out1.grossSatang).toBe(180_000)
+    expect(out1.whtSatang).toBe(5400)
+    const in2 = groups.find((group) => group.anchor.payeeId === 'in2')!
+    expect(in2.anchor.id).toBe('hotel')
+    expect(in2.taxSource.id).toBe('com2')
+  })
+
+  it('ใบต่อรายการ: taxSource = ตัวรายการเอง', () => {
+    const groups = groupCertificateSources(advanceFirst, 'per_item')
+    expect(groups.map((group) => [group.anchor.id, group.taxSource.id])).toEqual([
+      ['com1', 'com1'],
+      ['risk', 'risk'],
+      ['com2', 'com2'],
+    ])
+  })
+
+  it('U16 อ่านประเภทเงินได้จาก taxSource — 40(2) อัตรา 0% ที่แถวแรกนอกฐานยังออกใบได้', () => {
+    const zero: CertificateSourceItem[] = [
+      { id: 'adv0', payeeId: 'in3', grossSatang: 200_000, whtSatang: 0, whtBaseIncluded: false, incomeCategory: null },
+      { id: 'com0', payeeId: 'in3', grossSatang: 300_000, whtSatang: 0, whtBaseIncluded: true, incomeCategory: 'sec_40_2' },
+    ]
+    const groups = groupCertificateSources(zero, 'per_payee_batch', { issueZeroRate402Certificate: true })
+    expect(groups).toHaveLength(1)
+    expect(groups[0]!.taxSource.id).toBe('com0')
+  })
+
+  it('certificateTaxSource: ไม่มีรายการในฐานเลย ⇒ รายการแรก · กลุ่มว่าง ⇒ error', () => {
+    expect(certificateTaxSource([{ whtBaseIncluded: false, id: 'a' }, { whtBaseIncluded: false, id: 'b' }]).id).toBe('a')
+    expect(() => certificateTaxSource([])).toThrow(RangeError)
   })
 })

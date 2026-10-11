@@ -2,7 +2,7 @@ import { PrismaPg } from '@prisma/adapter-pg'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { SessionUser } from '@/lib/auth/types'
 import { PrismaClient } from '@/lib/generated/prisma/client'
-import { INCOME_TYPE_TEXT_CORPORATE } from '@/lib/settings/wht-policy'
+import { INCOME_TYPE_TEXT_40_2, INCOME_TYPE_TEXT_CORPORATE } from '@/lib/settings/wht-policy'
 
 /**
  * เทสต์ระดับ DB ของ Phase 4.5 — DoD ของไฟล์ 33
@@ -110,10 +110,19 @@ interface SeedItem {
   wht: number
   /** `null` = รายการเงินทดรองจ่าย (A4 — ไม่มี expense ต้นทาง ไม่หัก WHT) */
   taxProfileId?: string | null
+  /** snapshot `wht_base_included` · ไม่ระบุ = true (ค่า default ของตาราง) */
+  baseIncluded?: boolean
+  /** snapshot `wht_income_category` · ไม่ระบุ = NULL */
+  incomeCategory?: 'sec_40_1' | 'sec_40_2' | 'sec_40_8'
+  /** snapshot `wht_pct_snapshot` · ไม่ระบุ = NULL */
+  whtPct?: number
 }
 
 /** รอบจ่าย 1 รอบ + รายการตามที่ระบุ — คืน id ของรอบและรายการในรอบ */
-async function seedBatch(items: readonly SeedItem[]): Promise<{ batchId: string; batchName: string }> {
+async function seedBatch(
+  items: readonly SeedItem[],
+  mode: 'per_item' | 'per_payee_batch' | null = null,
+): Promise<{ batchId: string; batchName: string }> {
   batchCursor += 1
   const name = `PB-4.5-${batchCursor}`
   const gross = items.reduce((sum, item) => sum + item.gross, 0)
@@ -121,9 +130,9 @@ async function seedBatch(items: readonly SeedItem[]): Promise<{ batchId: string;
 
   const batchRows = await db().$queryRawUnsafe<{ id: string }[]>(`
     INSERT INTO payout_batches (organization_id, name, side, status, gross_satang, wht_satang, net_satang,
-                                payment_file_generated_at, created_by)
+                                payment_file_generated_at, wht_certificate_mode, created_by)
     VALUES ('${ORG_ID}', '${name}', 'outsource', 'completed', ${gross}, ${whtTotal}, ${gross - whtTotal},
-            '${PAYMENT_AT}', '${USER_ID}')
+            '${PAYMENT_AT}', ${mode === null ? 'NULL' : `'${mode}'`}, '${USER_ID}')
     RETURNING id
   `)
   const batchId = batchRows[0]?.id ?? ''
@@ -139,9 +148,12 @@ async function seedBatch(items: readonly SeedItem[]): Promise<{ batchId: string;
     const profile = item.taxProfileId === undefined || item.taxProfileId === null ? 'NULL' : `'${item.taxProfileId}'`
     await db().$executeRawUnsafe(`
       INSERT INTO payout_batch_items (organization_id, payout_batch_id, expense_id, payee_id,
-                                      gross_satang, wht_satang, net_satang, tax_profile_id, created_by)
+                                      gross_satang, wht_satang, net_satang, tax_profile_id,
+                                      wht_base_included, wht_income_category, wht_pct_snapshot, created_by)
       VALUES ('${ORG_ID}', '${batchId}', '${expenseRows[0]?.id}', '${item.payeeId}',
-              ${item.gross}, ${item.wht}, ${item.gross - item.wht}, ${profile}, '${USER_ID}')
+              ${item.gross}, ${item.wht}, ${item.gross - item.wht}, ${profile},
+              ${item.baseIncluded ?? true}, ${item.incomeCategory === undefined ? 'NULL' : `'${item.incomeCategory}'`},
+              ${item.whtPct ?? 'NULL'}, '${USER_ID}')
     `)
   }
 
@@ -562,6 +574,51 @@ suite('Phase 4.5 — ยกเลิก/ออกใบแทน (`33` §10 · �
       where: { expenseRecord: { payoutBatchItem: { payoutBatchId: seeded.batchId } } },
     })
     expect(total).toBe(2)
+  })
+
+  it('mytester F-01/H-01/H-02 — ใบต่อรอบที่แถวแรกอยู่นอกฐาน ⇒ ประเภทเงินได้/แบบ/อัตรามาจากรายการในฐาน · ออกใบแทนก็ถูก', async () => {
+    await setPeriodStatus('collecting')
+    const seeded = await seedBatch(
+      [
+        // แถวแรกของผู้รับ = รายการนอกฐาน (ค่าที่พัก/เงินทดรอง) ไม่มีประเภทเงินได้ อัตรา 0
+        { payeeId: PAYEE_PERSON_ID, gross: 4_000_00, wht: 0, baseIncluded: false, whtPct: 0 },
+        { payeeId: PAYEE_PERSON_ID, gross: 1_500_00, wht: 45_00, incomeCategory: 'sec_40_2', whtPct: 3 },
+        { payeeId: PAYEE_PERSON_ID, gross: 300_00, wht: 9_00, incomeCategory: 'sec_40_2', whtPct: 3 },
+      ],
+      'per_payee_batch',
+    )
+    await expenses.syncExpenseRecordsFromPayout(ctx, seeded.batchId)
+
+    const where = { organizationId: ORG_ID, payoutBatchId: seeded.batchId }
+    const original = await db().whtCertificate.findFirstOrThrow({ where })
+    // เดิม: อ่านจากแถวนอกฐาน ⇒ 40(8)/ภ.ง.ด.3
+    expect(original.filingForm).toBe('PND1')
+    expect(original.incomeType).toBe(INCOME_TYPE_TEXT_40_2)
+    expect(original.grossSatang).toBe(1_800_00)
+    expect(original.whtSatang).toBe(54_00)
+
+    const doc = await wht.getWhtCertificateDocSource(accountant, original.id)
+    expect(doc.incomeCategory).toBe('sec_40_2')
+
+    const snapshots = await wht.loadCertificateTaxSnapshots(ORG_ID, [
+      {
+        id: original.id,
+        issueMode: original.issueMode,
+        payoutBatchId: original.payoutBatchId,
+        payeeId: original.payeeId,
+        anchorIncomeCategory: null,
+        anchorWhtPct: null,
+      },
+    ])
+    expect(snapshots.get(original.id)?.whtPct?.toString()).toBe('3')
+
+    // ยกเลิกแล้วออกแทน ⇒ ใบใหม่ต้องถูกด้วย (H-01) · sync ซ้ำไม่ออกใบเพิ่ม (จุดยึดเดิม)
+    const { replacement } = await wht.cancelWhtCertificate(ctx, original.id, { reason: 'ประเภทเงินได้ผิด', reissue: true })
+    expect(replacement?.filingForm).toBe('PND1')
+    expect(replacement?.expenseRecordId).toBe(original.expenseRecordId)
+    await expenses.syncExpenseRecordsFromPayout(ctx, seeded.batchId)
+    expect(await db().whtCertificate.count({ where })).toBe(2)
+    expect(await db().whtCertificate.count({ where: { ...where, status: 'active' } })).toBe(1)
   })
 
   it('ใบที่ถูกยกเลิกแล้ว sync รอบเดิมซ้ำ ⇒ ออกใบแทนให้อัตโนมัติพร้อมอ้างกลับ (`33` §9)', async () => {

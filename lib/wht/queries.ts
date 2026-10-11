@@ -468,7 +468,9 @@ async function issueCertificate(
 ): Promise<CertRow> {
   const organizationId = ctx.actor.organizationId
   const source = group.anchor
-  const item = source.payoutBatchItem
+  // ข้อมูลภาษี (ประเภทเงินได้ · Tax Profile · แบบยื่น · เงื่อนไขการหัก) อ่านจากรายการในฐาน ไม่ใช่จุดยึด —
+  // จุดยึดอาจเป็นเงินทดรอง/ค่าที่พัก (mytester F-01) · ผู้รับ/รอบจ่ายเหมือนกันทุกสมาชิกของกลุ่ม
+  const item = group.taxSource.payoutBatchItem
   const paymentDate = paymentDateOf(source)
   const certificateNumber = await reserveCertificateNumber(tx, organizationId, paymentDate)
   const incomeCategory = item.whtIncomeCategory
@@ -997,6 +999,71 @@ export async function markWhtSupplementaryFiled(
   return toFilingDto(updated, now)
 }
 
+// ── snapshot ภาษีของใบที่ออกแล้ว (mytester F-01 · H-02) ─────────────────────
+
+/** ข้อมูลขั้นต่ำของใบ 50 ทวิ ที่ใช้หาแหล่งข้อมูลภาษี */
+export interface CertificateTaxRef {
+  id: string
+  issueMode: WhtCertificateMode
+  payoutBatchId: string | null
+  payeeId: string
+  /** snapshot ของจุดยึด — ใช้เมื่อใบออกต่อรายการ หรือรอบไม่มีรายการในฐานของผู้รับ */
+  anchorIncomeCategory: WhtIncomeCategory | null
+  anchorWhtPct: Prisma.Decimal | null
+}
+
+export interface CertificateTaxSnapshot {
+  incomeCategory: WhtIncomeCategory | null
+  whtPct: Prisma.Decimal | null
+}
+
+/**
+ * ประเภทเงินได้/อัตราของใบที่ออกแล้ว — ใบต่อผู้รับต่อรอบ (`per_payee_batch`) อ่านจาก**รายการในฐานตัวแรก**ของผู้รับในรอบ
+ * (กติกาเดียวกับ `certificateTaxSource()` ตอนออกใบ) ไม่ใช่จากจุดยึด ซึ่งอาจเป็นเงินทดรอง/ค่าที่พักนอกฐาน ·
+ * ทุกรายการในฐานของผู้รับคนเดียวในรอบเดียวมีประเภท/อัตราเดียวกัน (snapshot ระดับผู้รับ) ⇒ ลำดับไม่มีผลต่อค่า
+ */
+export async function loadCertificateTaxSnapshots(
+  organizationId: string,
+  certificates: readonly CertificateTaxRef[],
+): Promise<Map<string, CertificateTaxSnapshot>> {
+  const perBatch = certificates.filter(
+    (cert): cert is CertificateTaxRef & { payoutBatchId: string } =>
+      cert.issueMode === 'per_payee_batch' && cert.payoutBatchId !== null,
+  )
+  const items =
+    perBatch.length === 0
+      ? []
+      : await prisma.payoutBatchItem.findMany({
+          where: {
+            organizationId,
+            whtBaseIncluded: true,
+            payoutBatchId: { in: [...new Set(perBatch.map((cert) => cert.payoutBatchId))] },
+            payeeId: { in: [...new Set(perBatch.map((cert) => cert.payeeId))] },
+          },
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+          select: { payoutBatchId: true, payeeId: true, whtIncomeCategory: true, whtPctSnapshot: true },
+        })
+  const firstInBase = new Map<string, (typeof items)[number]>()
+  for (const item of items) {
+    const key = `${item.payoutBatchId}:${item.payeeId}`
+    if (!firstInBase.has(key)) firstInBase.set(key, item)
+  }
+  return new Map(
+    certificates.map((cert) => {
+      const source =
+        cert.issueMode === 'per_payee_batch' && cert.payoutBatchId !== null
+          ? firstInBase.get(`${cert.payoutBatchId}:${cert.payeeId}`)
+          : undefined
+      return [
+        cert.id,
+        source === undefined
+          ? { incomeCategory: cert.anchorIncomeCategory, whtPct: cert.anchorWhtPct }
+          : { incomeCategory: source.whtIncomeCategory, whtPct: source.whtPctSnapshot },
+      ]
+    }),
+  )
+}
+
 // ── GET /api/accounting/wht-certificates/:id/pdf (`28` §6.3) ────────────────
 
 /**
@@ -1023,6 +1090,19 @@ export async function getWhtCertificateDocSource(
   certificateId: string,
 ): Promise<WhtCertificateDocSource> {
   const certificate = await findCertificate(user, certificateId)
+  // ช่องประเภทเงินได้บนแบบทางการ (40(1)/40(2)/40(8)) ต้องมาจากรายการในฐาน ไม่ใช่จุดยึด (mytester F-01)
+  const taxSnapshot = (
+    await loadCertificateTaxSnapshots(user.organizationId, [
+      {
+        id: certificate.id,
+        issueMode: certificate.issueMode,
+        payoutBatchId: certificate.payoutBatchId,
+        payeeId: certificate.payeeId,
+        anchorIncomeCategory: certificate.expenseRecord.payoutBatchItem.whtIncomeCategory,
+        anchorWhtPct: null,
+      },
+    ])
+  ).get(certificate.id)
   const coverage =
     certificate.issueMode === 'per_payee_batch' && certificate.payoutBatchId !== null
       ? {
@@ -1050,7 +1130,7 @@ export async function getWhtCertificateDocSource(
     whtSatang: certificate.whtSatang,
     issuedAt: certificate.createdAt,
     payeeType: certificate.payeeType,
-    incomeCategory: certificate.expenseRecord.payoutBatchItem.whtIncomeCategory,
+    incomeCategory: taxSnapshot?.incomeCategory ?? certificate.expenseRecord.payoutBatchItem.whtIncomeCategory,
     whtCondition: certificate.whtCondition,
     filingSequence: await loadFilingSequence(user.organizationId, certificate),
     coverage,
