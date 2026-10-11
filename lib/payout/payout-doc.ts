@@ -257,7 +257,10 @@ export function groupPayoutItemsByPayee(items: readonly PayoutBatchItemDto[]): P
     // ทุก bucket ถูกสร้างพร้อมรายการแรกเสมอ ⇒ ไม่มีทางว่าง (ยามไว้ให้ type แน่นอนเท่านั้น)
     const first = bucket[0]
     if (first === undefined) throw new RangeError('กลุ่มผู้รับเงินต้องมีอย่างน้อย 1 รายการ')
-    const rates = new Set(bucket.map((item) => item.whtPctSnapshot))
+    // mytester2 รีวิว — เงินทดรองไม่มีอัตรา WHT (snapshot null) ⇒ ไม่นำมาตัดสินว่าอัตราของกลุ่มเท่ากันหรือไม่
+    const earning = bucket.filter((item) => item.source !== 'advance')
+    const rates = new Set(earning.map((item) => item.whtPctSnapshot))
+    const rateSource = earning[0] ?? first
     const totals = summarizePayoutBatch(bucket)
     const advanceOffsetSatang = bucket.reduce((sum, item) => sum + item.advanceOffsetSatang, 0)
     const recoveryOffsetSatang = bucket.reduce((sum, item) => sum + (item.recoveryOffsetSatang ?? 0), 0)
@@ -267,7 +270,7 @@ export function groupPayoutItemsByPayee(items: readonly PayoutBatchItemDto[]): P
       teamName: first.teamName,
       bankName: first.bankName,
       accountNumberMasked: first.accountNumberMasked,
-      whtPctSnapshot: rates.size === 1 ? (first.whtPctSnapshot ?? null) : null,
+      whtPctSnapshot: rates.size === 1 ? (rateSource.whtPctSnapshot ?? null) : null,
       items: bucket,
       totals,
       advanceOffsetSatang,

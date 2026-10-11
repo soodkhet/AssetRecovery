@@ -108,9 +108,17 @@ describe('groupPayoutItemsByPayee (`28` §6.1 — 1 คน = 1 ใบต่อ�
   it('อัตรา WHT ไม่เท่ากันทุกรายการ = ไม่สรุปอัตราเดียวบนเอกสาร', () => {
     const groups = groupPayoutItemsByPayee([
       item(),
-      item({ id: 'item-2', sourceId: 'adv-1', source: 'advance', whtPctSnapshot: null, whtSatang: 0, netSatang: 850_000 }),
+      item({ id: 'item-2', sourceId: 'exp-2', whtPctSnapshot: 2, whtSatang: 17_000, netSatang: 833_000 }),
     ])
     expect(groups[0]!.whtPctSnapshot).toBeNull()
+  })
+
+  it('mytester2 รีวิว — แถวเงินทดรอง (ไม่มีอัตรา) ไม่ทำให้อัตราของกลุ่มหาย', () => {
+    const groups = groupPayoutItemsByPayee([
+      item(),
+      item({ id: 'item-2', sourceId: 'adv-1', source: 'advance', whtPctSnapshot: null, whtSatang: 0, netSatang: 850_000 }),
+    ])
+    expect(groups[0]!.whtPctSnapshot).toBe(3)
   })
 
   it('รายการที่ net ≠ gross − wht ล้มทันที (ยามของ `22` §6.10 ก่อนเงินออกจริง)', () => {
