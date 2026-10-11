@@ -222,6 +222,18 @@ describe('ที่อยู่ + ช่องทางติดต่อ (`41` 
     ).toBeNull()
   })
 
+  it('กรุงเทพมหานครใช้ แขวง/เขต ไม่ใช่ ตำบล/อำเภอ (mytester C-04)', () => {
+    expect(
+      formatFieldAddress({
+        detail: '12 ซอย 5',
+        subdistrict: 'สะพานสอง',
+        district: 'วังทองหลาง',
+        province: 'กรุงเทพมหานคร',
+        postalCode: '10310',
+      }),
+    ).toBe('12 ซอย 5 แขวงสะพานสอง เขตวังทองหลาง กรุงเทพมหานคร 10310')
+  })
+
   it('ที่อยู่ว่างไม่มีลิงก์แผนที่', () => {
     expect(
       mapsSearchHref({ detail: null, subdistrict: null, district: null, province: null, postalCode: null }),

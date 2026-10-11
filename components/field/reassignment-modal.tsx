@@ -34,6 +34,8 @@ export function ReassignmentModal({
   const [detail, setDetail] = useState<FieldCaseDetailDto | null>(null)
   const [loadError, setLoadError] = useState<ApiCallError | null>(null)
   const [declining, setDeclining] = useState(false)
+  // ยินยอม = เคสโอนออกทันทีย้อนกลับไม่ได้ ⇒ ต้องกดยืนยันอีกครั้ง (mytester C-06)
+  const [consenting, setConsenting] = useState(false)
   const [reason, setReason] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [now, setNow] = useState<Date>(() => new Date())
@@ -110,6 +112,20 @@ export function ReassignmentModal({
           <Button variant="secondary" onClick={onClose}>
             ปิดหน้าต่าง
           </Button>
+        ) : consenting ? (
+          <>
+            <Button variant="secondary" onClick={() => setConsenting(false)} disabled={submitting}>
+              กลับ
+            </Button>
+            <Button
+              variant="success"
+              onClick={() => void respond(true)}
+              loading={submitting}
+              disabled={countdown?.expired === true}
+            >
+              ยืนยันยินยอม
+            </Button>
+          </>
         ) : declining ? (
           <>
             <Button variant="secondary" onClick={() => setDeclining(false)} disabled={submitting}>
@@ -135,9 +151,8 @@ export function ReassignmentModal({
             </Button>
             <Button
               variant="success"
-              onClick={() => void respond(true)}
-              loading={submitting}
-              disabled={countdown?.expired === true}
+              onClick={() => setConsenting(true)}
+              disabled={submitting || countdown?.expired === true}
             >
               ยินยอม
             </Button>
@@ -184,7 +199,14 @@ export function ReassignmentModal({
             </div>
           )}
 
-          {declining ? (
+          {consenting ? (
+            <div className="rounded-xl border-2 border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+              <div className="font-bold">ยืนยันโอนเคสนี้ให้ {pending.newAgentName}?</div>
+              <div className="mt-1 text-xs">
+                เมื่อยืนยันแล้ว เคสจะหายจากรายการของคุณทันทีและยกเลิกเองไม่ได้
+              </div>
+            </div>
+          ) : declining ? (
             <div>
               <label htmlFor="decline-reason" className="mb-1.5 block text-xs font-bold text-slate-600">
                 เหตุผลที่ไม่ยินยอม (จำเป็น)

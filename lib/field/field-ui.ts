@@ -1,3 +1,4 @@
+import { formatThaiAddressLineFull } from '@/lib/address/address-value'
 import { deviceAttributesText } from '@/lib/device-catalog/device-attributes'
 import type { FieldGroup } from '@/lib/field/field-status'
 import type { FieldAddressDto, FieldCaseListItemDto } from '@/lib/field/types'
@@ -242,15 +243,8 @@ export function teammatesInProvince(
 
 /** ที่อยู่แบบบรรทัดเดียว — คืน `null` เมื่อไม่มีข้อมูลเลย (หน้าจอแสดง "— ไม่มีข้อมูล —") */
 export function formatFieldAddress(address: FieldAddressDto | null | undefined): string | null {
-  if (address === null || address === undefined) return null
-  const parts = [
-    address.detail,
-    address.subdistrict === null || address.subdistrict === '' ? null : `ตำบล${address.subdistrict}`,
-    address.district === null || address.district === '' ? null : `อำเภอ${address.district}`,
-    address.province === null || address.province === '' ? null : `จังหวัด${address.province}`,
-    address.postalCode,
-  ].filter((part): part is string => part !== null && part !== '')
-  return parts.length === 0 ? null : parts.join(' ')
+  // ตัวจัดรูปแบบกลาง — กรุงเทพมหานครใช้ แขวง/เขต (mytester C-04)
+  return formatThaiAddressLineFull(address)
 }
 
 /** ลิงก์เปิด Google Maps ของที่อยู่ (`41` §7.7 — ทุกที่อยู่มีปุ่มของตัวเองแยกอิสระ) */
