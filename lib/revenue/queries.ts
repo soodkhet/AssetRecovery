@@ -995,13 +995,11 @@ export async function previewBillingBatch(user: SessionUser, input: BillingBatch
     select: { revenueDate: true, grossSatang: true, vatSatang: true, totalSatang: true },
   })
   const preview = summarizeBillingPreview(rows, input.cutoffDate)
-  const limit = input.cutoffDate.getTime()
-  const laterDates = rows.filter((row) => row.revenueDate.getTime() > limit).map((row) => row.revenueDate.getTime())
   return {
     revenueCount: preview.billable.revenueCount,
     totalSatang: preview.billable.totalSatang,
     laterRevenueCount: preview.later.revenueCount,
     laterTotalSatang: preview.later.totalSatang,
-    laterLatestRevenueDate: laterDates.length === 0 ? null : toDateOnlyIso(new Date(Math.max(...laterDates))),
+    laterLatestRevenueDate: preview.laterLatestRevenueDate === null ? null : toDateOnlyIso(preview.laterLatestRevenueDate),
   }
 }

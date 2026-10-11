@@ -258,6 +258,14 @@ describe('สรุปก่อนสร้างรอบวางบิล (my
     )
     expect(preview.billable).toMatchObject({ revenueCount: 2, totalSatang: 21_400 })
     expect(preview.later).toMatchObject({ revenueCount: 1, totalSatang: 21_400 })
+    expect(preview.laterLatestRevenueDate).toEqual(new Date('2026-10-05T00:00:00Z'))
+  })
+
+  it('วันที่รายได้ล่าสุดหลังวันตัดรอบ = ค่ามากสุดของกลุ่ม "หลังวันตัดรอบ" · ไม่มี ⇒ null (รีวิวเฟส 4 ข้อ 7)', () => {
+    const cutoff = new Date('2026-09-30T00:00:00Z')
+    const preview = summarizeBillingPreview([row('2026-10-12', 1_000), row('2026-09-30', 1_000), row('2026-10-03', 1_000)], cutoff)
+    expect(preview.laterLatestRevenueDate).toEqual(new Date('2026-10-12T00:00:00Z'))
+    expect(summarizeBillingPreview([row('2026-09-01', 1_000)], cutoff).laterLatestRevenueDate).toBeNull()
   })
 
   it('วันที่เสนอไม่มีรายได้ (ทุกใบอยู่หลังวันตัดรอบ) ⇒ billable = 0', () => {

@@ -188,16 +188,25 @@ export function summarizeBillingBatch(revenues: readonly RevenueAmounts[]): Bill
 export interface BillingPreviewTotals {
   billable: BillingBatchTotals
   later: BillingBatchTotals
+  /** วันที่รายได้ล่าสุดของกลุ่ม "หลังวันตัดรอบ" (ใช้เสนอวันตัดรอบที่ครอบคลุม) · ไม่มี = `null` — รีวิวเฟส 4 ข้อ 7 */
+  laterLatestRevenueDate: Date | null
 }
 
 export function summarizeBillingPreview(
   revenues: readonly (RevenueAmounts & { revenueDate: Date })[],
   cutoffDate: Date,
 ): BillingPreviewTotals {
+  // แบ่งด้วยเกณฑ์เดียวกับ query สร้างรอบจริงจุดเดียว — ผู้เรียกไม่ต้องเทียบวันตัดรอบเอง (รีวิวเฟส 4 ข้อ 7)
   const limit = billableRevenueDateFilter(cutoffDate).lte.getTime()
+  const later = revenues.filter((row) => row.revenueDate.getTime() > limit)
+  const latest = later.reduce<number | null>(
+    (max, row) => (max === null || row.revenueDate.getTime() > max ? row.revenueDate.getTime() : max),
+    null,
+  )
   return {
     billable: summarizeBillingBatch(revenues.filter((row) => row.revenueDate.getTime() <= limit)),
-    later: summarizeBillingBatch(revenues.filter((row) => row.revenueDate.getTime() > limit)),
+    later: summarizeBillingBatch(later),
+    laterLatestRevenueDate: latest === null ? null : new Date(latest),
   }
 }
 
