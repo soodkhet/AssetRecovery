@@ -291,10 +291,24 @@ export async function changeCaseStatus(
     }
   }
 
-  if (action === 'reject' || action === 'request_more_info') {
+  if (action === 'request_more_info') {
     data.reviewedBy = context.actor.id
     data.reviewedAt = new Date()
     data.reviewNote = reason
+  }
+
+  // มติผู้ใช้ 12/10/2569 I3-01 — ไม่รับเคสแยก 2 ช่อง: `reason` = เหตุผลที่แจ้งบริษัทไฟแนนซ์ (บังคับ · พอร์ทัลเห็น)
+  // · `internalNote` = หมายเหตุภายใน (ไม่บังคับ · เก็บที่ `review_note` · พอร์ทัลไม่เห็น) — audit มีทั้งสองช่อง
+  if (action === 'reject') {
+    const internalNote = input.internalNote?.trim() ?? ''
+    data.reviewedBy = context.actor.id
+    data.reviewedAt = new Date()
+    data.clientRejectReason = reason
+    data.reviewNote = internalNote === '' ? null : internalNote
+    auditBefore.clientRejectReason = row.clientRejectReason
+    auditBefore.reviewNote = row.reviewNote
+    auditAfter.clientRejectReason = reason
+    auditAfter.reviewNote = data.reviewNote
   }
 
   // ── Recycle (`38` §6.6) ───────────────────────────────────────────────────

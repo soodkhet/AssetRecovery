@@ -180,6 +180,7 @@ export const detailSelect = {
   serviceFeeBasisSnapshot: true,
   serviceFeeFailFeeSatang: true,
   reviewNote: true,
+  clientRejectReason: true,
   outcome: true,
   closedAt: true,
   updatedAt: true,
@@ -270,6 +271,7 @@ function redactCaseDetailForCompany(detail: CaseDetailDto): CaseDetailDto {
     serviceFeeTemplateId: null,
     projectedRevenueSource: null,
     projectedRevenueSourceLabel: null,
+    // review_note = หมายเหตุภายใน (I3-01) · `clientRejectReason` คงไว้ — เป็นช่องที่แจ้งบริษัทไฟแนนซ์อยู่แล้ว
     reviewNote: null,
     editHistory: [],
     statusHistory: redactCaseStatusTimelineForCompany(detail.statusHistory),
@@ -430,6 +432,7 @@ export function toDetailDto(row: CaseDetailRow): CaseDetailDto {
     serviceFeeFailFeeSatang: row.serviceFeeFailFeeSatang,
     allowedActions: allowedActionsFrom(row.status),
     reviewNote: row.reviewNote,
+    clientRejectReason: row.clientRejectReason,
     outcome: row.outcome,
     closedAt: row.closedAt?.toISOString() ?? null,
     // เติมเฉพาะ `getCase()` ของผู้ใช้ภายใน (มติ PO U26) — เส้นเขียน/ฝั่งบริษัทไฟแนนซ์คืน null

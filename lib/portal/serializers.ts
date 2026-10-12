@@ -81,9 +81,35 @@ export interface PortalCaseSource {
   /** assignment ปัจจุบัน (ไม่นับ `reassigned_away`) — จับเคสถูกตีกลับ */
   assignmentStatus?: AssignmentStatus | null
   trackingRound: number
-  /** `cases.review_note` — แสดงเป็น `statusReason` เฉพาะ "ไม่รับเคส"/"ขอข้อมูลเพิ่มเติม" */
+  /**
+   * `cases.review_note` — แสดงเป็น `statusReason` เฉพาะ "ขอข้อมูลเพิ่มเติม"
+   * · เคสไม่รับ = **หมายเหตุภายใน** ห้ามออกพอร์ทัล (มติผู้ใช้ 12/10/2569 I3-01)
+   */
   reviewNote: string | null
+  /** `cases.client_reject_reason` — เหตุผลไม่รับเคสที่แจ้งบริษัทไฟแนนซ์ (I3-01) */
+  clientRejectReason: string | null
   createdAt: Date
+}
+
+/** ข้อความกลางของเคสที่ไม่รับซึ่งไม่มีเหตุผลที่แจ้งบริษัทไฟแนนซ์ (ปฏิเสธก่อนแยกช่อง — I3-01) */
+export const PORTAL_DECLINED_GENERIC_REASON = 'เคสนี้ไม่ผ่านการพิจารณา — ติดต่อเจ้าหน้าที่เพื่อสอบถามรายละเอียด'
+
+/**
+ * เหตุผลที่พอร์ทัลแสดงต่อสถานะ (`97` §6.1 `status_reason` · มติผู้ใช้ 12/10/2569 I3-01)
+ * - ไม่รับเคส → `client_reject_reason` เท่านั้น · ว่าง ⇒ ข้อความกลาง (ไม่ fallback ไป `review_note` ซึ่งเป็นหมายเหตุภายใน)
+ * - ขอข้อมูลเพิ่มเติม → `review_note`
+ * - สถานะอื่น → ไม่แสดง
+ */
+export function portalCaseStatusReason(
+  code: PortalCaseStatusCode,
+  row: Pick<PortalCaseSource, 'reviewNote' | 'clientRejectReason'>,
+): string | null {
+  if (!portalCaseShowsReason(code)) return null
+  if (code === 'declined') {
+    const reason = row.clientRejectReason?.trim() ?? ''
+    return reason === '' ? PORTAL_DECLINED_GENERIC_REASON : reason
+  }
+  return row.reviewNote
 }
 
 export interface PortalCaseListItemDto {
@@ -104,7 +130,7 @@ export function serializePortalCaseListItem(row: PortalCaseSource): PortalCaseLi
     caseRef: row.caseRef,
     debtorName: row.debtorName,
     statusDisplay,
-    statusReason: portalCaseShowsReason(statusDisplay.code) ? row.reviewNote : null,
+    statusReason: portalCaseStatusReason(statusDisplay.code, row),
     createdAt: iso(row.createdAt),
     recycleRound: row.trackingRound > 1 ? row.trackingRound : null,
   }

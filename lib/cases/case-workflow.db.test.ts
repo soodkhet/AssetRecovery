@@ -560,7 +560,9 @@ suite('Phase 2.3 — state machine + snapshot + recycle (DB จริง)', () =
       { actor, meta },
     )
     expect(rejected.case.status).toBe('rejected')
-    expect(rejected.case.reviewNote).toBe('ข้อมูลลูกหนี้ไม่ตรงกับสัญญา')
+    // มติผู้ใช้ 12/10/2569 I3-01 — `reason` ของ reject = เหตุผลที่แจ้งบริษัทไฟแนนซ์ · ไม่กรอกหมายเหตุภายใน ⇒ review_note ว่าง
+    expect(rejected.case.clientRejectReason).toBe('ข้อมูลลูกหนี้ไม่ตรงกับสัญญา')
+    expect(rejected.case.reviewNote).toBeNull()
 
     // staging E-004 — รายละเอียดเคสมีประวัติสถานะจาก audit พร้อมเหตุผลไม่รับเคส
     const { getCase } = await import('@/lib/cases/queries')
@@ -568,6 +570,41 @@ suite('Phase 2.3 — state machine + snapshot + recycle (DB จริง)', () =
     const last = detail.statusHistory.at(-1)
     expect(detail.statusHistory.map((entry) => entry.toStatus).slice(-2)).toEqual(['pending_review', 'rejected'])
     expect(last).toMatchObject({ label: 'ไม่รับเคส', note: 'ข้อมูลลูกหนี้ไม่ตรงกับสัญญา', fromStatus: 'pending_review' })
+  })
+
+  it('ไม่รับเคสแยก 2 ช่อง: เหตุผลถึงบริษัท + หมายเหตุภายใน — audit before/after มีทั้งสองช่อง (มติผู้ใช้ 12/10/2569 I3-01)', async () => {
+    const caseId = await seedCase('SF-2026-2304B', { withDocuments: true })
+    await service.changeCaseStatus(actor, caseId, change({ action: 'review' }), { actor, meta })
+
+    // หมายเหตุภายในอย่างเดียวไม่พอ — เหตุผลที่แจ้งบริษัทบังคับ
+    await expect(
+      service.changeCaseStatus(actor, caseId, change({ action: 'reject', internalNote: 'ซ้ำเคส X ของบริษัทอื่น' }), {
+        actor,
+        meta,
+      }),
+    ).rejects.toMatchObject({ code: 'CASE_STATUS_REASON_REQUIRED' })
+
+    const rejected = await service.changeCaseStatus(
+      actor,
+      caseId,
+      change({ action: 'reject', reason: 'IMEI ซ้ำกับเคสที่ยังดำเนินการอยู่', internalNote: 'ซ้ำเคส X ของบริษัทอื่น' }),
+      { actor, meta },
+    )
+    expect(rejected.case).toMatchObject({
+      status: 'rejected',
+      clientRejectReason: 'IMEI ซ้ำกับเคสที่ยังดำเนินการอยู่',
+      reviewNote: 'ซ้ำเคส X ของบริษัทอื่น',
+    })
+    const audits = await db().$queryRawUnsafe<
+      Array<{ before_data: Record<string, unknown> | null; after_data: Record<string, unknown> | null; reason: string | null }>
+    >(`SELECT before_data, after_data, reason FROM audit_logs WHERE target_id = '${caseId}' AND after_data->>'status' = 'rejected'`)
+    expect(audits).toHaveLength(1)
+    expect(audits[0]?.before_data).toMatchObject({ clientRejectReason: null, reviewNote: null })
+    expect(audits[0]?.after_data).toMatchObject({
+      clientRejectReason: 'IMEI ซ้ำกับเคสที่ยังดำเนินการอยู่',
+      reviewNote: 'ซ้ำเคส X ของบริษัทอื่น',
+    })
+    expect(audits[0]?.reason).toBe('IMEI ซ้ำกับเคสที่ยังดำเนินการอยู่')
   })
 
   it('รีไซเคิลได้เฉพาะ closed_fail — closed_success ถูกปฏิเสธ (`38` §20)', async () => {

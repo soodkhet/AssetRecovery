@@ -158,6 +158,12 @@ export type CaseDocumentDeleteInput = z.infer<typeof caseDocumentDeleteSchema>
 export const caseStatusChangeSchema = z.object({
   action: z.enum(CASE_STATUS_ACTIONS),
   reason: optionalText(1000),
+  /**
+   * มติผู้ใช้ 12/10/2569 I3-01 — หมายเหตุภายในของ `reject` (ไม่บังคับ · พนักงานเห็นเท่านั้น)
+   * ส่วน `reason` ของ `reject` = เหตุผลที่แจ้งบริษัทไฟแนนซ์ (บังคับ · ช่องเดียวที่พอร์ทัลแสดง)
+   * · action อื่นไม่ใช้ช่องนี้ (ถูกละไว้)
+   */
+  internalNote: optionalText(1000),
   teamId: z.guid('ทีมไม่ถูกต้อง').nullable().optional(),
   teamChangeReason: optionalText(500),
   /**

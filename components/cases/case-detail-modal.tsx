@@ -120,6 +120,8 @@ export function CaseDetailModal({
   const [teamOptions, setTeamOptions] = useState<readonly CaseTeamOptionDto[]>([])
 
   const [reason, setReason] = useState('')
+  // มติผู้ใช้ 12/10/2569 I3-01 — หมายเหตุภายในของ "ไม่รับเคส" (ไม่บังคับ · พอร์ทัลไม่เห็น)
+  const [internalNote, setInternalNote] = useState('')
   /** ปุ่ม "ไม่รับเคส" ที่รอยืนยัน (R3-013) */
   const [confirmingReject, setConfirmingReject] = useState<CaseActionButton | null>(null)
   const [busyAction, setBusyAction] = useState<CaseActionButton['action'] | null>(null)
@@ -157,6 +159,7 @@ export function CaseDetailModal({
   if (sessionKey !== lastSessionKey) {
     setLastSessionKey(sessionKey)
     setReason('')
+    setInternalNote('')
     setConfirmingReject(null)
     setActionError(null)
     setTeamPick(null)
@@ -208,6 +211,7 @@ export function CaseDetailModal({
         jsonRequest('PATCH', {
           action: button.action,
           reason,
+          ...(button.action === 'reject' && internalNote.trim() !== '' ? { internalNote } : {}),
           ...(teamChanged ? { teamId: chosenTeam.id, teamChangeReason: chosenTeam.reason } : {}),
           // ส่งเฉพาะเคสโหมดเอกสารชุด — เคสแยกประเภทไม่ต้องมีค่านี้ (mytester B-12)
           ...(button.action === 'accept' && documentModeOf(countDocuments(detail.documents)) === 'bundle'
@@ -247,6 +251,7 @@ export function CaseDetailModal({
       }
       setDetail(response.data.case)
       setReason('')
+      setInternalNote('')
       setChosenTeam(null)
       onChanged?.(response.data.case)
       onClose()
@@ -461,7 +466,26 @@ export function CaseDetailModal({
           confirmCopy?.danger === false ? 'primary' : 'danger'
         }
       >
-        {reason.trim() !== '' && (
+        {confirmingReject?.action === 'reject' ? (
+          <div className="space-y-3">
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+              <p className="mb-1 font-semibold text-slate-800">เหตุผลที่แจ้งบริษัทไฟแนนซ์ (บริษัทไฟแนนซ์เห็น)</p>
+              <p className="max-h-32 overflow-y-auto whitespace-pre-wrap break-words">{reason.trim()}</p>
+            </div>
+            <Field
+              id="case-reject-internal-note"
+              label="หมายเหตุภายใน (ไม่บังคับ)"
+              hint="เห็นเฉพาะพนักงาน — บริษัทไฟแนนซ์ไม่เห็น ใช้จดรายละเอียดที่ไม่ควรแจ้งลูกค้า เช่น เลขเคสของบริษัทอื่น"
+            >
+              <Textarea
+                id="case-reject-internal-note"
+                maxLength={1000}
+                value={internalNote}
+                onChange={(event) => setInternalNote(event.target.value)}
+              />
+            </Field>
+          </div>
+        ) : reason.trim() !== '' && (
           <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
             <p className="mb-1 font-semibold text-slate-800">
               {confirmingReject?.action === 'approve_recycle' ? 'หมายเหตุผู้อนุมัติ' : 'เหตุผลที่จะบันทึก'}
@@ -510,7 +534,7 @@ export function CaseDetailModal({
 
 /** เหตุผลขอข้อมูลเพิ่ม/ไม่รับเคสของผู้ตรวจ (staging E-003) — เดิมเห็นเฉพาะในแจ้งเตือน */
 function ReviewNoteAlert({ detail }: { detail: CaseDetailDto }) {
-  const notice = caseReviewNoteNotice(detail.status, detail.reviewNote)
+  const notice = caseReviewNoteNotice(detail.status, detail.reviewNote, detail.clientRejectReason)
   if (notice === null) return null
   return (
     <InlineAlert tone={notice.tone} title={notice.title}>

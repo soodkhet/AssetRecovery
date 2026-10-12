@@ -274,7 +274,10 @@ export interface CaseDetailDto extends CaseListItemDto {
   serviceFeeFailFeeSatang: number | null
   /** action ที่ทำได้จากสถานะปัจจุบัน (`38` §10) — UX เท่านั้น API ตรวจซ้ำเสมอ */
   allowedActions: string[]
+  /** ข้อความขอข้อมูลเพิ่ม (need_info) · เคส `rejected` = หมายเหตุภายใน (มติผู้ใช้ 12/10/2569 I3-01) */
   reviewNote: string | null
+  /** เหตุผลไม่รับเคสที่แจ้งบริษัทไฟแนนซ์ (I3-01) — `null` บนเคสที่ปฏิเสธก่อนแยกช่อง */
+  clientRejectReason: string | null
   outcome: string | null
   /** เวลาปิดงาน**ครั้งแรก** — ส่งหลักฐานใหม่ไม่เขียนทับ (มติ PO U26) */
   closedAt: string | null

@@ -96,6 +96,7 @@
 | v4.69 | 11/10/2569 | **staging E-016 (มติ PO 10/10/2569)** — migration `20261011110000_adjustment_credit_note_waive`: `adjustments` + `credit_note_waived_at` / `credit_note_waived_by` (FK users) / `credit_note_waive_reason` (CHECK `chk_adjustments_credit_note_waive_shape` — ว่างทั้งสามหรือมีครบพร้อมเหตุผล) — ปิดป้าย "รอใบลดหนี้" ของบิลที่ชำระครบเป็น "จัดการนอกระบบ" |
 | v4.70 | 11/10/2569 | **staging E-014 (มติ PO 10/10/2569)** — migration `20261011120000_payee_recoveries`: ตารางใหม่ `payee_recoveries` (adjustment_id UNIQUE · amount > 0) + `payee_recovery_collections` (insert-only · กลับรายการด้วย reversed_* · partial unique ต่อ (recovery, item) ที่ยังไม่กลับรายการ · trigger กันยอดสะสมเกินยอดเรียกคืน + ห้ามลบ) · `payout_batch_items`/`payout_batches` + `recovery_offset_satang` (CHECK advance + recovery ≤ net) — `22` §6.14.1 |
 | v4.71 | 11/10/2569 | **staging E-069 (มติ PO 10/10/2569)** — migration `20261011130000_period_readiness_result`: `accounting_periods` + `last_readiness_passed_count` / `last_readiness_total_count` (SMALLINT · CHECK `chk_accounting_periods_readiness_result`) — บันทึกผลทุกครั้งที่ตรวจความพร้อม (`POST /api/accounting/periods/:id/readiness`) |
+| v4.72 | 12/10/2569 | **มติผู้ใช้ 12/10/2569 I3-01 (mytester3)** — migration `20261012100000_case_client_reject_reason`: `cases` + `client_reject_reason TEXT` (nullable · additive ไม่แตะข้อมูลเดิม) = เหตุผลไม่รับเคสที่แจ้งบริษัทไฟแนนซ์ (บังคับตอน reject · ช่องเดียวที่พอร์ทัลแสดง) · `review_note` ของเคส `rejected` เปลี่ยนความหมายเป็น**หมายเหตุภายใน** (ไม่บังคับ · พนักงานเห็นเท่านั้น) — `need_info` ใช้ `review_note` เป็นข้อความถึงบริษัทตามเดิม · เคสที่ปฏิเสธก่อน migration (`client_reject_reason` NULL) ⇒ พอร์ทัลแสดงข้อความกลาง ไม่ใช้ `review_note` เดิม |
 
 ขอบเขตเอกสารนี้: Full Production Database Schema — ทุก table, column, type, FK, index, unique constraint, enum, migration order และ seed data สรุปจาก spec ไฟล์ทั้งหมดไว้ในที่เดียว ใช้เป็น source of truth เดียวก่อนเขียน Prisma schema
 
@@ -1143,7 +1144,8 @@ CREATE TABLE cases (
   -- Review
   reviewed_by         UUID     REFERENCES users(id),
   reviewed_at         TIMESTAMPTZ,
-  review_note         TEXT,
+  review_note         TEXT,                            -- need_info: ข้อความถึงบริษัท · rejected: หมายเหตุภายใน (v4.72 I3-01)
+  client_reject_reason TEXT,                           -- v4.72 I3-01 เหตุผลไม่รับเคสที่แจ้งบริษัทไฟแนนซ์ (พอร์ทัลเห็นช่องเดียวนี้) — NULL บนเคสเก่า
   -- Close
   outcome             case_outcome,
   closed_at           TIMESTAMPTZ,

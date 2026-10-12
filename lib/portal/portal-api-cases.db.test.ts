@@ -406,6 +406,37 @@ suite('Portal-P4 — GET /api/portal/cases (`97` §6.1)', () => {
     expect(page2.items).toHaveLength(2)
   })
 
+  it('ไม่รับเคส: แสดงเฉพาะเหตุผลที่แจ้งบริษัท · หมายเหตุภายในไม่หลุด · เคสเก่าได้ข้อความกลาง (มติผู้ใช้ 12/10/2569 I3-01)', async () => {
+    const internal = `ซ้ำกับเคส SPC-${RUN} ของบริษัทอื่น`
+    const created = await insertCase({ company: co1, ref: `P4R-${RUN}-1`, status: 'rejected', reviewNote: internal })
+    await db().$executeRawUnsafe(
+      `UPDATE cases SET client_reject_reason = $$IMEI ซ้ำกับเคสที่ยังดำเนินการอยู่$$ WHERE id = '${created}'`,
+    )
+    const legacy = await insertCase({ company: co1, ref: `P4R-${RUN}-2`, status: 'rejected', reviewNote: internal })
+    try {
+      getRawSessionUserMock.mockResolvedValue(portalUser(co1, FULL_CAPS))
+      const { body } = await json(await casesGET(req(`/api/portal/cases?search=p4r-${RUN}&limit=100`), {}))
+      const items = dataOf<{ items: CaseItem[] }>(body).items
+      const byId = new Map(items.map((item) => [item.id, item]))
+      expect(byId.get(created)).toMatchObject({
+        statusDisplay: { code: 'declined' },
+        statusReason: 'IMEI ซ้ำกับเคสที่ยังดำเนินการอยู่',
+      })
+      expect(byId.get(legacy)?.statusReason).toBe('เคสนี้ไม่ผ่านการพิจารณา — ติดต่อเจ้าหน้าที่เพื่อสอบถามรายละเอียด')
+      expect(JSON.stringify(body)).not.toContain(internal)
+      deepScan(body)
+
+      for (const id of [created, legacy]) {
+        const detail = await json(await caseDetailGET(req(`/api/portal/cases/${id}`), { params: Promise.resolve({ id }) }))
+        expect(detail.status).toBe(200)
+        expect(JSON.stringify(detail.body)).not.toContain(internal)
+        deepScan(detail.body)
+      }
+    } finally {
+      await db().$executeRawUnsafe(`DELETE FROM cases WHERE id IN ('${created}', '${legacy}')`)
+    }
+  })
+
   it('ตัวกรองรับเฉพาะรหัสฝั่งบริษัท — raw enum → 400', async () => {
     getRawSessionUserMock.mockResolvedValue(portalUser(co1, FULL_CAPS))
     const response = await casesGET(req('/api/portal/cases?status=closed_success'), {})

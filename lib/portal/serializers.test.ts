@@ -13,6 +13,7 @@ import {
   serializePortalLotListItem,
   serializePortalTaxInvoice,
   portalCaseDeviceText,
+  PORTAL_DECLINED_GENERIC_REASON,
   type PortalCaseDetailSource,
 } from '@/lib/portal/serializers'
 
@@ -109,6 +110,7 @@ function caseRow(status: CaseStatus, extra: Partial<PortalCaseDetailSource> = {}
     assignmentStatus: null,
     trackingRound: 1,
     reviewNote: REVIEW_NOTE,
+    clientRejectReason: null,
     createdAt: CREATED,
     serviceFeeModelSnapshot: 'HYBRID',
     serviceFeeRatePct: '10.50',
@@ -279,8 +281,30 @@ describe('portal serializers — เนื้อหา', () => {
     const dto = serializePortalCaseListItem(caseRow('need_info'))
     expect(dto.statusDisplay.label).toBe('ขอข้อมูลเพิ่มเติม')
     expect(dto.statusReason).toBe(REVIEW_NOTE)
-    expect(serializePortalCaseListItem(caseRow('rejected')).statusReason).toBe(REVIEW_NOTE)
     expect(serializePortalCaseListItem(caseRow('approved')).statusReason).toBeNull()
+  })
+
+  it('ไม่รับเคส — แสดงเฉพาะเหตุผลที่แจ้งบริษัทไฟแนนซ์ · หมายเหตุภายในไม่หลุด (มติผู้ใช้ 12/10/2569 I3-01)', () => {
+    const internal = 'IMEI ตรงกับเคส SPC-0032 ของบริษัทอื่น'
+    const dto = serializePortalCaseListItem(
+      caseRow('rejected', { reviewNote: internal, clientRejectReason: 'IMEI ซ้ำกับเคสที่ยังดำเนินการอยู่' }),
+    )
+    expect(dto.statusDisplay.code).toBe('declined')
+    expect(dto.statusReason).toBe('IMEI ซ้ำกับเคสที่ยังดำเนินการอยู่')
+    expect(JSON.stringify(dto)).not.toContain(internal)
+    const detail = serializePortalCaseDetail(
+      caseRow('rejected', { reviewNote: internal, clientRejectReason: 'ข้อมูลสัญญาไม่ครบ' }),
+    )
+    expect(detail.statusReason).toBe('ข้อมูลสัญญาไม่ครบ')
+    expect(JSON.stringify(detail)).not.toContain(internal)
+  })
+
+  it('ไม่รับเคสก่อนแยกช่อง (ไม่มีเหตุผลถึงบริษัท) → ข้อความกลาง ไม่แสดงเหตุผลเดิม (I3-01)', () => {
+    for (const clientRejectReason of [null, '   ']) {
+      const dto = serializePortalCaseListItem(caseRow('rejected', { clientRejectReason }))
+      expect(dto.statusReason).toBe(PORTAL_DECLINED_GENERIC_REASON)
+      expect(JSON.stringify(dto)).not.toContain(REVIEW_NOTE)
+    }
   })
 
   it('วันที่ ISO UTC · recycleRound เฉพาะเคยรีไซเคิล', () => {

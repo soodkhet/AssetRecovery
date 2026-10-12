@@ -1945,7 +1945,12 @@ model Case {
   // Review
   reviewedBy String?   @map("reviewed_by") @db.Uuid
   reviewedAt DateTime? @map("reviewed_at") @db.Timestamptz(6)
+  /// มติผู้ใช้ 12/10/2569 I3-01 — เคส `rejected`: ช่องนี้เป็น **หมายเหตุภายใน** (ไม่บังคับ · พอร์ทัลไม่เห็น)
+  /// · `need_info` ยังเป็นข้อความขอข้อมูลเพิ่มที่บริษัทไฟแนนซ์เห็นตามเดิม
   reviewNote String?   @map("review_note")
+  /// มติผู้ใช้ 12/10/2569 I3-01 — เหตุผลไม่รับเคสที่แจ้งบริษัทไฟแนนซ์ (บังคับตอน reject · ช่องเดียวที่พอร์ทัลแสดง)
+  /// NULL บนเคสที่ปฏิเสธก่อนแยกช่อง ⇒ พอร์ทัลแสดงข้อความกลาง ไม่ใช้ `review_note` เดิม
+  clientRejectReason String? @map("client_reject_reason")
 
   // Close
   outcome  CaseOutcome?

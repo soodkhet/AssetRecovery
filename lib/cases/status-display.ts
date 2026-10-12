@@ -69,15 +69,32 @@ export function caseReviewActionLabel(status: string): string {
 export function caseReviewNoteNotice(
   status: string,
   reviewNote: string | null,
+  clientRejectReason: string | null = null,
 ): { tone: 'warning' | 'error'; title: string; message: string } | null {
   const note = reviewNote?.trim() ?? ''
+  if (status === 'rejected') return rejectedNotice(clientRejectReason?.trim() ?? '', note)
   if (note === '') return null
-  if (status === 'rejected') return { tone: 'error', title: 'เหตุผลที่ไม่รับเคส', message: note }
   if (status === 'need_info') return { tone: 'warning', title: 'ผู้ตรวจขอข้อมูลเพิ่ม', message: note }
   if (status === 'draft' || status === 'pending_review') {
     return { tone: 'warning', title: 'ผู้ตรวจขอข้อมูลเพิ่ม (รอบก่อน)', message: note }
   }
   return null
+}
+
+/**
+ * มติผู้ใช้ 12/10/2569 I3-01 — เคสไม่รับแยก 2 ช่อง: เหตุผลที่แจ้งบริษัทไฟแนนซ์ + หมายเหตุภายใน (`review_note`)
+ * · เคสที่ปฏิเสธก่อนแยกช่อง (ไม่มีช่องถึงลูกค้า) — `review_note` เดิมคือเหตุผลทั้งหมด แสดงเป็นเหตุผลตามเดิม
+ */
+function rejectedNotice(
+  clientReason: string,
+  internalNote: string,
+): { tone: 'error'; title: string; message: string } | null {
+  if (clientReason === '') {
+    return internalNote === '' ? null : { tone: 'error', title: 'เหตุผลที่ไม่รับเคส', message: internalNote }
+  }
+  const lines = [`แจ้งบริษัทไฟแนนซ์: ${clientReason}`]
+  if (internalNote !== '') lines.push(`หมายเหตุภายใน: ${internalNote}`)
+  return { tone: 'error', title: 'เหตุผลที่ไม่รับเคส', message: lines.join('\n') }
 }
 
 /** กลุ่มสีของสถานะ — สถานะที่ไม่รู้จักตกกลุ่มเทากลาง (เหมือน mapper กลาง) */

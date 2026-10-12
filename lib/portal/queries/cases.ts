@@ -90,6 +90,7 @@ const listSelect = {
   status: true,
   trackingRound: true,
   reviewNote: true,
+  clientRejectReason: true,
   createdAt: true,
   assignments: currentAssignmentSelect,
 } as const satisfies Prisma.CaseSelect

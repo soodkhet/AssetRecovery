@@ -84,4 +84,16 @@ describe('caseReviewNoteNotice (staging E-003)', () => {
     expect(caseReviewNoteNotice('need_info', '  ')).toBeNull()
     expect(caseReviewNoteNotice('draft', null)).toBeNull()
   })
+
+  it('ไม่รับเคสแยก 2 ช่อง — พนักงานเห็นทั้งเหตุผลที่แจ้งบริษัทและหมายเหตุภายใน (มติผู้ใช้ 12/10/2569 I3-01)', () => {
+    expect(caseReviewNoteNotice('rejected', 'ซ้ำเคสบริษัทอื่น', 'IMEI ซ้ำ')).toEqual({
+      tone: 'error',
+      title: 'เหตุผลที่ไม่รับเคส',
+      message: 'แจ้งบริษัทไฟแนนซ์: IMEI ซ้ำ\nหมายเหตุภายใน: ซ้ำเคสบริษัทอื่น',
+    })
+    expect(caseReviewNoteNotice('rejected', null, 'IMEI ซ้ำ')?.message).toBe('แจ้งบริษัทไฟแนนซ์: IMEI ซ้ำ')
+    // เคสที่ปฏิเสธก่อนแยกช่อง — review_note เดิมคือเหตุผลทั้งหมด
+    expect(caseReviewNoteNotice('rejected', 'เหตุผลเดิม', null)?.message).toBe('เหตุผลเดิม')
+    expect(caseReviewNoteNotice('rejected', null, null)).toBeNull()
+  })
 })

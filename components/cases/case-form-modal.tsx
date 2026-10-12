@@ -160,7 +160,7 @@ export function CaseFormModal({
 
   const isEdit = editing !== null
   // เหตุผลที่ผู้ตรวจขอข้อมูลเพิ่ม — ธุรการต้องเห็นตอนเปิดแก้ (staging E-003)
-  const reviewNotice = editing === null ? null : caseReviewNoteNotice(editing.status, editing.reviewNote)
+  const reviewNotice = editing === null ? null : caseReviewNoteNotice(editing.status, editing.reviewNote, editing.clientRejectReason)
   const identityKind = identityFieldOf(form.debtorNationality)
   const duplicate = readDuplicateCase(formError)
 
