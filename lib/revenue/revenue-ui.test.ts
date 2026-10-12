@@ -174,4 +174,21 @@ describe('mytester G-12 — ยอดแถวรอบวางบิล = ย�
     expect(billingDocumentedAmountNote({ totalSatang: 338_007, documentedTotalSatang: 348_707 })).toContain('หลังใบเพิ่มหนี้')
     expect(billingDocumentedAmountNote({ totalSatang: 338_007, documentedTotalSatang: 338_007 })).toBeNull()
   })
+
+  it('mytester3 LR3-04 — ป้ายตามสาเหตุจริง: ลดส่วนที่ยังไม่ออกใบ = "หลังปรับลด" (ไม่ใช่ใบลดหนี้)', () => {
+    const changes = (creditNoteSatang: number, debitNoteSatang: number, uninvoicedReductionSatang: number) => ({
+      creditNoteSatang,
+      debitNoteSatang,
+      uninvoicedReductionSatang,
+    })
+    expect(
+      billingDocumentedAmountNote({ totalSatang: 1_498_000, documentedTotalSatang: 1_391_000, documentedChanges: changes(0, 0, 107_000) }),
+    ).toBe('หลังปรับลด · ตามใบแจ้งหนี้ ฿14,980.00')
+    expect(
+      billingDocumentedAmountNote({ totalSatang: 100_000, documentedTotalSatang: 80_000, documentedChanges: changes(10_000, 0, 10_000) }),
+    ).toBe('หลังปรับลด + ใบลดหนี้ · ตามใบแจ้งหนี้ ฿1,000.00')
+    expect(
+      billingDocumentedAmountNote({ totalSatang: 100_000, documentedTotalSatang: 110_000, documentedChanges: changes(0, 10_000, 0) }),
+    ).toContain('หลังใบเพิ่มหนี้')
+  })
 })

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { buildRevenueReconciliation, pendingReceiptInvoiceSatang } from '@/lib/reports/finance/revenue-reconciliation'
+import {
+  buildRevenueReconciliation,
+  pendingReceiptBreakdown,
+  pendingReceiptInvoiceSatang,
+} from '@/lib/reports/finance/revenue-reconciliation'
 
 /** U44 — บรรทัดกระทบยอดรายงานรายได้ ↔ ใบกำกับภาษี (ยอดก่อน VAT · satang) */
 
@@ -163,3 +167,62 @@ describe('mytester3 J3-03 — ใบกำกับเมื่อรับช�
   })
 })
 
+
+describe('mytester3 LR3-04 — แยก "รับชำระแล้ว รอออกใบ" · ส่วนที่ปรับลดก่อนออกใบไม่ปน "รอรับชำระ"', () => {
+  it('BL-2569-011: รับ 1,015 + ค่าธรรมเนียม ยังไม่ออกใบ ⇒ บรรทัด "รับชำระแล้ว รอออกใบ" ไม่ใช่ "รอรับชำระ" · ลงตัว', () => {
+    const result = buildRevenueReconciliation({
+      reportTotalSatang: 100_000,
+      revenues: [{ grossSatang: 100_000, invoiced: true }],
+      adjustments: [],
+      notes: [],
+      invoicedBatches: [
+        {
+          batchBeforeVatSatang: 100_000,
+          issuedBeforeVatSatang: 5_000,
+          inRangeGrossSatang: 100_000,
+          receivedNotInvoicedBeforeVatSatang: 97_000,
+        },
+      ],
+    })
+    expect(lineOf(result, 'receivedNotInvoiced')).toBe(95_000)
+    expect(result.lines.some((line) => line.key === 'pendingReceipt')).toBe(false)
+    expect(result.balanced).toBe(true)
+  })
+
+  it('BL-2569-009: ลด 1,000 ก่อนออกใบ (ไม่ต้องออกใบลดหนี้) ⇒ ไม่ขึ้นรอรับชำระ/รอใบลดหนี้ · ลงตัว + หมายเหตุครอบกรณีไม่ต้องออก', () => {
+    const result = buildRevenueReconciliation({
+      reportTotalSatang: 1_200_000 - 100_000,
+      revenues: [{ grossSatang: 1_200_000, invoiced: true }],
+      adjustments: [{ adjustmentType: 'decrease', amountSatang: 100_000, invoiced: true, hasActiveNote: false }],
+      notes: [],
+      invoicedBatches: [
+        {
+          batchBeforeVatSatang: 1_200_000,
+          issuedBeforeVatSatang: 1_100_000,
+          inRangeGrossSatang: 1_200_000,
+          uninvoicedReductionBeforeVatSatang: 100_000,
+        },
+      ],
+    })
+    expect(lineOf(result, 'invoiced')).toBe(1_100_000)
+    expect(result.lines.some((line) => line.key === 'pendingReceipt')).toBe(false)
+    expect(lineOf(result, 'awaitingCredit')).toBe(0)
+    expect(result.balanced).toBe(true)
+    expect(result.note).toContain('ไม่ต้องออกใบลดหนี้')
+  })
+
+  it('สามส่วนรวมเท่ายอดยังไม่ออกใบเดิมทุกสตางค์ (รวมรอบคร่อมช่วง)', () => {
+    const batches = [
+      {
+        batchBeforeVatSatang: 300_000,
+        issuedBeforeVatSatang: 100_001,
+        inRangeGrossSatang: 100_000,
+        uninvoicedReductionBeforeVatSatang: 10_001,
+        receivedNotInvoicedBeforeVatSatang: 50_003,
+      },
+    ]
+    const parts = pendingReceiptBreakdown(batches)
+    expect(parts.receivedSatang + parts.awaitingPaymentSatang + parts.reductionSatang).toBe(pendingReceiptInvoiceSatang(batches))
+    expect(Object.values(parts).every((value) => Number.isInteger(value) && value >= 0)).toBe(true)
+  })
+})

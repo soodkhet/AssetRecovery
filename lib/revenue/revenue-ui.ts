@@ -96,14 +96,30 @@ export const REVENUE_FEE_MODEL_LABEL: Readonly<Record<ServiceFeeModel, string>> 
 }
 
 /**
- * mytester G-12 — ยอดของแถวรอบวางบิล = ยอดตามเอกสาร (ใบแจ้งหนี้ − ใบลดหนี้ + ใบเพิ่มหนี้ · `19` §8) ตัวเดียวกับพอร์ทัล
- * บรรทัดรองบอกยอดใบแจ้งหนี้เดิมเมื่อมีใบลด/เพิ่มหนี้ · ไม่ต่างกัน = `null`
+ * mytester G-12 — ยอดของแถวรอบวางบิล = ยอดตามเอกสาร (ใบแจ้งหนี้ − ใบลดหนี้ + ใบเพิ่มหนี้ − ส่วนที่ปรับลดก่อนออกใบ ·
+ * `19` §8) ตัวเดียวกับพอร์ทัล · บรรทัดรองบอกยอดใบแจ้งหนี้เดิม · ไม่ต่างกัน = `null`
+ * · mytester3 LR3-04 — ป้ายตามสาเหตุจริง: "หลังปรับลด" (ลดส่วนที่ยังไม่ออกใบ — ไม่มีใบลดหนี้) / "หลังใบลดหนี้" /
+ *   "หลังใบเพิ่มหนี้" (หลายสาเหตุต่อกันด้วย " + ") · ไม่ส่ง `documentedChanges` ⇒ ดูจากทิศของผลต่าง (พฤติกรรมเดิม)
  */
 export function billingDocumentedAmountNote(
-  batch: Pick<BillingBatchDto, 'totalSatang' | 'documentedTotalSatang'>,
+  batch: Pick<BillingBatchDto, 'totalSatang' | 'documentedTotalSatang'> & Partial<Pick<BillingBatchDto, 'documentedChanges'>>,
 ): string | null {
   if (batch.documentedTotalSatang === batch.totalSatang) return null
-  const direction = batch.documentedTotalSatang < batch.totalSatang ? 'หลังใบลดหนี้' : 'หลังใบเพิ่มหนี้'
+  const changes = batch.documentedChanges
+  const causes =
+    changes === undefined
+      ? []
+      : [
+          ...(changes.uninvoicedReductionSatang > 0 ? ['ปรับลด'] : []),
+          ...(changes.creditNoteSatang > 0 ? ['ใบลดหนี้'] : []),
+          ...(changes.debitNoteSatang > 0 ? ['ใบเพิ่มหนี้'] : []),
+        ]
+  const direction =
+    causes.length > 0
+      ? `หลัง${causes.join(' + ')}`
+      : batch.documentedTotalSatang < batch.totalSatang
+        ? 'หลังใบลดหนี้'
+        : 'หลังใบเพิ่มหนี้'
   return `${direction} · ตามใบแจ้งหนี้ ${fmtSatangSymbol(batch.totalSatang)}`
 }
 

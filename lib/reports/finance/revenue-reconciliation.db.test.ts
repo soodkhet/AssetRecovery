@@ -206,6 +206,47 @@ suite('U44 — บรรทัดกระทบยอด F2 กับใบก�
     expect(line(unbalanced, 'difference')).toBe(3_000)
   })
 
+  it('mytester3 LR3-04 — ใบกำกับเมื่อรับชำระ: แยก "รับชำระแล้ว รอออกใบ" · ส่วนที่ลดก่อนออกใบไม่ขึ้นรอรับชำระ/รอใบลดหนี้ · ผลต่างเดิมไม่เปลี่ยน', async () => {
+    const before = await run()
+    const tx = db()
+    const batch = await tx.$queryRawUnsafe<{ id: string }[]>(`
+      INSERT INTO billing_batches (organization_id, company_id, period, status, total_satang, due_date, created_by)
+      VALUES ('${ORG_ID}', '${COMPANY_ID}', 'สิงหาคม 2569', 'partially_paid', 214000, '2026-09-30', '${USER_ID}') RETURNING id
+    `)
+    const batchId = batch[0]?.id ?? ''
+    await seedRevenue(100_000, batchId)
+    const second = await seedRevenue(100_000, batchId)
+    const sales = await tx.$queryRawUnsafe<{ id: string }[]>(`
+      INSERT INTO sales_records (organization_id, period_id, billing_batch_id, company_id, total_before_vat_satang, vat_satang, total_satang, created_by)
+      VALUES ('${ORG_ID}', '${periodId}', '${batchId}', '${COMPANY_ID}', 200000, 14000, 214000, '${USER_ID}') RETURNING id
+    `)
+    const salesId = sales[0]?.id ?? ''
+    // ใบเสร็จฯ ออกแล้ว 1,000 ก่อน VAT
+    const fixture = taxInvoiceFixtureValues(salesId)
+      .replace(`'tax_invoice'`, `'receipt_tax_invoice'`)
+      .replace(`(SELECT s.total_before_vat_satang FROM sales_records s WHERE s.id = '${salesId}')`, '100000')
+      .replace(`(SELECT s.vat_satang FROM sales_records s WHERE s.id = '${salesId}')`, '7000')
+      .replace(`(SELECT s.total_satang FROM sales_records s WHERE s.id = '${salesId}')`, '107000')
+    await tx.$executeRawUnsafe(`
+      INSERT INTO tax_invoices (organization_id, sales_record_id, invoice_number, invoice_date, buyer_branch_code, seller_branch_code, created_by,
+                                ${TAX_INVOICE_FIXTURE_COLUMNS})
+      VALUES ('${ORG_ID}', '${salesId}', 'INVR-${TAG}', '2026-08-12', '00000', '00000', '${USER_ID}', ${fixture})
+    `)
+    // ลด 200 ในส่วนที่ยังไม่ออกใบ (ไม่ต้องออกใบลดหนี้) · รับเงินอีก 535 (ก่อน VAT 500) ยังไม่ออกใบ
+    await seedAdjustment(second, 'decrease', 20_000)
+    await tx.$executeRawUnsafe(`
+      INSERT INTO cash_receipts (organization_id, period_id, billing_batch_id, amount_satang, wht_withheld_by_customer_satang,
+                                 received_date, created_by)
+      VALUES ('${ORG_ID}', '${periodId}', '${batchId}', 53500, 0, '2026-08-13', '${USER_ID}')
+    `)
+
+    const after = await run()
+    expect(line(after, 'receivedNotInvoiced')).toBe(50_000)
+    expect(line(after, 'pendingReceipt')).toBe(30_000)
+    expect(line(after, 'awaitingCredit')).toBe(line(before, 'awaitingCredit'))
+    expect(after.reconciliation?.differenceSatang).toBe(before.reconciliation?.differenceSatang)
+  })
+
   it('ผู้ที่เห็นเฉพาะทีมไม่ได้บรรทัดกระทบยอด (เอกสารออกระดับรอบวางบิล)', async () => {
     const report = findReport('revenue-summary')
     if (report === null) throw new Error('ไม่รู้จักรายงาน')

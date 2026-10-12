@@ -1,5 +1,5 @@
 import { netAfterAdjustments } from '@/lib/adjustments/adjustment'
-import { sumSatang } from '@/lib/finance/satang'
+import { sumSatang, vatIncludedInSatang } from '@/lib/finance/satang'
 import { caseStatusLabel } from '@/lib/cases/status-display'
 import { endOfBangkokDay, startOfBangkokDay } from '@/lib/format/datetime'
 import { bangkokBusinessDate } from '@/lib/field/expense-queries'
@@ -8,6 +8,7 @@ import type {
   AdjustmentType,
   BillingBatchStatus,
 } from '@/lib/generated/prisma/enums'
+import { documentedAmountsForBatches } from '@/lib/portal/documented-amounts'
 import { prisma } from '@/lib/prisma'
 import { LEGACY_WHT_POLICY } from '@/lib/settings/wht-policy'
 import { ReportError } from '@/lib/reports/errors'
@@ -47,6 +48,7 @@ import {
 } from '@/lib/reports/finance/revenue-summary-report'
 import {
   buildRevenueReconciliation,
+  type ReconciliationInvoicedBatch,
   type RevenueReconciliationInput,
 } from '@/lib/reports/finance/revenue-reconciliation'
 import type { ReportData } from '@/lib/reports/payload'
@@ -414,6 +416,52 @@ export async function loadRevenueFailCases(
 }
 
 /**
+ * mytester3 LR3-04 — ต่อรอบ: ส่วนที่ปรับลดก่อนออกใบ (ก่อน VAT · `uninvoicedReductionOf()` ปัจจุบัน) และเงินรับ
+ * ลงวันไม่หลังวันสิ้นช่วงที่ยังไม่มีใบเสร็จฯ active ลงวันไม่หลังวันสิ้นช่วง (แปลงก่อน VAT ด้วย `vatIncludedInSatang()` อัตราของรอบ)
+ */
+async function loadPendingReceiptExtras(
+  organizationId: string,
+  batchIds: readonly string[],
+  endDate: Date,
+): Promise<Map<string, Pick<ReconciliationInvoicedBatch, 'uninvoicedReductionBeforeVatSatang' | 'receivedNotInvoicedBeforeVatSatang'>>> {
+  const result = new Map<string, Pick<ReconciliationInvoicedBatch, 'uninvoicedReductionBeforeVatSatang' | 'receivedNotInvoicedBeforeVatSatang'>>()
+  if (batchIds.length === 0) return result
+  const [documented, receipts, rates] = await Promise.all([
+    // ยอดปัจจุบัน (ไม่ใช้ asOf) — ชุดเดียวกับบรรทัด Adjustment ที่นับ Adjustment อนุมัติแล้ว ณ ตอนนี้ ⇒ หักกันได้พอดี
+    documentedAmountsForBatches(organizationId, batchIds),
+    prisma.cashReceipt.findMany({
+      where: {
+        organizationId,
+        billingBatchId: { in: [...batchIds] },
+        receivedDate: { lte: endDate },
+        taxInvoices: { none: { status: 'active', invoiceDate: { lte: endDate } } },
+      },
+      select: { billingBatchId: true, amountSatang: true, whtWithheldByCustomerSatang: true },
+    }),
+    prisma.revenue.findMany({
+      where: { organizationId, billingBatchId: { in: [...batchIds] }, deletedAt: null },
+      select: { billingBatchId: true, vatRatePctUsed: true },
+      distinct: ['billingBatchId'],
+    }),
+  ])
+  const rateOf = new Map(rates.map((row) => [row.billingBatchId, row.vatRatePctUsed.toNumber()]))
+  for (const batchId of batchIds) {
+    const rate = rateOf.get(batchId) ?? 0
+    const received = receipts
+      .filter((row) => row.billingBatchId === batchId)
+      .reduce((sum, row) => {
+        const paid = row.amountSatang + row.whtWithheldByCustomerSatang
+        return sum + paid - vatIncludedInSatang(paid, rate)
+      }, 0)
+    result.set(batchId, {
+      uninvoicedReductionBeforeVatSatang: documented.get(batchId)?.uninvoicedReduction.beforeVatSatang ?? 0,
+      receivedNotInvoicedBeforeVatSatang: received,
+    })
+  }
+  return result
+}
+
+/**
  * ข้อมูลของบรรทัดกระทบยอด F2 ↔ ใบกำกับภาษี (มติ PO 05/10/2569 U44) — รายได้ในช่วงเดียวกับรายงาน
  * + Adjustment ที่อนุมัติแล้วของรายได้/รอบวางบิลนั้น + ใบลดหนี้/ใบเพิ่มหนี้ active ของใบกำกับในรอบเหล่านั้น
  * (สูตรอยู่ที่ `buildRevenueReconciliation()` — ที่นี่แค่ query · ไม่กรองทีม: ผู้เรียกใช้เฉพาะมุมมององค์กร)
@@ -483,7 +531,7 @@ export async function loadRevenueReconciliationInput(
   })
 
   // mytester3 J3-03 — ใบกำกับที่ออกจริงต่อรอบ (active · ลงวันที่ไม่หลังวันสิ้นช่วง) เทียบใบแจ้งหนี้ทั้งรอบ ⇒ แยกส่วน "รอรับชำระ"
-  const invoicedBatchMap = new Map<string, { batchBeforeVatSatang: number; issuedBeforeVatSatang: number; inRangeGrossSatang: number }>()
+  const invoicedBatchMap = new Map<string, ReconciliationInvoicedBatch>()
   for (const invoice of invoices) {
     const batchId = invoice.salesRecord.billingBatchId
     if (!invoicedBatches.has(batchId)) continue
@@ -501,6 +549,15 @@ export async function loadRevenueReconciliationInput(
   for (const row of revenues) {
     const current = row.billingBatchId === null ? undefined : invoicedBatchMap.get(row.billingBatchId)
     if (current !== undefined) current.inRangeGrossSatang += row.grossSatang
+  }
+  // mytester3 LR3-04 — ส่วนที่ปรับลดก่อนออกใบ (ไม่ต้องออก) + เงินรับที่ยังไม่ออกใบเสร็จฯ ณ วันสิ้นช่วง ⇒ แยกบรรทัดไม่ปน "รอรับชำระ"
+  const pendingIds = [...invoicedBatchMap.entries()]
+    .filter(([, batch]) => batch.batchBeforeVatSatang > batch.issuedBeforeVatSatang)
+    .map(([batchId]) => batchId)
+  const pendingExtras = await loadPendingReceiptExtras(organizationId, pendingIds, range.endDate)
+  for (const [batchId, extra] of pendingExtras) {
+    const current = invoicedBatchMap.get(batchId)
+    if (current !== undefined) invoicedBatchMap.set(batchId, { ...current, ...extra })
   }
 
   return {

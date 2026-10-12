@@ -12,9 +12,11 @@ import type { ReportReconciliation, ReportReconciliationLine } from '@/lib/repor
  *
  * ```
  *   ยอดตามใบกำกับภาษี (ก่อน VAT — ใบที่ออกจริง)
+ * + รับชำระแล้ว รอออกใบกำกับภาษี                (เงินรับที่ยังไม่ออกใบเสร็จฯ — mytester3 LR3-04)
  * + ยังไม่ออกใบกำกับ (รอรับชำระ)                 (ใบกำกับเมื่อรับชำระ — mytester3 J3-03)
  * − ใบลดหนี้ + ใบเพิ่มหนี้                       (เอกสาร active)
  * − Adjustment ลดยอดที่รอใบลดหนี้ + Adjustment เพิ่มยอดที่รอใบเพิ่มหนี้
+ *   (ส่วนที่ลดก่อนออกใบ — ไม่ต้องออกใบลดหนี้ — หักออกจากทั้งส่วนที่ยังไม่ออกใบและบรรทัดนี้ด้วยยอดเดียวกัน ⇒ ไม่แสดง · LR3-04)
  * + รายได้ที่ยังไม่ออกใบกำกับ ± Adjustment ของรายได้นั้น
  * = ยอดคาดหมาย  →  เทียบกับยอดรายงาน (ไม่ลง ⇒ แสดงผลต่าง)
  * ```
@@ -64,6 +66,50 @@ export interface ReconciliationInvoicedBatch {
   issuedBeforeVatSatang: number
   /** ผลรวมยอดก่อน VAT ของรายได้ในช่วงรายงานที่อยู่ในรอบนี้ */
   inRangeGrossSatang: number
+  /**
+   * mytester3 LR3-04 — ส่วนที่ลดในมูลค่าที่ยังไม่ออกใบ (ก่อน VAT · `uninvoicedReductionOf()`) — ไม่ต้องออกใบ/ใบลดหนี้ · ไม่ส่ง = 0
+   */
+  uninvoicedReductionBeforeVatSatang?: number
+  /** mytester3 LR3-04 — เงินรับที่ยังไม่ออกใบเสร็จฯ (ก่อน VAT) ณ วันสิ้นช่วง · ไม่ส่ง = 0 */
+  receivedNotInvoicedBeforeVatSatang?: number
+}
+
+/** ส่วนของรอบที่ตกในช่วงรายงาน (สัดส่วนรายได้ในช่วง ปัดลง) — ใช้สูตรเดียวทุกบรรทัด */
+function inRangeShare(amount: number, batch: ReconciliationInvoicedBatch): number {
+  if (amount <= 0 || batch.inRangeGrossSatang <= 0) return 0
+  if (batch.inRangeGrossSatang >= batch.batchBeforeVatSatang) return amount
+  return Math.floor((amount * batch.inRangeGrossSatang) / batch.batchBeforeVatSatang)
+}
+
+export interface PendingReceiptBreakdown {
+  /** รับชำระแล้ว รอออกใบกำกับภาษี */
+  receivedSatang: number
+  /** ยังไม่ออกใบกำกับ (รอรับชำระ) */
+  awaitingPaymentSatang: number
+  /** ส่วนที่ลดก่อนออกใบ (ไม่ต้องออกใบ) */
+  reductionSatang: number
+}
+
+/**
+ * mytester3 LR3-04 — แยกมูลค่าที่ยังไม่ออกใบของรอบ (= {@link pendingReceiptInvoiceSatang} ทุกสตางค์) เป็น 3 ส่วน:
+ * ส่วนที่ปรับลดก่อนออกใบ (ไม่ต้องออก) → รับชำระแล้วรอออกใบ (ไม่เกินที่เหลือ) → รอรับชำระ (ที่เหลือ)
+ */
+export function pendingReceiptBreakdown(batches: readonly ReconciliationInvoicedBatch[]): PendingReceiptBreakdown {
+  let receivedSatang = 0
+  let awaitingPaymentSatang = 0
+  let reductionSatang = 0
+  for (const batch of batches) {
+    const pending = Math.max(0, batch.batchBeforeVatSatang - batch.issuedBeforeVatSatang)
+    const reduction = Math.min(pending, Math.max(0, batch.uninvoicedReductionBeforeVatSatang ?? 0))
+    const received = Math.min(pending - reduction, Math.max(0, batch.receivedNotInvoicedBeforeVatSatang ?? 0))
+    const total = inRangeShare(pending, batch)
+    const reductionShare = Math.min(total, inRangeShare(reduction, batch))
+    const receivedShare = Math.min(total - reductionShare, inRangeShare(received, batch))
+    reductionSatang += reductionShare
+    receivedSatang += receivedShare
+    awaitingPaymentSatang += total - reductionShare - receivedShare
+  }
+  return { receivedSatang, awaitingPaymentSatang, reductionSatang }
 }
 
 export interface RevenueReconciliationInput {
@@ -106,6 +152,9 @@ export function buildRevenueReconciliation(input: RevenueReconciliationInput): R
     pendingReceiptInvoiceSatang(input.invoicedBatches ?? []),
   )
   const invoicedSatang = invoicedRevenueSatang - pendingReceiptSatang
+  // mytester3 LR3-04 — แยก "รับชำระแล้ว รอออกใบ" ออกจาก "รอรับชำระ" · ส่วนที่ปรับลดก่อนออกใบหักออกจากทั้งฝั่งยังไม่ออกใบ
+  // และบรรทัด Adjustment ลดยอดด้วยยอดเดียวกัน (ไม่เกินทั้งสองฝั่ง) ⇒ ผลรวมคงเดิม กระทบยอดลงตัวเหมือนเดิม
+  const breakdown = pendingReceiptBreakdown(input.invoicedBatches ?? [])
   const uninvoicedSatang = sumSatang(
     input.revenues.filter((row) => !row.invoiced).map((row) => row.grossSatang),
     'รายได้ที่ยังไม่ออกใบกำกับ',
@@ -123,6 +172,10 @@ export function buildRevenueReconciliation(input: RevenueReconciliationInput): R
     awaiting.filter((row) => row.adjustmentType === 'decrease').map((row) => row.amountSatang),
     'รอใบลดหนี้',
   )
+  const reductionSatang = Math.min(breakdown.reductionSatang, pendingReceiptSatang, awaitingCreditSatang)
+  const pendingReceivedSatang = Math.min(breakdown.receivedSatang, pendingReceiptSatang - reductionSatang)
+  const pendingAwaitingPaymentSatang = pendingReceiptSatang - reductionSatang - pendingReceivedSatang
+  const awaitingCreditNoteSatang = awaitingCreditSatang - reductionSatang
   const awaitingDebitSatang = sumSatang(
     awaiting.filter((row) => row.adjustmentType === 'increase').map((row) => row.amountSatang),
     'รอใบเพิ่มหนี้',
@@ -136,10 +189,11 @@ export function buildRevenueReconciliation(input: RevenueReconciliationInput): R
 
   const expectedSatang =
     invoicedSatang +
-    pendingReceiptSatang -
+    pendingReceivedSatang +
+    pendingAwaitingPaymentSatang -
     creditNotesSatang +
     debitNotesSatang -
-    awaitingCreditSatang +
+    awaitingCreditNoteSatang +
     awaitingDebitSatang +
     uninvoicedSatang +
     uninvoicedAdjustmentSatang
@@ -149,18 +203,26 @@ export function buildRevenueReconciliation(input: RevenueReconciliationInput): R
     { key: 'invoiced', label: 'ยอดตามใบกำกับภาษี', sign: '+', amountSatang: invoicedSatang },
   ]
   // mytester3 J3-03 — แสดงเฉพาะเมื่อมียอด (ใบกำกับเมื่อรับชำระของรอบที่ยังรับเงินไม่ครบ)
-  if (pendingReceiptSatang !== 0) {
+  if (pendingReceivedSatang !== 0) {
+    lines.push({
+      key: 'receivedNotInvoiced',
+      label: 'บวก รับชำระแล้ว รอออกใบกำกับภาษี',
+      sign: '+',
+      amountSatang: pendingReceivedSatang,
+    })
+  }
+  if (pendingAwaitingPaymentSatang !== 0) {
     lines.push({
       key: 'pendingReceipt',
       label: 'บวก ยังไม่ออกใบกำกับภาษี (รอรับชำระ)',
       sign: '+',
-      amountSatang: pendingReceiptSatang,
+      amountSatang: pendingAwaitingPaymentSatang,
     })
   }
   lines.push(
     { key: 'creditNotes', label: 'หัก ใบลดหนี้', sign: '-', amountSatang: creditNotesSatang },
     { key: 'debitNotes', label: 'บวก ใบเพิ่มหนี้', sign: '+', amountSatang: debitNotesSatang },
-    { key: 'awaitingCredit', label: 'หัก Adjustment ลดยอดที่ไม่มีใบลดหนี้ (รอออก หรือไม่ต้องออก)', sign: '-', amountSatang: awaitingCreditSatang },
+    { key: 'awaitingCredit', label: 'หัก Adjustment ลดยอดที่รอใบลดหนี้', sign: '-', amountSatang: awaitingCreditNoteSatang },
     { key: 'awaitingDebit', label: 'บวก Adjustment เพิ่มยอดที่รอใบเพิ่มหนี้', sign: '+', amountSatang: awaitingDebitSatang },
   )
   // บรรทัดของรายได้ที่ยังไม่ออกใบกำกับแสดงเฉพาะเมื่อมียอด — ปกติเป็นรายได้รอวางบิล
@@ -192,7 +254,8 @@ export function buildRevenueReconciliation(input: RevenueReconciliationInput): R
     balanced: differenceSatang === 0,
     note:
       differenceSatang === 0
-        ? 'ยอดรายงานต่างจากใบกำกับภาษีเฉพาะ Adjustment ที่ยังรอเอกสารจากสำนักงานบัญชี'
+        ? 'ยอดรายงานต่างจากใบกำกับภาษีเฉพาะมูลค่าที่ยังไม่ถึงกำหนดออกใบ (รอรับชำระ/รับชำระแล้วรอออกใบ) และ Adjustment ' +
+          'ที่ยังรอเอกสารจากสำนักงานบัญชี · ส่วนที่ปรับลดก่อนออกใบกำกับภาษีไม่ต้องออกใบลดหนี้ จึงไม่มีบรรทัดแยก'
         : 'กระทบยอดไม่ลง — อาจมีใบลดหนี้/ใบเพิ่มหนี้ที่ไม่ได้อ้าง Adjustment หรือยอดเอกสารไม่เท่ายอด Adjustment ' +
           'ให้ตรวจสอบกับฝ่ายบัญชี',
   }

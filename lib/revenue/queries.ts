@@ -51,13 +51,15 @@ import type {
   ArAgingQuery,
   RevenueListQuery,
 } from '@/lib/revenue/schemas'
-import type {
-  ArAgingCompanyDto,
-  ArAgingReportDto,
-  BillingBatchDetailDto,
-  BillingBatchDto,
-  BillingBatchPreviewDto,
-  RevenueDto,
+import {
+  NO_DOCUMENTED_CHANGES,
+  type ArAgingCompanyDto,
+  type ArAgingReportDto,
+  type BillingBatchDetailDto,
+  type BillingDocumentedChanges,
+  type BillingBatchDto,
+  type BillingBatchPreviewDto,
+  type RevenueDto,
 } from '@/lib/revenue/types'
 import { cycleCoversCompany, resolveDueDate } from '@/lib/settings/cycles'
 import { loadActiveCycleForScope, resolveCompanyBillingCycle } from '@/lib/settings/queries/cycles'
@@ -238,7 +240,16 @@ async function documentedArTotals(
       const amounts = documented.get(row.id)
       return [
         row.id,
-        { arTotalSatang: amounts?.documented.totalSatang ?? row.totalSatang, notes: customerWhtNotesOf(amounts) },
+        {
+          arTotalSatang: amounts?.documented.totalSatang ?? row.totalSatang,
+          notes: customerWhtNotesOf(amounts),
+          // mytester3 LR3-04 — ส่วนประกอบของผลต่างจากใบแจ้งหนี้ (ป้าย "หลังใบลดหนี้"/"หลังปรับลด"/"หลังใบเพิ่มหนี้")
+          changes: {
+            creditNoteSatang: amounts?.creditNotes.totalSatang ?? 0,
+            debitNoteSatang: amounts?.debitNotes.totalSatang ?? 0,
+            uninvoicedReductionSatang: amounts?.uninvoicedReduction.totalSatang ?? 0,
+          },
+        },
       ] as const
     }),
   )
@@ -248,6 +259,7 @@ async function documentedArTotals(
 interface DocumentedBatchTotals {
   arTotalSatang: number
   notes: CustomerWhtNoteAmounts | undefined
+  changes: BillingDocumentedChanges
 }
 
 function toBatchDto(
@@ -277,6 +289,7 @@ function toBatchDto(
     status: row.status,
     totalSatang: row.totalSatang,
     documentedTotalSatang: arTotalSatang,
+    documentedChanges: documented?.changes ?? NO_DOCUMENTED_CHANGES,
     receivedSatang: row.receivedSatang,
     whtWithheldByCustomerSatang: row.whtWithheldByCustomerSatang,
     bankFeeWrittenOffSatang: row.bankFeeWrittenOffSatang,

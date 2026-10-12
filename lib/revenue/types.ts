@@ -48,6 +48,8 @@ export interface BillingBatchDto {
   totalSatang: number
   /** mytester G-12 — ยอดตามเอกสาร (ใบแจ้งหนี้ − ใบลดหนี้ + ใบเพิ่มหนี้ · `19` §8) ตัวเดียวกับพอร์ทัล/AR */
   documentedTotalSatang: number
+  /** mytester3 LR3-04 — ผลต่างระหว่างใบแจ้งหนี้กับยอดตามเอกสารมาจากอะไร (รวม VAT) */
+  documentedChanges: BillingDocumentedChanges
   receivedSatang: number
   /** A1 — WHT ที่บริษัทไฟแนนซ์หักจากเรา (นับเป็นรับชำระแล้ว ไม่ใช่หนี้ค้าง) */
   whtWithheldByCustomerSatang: number
@@ -124,3 +126,19 @@ export interface BillingBatchPreviewDto {
   /** `YYYY-MM-DD` วันที่รายได้ล่าสุดที่อยู่หลังวันตัดรอบ · ไม่มี = `null` */
   laterLatestRevenueDate: string | null
 }
+
+/** mytester3 LR3-04 — ส่วนประกอบของ "ยอดตามเอกสาร" ของรอบวางบิล (รวม VAT · ไม่มี = 0) */
+export interface BillingDocumentedChanges {
+  /** ใบลดหนี้ active */
+  creditNoteSatang: number
+  /** ใบเพิ่มหนี้ active */
+  debitNoteSatang: number
+  /** ส่วนที่ลดในมูลค่าที่ยังไม่ออกใบกำกับ — ไม่ต้องออกใบลดหนี้ (มติรีวิว R3 #1) */
+  uninvoicedReductionSatang: number
+}
+
+export const NO_DOCUMENTED_CHANGES: BillingDocumentedChanges = Object.freeze({
+  creditNoteSatang: 0,
+  debitNoteSatang: 0,
+  uninvoicedReductionSatang: 0,
+})
