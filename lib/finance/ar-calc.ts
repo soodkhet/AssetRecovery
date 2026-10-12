@@ -190,8 +190,11 @@ export function summarizeArAging(
   return summary
 }
 
-/** ยอดค้างรับรวมทุกช่วง — ตัวเลข KPI ด้านบนของหน้า AR */
-export function totalArOutstandingSatang(rows: readonly ArAgingRow[]): number {
+/**
+ * ยอดค้างรับรวมทุกช่วง — ตัวเลข KPI ด้านบนของหน้า AR และการ์ดยอดค้างของพอร์ทัล
+ * · ตัดยอดติดลบต่อรอบเป็น 0 (รอบที่ลูกค้าชำระเกิน ไม่ไปหักยอดค้างของรอบอื่น — ตรงกับ AR Aging)
+ */
+export function totalArOutstandingSatang(rows: readonly BillingBatchAmounts[]): number {
   return sumSatang(
     rows.map((row) => Math.max(0, arOutstandingSatang(row))),
     'ยอดค้างรับรวม',

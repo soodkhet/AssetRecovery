@@ -1,4 +1,4 @@
-import { arOutstandingSatang } from '@/lib/finance/ar-calc'
+import { totalArOutstandingSatang } from '@/lib/finance/ar-calc'
 import type { HandoverLotStatus } from '@/lib/generated/prisma/enums'
 import { canAccess } from '@/lib/portal/access'
 import type { PortalContext } from '@/lib/portal/guard'
@@ -14,7 +14,7 @@ import { prisma } from '@/lib/prisma'
  * - ทุก query กรอง `organization_id` + `company_id = ctx.companyId`
  * - query ของหมวดที่ผู้เรียกไม่มีสิทธิ์ **ไม่ถูกยิงเลย** และ serializer ตัดการ์ดนั้นออก (ไม่มีคีย์ใน response)
  * - ยอดค้าง: เฉพาะ batch `sent` ขึ้นไป (D9) · **ยอดบิลตามเอกสาร** (ใบกำกับ − ใบลดหนี้ — มติ U14 ไม่ใช่ยอดหลัง
- *   Adjustment ภายใน) · สูตรกลาง `arOutstandingSatang()` (`22` §6.11 — หักภาษีที่ลูกค้าหักแล้ว · O44)
+ *   Adjustment ภายใน) · สูตรกลาง `totalArOutstandingSatang()` (`22` §6.11 — หักภาษีที่ลูกค้าหักแล้ว · O44 · ตัดยอดติดลบต่อรอบ)
  * - ใบกำกับภาษีล่าสุด: ใบ `active` ล่าสุดตามวันที่ออกของรอบที่ส่งแล้ว (ใบยกเลิกไม่ใช่ "ใบล่าสุด") · ยอด = หน้าใบกำกับ
  * - ล็อตรอส่งมอบ: ล็อตที่ยังไม่ `confirmed`
  */
@@ -23,7 +23,8 @@ const PENDING_LOT_STATUSES = ['pending_attach', 'pending_delivery_proof'] as con
 
 async function arOutstandingOf(ctx: PortalContext): Promise<number> {
   const batches = await loadPortalDocumentedBatches(ctx)
-  return batches.reduce((sum, batch) => sum + arOutstandingSatang(batch), 0)
+  // mytester4 รีวิว — รอบที่ชำระเกิน (ยอดค้างติดลบ) ไม่หักยอดค้างของรอบอื่น ⇒ ตรงหน้ารอบวางบิล/AR aging
+  return totalArOutstandingSatang(batches)
 }
 
 async function latestTaxInvoiceOf(ctx: PortalContext): Promise<PortalDashboardSource['latestTaxInvoice']> {

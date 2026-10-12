@@ -145,6 +145,13 @@ describe('summarizeArAging', () => {
   it('ยอดค้างรับรวมนับเฉพาะยอดที่ยังค้าง (จ่ายเกินไม่มาหักยอดคนอื่น)', () => {
     expect(totalArOutstandingSatang(rows)).toBe(1_600_000)
   })
+
+  it('mytester4 รีวิว — การ์ดพอร์ทัล: รอบชำระเกิน −42.12 + รอบค้าง +100 = 100 (ไม่ใช่ 57.88)', () => {
+    const overpaid = { totalSatang: 100_000, receivedSatang: 104_212, ...noWht }
+    const open = { totalSatang: 10_000, receivedSatang: 0, ...noWht }
+    expect(arOutstandingSatang(overpaid)).toBe(-4_212)
+    expect(totalArOutstandingSatang([overpaid, open])).toBe(10_000)
+  })
 })
 
 describe('§6.11.1 ตัดส่วนต่างเป็นค่าธรรมเนียมธนาคาร (มติ PO U144)', () => {
