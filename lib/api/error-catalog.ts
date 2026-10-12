@@ -140,6 +140,8 @@ export const ERROR_CATALOG = {
   PAYEE_NOT_FOUND: { status: 404, severity: 'reject', source: '24 §6.5' },
   PAYEE_ALREADY_EXISTS: { status: 400, severity: 'reject', source: '24 §6.5' },
   PAYEE_ID_DOCUMENT_REQUIRED: { status: 400, severity: 'reject', source: '24 §6.5' },
+  // mytester3 A3-01 — ยืนยันผู้รับที่เลขบัญชีผิดรูปแบบ (ข้อมูลเก่าก่อนมีการตรวจ)
+  INVALID_BANK_ACCOUNT_FORMAT: { status: 400, severity: 'reject', source: '24 §6.5' },
   /** เตือนไม่บล็อก — Payee ยังไม่มี Tax Profile ⇒ ใช้อัตรา WHT ของ Plan เป็นค่าสำรอง (`18` §6.3) */
   WHT_RATE_FALLBACK_TO_PLAN: { status: 200, severity: 'warn', source: '24 §6.5' },
   PAYOUT_BATCH_NOT_FOUND: { status: 404, severity: 'reject', source: '24 §6.5' },

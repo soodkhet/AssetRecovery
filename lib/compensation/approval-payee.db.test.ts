@@ -341,6 +341,17 @@ suite('Phase 3.2 — Payee & Tax Profile (`18`)', () => {
     await expectCode(() => payees.verifyPayee(ctx(finance, 'ลองยืนยันทั้งที่ยังไม่ครบ'), payeeId), 'REQUIRED_MISSING')
   })
 
+  it('mytester3 A3-01 — เลขบัญชีเก่าผิดรูปแบบ ("123") ⇒ ยืนยันไม่ได้ (`INVALID_BANK_ACCOUNT_FORMAT`) · แก้แล้วยืนยันได้', async () => {
+    // service ไม่ตรวจรูปแบบตอนบันทึก (Zod ที่ route ตรวจ) ⇒ จำลองข้อมูลที่บันทึกก่อนมีการตรวจ
+    const payeeId = await seedPayee(AGENT_ID, { accountNumber: '123' })
+    await expectCode(() => payees.verifyPayee(ctx(finance, 'ลองยืนยันเลขบัญชีสั้น'), payeeId), 'INVALID_BANK_ACCOUNT_FORMAT')
+    const stored = await db().payeeProfile.findUniqueOrThrow({ where: { id: payeeId }, select: { isVerified: true } })
+    expect(stored.isVerified).toBe(false)
+    await payees.updatePayee(ctx(finance, 'แก้เลขบัญชีตามสมุดบัญชี'), payeeId, { ...BANK, accountNumber: '123-4-56789-0' })
+    const verified = await payees.verifyPayee(ctx(finance, 'ตรวจกับสมุดบัญชีแล้ว'), payeeId)
+    expect(verified.payee.isVerified).toBe(true)
+  })
+
   it('BUG-SF1 (U121) — ไม่มี Tax Profile รายคน: ไม่มีค่าเริ่มต้น + ทีมไม่ผูกแผน ⇒ ยืนยันไม่ได้ · ตั้งค่าเริ่มต้นตามประเภทแล้ว ⇒ ยืนยันได้', async () => {
     await db().$executeRawUnsafe(`UPDATE teams SET compensation_plan_id = NULL WHERE id = '${TEAM_ID}'`)
     try {

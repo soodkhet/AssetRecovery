@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest'
 import { EXECUTIVE_ROLE_NAME, SUPERADMIN_ROLE_NAME } from '@/lib/auth/constants'
 import {
   buildRoleMatrix,
+  capabilityTooltip,
   countGrantedLevels,
   isRowEditable,
   resolveLevel,
   type CapabilityInfo,
 } from '@/lib/roles/matrix'
 import { ROLE_GROUP_TABS, roleGroupsForTab, tabForRoleGroup } from '@/lib/roles/role-groups'
+import { CAPABILITIES } from '@/lib/roles/capability-catalog'
 
 const capabilities: CapabilityInfo[] = [
   { code: 'approve_case', label: 'รับ/ไม่รับเคส', module: 'case', functionalGroup: 'ops', description: null },
@@ -111,5 +113,20 @@ describe('role group tabs (`07` §8 — 3 tab หลัก)', () => {
     expect(tabForRoleGroup('inhouse')).toBe('field')
     expect(tabForRoleGroup('outsource')).toBe('field')
     expect(tabForRoleGroup('finance_company')).toBe('finance_company')
+  })
+})
+
+describe('mytester3 A3-03 — tooltip ชื่อสิทธิ์ไม่แสดงรหัสภายใน', () => {
+  it('ใช้คำอธิบายภาษาไทย · ไม่มีคำอธิบาย = ไม่มี tooltip', () => {
+    expect(capabilityTooltip({ description: '🔒 Superadmin เท่านั้น' })).toBe('🔒 Superadmin เท่านั้น')
+    expect(capabilityTooltip({ description: null })).toBeUndefined()
+    expect(capabilityTooltip({ description: '  ' })).toBeUndefined()
+  })
+
+  it('ทุก capability ในระบบ: tooltip ไม่ใช่รหัส (ไม่มีรูปแบบ snake_case)', () => {
+    for (const capability of CAPABILITIES) {
+      const tooltip = capabilityTooltip({ description: capability.description ?? null })
+      expect(tooltip ?? '').not.toMatch(/[a-z]+_[a-z_]+/)
+    }
   })
 })

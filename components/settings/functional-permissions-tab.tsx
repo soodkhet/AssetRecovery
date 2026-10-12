@@ -163,7 +163,7 @@ export function FunctionalPermissionsTab() {
       </div>
 
       {sections.length > 0 && (
-        <div className="mb-4 flex w-fit gap-1 rounded-lg bg-slate-100 p-1">
+        <div className="mb-4 flex w-fit max-w-full flex-wrap gap-1 rounded-lg bg-slate-100 p-1">
           {sections.map((section) => (
             <button
               key={section.id}
@@ -194,11 +194,11 @@ export function FunctionalPermissionsTab() {
                 {MATRIX_LEVEL_LABEL[level]}
               </Badge>
             ))}
-            <span className="text-[11px] text-slate-500">— ระดับ “ไม่มีสิทธิ์” ไม่เก็บ record จึงไม่แสดงในตาราง</span>
+            <span className="text-[11px] text-slate-500">— บทบาทที่ “ไม่มีสิทธิ์” ในรายการใดจะไม่แสดงในตารางของรายการนั้น</span>
           </div>
           <div className="text-[11px] text-slate-600">
             <b>Superadmin</b> มีสิทธิ์ทุกรายการโดยนิยาม ไม่แสดงในตาราง · รายการ{' '}
-            <Badge className="bg-slate-900 text-white">🔒</Badge> ล็อกไว้กับ role เจ้าของ มอบให้ role อื่นไม่ได้
+            <Badge className="bg-slate-900 text-white">🔒</Badge> สงวนไว้ให้บทบาทเจ้าของเท่านั้น มอบให้บทบาทอื่นไม่ได้
           </div>
         </div>
       </InlineAlert>

@@ -339,9 +339,9 @@ export function CompaniesManager() {
                         target="_blank"
                         rel="noopener noreferrer"
                         className={buttonClass('secondary')}
-                        aria-label={`เปิด portal ของลูกค้า ${company.name} ในแท็บใหม่ (ดูอย่างเดียว)`}
+                        aria-label={`เปิดพอร์ทัลของลูกค้า ${company.name} ในแท็บใหม่ (ดูอย่างเดียว)`}
                       >
-                        เปิด portal ของลูกค้า ↗
+                        เปิดพอร์ทัลของลูกค้า ↗
                       </a>
                     </Can>
                     <Can action="manage" resource={MANAGE_RESOURCE}>

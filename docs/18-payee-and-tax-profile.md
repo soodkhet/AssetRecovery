@@ -25,6 +25,7 @@
 | v2.10 | 07/10/2569 | **มติ PO 07/10/2569 (U164)** — §8/§14/§16: ช่อง "กติกาภาษี (Tax Profile)" ในฟอร์มผู้รับเงินและฟอร์มผู้ใช้ (U131) **ตัวเลือกแรกแสดงค่าที่ใช้จริง** แทนข้อความระบบ "ยังไม่ผูก…" — ตามฝั่ง (ทีม → กลุ่ม role แบบเดียวกับรอบจ่าย) × ประเภทผู้รับในฟอร์ม · ใช้ตรรกะเดียวกับกล่องกติกาภาษีของฟอร์มทีม (U161) · ไม่เปลี่ยน data model (เลือกตัวแรก = `tax_profile_id` null เหมือนเดิม) · `PayeeDto`/candidates เพิ่ม `payoutSide` (ค่าคำนวณ ไม่ใช่ column) |
 | v2.11 | 11/10/2569 | **staging E-002/E-010/E-021 (มติ PO 10/10/2569)** — §7.1 เพิ่ม `legal_name` ชื่อนิติบุคคลตามหนังสือรับรอง (บังคับเมื่อ `corporate` ตั้งแต่ตอนบันทึก — `REQUIRED_MISSING` field `legalName`) ใช้บน 50 ทวิ · ภ.ง.ด.53 · ไฟล์โอน · เทียบชื่อบัญชี (`BANK_ACCOUNT_NAME_MISMATCH`) · บุคคลธรรมดาใช้ชื่อผู้ใช้เหมือนเดิม · เพิ่ม `income_category_override` ประเภทเงินได้รายคน (ตามค่าตั้งองค์กร / 40(2) / 40(8)) **ชนะค่าองค์กร** · นิติบุคคล 40(8)/ภ.ง.ด.53 เสมอ · แก้สองช่องนี้ = ต้องยืนยันผู้รับใหม่ |
 | v2.12 | 11/10/2569 | **มติชั่วคราว M4 (mytester A-10 — Claude ตัดสินแทน PO รอยืนยัน)**: §9 ความพร้อมก่อนยืนยัน — ผู้รับที่ไม่มีอัตรารายคน/ค่าเริ่มต้นตามประเภท แต่ทีมผูกแผนค่าตอบแทน ⇒ **ยืนยันได้** พร้อมคำเตือน `WHT_RATE_FALLBACK_TO_PLAN` (warning code เดิม · ตาม §6.3 "fallback Plan ได้แต่ต้องมี warning") · ป้าย "ข้อมูลรับเงินไม่ครบ" ใช้นิยามเดียวกัน · ไม่มีทั้งรายคน/ค่าเริ่มต้น/แผน = ยืนยันไม่ได้ตามเดิม |
+| v2.13 | 12/10/2569 | **mytester3 A3-01** — §7.1/§11/§16: `account_number` ตรวจรูปแบบเดียวกับบัญชีธนาคารบริษัท (`13` §6.3) — ตัวเลข คั่น `-`/ช่องว่างได้ อย่างน้อย 8 หลัก (นับเฉพาะตัวเลข) ไม่เกิน 30 ตัวอักษร · ว่างได้ตอนบันทึก (บังคับตอนยืนยันเหมือนเดิม) · ข้อมูลเก่าที่ผิดรูปแบบ ปุ่มยืนยันกดไม่ได้พร้อมคำใบ้ และ API ตอบ `INVALID_BANK_ACCOUNT_FORMAT` |
 
 ขอบเขตเอกสารนี้: จัดการข้อมูลผู้รับเงิน (Payee) ที่ AssetRecovery จ่ายค่าตอบแทนให้ — ครอบคลุมพนักงาน inhouse (เฉพาะค่าตอบแทนจากเคส ไม่ใช่เงินเดือน) และทีม/บุคคล outsource — เก็บข้อมูลบัญชีธนาคารและ Tax Profile ที่ผูกกับแต่ละราย รวมถึง **กฎ WHT Priority ที่สำคัญที่สุดของระบบการเงินทั้งหมด**
 
@@ -120,7 +121,7 @@ WHT rate ที่ใช้จริง = payee.tax_profile.wht_rate
 | tax_id | national_id | string(13) | yes | เลขบัตรประชาชน (บุคคลธรรมดา) หรือเลขทะเบียนนิติบุคคล (นิติบุคคล) — รูปแบบเดียวกัน 13 หลัก validate แค่ format ไม่ทำ checksum |
 | tax_profile_id | tax_profile_id | uuid \| null | — (override) | ผูกกับ Tax Profile รายคน — ว่างได้เมื่อมีค่าเริ่มต้นตามประเภทผู้รับ (U121 · §9) (ไฟล์ 13 §6.4) กำหนดอัตรา WHT ที่ใช้กับ payee รายนี้ |
 | bank_name | bank_name | string | yes | — |
-| bank_account_number | account_number | string | yes | — |
+| bank_account_number | account_number | string | yes | ตัวเลข (คั่น `-`/ช่องว่างได้ เก็บเฉพาะตัวเลข) อย่างน้อย 8 หลัก — กติกาเดียวกับบัญชีธนาคารบริษัท (v2.13) |
 | bank_account_name | account_name | string | yes | ชื่อบัญชีธนาคาร — ต้องตรงกับชื่อ payee เพื่อกันโอนผิดบัญชี (validate ตรงกันหรือเตือนถ้าไม่ตรง) |
 | status | *(derive จาก `is_verified` boolean)* | enum/boolean | yes | `verified` / `unverified` (ดู §9) — schema เก็บเป็น `is_verified BOOLEAN` ไม่ใช่ enum แต่ความหมายเดียวกัน |
 | verified_by, verified_at | verified_by, verified_at | uuid, timestamptz \| null | — | — |
@@ -168,6 +169,7 @@ WHT rate ที่ใช้จริง = payee.tax_profile.wht_rate
 | Code / Scenario | Condition | System Behavior |
 |---|---|---|
 | REQUIRED_MISSING | ฟิลด์บังคับไม่ครบ | inline error |
+| INVALID_BANK_ACCOUNT_FORMAT | ยืนยัน Payee ที่ `account_number` ไม่ใช่ตัวเลข/น้อยกว่า 8 หลัก (ข้อมูลเก่า) — ตอนบันทึกฟอร์มตรวจรูปแบบเดียวกันอยู่แล้ว | reject 400 พร้อมข้อความให้แก้เลขบัญชี · ปุ่มยืนยันกดไม่ได้ (v2.13) |
 | BANK_ACCOUNT_NAME_MISMATCH | `account_name` ไม่ตรงกับชื่อ payee | เตือน (ไม่ reject) — ให้การเงินตรวจสอบก่อนยืนยัน เพราะบางกรณีอาจตรงแต่เขียนคนละรูปแบบ |
 | UNVERIFIED_PAYEE_IN_PAYOUT | พยายามรวม Payee ที่ `is_verified = false` เข้า Payout Batch | reject ที่ไฟล์ 17 |
 
@@ -212,6 +214,7 @@ WHT rate ที่ใช้จริง = payee.tax_profile.wht_rate
 | (U150) URL เก่า | ผู้รับที่มีลิงก์พิมพ์เองก่อนมติ + องค์กรบังคับเอกสาร → ยืนยัน | `PAYEE_ID_DOCUMENT_REQUIRED` · ฟอร์มแสดงป้าย "ไม่ผ่านการตรวจ — แนบไฟล์ใหม่" |
 | (U150) สิทธิ์เปิดไฟล์ | การเงิน / เจ้าของ / ผู้รับคนอื่น / ผู้ไม่มีสิทธิ์ผู้รับเงิน | ได้ / ได้ / 404 / 403 · ทุกครั้งที่ได้ URL ลง audit `view` |
 | แก้บัญชีธนาคารแล้วต้องยืนยันใหม่ | แก้ account_number ของ Payee ที่ verified แล้ว | is_verified เปลี่ยนเป็น false อัตโนมัติ |
+| เลขบัญชีผิดรูปแบบ (A3-01) | บันทึกเลขบัญชี `123` / `abc-12345678` · ยืนยันผู้รับที่เลขบัญชีเดิมเป็น `123` | บันทึกไม่ได้ ข้อความใต้ช่องเลขบัญชี · ยืนยัน reject `INVALID_BANK_ACCOUNT_FORMAT` |
 | รวม unverified payee เข้า payout | พยายามสร้าง Payout Batch ที่มี payee unverified อยู่ในรายการ | reject UNVERIFIED_PAYEE_IN_PAYOUT |
 | WHT Priority | Payee มี tax_profile ตั้ง 1% แต่ plan ของทีมตั้ง 3% | ใช้ 1% (Payee level ชนะ) |
 | WHT Fallback | Payee ยังไม่มี tax_profile ผูกไว้ | ใช้ WHT rate จาก plan เป็น fallback พร้อมเตือนเจ้าหน้าที่ |

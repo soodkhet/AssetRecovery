@@ -2,6 +2,7 @@ import {
   EMPTY_ADDRESS,
   formatThaiAddressLine,
   parseThaiAddressLine,
+  suggestThaiAddressFromText,
   type AddressValue,
 } from '@/lib/address/address-value'
 import { FinanceCompanyError } from '@/lib/finance-companies/errors'
@@ -226,20 +227,35 @@ export function companyAddressFormOf(address: string | null): CompanyAddressForm
     : { value: parsed, legacyText: null }
 }
 
-/**
- * ช่องที่ยังขาด — ว่าง = บันทึกได้ · ที่อยู่เก่าแบบข้อความอิสระที่ไม่ได้แตะเลยบันทึกต่อได้ (แก้ช่องอื่นของบริษัทเดิม
- * ไม่ถูกบังคับกรอกที่อยู่ใหม่) — แตะเมื่อไหร่ต้องกรอกครบตามช่อง
- */
-export function missingCompanyAddressFields(form: CompanyAddressForm): (keyof AddressValue)[] {
+/** ที่อยู่เก่าแบบข้อความอิสระที่ยังไม่ถูกแตะ (ข้อความเดิมทั้งก้อนอยู่ช่องบ้านเลขที่ ช่องอื่นว่าง) */
+export function isUntouchedLegacyAddress(form: CompanyAddressForm): boolean {
   const { value, legacyText } = form
-  const untouchedLegacy =
+  return (
     legacyText !== null &&
     value.detail.trim() === legacyText &&
     value.postalCode.trim() === '' &&
     value.province.trim() === '' &&
     value.district.trim() === '' &&
     value.subdistrict.trim() === ''
-  if (untouchedLegacy) return []
+  )
+}
+
+/**
+ * mytester3 A3-02 — ข้อเสนอแยกที่อยู่เก่าเป็น 5 ช่อง (เดาจากคำนำหน้า ตำบล/อำเภอ/จังหวัด + รหัสไปรษณีย์)
+ * ฟอร์มแสดงให้ผู้ใช้กด "แยกเป็นช่องตามนี้" เอง — ไม่กด = ข้อความเดิมคงอยู่ทุกตัวอักษร · `null` = เดาไม่ได้
+ */
+export function legacyCompanyAddressSuggestion(legacyText: string | null): AddressValue | null {
+  if (legacyText === null) return null
+  return suggestThaiAddressFromText(legacyText)
+}
+
+/**
+ * ช่องที่ยังขาด — ว่าง = บันทึกได้ · ที่อยู่เก่าแบบข้อความอิสระที่ไม่ได้แตะเลยบันทึกต่อได้ (แก้ช่องอื่นของบริษัทเดิม
+ * ไม่ถูกบังคับกรอกที่อยู่ใหม่) — แตะเมื่อไหร่ต้องกรอกครบตามช่อง
+ */
+export function missingCompanyAddressFields(form: CompanyAddressForm): (keyof AddressValue)[] {
+  const { value } = form
+  if (isUntouchedLegacyAddress(form)) return []
   return COMPANY_REQUIRED_ADDRESS_FIELDS.filter((field) =>
     field === 'postalCode' ? !/^\d{5}$/.test(value.postalCode.trim()) : value[field].trim() === '',
   )

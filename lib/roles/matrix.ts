@@ -106,6 +106,15 @@ export function isRowEditable(role: MatrixRoleInput, code: string): boolean {
   return capabilityLockOwner(code) === null
 }
 
+/**
+ * tooltip ของชื่อสิทธิ์ในหน้ากำหนดสิทธิ์ — คำอธิบายภาษาไทยของ capability (ถ้ามี) · **ห้ามใช้รหัสภายใน**
+ * (`manage_companies` ฯลฯ — Rule 05 · mytester3 A3-03) · ไม่มีคำอธิบาย = ไม่มี tooltip
+ */
+export function capabilityTooltip(capability: Pick<CapabilityInfo, 'description'>): string | undefined {
+  const text = capability.description?.trim() ?? ''
+  return text === '' ? undefined : text
+}
+
 export function buildMatrixRow(
   role: MatrixRoleInput,
   capability: CapabilityInfo,

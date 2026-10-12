@@ -92,7 +92,7 @@ export function CompensationTab() {
 
       <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800">
         <p>ขั้นตอน: รอขั้น 1 (ผู้จัดการ) → รอขั้น 2 (การเงิน) → อนุมัติแล้ว — เกินเพดานเพิ่มขั้นบริหารตาม Approval Matrix</p>
-        <p className="mt-1">ตีกลับ: กลับไป “ต้องแก้ไข” แล้วเริ่มขั้น 1 ใหม่ทั้งหมด ไม่ resume จากขั้นที่ตีกลับ</p>
+        <p className="mt-1">ตีกลับ: กลับไป “ต้องแก้ไข” แล้วเริ่มขั้น 1 ใหม่ทั้งหมด ไม่ทำต่อจากขั้นที่ตีกลับ</p>
       </div>
 
       <div className="overflow-x-auto rounded-lg border border-slate-200">
