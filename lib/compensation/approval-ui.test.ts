@@ -12,6 +12,7 @@ import {
   claimSourceLabel,
   CLAIM_STATUS_FILTERS,
   bulkApprovableIds,
+  claimStatusLabel,
   bulkApproveSummary,
   isResubmittedClaim,
   expenseRowActions,
@@ -154,6 +155,23 @@ describe('stepper ในแถว (`16` §8)', () => {
       2,
     )
     expect(label).toBe('✓ ขั้น 1/2: การเงิน')
+  })
+})
+
+describe('mytester3 F3-03 — ป้ายสถานะของรายการที่รอขั้นบริหาร', () => {
+  it('ขั้น 3/3 รอบริหาร ⇒ "รอผู้บริหารอนุมัติ" (enum คงเป็น pending_finance_approval)', () => {
+    const item = dto({ status: 'pending_finance_approval', approvalStepCurrent: 3, approvalStepTotal: 3, pendingStepRole: 'บริหาร' })
+    expect(claimStatusLabel(item)).toBe('รอผู้บริหารอนุมัติ')
+    expect(approvalStepText(item)).toBe('ขั้น 3/3: รอ บริหาร')
+  })
+
+  it('ขั้นการเงิน ⇒ ป้ายเดิม "รอการเงินอนุมัติ"', () => {
+    expect(claimStatusLabel(dto({ status: 'pending_finance_approval', pendingStepRole: 'การเงิน' }))).toBe('รอการเงินอนุมัติ')
+  })
+
+  it('สถานะอื่น/ไม่มีสายอนุมัติ ⇒ ป้ายตาม enum', () => {
+    expect(claimStatusLabel(dto({ status: 'pending_approval', pendingStepRole: 'บริหาร' }))).toBe('รออนุมัติจ่าย')
+    expect(claimStatusLabel(dto({ status: 'pending_finance_approval', pendingStepRole: null }))).toBe('รอการเงินอนุมัติ')
   })
 })
 

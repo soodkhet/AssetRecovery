@@ -9,9 +9,14 @@ import {
   summarizeArAging,
   type ArAgingRow,
 } from '@/lib/finance/ar-calc'
-import { estimateCustomerWhtForBilling } from '@/lib/finance/wht-calc'
+import { estimateCustomerWhtForBilling, type CustomerWhtNoteAmounts } from '@/lib/finance/wht-calc'
 import type { Prisma } from '@/lib/generated/prisma/client'
-import { adjustmentsAwaitingNotesByBatch, withDocumentedArTotals } from '@/lib/portal/documented-amounts'
+import {
+  adjustmentsAwaitingNotesByBatch,
+  customerWhtNotesOf,
+  documentedAmountsForBatches,
+  withDocumentedArTotals,
+} from '@/lib/portal/documented-amounts'
 import type {
   BillingBatchStatus,
   RevenueStatus,
@@ -57,6 +62,7 @@ import type {
 import { cycleCoversCompany, resolveDueDate } from '@/lib/settings/cycles'
 import { loadActiveCycleForScope, resolveCompanyBillingCycle } from '@/lib/settings/queries/cycles'
 import { FinanceCompanyError } from '@/lib/finance-companies/errors'
+import { fmtSatang } from '@/lib/format/money'
 import { SettingsError } from '@/lib/settings/errors'
 import { getFinancePolicy } from '@/lib/settings/queries/finance-policy'
 import { toDateOnlyIso, toIso } from '@/lib/settings/queries/shared'
@@ -222,27 +228,44 @@ type BatchRow = Prisma.BillingBatchGetPayload<{ select: typeof batchSelect }>
 async function documentedArTotals(
   organizationId: string,
   rows: readonly { id: string; totalSatang: number }[],
-): Promise<Map<string, number>> {
-  const documented = await withDocumentedArTotals(
+): Promise<Map<string, DocumentedBatchTotals>> {
+  const documented = await documentedAmountsForBatches(
     organizationId,
-    rows.map((row) => ({ id: row.id, totalSatang: row.totalSatang })),
+    rows.map((row) => row.id),
   )
-  return new Map(documented.map((row) => [row.id, row.totalSatang]))
+  return new Map(
+    rows.map((row) => {
+      const amounts = documented.get(row.id)
+      return [
+        row.id,
+        { arTotalSatang: amounts?.documented.totalSatang ?? row.totalSatang, notes: customerWhtNotesOf(amounts) },
+      ] as const
+    }),
+  )
+}
+
+/** ยอดตามเอกสารของรอบ (BUG-178) + ใบลด/เพิ่มหนี้สำหรับภาษีลูกค้าจะหัก (mytester3 G3-02 · `22` §6.16) */
+interface DocumentedBatchTotals {
+  arTotalSatang: number
+  notes: CustomerWhtNoteAmounts | undefined
 }
 
 function toBatchDto(
   row: BatchRow,
   asOf: Date,
   amountBeforeVatSatang: number,
-  arTotalSatang: number = row.totalSatang,
+  documented?: DocumentedBatchTotals,
 ): BillingBatchDto {
+  const arTotalSatang = documented?.arTotalSatang ?? row.totalSatang
   const customerWhtPct =
     row.company.whtWithheldByCustomerPct === null ? null : row.company.whtWithheldByCustomerPct.toNumber()
+  // mytester3 G3-02 — ฐาน/ยอดคาดรับตามเอกสาร (ใบแจ้งหนี้ − ใบลดหนี้ + ใบเพิ่มหนี้ · `22` §6.16)
   const customerWht = estimateCustomerWhtForBilling({
     amountBeforeVatSatang,
     totalSatang: row.totalSatang,
     recordedWhtSatang: row.whtWithheldByCustomerSatang,
     whtPct: customerWhtPct,
+    ...(documented?.notes === undefined ? {} : { notes: documented.notes }),
   })
   return {
     id: row.id,
@@ -949,7 +972,7 @@ export async function applyBillingReceipt(input: {
         },
         reason:
           bankFeeChanged && bankFeeSatang > 0
-            ? `รับชำระจากรายการเดินบัญชี ${input.sourceRef} · ตัดส่วนต่างเป็นค่าธรรมเนียมธนาคาร ${(bankFeeSatang / 100).toFixed(2)} บาท (ไม่เกินเพดาน)`
+            ? `รับชำระจากรายการเดินบัญชี ${input.sourceRef} · ตัดส่วนต่างเป็นค่าธรรมเนียมธนาคาร ${fmtSatang(bankFeeSatang)} บาท (ไม่เกินเพดาน)`
             : `รับชำระจากรายการเดินบัญชี ${input.sourceRef}`,
         ipAddress: null,
         userAgent: null,

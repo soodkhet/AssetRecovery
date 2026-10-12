@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildRevenueReconciliation } from '@/lib/reports/finance/revenue-reconciliation'
+import { buildRevenueReconciliation, pendingReceiptInvoiceSatang } from '@/lib/reports/finance/revenue-reconciliation'
 
 /** U44 — บรรทัดกระทบยอดรายงานรายได้ ↔ ใบกำกับภาษี (ยอดก่อน VAT · satang) */
 
@@ -117,3 +117,49 @@ describe('U44 — กระทบยอดรายงานรายได้�
     ).toThrow(RangeError)
   })
 })
+
+describe('mytester3 J3-03 — ใบกำกับเมื่อรับชำระ: "ยอดตามใบกำกับภาษี" = ใบที่ออกจริง + บรรทัดรอรับชำระ', () => {
+  it('รอบรับเงินบางส่วน: ใบแจ้งหนี้ 1,000 ออกใบแล้ว 600 ⇒ ตามใบกำกับ 600 + รอรับชำระ 400 · ยังลงตัว', () => {
+    const result = buildRevenueReconciliation({
+      reportTotalSatang: 250_000,
+      revenues: [
+        { grossSatang: 100_000, invoiced: true },
+        { grossSatang: 150_000, invoiced: true },
+      ],
+      adjustments: [],
+      notes: [],
+      invoicedBatches: [
+        { batchBeforeVatSatang: 100_000, issuedBeforeVatSatang: 60_000, inRangeGrossSatang: 100_000 },
+        { batchBeforeVatSatang: 150_000, issuedBeforeVatSatang: 150_000, inRangeGrossSatang: 150_000 },
+      ],
+    })
+    expect(lineOf(result, 'invoiced')).toBe(210_000)
+    expect(lineOf(result, 'pendingReceipt')).toBe(40_000)
+    expect(result.balanced).toBe(true)
+  })
+
+  it('ใบกำกับเต็มรอบ ⇒ ไม่มีบรรทัดรอรับชำระ (ผลเดิม)', () => {
+    const result = buildRevenueReconciliation({
+      reportTotalSatang: 100_000,
+      revenues: [{ grossSatang: 100_000, invoiced: true }],
+      adjustments: [],
+      notes: [],
+      invoicedBatches: [{ batchBeforeVatSatang: 100_000, issuedBeforeVatSatang: 100_000, inRangeGrossSatang: 100_000 }],
+    })
+    expect(lineOf(result, 'invoiced')).toBe(100_000)
+    expect(result.lines.some((line) => line.key === 'pendingReceipt')).toBe(false)
+  })
+
+  it('รอบคร่อมช่วง ⇒ ส่วนรอรับชำระตามสัดส่วนรายได้ในช่วง (ปัดลง)', () => {
+    expect(
+      pendingReceiptInvoiceSatang([
+        { batchBeforeVatSatang: 300_000, issuedBeforeVatSatang: 100_001, inRangeGrossSatang: 100_000 },
+      ]),
+    ).toBe(66_666)
+    // ออกใบเกินใบแจ้งหนี้ (ไม่ควรเกิด) ⇒ ไม่ติดลบ
+    expect(
+      pendingReceiptInvoiceSatang([{ batchBeforeVatSatang: 100, issuedBeforeVatSatang: 200, inRangeGrossSatang: 100 }]),
+    ).toBe(0)
+  })
+})
+

@@ -436,7 +436,9 @@ export async function loadRevenueReconciliationInput(
           where: { organizationId, salesRecord: { billingBatchId: { in: batchIds } } },
           select: {
             status: true,
-            salesRecord: { select: { billingBatchId: true } },
+            invoiceDate: true,
+            amountBeforeVatSatang: true,
+            salesRecord: { select: { billingBatchId: true, totalBeforeVatSatang: true } },
             creditNotes: {
               where: { status: 'active' },
               select: { noteType: true, amountBeforeVatSatang: true },
@@ -480,8 +482,30 @@ export async function loadRevenueReconciliationInput(
         ]
   })
 
+  // mytester3 J3-03 — ใบกำกับที่ออกจริงต่อรอบ (active · ลงวันที่ไม่หลังวันสิ้นช่วง) เทียบใบแจ้งหนี้ทั้งรอบ ⇒ แยกส่วน "รอรับชำระ"
+  const invoicedBatchMap = new Map<string, { batchBeforeVatSatang: number; issuedBeforeVatSatang: number; inRangeGrossSatang: number }>()
+  for (const invoice of invoices) {
+    const batchId = invoice.salesRecord.billingBatchId
+    if (!invoicedBatches.has(batchId)) continue
+    const current = invoicedBatchMap.get(batchId) ?? {
+      batchBeforeVatSatang: invoice.salesRecord.totalBeforeVatSatang,
+      issuedBeforeVatSatang: 0,
+      inRangeGrossSatang: 0,
+    }
+    const issued =
+      invoice.status === 'active' && invoice.invoiceDate.getTime() <= range.endDate.getTime()
+        ? invoice.amountBeforeVatSatang
+        : 0
+    invoicedBatchMap.set(batchId, { ...current, issuedBeforeVatSatang: current.issuedBeforeVatSatang + issued })
+  }
+  for (const row of revenues) {
+    const current = row.billingBatchId === null ? undefined : invoicedBatchMap.get(row.billingBatchId)
+    if (current !== undefined) current.inRangeGrossSatang += row.grossSatang
+  }
+
   return {
     revenues: revenues.map((row) => ({ grossSatang: row.grossSatang, invoiced: isInvoiced(row.billingBatchId) })),
+    invoicedBatches: [...invoicedBatchMap.values()],
     adjustments: [
       ...adjustments.map((row) => ({
         adjustmentType: row.adjustmentType,

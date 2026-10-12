@@ -4,7 +4,8 @@ import type { ReactNode } from 'react'
 import { StoredFileButton } from '@/components/uploads/stored-file-button'
 import { Button, InlineAlert, Modal, RefText } from '@/components/ui'
 import type { CompensationApprovalDto } from '@/lib/compensation/approval-types'
-import { EXPENSE_STATUS_LABEL, EXPENSE_TYPE_LABEL } from '@/lib/field/expense-ui'
+import { claimStatusLabel } from '@/lib/compensation/approval-ui'
+import { EXPENSE_TYPE_LABEL } from '@/lib/field/expense-ui'
 import { googleMapsRouteUrl } from '@/lib/field/field-ui'
 import { fmtDate, fmtDateTime } from '@/lib/format/datetime'
 import { fmtSatangSymbol } from '@/lib/format/money'
@@ -77,7 +78,7 @@ export function ExpenseDetailModal({ item, onClose }: { item: CompensationApprov
             )}
           </Row>
         )}
-        <Row label="สถานะ">{EXPENSE_STATUS_LABEL[item.status]}</Row>
+        <Row label="สถานะ">{claimStatusLabel(item)}</Row>
         {item.recordedByName !== null && <Row label="บันทึกแทนโดย">{item.recordedByName}</Row>}
         {item.sharedWithName !== null && <Row label="ผู้พักร่วม">{item.sharedWithName}</Row>}
         <Row label="หมายเหตุของผู้เบิก">

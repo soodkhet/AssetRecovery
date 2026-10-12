@@ -474,6 +474,47 @@ describe('staging E-058 — บัญชีค่าใช้จ่ายที�
   })
 })
 
+describe('mytester3 H3-02 — ใบกำกับไม่ครอบยอดของรอบที่รับชำระครบ', () => {
+  it('มีรอบที่ใบกำกับขาด ⇒ คำเตือน (ไม่บล็อก) บอกเลขรอบและยอดต่าง', () => {
+    const result = evaluateReadiness({
+      ...readyInput,
+      taxInvoiceCoverage: {
+        checkedCount: 2,
+        documentsSatang: 267_255,
+        settledSatang: 287_255,
+        overpaymentSatang: 0,
+        differenceSatang: 20_000,
+        mismatches: [
+          {
+            batchNumber: 'BL-2569-002',
+            expectedSatang: 287_255,
+            documentsSatang: 267_255,
+            differenceSatang: 20_000,
+            vatDifferenceSatang: 1_308,
+          },
+        ],
+      },
+    })
+    expect(result.ready).toBe(true)
+    expect(result.warnings.some((warning) => warning.includes('BL-2569-002 ต่าง ฿200.00'))).toBe(true)
+  })
+
+  it('ครอบครบ ⇒ ไม่มีคำเตือน', () => {
+    const result = evaluateReadiness({
+      ...readyInput,
+      taxInvoiceCoverage: {
+        checkedCount: 1,
+        documentsSatang: 100,
+        settledSatang: 100,
+        overpaymentSatang: 0,
+        differenceSatang: 0,
+        mismatches: [],
+      },
+    })
+    expect(result.warnings).toEqual(evaluateReadiness(readyInput).warnings)
+  })
+})
+
 describe('readinessScore / readinessRowText — staging E-069', () => {
   it('นับข้อที่ผ่านจากทั้งหมด', () => {
     expect(readinessScore([{ passed: true }, { passed: false }, { passed: true }])).toEqual({ passed: 2, total: 3 })

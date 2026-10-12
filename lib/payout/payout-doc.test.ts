@@ -121,6 +121,21 @@ describe('groupPayoutItemsByPayee (`28` §6.1 — 1 คน = 1 ใบต่อ�
     expect(groups[0]!.whtPctSnapshot).toBe(3)
   })
 
+  it('mytester3 F3-01 — รายการนอกฐานภาษี (อัตรา 0) ไม่ทำให้อัตราของกลุ่มหาย', () => {
+    const groups = groupPayoutItemsByPayee([
+      item(),
+      item({ id: 'item-2', sourceId: 'exp-2', description: 'ค่าที่พัก', whtPctSnapshot: 0, whtSatang: 0, netSatang: 850_000, whtBaseIncluded: false }),
+    ])
+    expect(groups[0]!.whtPctSnapshot).toBe(3)
+  })
+
+  it('mytester3 F3-01 — กลุ่มที่มีแต่รายการนอกฐานภาษี ไม่สรุปอัตรา', () => {
+    const groups = groupPayoutItemsByPayee([
+      item({ whtPctSnapshot: 0, whtSatang: 0, netSatang: 850_000, whtBaseIncluded: false }),
+    ])
+    expect(groups[0]!.whtPctSnapshot).toBeNull()
+  })
+
   it('รายการที่ net ≠ gross − wht ล้มทันที (ยามของ `22` §6.10 ก่อนเงินออกจริง)', () => {
     expect(() => groupPayoutItemsByPayee([item({ netSatang: 999_999 })])).toThrow(RangeError)
   })

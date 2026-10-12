@@ -125,11 +125,7 @@ export function ReadinessModal({
             ))}
           </ul>
 
-          {data.warnings.map((warning) => (
-            <InlineAlert key={warning} tone="warning" title="คำเตือน — ผ่านได้แต่ควรตรวจก่อน">
-              {warning}
-            </InlineAlert>
-          ))}
+          <ReadinessWarnings warnings={data.warnings} />
 
           {data.criticalOpen.length > 0 && (
             <div className="rounded-lg border border-red-200">
@@ -198,5 +194,26 @@ export function ReadinessModal({
         </div>
       )}
     </Modal>
+  )
+}
+
+/**
+ * mytester3 H3-01 — คำเตือนทุกแหล่ง (ข้อยกเว้นระดับคำเตือน · ศูนย์ต้นทุนว่าง ฯลฯ) อยู่ใต้หัวข้อเดียว
+ * (เดิม render กล่องละหัวข้อ ⇒ หัวข้อ "คำเตือน — ผ่านได้แต่ควรตรวจก่อน" ซ้ำเมื่อมีหลายกลุ่ม)
+ */
+export function ReadinessWarnings({ warnings }: { warnings: readonly string[] }) {
+  if (warnings.length === 0) return null
+  return (
+    <InlineAlert tone="warning" title="คำเตือน — ผ่านได้แต่ควรตรวจก่อน">
+      {warnings.length === 1 ? (
+        warnings[0]
+      ) : (
+        <ul className="list-disc space-y-1 pl-4">
+          {warnings.map((warning) => (
+            <li key={warning}>{warning}</li>
+          ))}
+        </ul>
+      )}
+    </InlineAlert>
   )
 }

@@ -258,7 +258,8 @@ export function groupPayoutItemsByPayee(items: readonly PayoutBatchItemDto[]): P
     const first = bucket[0]
     if (first === undefined) throw new RangeError('กลุ่มผู้รับเงินต้องมีอย่างน้อย 1 รายการ')
     // mytester2 รีวิว — เงินทดรองไม่มีอัตรา WHT (snapshot null) ⇒ ไม่นำมาตัดสินว่าอัตราของกลุ่มเท่ากันหรือไม่
-    const earning = bucket.filter((item) => item.source !== 'advance')
+    // mytester3 F3-01 — รายการนอกฐานภาษี (ค่าที่พัก/รายการกรอกเอง · snapshot 0) ก็ไม่นำมาตัดสิน: อัตราของกลุ่ม = อัตราของรายการในฐานภาษี
+    const earning = bucket.filter((item) => item.source !== 'advance' && item.whtBaseIncluded)
     const rates = new Set(earning.map((item) => item.whtPctSnapshot))
     const rateSource = earning[0] ?? first
     const totals = summarizePayoutBatch(bucket)

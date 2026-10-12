@@ -55,7 +55,7 @@ import type {
 import { emitAudit } from '@/lib/audit/audit'
 import { SalesError } from '@/lib/sales/errors'
 import type { SessionUser } from '@/lib/auth/types'
-import { calculateCustomerWithheldWht } from '@/lib/finance/wht-calc'
+import { calculateCustomerWithheldWht, documentedBillingAmounts, type CustomerWhtNoteAmounts } from '@/lib/finance/wht-calc'
 import { Prisma } from '@/lib/generated/prisma/client'
 import type {
   BankFileEncoding,
@@ -64,7 +64,7 @@ import type {
   BankMatchStatus,
 } from '@/lib/generated/prisma/enums'
 import { arOutstandingSatang, remainingAfterCustomerWhtSatang } from '@/lib/finance/ar-calc'
-import { withDocumentedArTotals } from '@/lib/portal/documented-amounts'
+import { customerWhtNotesOf, documentedAmountsForBatches } from '@/lib/portal/documented-amounts'
 import { prisma } from '@/lib/prisma'
 import { PayoutError } from '@/lib/payout/errors'
 import { PAYOUT_STATUS_LABEL } from '@/lib/payout/payout'
@@ -261,16 +261,23 @@ export async function listBankTransactions(
  * ⇒ คาดผิดไม่ทำให้จับคู่พลาด และไม่แตะยอด AR (ยอดหักจริงถูกบันทึกตอนจับคู่สำเร็จเท่านั้น)
  */
 function altAmountForBilling(row: {
+  /** ยอดตามเอกสารของรอบ (มติ O75) */
   totalSatang: number
   whtWithheldByCustomerSatang: number
   company: { whtWithheldByCustomerPct: Prisma.Decimal | null }
   revenues: readonly { grossSatang: number }[]
+  /** mytester3 G3-02 — ใบลด/เพิ่มหนี้ของรอบ ⇒ ฐานภาษี = ยอดก่อน VAT ตามเอกสาร (`22` §6.16) */
+  notes: CustomerWhtNoteAmounts | undefined
 }): number | null {
   const withheldSatang =
     row.whtWithheldByCustomerSatang > 0
       ? row.whtWithheldByCustomerSatang
       : calculateCustomerWithheldWht({
-          amountBeforeVatSatang: row.revenues.reduce((sum, revenue) => sum + revenue.grossSatang, 0),
+          amountBeforeVatSatang: documentedBillingAmounts({
+            amountBeforeVatSatang: row.revenues.reduce((sum, revenue) => sum + revenue.grossSatang, 0),
+            totalSatang: row.totalSatang,
+            ...(row.notes === undefined ? {} : { notes: row.notes }),
+          }).beforeVatSatang,
           whtPct: row.company.whtWithheldByCustomerPct === null ? null : Number(row.company.whtWithheldByCustomerPct),
         })
   return withheldSatang > 0 ? row.totalSatang - withheldSatang : null
@@ -343,13 +350,20 @@ async function loadCandidates(
     })
 
     // มติ O75 — ยอดของรอบ = ยอดตามเอกสาร (รวมใบลด/เพิ่มหนี้) · รอบที่รับเงินไปบางส่วนแล้วรับ "ยอดค้างที่เหลือ" เป็นยอดตรงด้วย
-    const [documented, debitNoteDates] = await Promise.all([
-      withDocumentedArTotals(organizationId, rows),
+    const [documentedAmounts, debitNoteDates] = await Promise.all([
+      documentedAmountsForBatches(
+        organizationId,
+        rows.map((row) => row.id),
+      ),
       latestDebitNoteDateByBatch(
         organizationId,
         rows.map((row) => row.id),
       ),
     ])
+    const documented = rows.map((row) => {
+      const amounts = documentedAmounts.get(row.id)
+      return { ...row, totalSatang: amounts?.documented.totalSatang ?? row.totalSatang, notes: customerWhtNotesOf(amounts) }
+    })
     return documented.map((row) => {
       const remaining = arOutstandingSatang(row)
       const hasReceipts = remaining !== row.totalSatang

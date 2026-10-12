@@ -1356,6 +1356,34 @@ describe('00_Control_Totals.csv + หน้าปก (มติ PO 06/10/2569 U9
     expect(amounts).toEqual(['366.00', '679.65', '1,045.65'])
   })
 
+  it('mytester3 H3-02 — บรรทัดกระทบใบกำกับกับเงินรับ (มีเมื่อส่งผลตรวจมา) · ไม่ส่ง = ไม่มีบรรทัด', () => {
+    const covered = buildControlTotals({
+      ...CONTROL_TOTALS_FIXTURE,
+      taxInvoiceCoverage: {
+        checkedCount: 3,
+        documentsSatang: 2_035_295,
+        settledSatang: 2_063_855 + 500,
+        overpaymentSatang: 500,
+        differenceSatang: 28_560,
+        mismatches: [
+          {
+            batchNumber: 'BL-2569-002',
+            expectedSatang: 287_255,
+            documentsSatang: 258_695,
+            differenceSatang: 28_560,
+            vatDifferenceSatang: 1_868,
+          },
+        ],
+      },
+    })
+    const get = (item: string) => covered.find((line) => line.section === 'summary' && line.item === item)
+    expect(get('tax_invoice_coverage_documents')).toMatchObject({ rowCount: 3, amountSatang: 2_035_295 })
+    expect(get('tax_invoice_coverage_settled')).toMatchObject({ rowCount: 3, amountSatang: 2_063_855 })
+    expect(get('tax_invoice_coverage_difference')).toMatchObject({ rowCount: 1, amountSatang: 28_560 })
+    expect(controlTotalsCsv(covered)).toContain(',tax_invoice_coverage_difference,')
+    expect(lines.some((line) => line.item.startsWith('tax_invoice_coverage'))).toBe(false)
+  })
+
   it('หน้าปก: จำนวนแถวต่อไฟล์ + ตารางยอดสรุปค่าเดียวกับไฟล์ 00 · ช่วงไฟล์ 00–18 · หมายเหตุโฟลเดอร์ PDF', () => {
     const doc = buildPackCoverDoc({
       organizationName: 'บริษัททดสอบ',

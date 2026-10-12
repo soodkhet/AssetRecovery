@@ -134,6 +134,7 @@ import { customerWhtExportSources } from '@/lib/customer-wht/queries'
 import { TAX_INVOICE_DOC_KIND_TITLE } from '@/lib/sales/receipt-invoice'
 import { buildTaxInvoiceDoc } from '@/lib/sales/sales'
 import { taxInvoicesForPack } from '@/lib/sales/queries'
+import { loadTaxInvoiceCoverage } from '@/lib/sales/tax-invoice-coverage-queries'
 
 /**
  * Accounting Pack Export (ไฟล์ 37) — ชั้น DB + ตัวประกอบชุดเอกสาร (`37` §14)
@@ -1747,6 +1748,7 @@ export async function createExportPack(
     advanceBalances,
     companyDocuments,
     bankFeeWriteOffs,
+    taxInvoiceCoverage,
   ] = await Promise.all([
     revenueRows(actor.organizationId, scope),
     cashReceiptRows(actor.organizationId, scope),
@@ -1766,6 +1768,8 @@ export async function createExportPack(
     advanceBalanceExportRows(actor.organizationId, scope),
     companyDocumentExportRows(actor.organizationId, generatedAt),
     bankFeeWriteOffRows(actor.organizationId, scope),
+    // mytester3 H3-02 — บรรทัดกระทบใบกำกับกับเงินรับใน 00_Control_Totals
+    loadTaxInvoiceCoverage(actor.organizationId, scope),
   ])
   const expenses = expenseRows(expenseRecords, vouchers)
 
@@ -1806,6 +1810,7 @@ export async function createExportPack(
     advanceBalances,
     companyDocuments,
     bankFeeWriteOffs,
+    taxInvoiceCoverage,
   })
 
   const dataFiles: readonly { key: string; fileName: string; bytes: Uint8Array; kind: PackAssetKind }[] = [
