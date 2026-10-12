@@ -160,6 +160,14 @@ export function isArOutstanding(batch: Pick<BillingBatchDto, 'outstandingSatang'
   return batch.outstandingSatang > 0 && batch.status !== 'draft'
 }
 
+/**
+ * mytester4 G4-01 — ยอดที่ลูกค้าชำระเกินยอดตามเอกสาร (ยอดค้างติดลบ เช่น หลังใบลดหนี้ส่วนเกินตามมติรีวิว R3 #1 ข้อ 2) ·
+ * ระบบไม่มีที่เก็บเครดิตลูกค้า ⇒ คืนนอกระบบ (U171) · ไม่เกิน = 0
+ */
+export function customerOverpaidSatang(batch: Pick<BillingBatchDto, 'outstandingSatang' | 'status'>): number {
+  return batch.status === 'draft' ? 0 : Math.max(0, -batch.outstandingSatang)
+}
+
 /** เกินกำหนดชำระแล้วหรือยัง — `daysOverdue` มาจาก API (นับตามปฏิทินไทย · `22` §6.11) */
 export function isArOverdue(batch: Pick<BillingBatchDto, 'outstandingSatang' | 'status' | 'daysOverdue'>): boolean {
   return isArOutstanding(batch) && batch.daysOverdue > 0

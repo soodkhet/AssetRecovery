@@ -724,6 +724,67 @@ suite('มติ PO U95 — รับเงิน ⇒ ใบเสร็จร�
     expect(note.totalSatang).toBe(21_400)
   })
 
+  it('mytester4 G4-01 — BL-2569-003 SPC: ลด 100 ก่อนรับ · รับ 1,500 · ลด 1,000 ⇒ ใบลดหนี้ส่วนเกิน 39.36 บันทึกได้ · AR ไม่มีเศษ 0.01 · Σ ใบ − ใบลดหนี้ = ยอดตามเอกสาร', async () => {
+    const credit = await import('@/lib/credit-notes/queries')
+    const { documentedAmountsForBatches, documentedOutstandingByBatch } = await import('@/lib/portal/documented-amounts')
+    await setNumbering({ seq: 3020 })
+    // ใบแจ้งหนี้ 2,462.51 + 172.38 = 2,634.89
+    const batch = await seedBilling({ status: 'sent', grossSatang: 246_251, vatSatang: 17_238 })
+    await sales.syncSalesRecordFromBilling(ctx, batch.id)
+    const approvedDecrease = async (amountSatang: number, reason: string): Promise<string> => {
+      const rows = await db().$queryRawUnsafe<{ id: string }[]>(`
+        INSERT INTO adjustments (organization_id, adjustment_type, amount_satang, reason, status, billing_batch_id,
+                                 approved_by, approved_at, created_by)
+        VALUES ('${ORG_ID}', 'decrease', ${amountSatang}, $$${reason}$$, 'approved', '${batch.id}', '${ACCOUNTING_ID}', now(), '${ACCOUNTING_ID}')
+        RETURNING id
+      `)
+      return rows[0]?.id ?? ''
+    }
+    // SPC-0005 −100 ก่อนรับเงิน ⇒ ไม่ต้องออกใบลดหนี้
+    await approvedDecrease(10_000, 'SPC-0005 ลดก่อนรับเงิน')
+    const invoice = await sales.issueTaxInvoice(ctx, { cashReceiptId: await seedReceipt(batch.id, { amountSatang: 150_000 }) })
+    expect(invoice).toMatchObject({ totalBeforeVatSatang: 140_187, vatSatang: 9_813, totalSatang: 150_000 })
+    await db().$executeRawUnsafe(
+      `UPDATE billing_batches SET status = 'partially_paid', received_satang = 150000 WHERE id = '${batch.id}'`,
+    )
+
+    // SPC-0031 −1,000 ⇒ ลดหมดส่วนที่ยังไม่ออกใบ 1,060.64 + เกินไปในส่วนที่ออกใบแล้ว 39.36
+    const adjustmentId = await approvedDecrease(100_000, 'SPC-0031 ลดหลังรับเงินบางส่วน')
+    const before = (await documentedAmountsForBatches(ORG_ID, [batch.id])).get(batch.id)
+    expect(before?.uninvoicedReduction).toMatchObject({
+      beforeVatSatang: 106_064,
+      vatSatang: 7_425,
+      creditNoteAllowanceBeforeVatSatang: 3_936,
+    })
+    // เดิม 1,500.01 (VAT ของส่วนที่ลด 74.24) ⇒ ค้าง 0.01 ลอย
+    expect(before?.documented.totalSatang).toBe(150_000)
+    const batchRow = await db().billingBatch.findUniqueOrThrow({ where: { id: batch.id } })
+    expect((await documentedOutstandingByBatch(ORG_ID, [batchRow])).get(batch.id)).toBe(0)
+    expect((await credit.listAdjustmentsAwaitingCreditNote(accountant)).some((row) => row.adjustmentId === adjustmentId)).toBe(true)
+    const listed = (await sales.listSalesRecords(accountant, {})).items.find((item) => item.billingBatchId === batch.id)
+    expect(listed?.creditNoteAllowanceBeforeVatSatang).toBe(3_936)
+
+    const base = { taxInvoiceId: invoice.id, adjustmentId, issueDate: TODAY, reason: 'ลดส่วนที่ออกใบแล้วเกินมูลค่าใหม่' }
+    await expectCode(
+      () => credit.createCreditNote(ctx, { ...base, creditNoteNumber: `G401-${RUN}-1`, amountBeforeVatSatang: 3_937 }),
+      'CREDIT_NOTE_EXCEEDS_OUTSTANDING',
+    )
+    // เดิม: CREDIT_NOTE_EXCEEDS_OUTSTANDING "ลดได้ไม่เกิน ฿0.01" (เพดานยอดค้าง U171) ⇒ ป้ายรอใบลดหนี้ค้างถาวร
+    const note = await credit.createCreditNote(ctx, { ...base, creditNoteNumber: `G401-${RUN}-2`, amountBeforeVatSatang: 3_936 })
+    expect(note).toMatchObject({ amountBeforeVatSatang: 3_936, vatSatang: 276, totalSatang: 4_212 })
+
+    const after = (await documentedAmountsForBatches(ORG_ID, [batch.id])).get(batch.id)
+    // Σ ใบกำกับ − Σ ใบลดหนี้ = ยอดตามเอกสาร (ก่อน VAT = มูลค่าสุทธิ 2,462.51 − 1,100 = 1,362.51)
+    expect(after?.documented).toEqual({ beforeVatSatang: 136_251, vatSatang: 9_537, totalSatang: 145_788 })
+    expect(invoice.totalSatang - note.totalSatang).toBe(after?.documented.totalSatang)
+    expect(after?.uninvoicedReduction.creditNoteAllowanceBeforeVatSatang).toBe(0)
+    // ลูกค้าชำระเกิน 42.12 (ยอดค้างติดลบ) ⇒ คืนนอกระบบตาม U171 · ไม่มีป้ายรอใบลดหนี้ค้าง
+    const afterRow = await db().billingBatch.findUniqueOrThrow({ where: { id: batch.id } })
+    expect((await documentedOutstandingByBatch(ORG_ID, [afterRow])).get(batch.id)).toBe(-4_212)
+    expect(afterRow.status).toBe('paid')
+    expect((await credit.listAdjustmentsAwaitingCreditNote(accountant)).some((row) => row.adjustmentId === adjustmentId)).toBe(false)
+  })
+
   it('รีวิว mytester3 #5 — เงินรับส่วนเพิ่มหนี้หลังใบปิดยอดของรอบที่รับครบ ⇒ ไม่นับ "รอออกใบ" (คำเตือน U95) · รอบที่ยังออกไม่ครบยังนับ', async () => {
     const { loadReceiptsAwaitingTaxInvoice } = await import('@/lib/sales/tax-invoice-coverage-queries')
     const tomorrow = new Date(TODAY.getTime() + 86_400_000)

@@ -420,6 +420,22 @@ describe('portal serializers — เนื้อหา', () => {
       expect(none([adj({ adjustmentType: 'increase' })], 0)).toBe(0)
     })
 
+    it('mytester4 G4-01 — Adjustment −1,000 คร่อมสองส่วน มีใบลดหนี้ 39.36 ⇒ หักส่วนที่เหลือ 960.64 + VAT 67.24 · ใบลดหนี้หักแยก', () => {
+      const split = adj({ hasActiveCreditNote: true, creditNoteBeforeVatSatang: 3_936 })
+      const reduction = portalCaseUninvoicedReductionSatang({
+        adjustments: [split],
+        creditNoteAllowanceBeforeVatSatang: 0,
+        vatRatePct: 7,
+        revenueHasVat: true,
+      })
+      expect(reduction).toBe(102_788)
+      // ใบลดหนี้ 42.12 + ส่วนที่ไม่ต้องออกใบ 1,027.88 = 1,070.00 = ยอดที่ลดทั้งหมดรวม VAT
+      expect(reduction + 4_212).toBe(107_000)
+      // รอบยังเหลือส่วนที่ต้องออกใบลดหนี้ / ใบกำกับแบบเดิม ⇒ ไม่แยกส่วน
+      expect(portalCaseUninvoicedReductionSatang({ adjustments: [split], creditNoteAllowanceBeforeVatSatang: 100, vatRatePct: 7, revenueHasVat: true })).toBe(0)
+      expect(portalCaseUninvoicedReductionSatang({ adjustments: [split], creditNoteAllowanceBeforeVatSatang: null, vatRatePct: 7, revenueHasVat: true })).toBe(0)
+    })
+
     it('serializer — ยอดจริงหักส่วนที่ปรับลด + ส่งยอดปรับลดให้บรรทัดย่อย · ไม่ส่ง = 0', () => {
       const fee = serializePortalCaseDetail(
         caseRow('closed_success', { revenue: { totalSatang: 749_000, vatSatang: 49_000, uninvoicedReductionSatang: 107_000 } }),

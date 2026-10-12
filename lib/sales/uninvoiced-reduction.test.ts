@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { assertWithinUninvoicedAllowance } from '@/lib/credit-notes/credit-note'
+import { applyCreditNotes, ZERO_AMOUNTS } from '@/lib/portal/documented-amounts'
 import { receiptInvoiceAmounts, receiptSettlementOf } from '@/lib/sales/receipt-invoice'
 import { evaluateTaxInvoiceCoverage, receiptAwaitsTaxInvoice } from '@/lib/sales/tax-invoice-coverage'
 import {
@@ -234,5 +235,60 @@ describe('H3-02 ใบกำกับครอบยอด — ปิดแบ�
     }
     expect(receiptAwaitsTaxInvoice(input)).toBe(true)
     expect(receiptAwaitsTaxInvoice({ ...input, uninvoicedReductionBeforeVatSatang: 10_000 })).toBe(false)
+  })
+})
+
+describe('mytester4 G4-01 — BL-2569-003 SPC ลดคร่อมส่วนที่ออกใบแล้ว ⇒ ใบลดหนี้ส่วนเกิน 39.36 · AR ไม่มีเศษ 0.01', () => {
+  // ใบแจ้งหนี้ 2,462.51 + 172.38 = 2,634.89 · SPC-0005 −100 ก่อนรับเงิน · รับ 1,500 ⇒ IV 1,401.87 + 98.13 · SPC-0031 −1,000
+  const SPC: UninvoicedReductionInput = {
+    billedBeforeVatSatang: 246_251,
+    billedVatSatang: 17_238,
+    billedVatRatesPct: [7, 7],
+    invoicedBeforeVatSatang: 140_187,
+    invoicedVatSatang: 9_813,
+    invoicedVatRatesPct: [7],
+    creditNoteBeforeVatSatang: 0,
+    decreaseSatang: 110_000,
+    legacyInvoice: false,
+  }
+  const invoiced = { beforeVatSatang: 246_251, vatSatang: 17_238, totalSatang: 263_489 }
+
+  it('ก่อนใบลดหนี้: R = V = 1,060.64 · VAT ของ R = 172.38 − 98.13 = 74.25 (ไม่ใช่ 74.24) ⇒ ยอดตามเอกสาร 1,500.00 = รับแล้ว · ใบลดหนี้ได้ 39.36', () => {
+    const r = uninvoicedReductionOf(SPC)
+    expect(r).toMatchObject({ beforeVatSatang: 106_064, vatSatang: 7_425, remainingBeforeVatSatang: 0, creditNoteAllowanceBeforeVatSatang: 3_936 })
+    expect(applyCreditNotes(invoiced, ZERO_AMOUNTS, ZERO_AMOUNTS, r).totalSatang).toBe(150_000)
+    // ไม่ส่ง VAT ของใบที่ออกแล้ว ⇒ สูตรอัตราเดิม (74.24 — ที่มาของเศษ 0.01 ใน AR)
+    expect(uninvoicedReductionOf({ ...SPC, invoicedVatSatang: undefined }).vatSatang).toBe(7_424)
+    // อัตราบนใบกำกับต่างจากใบแจ้งหนี้ ⇒ ไม่ปิดเศษ (สูตรอัตราเดิม)
+    expect(uninvoicedReductionOf({ ...SPC, invoicedVatRatesPct: [10] }).vatSatang).toBe(7_424)
+  })
+
+  it('บันทึกใบลดหนี้ 39.36 + 2.76 ⇒ R คงเดิม · ลดหนี้เพิ่มไม่ได้ · Σ ใบ − ใบลดหนี้ = ยอดตามเอกสาร · ลูกค้าชำระเกิน 42.12', () => {
+    const r = uninvoicedReductionOf({ ...SPC, creditNoteBeforeVatSatang: 3_936 })
+    expect(r).toMatchObject({ beforeVatSatang: 106_064, vatSatang: 7_425, creditNoteAllowanceBeforeVatSatang: 0 })
+    const cn = { beforeVatSatang: 3_936, vatSatang: 276, totalSatang: 4_212 }
+    const documented = applyCreditNotes(invoiced, cn, ZERO_AMOUNTS, r)
+    expect(documented).toEqual({ beforeVatSatang: 136_251, vatSatang: 9_537, totalSatang: 145_788 })
+    expect(150_000 - cn.totalSatang).toBe(documented.totalSatang)
+    expect(150_000 - documented.totalSatang).toBe(4_212)
+  })
+
+  it('ใบลดหนี้ VAT 2.75 (ยอดตามเอกสาร ± 1 สตางค์) ⇒ Σ ใบ − ใบลดหนี้ = มูลค่าสุทธิ 1,362.51 + 95.38 = 1,457.89 พอดี', () => {
+    const r = uninvoicedReductionOf({ ...SPC, creditNoteBeforeVatSatang: 3_936 })
+    const documented = applyCreditNotes(invoiced, { beforeVatSatang: 3_936, vatSatang: 275, totalSatang: 4_211 }, ZERO_AMOUNTS, r)
+    expect(documented).toEqual({ beforeVatSatang: 136_251, vatSatang: 9_538, totalSatang: 145_789 })
+    expect(246_251 - 110_000).toBe(136_251)
+  })
+
+  it('ใบลดหนี้เกิน 39.36 ⇒ ปฏิเสธ (ส่วนที่ลดยังไม่ได้ออกใบกำกับ)', () => {
+    const allowance = uninvoicedReductionOf(SPC).creditNoteAllowanceBeforeVatSatang
+    expect(codeOf(() => assertWithinUninvoicedAllowance(allowance, { amountBeforeVatSatang: 3_937, vatSatang: 276, totalSatang: 4_213 }))).toBe(
+      'CREDIT_NOTE_EXCEEDS_OUTSTANDING',
+    )
+    expect(codeOf(() => assertWithinUninvoicedAllowance(allowance, { amountBeforeVatSatang: 3_936, vatSatang: 276, totalSatang: 4_212 }))).toBeNull()
+  })
+
+  it('ลดไม่หมดส่วนที่ยังไม่ออกใบ (R < V) ⇒ VAT สูตรอัตราเดิม', () => {
+    expect(uninvoicedReductionOf({ ...SPC, decreaseSatang: 10_000 }).vatSatang).toBe(700)
   })
 })

@@ -153,9 +153,16 @@ export function customerWhtNotesOf(amounts: DocumentedBillingAmounts | undefined
 interface ReductionInputs {
   /** Σ ก่อน VAT ของใบกำกับ active (ณ `asOf`) */
   invoicedBeforeVatSatang: number
+  /** mytester4 G4-01 — Σ VAT + อัตราบนใบกำกับ (ปิดเศษ VAT เมื่อลดหมดส่วนที่ยังไม่ออกใบ) */
+  invoicedVatSatang: number
+  invoicedVatRatesPct: number[]
   legacyInvoice: boolean
   /** Σ Adjustment ลดยอด `approved` (ระดับรอบ + ระดับรายได้ในรอบ) */
   decreaseSatang: number
+}
+
+function emptyReductionInputs(): ReductionInputs {
+  return { invoicedBeforeVatSatang: 0, invoicedVatSatang: 0, invoicedVatRatesPct: [], legacyInvoice: false, decreaseSatang: 0 }
 }
 
 /**
@@ -191,17 +198,25 @@ async function loadReductionInputs(
           ? { status: 'active' as const }
           : { invoiceDate: { lte: asOf }, OR: [{ status: 'active' as const }, { cancelledAt: { gt: endOfDay } }] }),
       },
-      select: { docKind: true, amountBeforeVatSatang: true, salesRecord: { select: { billingBatchId: true } } },
+      select: {
+        docKind: true,
+        amountBeforeVatSatang: true,
+        vatSatang: true,
+        vatRatePctUsed: true,
+        salesRecord: { select: { billingBatchId: true } },
+      },
     }),
   ])
   const entry = (batchId: string): ReductionInputs => {
-    const current = result.get(batchId) ?? { invoicedBeforeVatSatang: 0, legacyInvoice: false, decreaseSatang: 0 }
+    const current = result.get(batchId) ?? emptyReductionInputs()
     result.set(batchId, current)
     return current
   }
   for (const invoice of invoices) {
     const current = entry(invoice.salesRecord.billingBatchId)
     current.invoicedBeforeVatSatang += invoice.amountBeforeVatSatang
+    current.invoicedVatSatang += invoice.vatSatang
+    if (invoice.vatRatePctUsed !== null) current.invoicedVatRatesPct.push(invoice.vatRatePctUsed.toNumber())
     if (invoice.docKind === 'tax_invoice') current.legacyInvoice = true
   }
   for (const row of adjustments) {
@@ -261,7 +276,7 @@ export async function documentedAmountsForBatches(
           }
     const credit = notes.credit.get(batch.id) ?? ZERO_AMOUNTS
     const debit = notes.debit.get(batch.id) ?? ZERO_AMOUNTS
-    const loaded = reductionInputs.get(batch.id) ?? { invoicedBeforeVatSatang: 0, legacyInvoice: false, decreaseSatang: 0 }
+    const loaded = reductionInputs.get(batch.id) ?? emptyReductionInputs()
     // มติผู้ใช้ 12/10/2569 (รีวิว R3 #1) — เฉพาะรอบที่ส่งแล้ว (มีรายการขาย)
     const uninvoicedReduction =
       sales === null
@@ -271,6 +286,8 @@ export async function documentedAmountsForBatches(
             billedVatSatang: sales.vatSatang,
             billedVatRatesPct: batch.revenues.map((row) => row.vatRatePctUsed.toNumber()),
             invoicedBeforeVatSatang: loaded.invoicedBeforeVatSatang,
+            invoicedVatSatang: loaded.invoicedVatSatang,
+            invoicedVatRatesPct: loaded.invoicedVatRatesPct,
             creditNoteBeforeVatSatang: credit.beforeVatSatang,
             decreaseSatang: loaded.decreaseSatang,
             legacyInvoice: loaded.legacyInvoice,

@@ -249,14 +249,32 @@ export function creditNoteFormLimit(input: {
   noteType: 'credit' | 'debit'
   maxCreditTotalSatang: number | null
   allowanceBeforeVatSatang: number | null
+  /**
+   * mytester4 G4-01 — คงเหลือของใบกำกับ (รวมภาษี) · ใช้เป็นเพดานรวมภาษีเมื่อกติกา §6.8.3 คุม (allowance ≠ null)
+   * แทนยอดค้างของรอบ ({@link creditNoteCappedByOutstanding}) · ไม่ส่ง = ใช้ `maxCreditTotalSatang`
+   */
+  invoiceCreditableTotalSatang?: number
 }): { blocked: 'uninvoiced' | 'outstanding' | null; maxTotalSatang: number | null; maxBeforeVatSatang: number | null } {
   const allowance = input.allowanceBeforeVatSatang === null ? null : Math.max(0, input.allowanceBeforeVatSatang)
   if (input.noteType === 'debit') return { blocked: null, maxTotalSatang: input.maxCreditTotalSatang, maxBeforeVatSatang: null }
   if (allowance === 0) return { blocked: 'uninvoiced', maxTotalSatang: 0, maxBeforeVatSatang: 0 }
+  if (allowance !== null && input.invoiceCreditableTotalSatang !== undefined) {
+    return { blocked: null, maxTotalSatang: Math.max(0, input.invoiceCreditableTotalSatang), maxBeforeVatSatang: allowance }
+  }
   if (isCreditNoteBlockedByOutstanding('credit', input.maxCreditTotalSatang)) {
     return { blocked: 'outstanding', maxTotalSatang: 0, maxBeforeVatSatang: allowance }
   }
   return { blocked: null, maxTotalSatang: input.maxCreditTotalSatang, maxBeforeVatSatang: allowance }
+}
+
+/**
+ * mytester4 G4-01 — เพดานยอดค้างของรอบ (U171) ใช้เมื่อใด: เฉพาะเมื่อกติกา §6.8.3 ไม่คุม (`allowance = null` — ใบกำกับแบบเดิม /
+ * ออกใบครบรอบแล้ว) · รอบที่ยังมีมูลค่าไม่ออกใบ ใบลดหนี้ส่วนเกิน (required − C) เกิดเมื่อมูลค่าใหม่ต่ำกว่ายอดที่ออกใบ
+ * (= ลูกค้าชำระเกินแล้ว) โดยนิยาม ⇒ ถ้าคงเพดานยอดค้างจะชนเสมอ (ป้ายรอใบลดหนี้ค้างถาวร) — เพดานคือ allowance แทน
+ * และส่วนที่ลูกค้าชำระเกิน (ยอดค้างติดลบ) คืนนอกระบบตาม U171
+ */
+export function creditNoteCappedByOutstanding(allowanceBeforeVatSatang: number | null): boolean {
+  return allowanceBeforeVatSatang === null
 }
 
 /**

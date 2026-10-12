@@ -172,6 +172,8 @@ export interface PortalCaseReductionAdjustment {
   /** ยอดก่อน VAT */
   amountSatang: number
   hasActiveCreditNote: boolean
+  /** mytester4 G4-01 — Σ ก่อน VAT ของใบลดหนี้ active ที่ผูก Adjustment นี้ (ไม่ส่ง = ไม่แยกส่วน) */
+  creditNoteBeforeVatSatang?: number
   creditNoteWaivedAt: Date | null
   creditNoteWaiveReason: string | null
 }
@@ -184,6 +186,8 @@ export interface PortalCaseReductionAdjustment {
  * - ปิดอัตโนมัติด้วยเหตุผล "ส่วนที่ลดยังไม่ได้ออกใบกำกับภาษี — ไม่ต้องออกใบลดหนี้" หรือ
  * - ยังไม่ปิดป้าย และรอบไม่เหลือส่วนที่ต้องออกใบลดหนี้ (`creditNoteStillRequired(allowance) = false` — เกณฑ์เดียวกับป้าย
  *   "รอใบลดหนี้" ⇒ ข้อมูลก่อนมติที่ไม่ได้ตั้งป้ายย้อนหลังก็นับ)
+ * - (mytester4 G4-01) มีใบลดหนี้แล้วแต่ใบลดหนี้น้อยกว่ายอด Adjustment (ลดคร่อมส่วนที่ออกใบแล้วกับส่วนที่ยังไม่ออกใบ) และรอบไม่เหลือ
+ *   ส่วนที่ต้องออกใบลดหนี้ ⇒ นับส่วนต่าง (ยอด Adjustment − ใบลดหนี้ ก่อน VAT) · ใบลดหนี้เองหักตามมติ I2-01 อยู่แล้ว
  * ไม่นับ: ยัง "รอใบลดหนี้" จริง (หักเมื่อออกใบลดหนี้ตามมติ I2-01) · ปิดป้าย "จัดการนอกระบบ" (ไม่มีเอกสารในระบบ)
  * · VAT = อัตราของรายได้เคส (รายได้ไม่มี VAT ⇒ 0)
  */
@@ -195,14 +199,18 @@ export function portalCaseUninvoicedReductionSatang(input: {
 }): number {
   const notRequired = !creditNoteStillRequired(input.creditNoteAllowanceBeforeVatSatang)
   const beforeVat = input.adjustments
-    .filter(
-      (row) =>
-        row.adjustmentType === 'decrease' &&
-        row.status === 'approved' &&
-        !row.hasActiveCreditNote &&
-        (row.creditNoteWaiveReason === UNINVOICED_REDUCTION_WAIVE_REASON || (row.creditNoteWaivedAt === null && notRequired)),
-    )
-    .reduce((sum, row) => sum + row.amountSatang, 0)
+    .filter((row) => row.adjustmentType === 'decrease' && row.status === 'approved')
+    .reduce((sum, row) => {
+      if (!row.hasActiveCreditNote) {
+        const counted =
+          row.creditNoteWaiveReason === UNINVOICED_REDUCTION_WAIVE_REASON || (row.creditNoteWaivedAt === null && notRequired)
+        return counted ? sum + row.amountSatang : sum
+      }
+      // mytester4 G4-01 — ลดคร่อมสองส่วน: ใบลดหนี้ออกเฉพาะส่วนที่ออกใบแล้ว ⇒ ส่วนที่เหลือของ Adjustment เป็นส่วนที่ลดในมูลค่าที่
+      // ยังไม่ออกใบ (ไม่ต้องมีใบลดหนี้) — นับเมื่อรอบไม่เหลือส่วนที่ต้องออกใบลดหนี้แล้ว (เกณฑ์เดียวกับป้าย "รอใบลดหนี้")
+      if (!notRequired || row.creditNoteBeforeVatSatang === undefined) return sum
+      return sum + Math.max(0, row.amountSatang - row.creditNoteBeforeVatSatang)
+    }, 0)
   if (beforeVat <= 0) return 0
   return beforeVat + (input.revenueHasVat ? pctOfSatang(beforeVat, input.vatRatePct) : 0)
 }

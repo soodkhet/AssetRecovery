@@ -193,7 +193,7 @@ export async function findPortalCaseDetail(ctx: PortalContext, id: string): Prom
               creditNoteWaiveReason: true,
               creditNotes: {
                 where: { organizationId: ctx.user.organizationId, status: 'active', noteType: 'credit' },
-                select: { creditNoteNumber: true, totalSatang: true, issueDate: true },
+                select: { creditNoteNumber: true, amountBeforeVatSatang: true, totalSatang: true, issueDate: true },
               },
             },
           },
@@ -224,7 +224,7 @@ interface PortalCaseRevenueRow {
   vatRatePctUsed: { toNumber(): number }
   billingBatchId: string | null
   adjustments: (Omit<PortalCaseReductionAdjustment, 'hasActiveCreditNote'> & {
-    creditNotes: { creditNoteNumber: string; totalSatang: number; issueDate: Date }[]
+    creditNotes: { creditNoteNumber: string; amountBeforeVatSatang: number; totalSatang: number; issueDate: Date }[]
   })[]
 }
 
@@ -245,9 +245,14 @@ async function portalCaseRevenueSource(
     creditNoteWaivedAt: row.creditNoteWaivedAt,
     creditNoteWaiveReason: row.creditNoteWaiveReason,
     hasActiveCreditNote: row.creditNotes.length > 0,
+    creditNoteBeforeVatSatang: row.creditNotes.reduce((sum, note) => sum + note.amountBeforeVatSatang, 0),
   }))
+  // mytester4 G4-01 — รวม Adjustment ที่ใบลดหนี้ออกเฉพาะส่วนเกิน (ใบลดหนี้ < ยอด Adjustment)
   const candidate = adjustments.some(
-    (row) => row.adjustmentType === 'decrease' && row.status === 'approved' && !row.hasActiveCreditNote,
+    (row) =>
+      row.adjustmentType === 'decrease' &&
+      row.status === 'approved' &&
+      (!row.hasActiveCreditNote || row.amountSatang > (row.creditNoteBeforeVatSatang ?? 0)),
   )
   const allowance =
     candidate && revenue.billingBatchId !== null

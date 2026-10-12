@@ -12,6 +12,7 @@ import {
   canDeleteBillingBatch,
   canSendBillingBatch,
   isArOutstanding,
+  customerOverpaidSatang,
   isArOverdue,
   customerWhtSummary,
   REVENUE_STATUS_FILTERS,
@@ -190,5 +191,14 @@ describe('mytester G-12 — ยอดแถวรอบวางบิล = ย�
     expect(
       billingDocumentedAmountNote({ totalSatang: 100_000, documentedTotalSatang: 110_000, documentedChanges: changes(0, 10_000, 0) }),
     ).toContain('หลังใบเพิ่มหนี้')
+  })
+})
+
+describe('mytester4 G4-01 — ลูกค้าชำระเกินยอดตามเอกสาร (ยอดค้างติดลบ) ⇒ แจ้งให้คืนนอกระบบ', () => {
+  it('ยอดค้าง −42.12 ⇒ ชำระเกิน 42.12 · ค้าง ≥ 0 หรือร่าง ⇒ 0', () => {
+    expect(customerOverpaidSatang(batch('paid', -4_212))).toBe(4_212)
+    expect(customerOverpaidSatang(batch('paid', 0))).toBe(0)
+    expect(customerOverpaidSatang(batch('partially_paid', 1))).toBe(0)
+    expect(customerOverpaidSatang(batch('draft', -100))).toBe(0)
   })
 })

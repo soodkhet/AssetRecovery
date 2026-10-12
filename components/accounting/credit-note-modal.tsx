@@ -28,6 +28,7 @@ import {
   creditNoteFormLimit,
   CREDIT_NOTE_NOT_REQUIRED_TEXT,
   CREDIT_NOTE_TYPE_LABEL,
+  creditNoteCappedByOutstanding,
   maxCreditNoteTotalSatang,
   netInvoiceAmounts,
 } from '@/lib/credit-notes/credit-note'
@@ -117,7 +118,10 @@ export function CreditNoteModal({
     noteType: 'credit',
     maxCreditTotalSatang: outstandingCap,
     allowanceBeforeVatSatang: creditNoteAllowanceBeforeVatSatang,
+    // mytester4 G4-01 — ส่วนเกินที่ต้องออกใบลดหนี้ไม่ชนเพดานยอดค้าง (ลูกค้าชำระเกินแล้ว) — เพดานรวมภาษี = คงเหลือของใบ
+    invoiceCreditableTotalSatang: creditable.totalSatang,
   })
+  const outstandingCapped = creditNoteCappedByOutstanding(creditNoteAllowanceBeforeVatSatang)
   const maxCreditTotal = limit.maxTotalSatang
   const blockedReason = isDebit ? null : limit.blocked
   const canSubmit =
@@ -366,7 +370,11 @@ export function CreditNoteModal({
                     ? 'ใบเพิ่มหนี้ — เพิ่มมูลค่าบริการหลังออกใบกำกับแล้ว (ผูกได้เฉพาะรายการปรับปรุงเพิ่มยอด)'
                     : limit.blocked === 'uninvoiced'
                       ? `ใบลดหนี้ — ${CREDIT_NOTE_NOT_REQUIRED_TEXT}`
-                      : `ใบลดหนี้ — ลดมูลค่าบริการหลังออกใบกำกับแล้ว (ยอดรวมต้องไม่เกินยอดใบกำกับ และไม่เกินยอดค้างชำระของรอบ${
+                      : !outstandingCapped
+                        ? `ใบลดหนี้ — ลดได้เฉพาะส่วนที่ลดลงไปในยอดที่ออกใบกำกับภาษีแล้ว${
+                            limit.maxBeforeVatSatang === null ? '' : ` ไม่เกิน ${fmtSatangSymbol(limit.maxBeforeVatSatang)} ก่อนภาษี`
+                          } · ถ้าลูกค้าชำระเกินยอดใหม่ ขอให้สำนักงานบัญชีคืนส่วนที่ชำระเกินนอกระบบ`
+                        : `ใบลดหนี้ — ลดมูลค่าบริการหลังออกใบกำกับแล้ว (ยอดรวมต้องไม่เกินยอดใบกำกับ และไม่เกินยอดค้างชำระของรอบ${
                           maxCreditTotal === null ? '' : ` — ลดได้สูงสุด ${fmtSatangSymbol(maxCreditTotal)} รวมภาษี`
                         })`
                 }

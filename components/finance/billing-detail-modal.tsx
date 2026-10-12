@@ -20,6 +20,7 @@ import { callApi } from '@/lib/api/types'
 import { fmtDate } from '@/lib/format/datetime'
 import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
 import {
+  customerOverpaidSatang,
   customerWhtSummary,
   isArOutstanding,
   REVENUE_FEE_MODEL_LABEL,
@@ -107,6 +108,13 @@ export function BillingDetailModal({ batch, onClose }: { batch: BillingBatchDto 
           />
           <Summary label="ครบกำหนดชำระ" value={fmtDate(batch.dueDate)} />
         </div>
+
+        {customerOverpaidSatang(batch) > 0 && (
+          <InlineAlert tone="warning" title="ลูกค้าชำระเกินยอดตามเอกสาร">
+            รับชำระเกิน {fmtSatangSymbol(customerOverpaidSatang(batch))} (เช่น หลังบันทึกใบลดหนี้) — ระบบไม่เก็บเป็นเครดิตลูกค้า ขอให้สำนักงานบัญชีคืนเงินนอกระบบ
+            แล้วกด “ปิดรายการโดยไม่จับคู่” กับรายการเงินโอนคืนในหน้ากระทบยอดธนาคารพร้อมเหตุผล
+          </InlineAlert>
+        )}
 
         <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
           <BillingStatusBadge status={batch.status} outstandingSatang={batch.outstandingSatang} />

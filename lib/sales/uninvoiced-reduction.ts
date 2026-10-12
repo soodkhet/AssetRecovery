@@ -21,6 +21,7 @@ import { pctOfSatang } from '@/lib/finance/satang'
  * - ใบลดหนี้ที่บันทึกไว้แล้ว (รวมข้อมูลเดิมที่ลดส่วนที่ยังไม่ออกใบ — มติ G3-01) นับก่อน ⇒ ไม่หักซ้ำ
  * - รอบที่มีใบกำกับแบบเดิม (ออกตอนวางบิล) active ⇒ ไม่ใช้กติกานี้ (R = 0 · ไม่จำกัดใบลดหนี้เพิ่ม — พฤติกรรมเดิม)
  * - VAT ของ R: อัตราเดียวทั้งรอบ ⇒ `pctOfSatang(R, อัตรา)` · หลายอัตรา ⇒ ตามสัดส่วน VAT/ก่อน VAT ของใบแจ้งหนี้ (ปัดครึ่งขึ้น)
+ *   · R = V (ลดหมดส่วนที่ยังไม่ออกใบ) + อัตราเดียวกับใบกำกับ ⇒ VAT ใบแจ้งหนี้ − VAT ที่ออกแล้ว (mytester4 G4-01 — กันเศษ 0.01 ค้าง AR)
  * - R หักจาก "ยอดตามเอกสาร" ของรอบ (ลูกหนี้/พอร์ทัล — `documentedAmountsForBatches()`) และจากฐานใบเสร็จฯ ถัดไป
  *   (`receiptInvoiceAmounts()`) ⇒ รับชำระครบ: Σ ใบกำกับ − Σ ใบลดหนี้ + Σ ใบเพิ่มหนี้ = ยอดสุทธิของรอบ ทุกสตางค์
  */
@@ -43,6 +44,12 @@ export interface UninvoicedReductionInput {
   decreaseSatang: number
   /** รอบมีใบกำกับแบบเดิม (ออกตอนวางบิล) active */
   legacyInvoice: boolean
+  /**
+   * mytester4 G4-01 — Σ VAT ของใบกำกับ active + อัตราบนใบ (ไม่ส่ง = ไม่ใช้กติกาปิดเศษ) ⇒ ลดหมดส่วนที่ยังไม่ออกใบ (R = V)
+   * และอัตราเดียวกันทั้งรอบ: VAT ของ R = VAT ใบแจ้งหนี้ − VAT ที่ออกแล้ว (สูตรเดียวกับใบปิดยอด `22` §6.8.2) ไม่ใช่ R × อัตรา
+   */
+  invoicedVatSatang?: number
+  invoicedVatRatesPct?: readonly number[]
 }
 
 export interface UninvoicedReduction {
@@ -92,6 +99,19 @@ export function reductionVatSatang(
   return Number(numerator / (2n * BigInt(basis.billedBeforeVatSatang)))
 }
 
+/**
+ * mytester4 G4-01 — ลดหมดส่วนที่ยังไม่ออกใบ ⇒ VAT ที่เหลือของใบแจ้งหนี้ต้องหมดพอดี (ไม่มีเศษสตางค์ลอยใน AR) ·
+ * ใช้เมื่อรู้ VAT ของใบที่ออกแล้ว และอัตราบนใบแจ้งหนี้/ใบกำกับทุกใบเท่ากัน (อัตราเปลี่ยน ⇒ สูตรอัตราตามเดิม)
+ */
+function closesUninvoicedVat(input: UninvoicedReductionInput): boolean {
+  if (input.invoicedVatSatang === undefined) return false
+  assertSatangInput(input.invoicedVatSatang, 'VAT ของใบกำกับ')
+  const [first] = input.billedVatRatesPct
+  if (first === undefined) return false
+  const rates = [...input.billedVatRatesPct, ...(input.invoicedVatRatesPct ?? [])]
+  return rates.every((rate) => sameRate(rate, first))
+}
+
 export function uninvoicedReductionOf(input: UninvoicedReductionInput): UninvoicedReduction {
   assertSatangInput(input.billedBeforeVatSatang, 'ยอดก่อน VAT ตามใบแจ้งหนี้')
   assertSatangInput(input.billedVatSatang, 'VAT ตามใบแจ้งหนี้')
@@ -103,7 +123,10 @@ export function uninvoicedReductionOf(input: UninvoicedReductionInput): Uninvoic
   const uninvoiced = Math.max(0, input.billedBeforeVatSatang - input.invoicedBeforeVatSatang)
   const required = Math.max(0, input.decreaseSatang - uninvoiced)
   const reduction = Math.max(0, input.decreaseSatang - Math.max(required, input.creditNoteBeforeVatSatang))
-  const vatSatang = reductionVatSatang(reduction, input)
+  const vatSatang =
+    reduction > 0 && reduction === uninvoiced && closesUninvoicedVat(input)
+      ? Math.max(0, input.billedVatSatang - (input.invoicedVatSatang ?? 0))
+      : reductionVatSatang(reduction, input)
   return {
     beforeVatSatang: reduction,
     vatSatang,

@@ -9,6 +9,7 @@ import {
   assertWithinBillingOutstanding,
   assertWithinInvoiceBalance,
   assertWithinUninvoicedAllowance,
+  creditNoteCappedByOutstanding,
   creditNoteFormLimit,
   CREDIT_NOTE_NOT_REQUIRED_TEXT,
   expectedCreditNoteVat,
@@ -267,5 +268,37 @@ describe('mytester3 LR3-01 — เพดานฟอร์มใบลดหน�
       expect((error as { title: string }).title).toBe('ยอดใบลดหนี้เกินส่วนที่ออกใบกำกับภาษีแล้ว')
       expect((error as { userMessage: string }).userMessage).toContain('฿200.00')
     }
+  })
+})
+
+describe('mytester4 G4-01 — ใบลดหนี้ส่วนเกินตามมติรีวิว R3 #1 ข้อ 2 ไม่ชนเพดานยอดค้างของรอบ', () => {
+  it('กติกา §6.8.3 คุม (allowance ≠ null) ⇒ ไม่ใช้เพดานยอดค้าง · ไม่คุม (null) ⇒ เพดานยอดค้างตาม U171', () => {
+    expect(creditNoteCappedByOutstanding(3_936)).toBe(false)
+    expect(creditNoteCappedByOutstanding(0)).toBe(false)
+    expect(creditNoteCappedByOutstanding(null)).toBe(true)
+  })
+
+  it('ฟอร์ม BL-2569-003: ยอดค้าง 0.01 แต่ลดหนี้ได้ 39.36 ก่อนภาษี ⇒ ไม่บล็อก · เพดานรวมภาษี = คงเหลือของใบ 1,500', () => {
+    expect(
+      creditNoteFormLimit({
+        noteType: 'credit',
+        maxCreditTotalSatang: 1,
+        allowanceBeforeVatSatang: 3_936,
+        invoiceCreditableTotalSatang: 150_000,
+      }),
+    ).toEqual({ blocked: null, maxTotalSatang: 150_000, maxBeforeVatSatang: 3_936 })
+    expect(
+      creditNoteFormLimit({ noteType: 'credit', maxCreditTotalSatang: 0, allowanceBeforeVatSatang: 3_936, invoiceCreditableTotalSatang: 150_000 })
+        .blocked,
+    ).toBeNull()
+    // allowance 0 ยังบล็อก "ไม่ต้องออกใบลดหนี้" · ไม่คุม (null) ⇒ ยอดค้าง 0 ยังบล็อกตาม U171
+    expect(
+      creditNoteFormLimit({ noteType: 'credit', maxCreditTotalSatang: 1, allowanceBeforeVatSatang: 0, invoiceCreditableTotalSatang: 150_000 })
+        .blocked,
+    ).toBe('uninvoiced')
+    expect(
+      creditNoteFormLimit({ noteType: 'credit', maxCreditTotalSatang: 0, allowanceBeforeVatSatang: null, invoiceCreditableTotalSatang: 150_000 })
+        .blocked,
+    ).toBe('outstanding')
   })
 })
