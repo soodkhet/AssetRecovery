@@ -47,7 +47,7 @@ const MESSAGES: Record<RoleErrorCode, { title: string; message: string }> = {
   },
   CAPABILITY_LOCKED: {
     title: 'สิทธิ์นี้ถูกล็อกไว้',
-    message: 'ความสามารถนี้เป็นของบทบาทเดียว ("✅ only") มอบให้บทบาทอื่นไม่ได้',
+    message: 'สิทธิ์นี้ล็อกไว้กับบทบาทเจ้าของ มอบให้บทบาทอื่นไม่ได้',
   },
   CAPABILITY_NOT_FOUND: {
     title: 'ไม่พบความสามารถที่ระบุ',
