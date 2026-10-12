@@ -16,9 +16,11 @@ import {
   hasCloseFormRevision,
   removeMediaAt,
   resubmitClosePayload,
+  localTravelOrigin,
   type CloseFormState,
 } from '@/lib/field/close-form'
 import type { FieldCaseDetailDto } from '@/lib/field/types'
+import { resubmitCloseSchema } from '@/lib/field/schemas'
 
 function detailOf(overrides: Partial<FieldCaseDetailDto> = {}): FieldCaseDetailDto {
   return {
@@ -307,6 +309,20 @@ describe('payload ของแต่ละปุ่ม', () => {
     expect(closeCasePayload(form).outcome).toBe('closed_success')
     expect(resubmitClosePayload(form)).not.toHaveProperty('outcome')
     expect(resubmitClosePayload(form).photos).toEqual(['p1'])
+  })
+
+  it('mytester3 D-IN3-01 — resubmit-close ส่งจุดเริ่มที่ปรับในโหมดตีกลับ · ไม่ปรับ = ไม่ส่ง (ใช้จุดเดิม) · schema รับได้', () => {
+    expect(resubmitClosePayload(form)).not.toHaveProperty('travelOrigin')
+    const origin = { latitude: 13.95, longitude: 100.53, source: 'manual_adjusted' as const }
+    const payload = resubmitClosePayload(form, origin)
+    expect(payload.travelOrigin).toEqual(origin)
+    const parsed = resubmitCloseSchema.safeParse(payload)
+    expect(parsed.success && parsed.data.travelOrigin).toEqual(origin)
+    expect(resubmitCloseSchema.safeParse(resubmitClosePayload(form)).success).toBe(true)
+    expect(localTravelOrigin(origin, new Date('2026-10-12T03:00:00.000Z'))).toEqual({
+      ...origin,
+      setAt: '2026-10-12T03:00:00.000Z',
+    })
   })
 
   it('เหตุผลไม่สำเร็จส่งเฉพาะ outcome = ไม่สำเร็จ · resubmit ไม่ส่ง (ล็อกตามรอบเดิม — UAT Q16)', () => {

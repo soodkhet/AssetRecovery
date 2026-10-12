@@ -32,6 +32,7 @@ import {
   closeFormMode,
   closeMissingSummary,
   hasCloseFormRevision,
+  localTravelOrigin,
   rejectedUploadPath,
   removeMediaAt,
   resubmitClosePayload,
@@ -56,6 +57,7 @@ import {
   FIELD_MEDIA_LABEL,
   type FieldMediaKind,
 } from '@/lib/field/media-upload'
+import type { TravelOriginInput } from '@/lib/field/schemas'
 import { uploadFieldMedia, FieldUploadError } from '@/lib/field/upload-client'
 import type {
   FieldActionResultDto,
@@ -496,6 +498,11 @@ export function CloseCaseModal({
   const savedRef = useRef(false)
   const [showMissing, setShowMissing] = useState(false)
   const [originError, setOriginError] = useState<string | null>(null)
+  /**
+   * จุดเริ่มที่ปรับในโหมดตีกลับ — โหมดนี้ไม่มี draft (server ปฏิเสธ close-draft) ⇒ ถือไว้ฝั่งเครื่องแล้วส่งไปกับ
+   * "ส่งกลับยืนยันอีกครั้ง" ให้ server คำนวณค่าน้ำมันใหม่ (`41` §7.6 · mytester3 D-IN3-01) · `null` = ใช้จุดเดิม
+   */
+  const [revisedOrigin, setRevisedOrigin] = useState<TravelOriginInput | null>(null)
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number } | null>(null)
   const dragStart = useRef<{ x: number; y: number } | null>(null)
 
@@ -602,6 +609,16 @@ export function CloseCaseModal({
       try {
         const position = await currentPosition()
         if (cancelled) return
+        if (closeFormMode(loaded).revision) {
+          const point: TravelOriginInput = {
+            latitude: position.latitude,
+            longitude: position.longitude,
+            source: 'gps_auto',
+          }
+          setRevisedOrigin(point)
+          setDetail({ ...loaded, travelOrigin: localTravelOrigin(point, new Date()) })
+          return
+        }
         const saved = await callApi<FieldCloseDraftResultDto>(
           apiPath('field.closeDraft', { id: caseId }),
           jsonRequest(
@@ -764,6 +781,16 @@ export function CloseCaseModal({
     source: 'gps_auto' | 'manual_adjusted',
   ): Promise<void> {
     if (detail === null) return
+    // โหมดตีกลับ — เก็บไว้ส่งพร้อม "ส่งกลับยืนยันอีกครั้ง" (ไม่มี draft ในโหมดนี้)
+    if (closeFormMode(detail).revision) {
+      const next: TravelOriginInput = { ...point, source }
+      setRevisedOrigin(next)
+      setDetail((latest) =>
+        latest === null ? latest : { ...latest, travelOrigin: localTravelOrigin(next, new Date()) },
+      )
+      setOriginError(null)
+      return
+    }
     setBusy(true)
     try {
       const response = await callApi<FieldCloseDraftResultDto>(
@@ -834,7 +861,7 @@ export function CloseCaseModal({
       const response = mode.revision
         ? await callApi<FieldActionResultDto>(
             apiPath('field.resubmitClose', { id: caseId }),
-            jsonRequest('POST', resubmitClosePayload(form)),
+            jsonRequest('POST', resubmitClosePayload(form, revisedOrigin ?? undefined)),
           )
         : await callApi<FieldActionResultDto>(
             apiPath('field.closeCase', { id: caseId }),
@@ -1064,6 +1091,11 @@ export function CloseCaseModal({
                     </button>
                   </div>
                 </div>
+              )}
+              {mode.revision && revisedOrigin !== null && (
+                <p className="mt-1.5 text-[11px] font-bold text-blue-700">
+                  ปรับจุดเริ่มเดินทางแล้ว — ระบบคำนวณระยะทางและค่าน้ำมันใหม่เมื่อกด &quot;{mode.submitLabel}&quot;
+                </p>
               )}
               <p className="mt-1.5 text-[11px] text-slate-400">
                 จุดนี้ใช้คำนวณระยะทางเท่านั้น ไม่ใช่หลักฐานปิดงาน — ถ้าไม่ตรงจุดออกเดินทางจริง ให้ไปยืนที่จุดนั้นแล้วกด

@@ -844,6 +844,92 @@ suite('Phase 2.9 — 2 เส้นทางตีกลับ (`41` §10.1 ห�
     expect(active.find((row) => row.expenseType === 'commission')?.grossSatang).toBe(COMMISSION_SATANG)
   })
 
+  it('mytester3 D-IN3-01 — โหมดตีกลับปรับจุดเริ่มเดินทางได้: ส่งกลับพร้อมจุดใหม่ ⇒ ค่าน้ำมันคำนวณใหม่จากจุดนั้น (`41` §7.6)', async () => {
+    const caseId = await closeSuccessfully()
+    await field.rejectFieldEvidence(manager, caseId, { reason: 'ขอภาพเพิ่มอีกมุม' }, { actor: manager, meta })
+
+    clearDistanceCache()
+    const fetchMock = stubDistanceMatrix(7_000)
+    const revisedOrigin = { latitude: 18.7012, longitude: 99.1034, source: 'manual_adjusted' as const }
+    await field.resubmitCloseCase(
+      agentA,
+      caseId,
+      { photos: ['p1.jpg', 'p2-new.jpg'], videos: ['v1.mp4'], productPhotos: ['pp1.jpg'], travelOrigin: revisedOrigin },
+      { actor: agentA, meta },
+    )
+
+    // ช่วงแรกของเส้นทางเริ่มจากจุดที่ปรับใหม่ ไม่ใช่จุดเดิม 18.58,99
+    const urls = fetchMock.mock.calls.map((call) => String((call as unknown[])[0]))
+    expect(urls.some((each) => new URL(each).searchParams.get('origins') === '18.7012,99.1034')).toBe(true)
+
+    const all = await db().expense.findMany({ where: { caseId, fieldDaySettlementId: null } })
+    const fuel = all.filter((row) => row.expenseType === 'fuel')
+    expect(fuel.filter((row) => row.status === 'superseded').map((row) => row.grossSatang)).toEqual([1_000])
+    const activeFuel = fuel.filter((row) => row.status !== 'superseded')
+    // 7 กม. × ฿5 = ฿35 — สูตรเดียวกับตอนปิดงาน (`22` §6.1)
+    expect(activeFuel.map((row) => row.grossSatang)).toEqual([3_500])
+    expect(activeFuel[0]?.distanceKm?.toString()).toBe('7')
+
+    // จุดเริ่มถูกเขียนทับ (ไม่ใช่หลักฐาน) + snapshot ลงหลักฐานชุดใหม่ + audit เก็บจุดเดิม/ใหม่
+    const origin = await db().travelOrigin.findFirstOrThrow({ where: { caseId } })
+    expect(origin.latitude.toString()).toBe('18.7012')
+    expect(origin.source).toBe('manual_adjusted')
+    const latestEvidence = await db().caseEvidence.findFirstOrThrow({ where: { caseId }, orderBy: { submittedAt: 'desc' } })
+    expect(latestEvidence.travelOriginLat?.toString()).toBe('18.7012')
+    expect(latestEvidence.travelOriginSource).toBe('manual_adjusted')
+    const assignment = await db().caseAssignment.findFirstOrThrow({ where: { caseId } })
+    const audit = await db().auditLog.findFirstOrThrow({
+      where: { targetType: 'case_assignments', targetId: assignment.id, action: 'status_change' },
+      orderBy: { createdAt: 'desc' },
+    })
+    expect(audit.afterData).toMatchObject({
+      travelOriginBefore: { latitude: 18.58, longitude: 99, source: 'gps_auto' },
+      travelOrigin: revisedOrigin,
+    })
+  })
+
+  it('mytester3 D-IN3-01 — ปรับจุดเริ่มตอนส่งกลับแล้วระยะทางเกินเพดาน max_per_case = ตัดที่เพดาน', async () => {
+    stubDistanceMatrix(2_000)
+    const caseId = await seedReadyToClose(agentCapped, TEAM_CAPPED)
+    await field.closeFieldCase(agentCapped, caseId, { outcome: 'closed_success', ...MEDIA }, { actor: agentCapped, meta })
+    await field.rejectFieldEvidence(manager, caseId, { reason: 'ขอภาพเพิ่มอีกมุม' }, { actor: manager, meta })
+
+    clearDistanceCache()
+    stubDistanceMatrix(120_000)
+    await field.resubmitCloseCase(
+      agentCapped,
+      caseId,
+      {
+        photos: ['p1.jpg', 'p2-new.jpg'],
+        videos: ['v1.mp4'],
+        productPhotos: ['pp1.jpg'],
+        travelOrigin: { latitude: 17.9, longitude: 98.9, source: 'gps_auto' },
+      },
+      { actor: agentCapped, meta },
+    )
+
+    const fuel = (await expensesOf(caseId)).find((row) => row.expenseType === 'fuel' && row.status !== 'superseded')
+    // 120 กม. × ฿5 = ฿600 แต่เพดาน ฿400
+    expect(fuel?.grossSatang).toBe(CAP_SATANG)
+    expect(fuel?.distanceKm?.toString()).toBe('120')
+  })
+
+  it('mytester3 D-IN3-01 — ไม่ได้ถูกตีกลับ = ส่งจุดเริ่มมากับการส่งกลับไม่ได้ จุดเดิมไม่ถูกแตะ', async () => {
+    const caseId = await closeSuccessfully()
+    await expectCode(
+      () =>
+        field.resubmitCloseCase(
+          agentA,
+          caseId,
+          { ...MEDIA, photos: ['p9.jpg'], travelOrigin: { latitude: 18.6, longitude: 99.0, source: 'gps_auto' } },
+          { actor: agentA, meta },
+        ),
+      'ASSIGNMENT_INVALID_STATUS',
+    )
+    const origin = await db().travelOrigin.findFirstOrThrow({ where: { caseId } })
+    expect(origin.latitude.toString()).toBe('18.58')
+  })
+
   it('มติ PO U135 — resubmit ข้ามงวด: งวดของวันปิดงานเดิมล็อกแล้ว ⇒ รายการเดิม (ยังไม่อนุมัติ) superseded · ชุดใหม่ลงวันนี้ในงวดที่เปิด + อ้างวันงานเดิม', async () => {
     const caseId = await closeSuccessfully()
     await field.rejectFieldEvidence(manager, caseId, { reason: 'ขอภาพเพิ่มอีกมุม' }, { actor: manager, meta })

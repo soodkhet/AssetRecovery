@@ -1108,6 +1108,8 @@ export async function saveCloseDraft(
 async function resolveDistanceForClose(
   assignmentId: string,
   fuelMode: FuelMode | null,
+  /** จุดเริ่มที่เพิ่งปรับมากับการส่งกลับ (D-IN3-01) — ยังไม่ลง DB ตอนคำนวณ · ไม่ส่ง = อ่านจุดที่บันทึกไว้ */
+  originOverride?: { latitude: number; longitude: number },
 ): Promise<{ distanceKmHundredths: number | null; checkedInAts: Date[] }> {
   const checkins = await prisma.checkIn.findMany({
     where: { assignmentId },
@@ -1119,16 +1121,22 @@ async function resolveDistanceForClose(
   // `DAILY_FLAT` ไม่แตะ Distance Matrix เลยแม้แต่ครั้งเดียว (`41` §6.4.2 · §20)
   if (fuelMode !== 'PER_KM') return { distanceKmHundredths: null, checkedInAts }
 
-  const origin = await prisma.travelOrigin.findUnique({
-    where: { assignmentId },
-    select: { latitude: true, longitude: true },
-  })
+  const stored =
+    originOverride === undefined
+      ? await prisma.travelOrigin.findUnique({
+          where: { assignmentId },
+          select: { latitude: true, longitude: true },
+        })
+      : null
+  const origin =
+    originOverride ??
+    (stored === null ? null : { latitude: stored.latitude.toNumber(), longitude: stored.longitude.toNumber() })
   if (origin === null) return { distanceKmHundredths: null, checkedInAts }
 
   try {
     const meters = await resolveRouteMeters(
       routePoints(
-        { latitude: origin.latitude.toNumber(), longitude: origin.longitude.toNumber() },
+        origin,
         checkins.map((row) => ({
           latitude: row.latitude.toNumber(),
           longitude: row.longitude.toNumber(),
@@ -1592,6 +1600,13 @@ export async function resubmitCloseCase(
 ): Promise<FieldActionResultDto> {
   const current = await loadOwnAssignment(user, caseId)
   assertFieldAction(current.status, 'resubmit_close_case')
+  // `41` §7.6 โหมด needs_revision — จุดเริ่มเดินทางปรับได้ตามปกติ (ไม่ใช่หลักฐาน) · ถ้าปรับ คำนวณค่าน้ำมันใหม่
+  // ด้วยจุดนี้ (mytester3 D-IN3-01) — ไม่ส่งมา = ใช้จุดเดิม
+  const revisedOrigin = input.travelOrigin
+  if (revisedOrigin !== undefined) {
+    assertFieldStateAction(current.status, 'set_travel_origin')
+    assertDeviceCoordinates(revisedOrigin.latitude, revisedOrigin.longitude)
+  }
 
   const previous = await prisma.caseEvidence.findFirst({
     where: { assignmentId: current.id },
@@ -1632,13 +1647,22 @@ export async function resubmitCloseCase(
   // outcome ล็อกตามรอบแรกเสมอ (`41` §10.1) — ห้ามให้ body เปลี่ยนผลการติดตาม
   const outcome = previous.outcome
   const closedStatus = closedStatusOf(outcome)
-  const [checkinCount, travelOrigin] = await Promise.all([
+  const [checkinCount, storedOrigin] = await Promise.all([
     prisma.checkIn.count({ where: { assignmentId: current.id } }),
     prisma.travelOrigin.findUnique({
       where: { assignmentId: current.id },
       select: { latitude: true, longitude: true, source: true },
     }),
   ])
+  // จุดที่ใช้คิดเงินรอบนี้ = จุดที่เพิ่งปรับ (ถ้ามี) ไม่งั้นจุดเดิม — snapshot ลง `case_evidences` ชุดใหม่ด้วยค่านี้
+  const travelOrigin =
+    revisedOrigin === undefined
+      ? storedOrigin
+      : {
+          latitude: new Prisma.Decimal(revisedOrigin.latitude),
+          longitude: new Prisma.Decimal(revisedOrigin.longitude),
+          source: revisedOrigin.source,
+        }
 
   assertCloseEvidence({
     outcome,
@@ -1662,7 +1686,13 @@ export async function resubmitCloseCase(
   // มติ PO 03/10/2569 (UAT Q7 · BUG-052 · `41` §10.1): ชุดใหม่คิดด้วย **แผน (เวอร์ชัน) + วันที่ของการปิดงาน
   // ครั้งแรก** — ไม่ใช่แผน/วันที่ ณ ตอน resubmit ⇒ แก้แผนระหว่างนั้นยอดต้องเท่าเดิม (`92` §7.1)
   const [{ distanceKmHundredths }, pricing] = await Promise.all([
-    resolveDistanceForClose(current.id, fuelMode),
+    resolveDistanceForClose(
+      current.id,
+      fuelMode,
+      revisedOrigin === undefined
+        ? undefined
+        : { latitude: revisedOrigin.latitude, longitude: revisedOrigin.longitude },
+    ),
     resolveRoundPricing(prisma as ExpenseTxClient, {
       organizationId: user.organizationId,
       assignmentId: current.id,
@@ -1686,6 +1716,28 @@ export async function resubmitCloseCase(
       data: { status: closedStatus, completedAt: firstClosedAt, updatedBy: context.actor.id },
     })
     if (claimed.count === 0) throw new AssignmentError('ASSIGNMENT_INVALID_STATUS')
+
+    // จุดเริ่มที่ปรับมากับการส่งกลับ — เขียนทับแถวเดิม (ไม่ใช่หลักฐาน `41` §6.4.1) · job คำนวณระยะทางย้อนหลัง
+    // (Maps ล่ม — D10) อ่านจุดจากแถวนี้ จึงต้องลงใน transaction เดียวกับรายการเบิกชุดใหม่
+    if (revisedOrigin !== undefined) {
+      const point = {
+        latitude: new Prisma.Decimal(revisedOrigin.latitude),
+        longitude: new Prisma.Decimal(revisedOrigin.longitude),
+        source: revisedOrigin.source,
+      }
+      await tx.travelOrigin.upsert({
+        where: { assignmentId: current.id },
+        create: {
+          organizationId: user.organizationId,
+          caseId,
+          assignmentId: current.id,
+          ...point,
+          setAt: resubmittedAt,
+          createdBy: context.actor.id,
+        },
+        update: { ...point, updatedBy: context.actor.id },
+      })
+    }
 
     const evidence = await tx.caseEvidence.create({
       data: {
@@ -1798,6 +1850,19 @@ export async function resubmitCloseCase(
           assetId: asset?.assetId ?? null,
           closedAt: firstClosedAt.toISOString(),
           resubmittedAt: resubmittedAt.toISOString(),
+          ...(revisedOrigin === undefined
+            ? {}
+            : {
+                travelOriginBefore:
+                  storedOrigin === null
+                    ? null
+                    : {
+                        latitude: storedOrigin.latitude.toNumber(),
+                        longitude: storedOrigin.longitude.toNumber(),
+                        source: storedOrigin.source,
+                      },
+                travelOrigin: revisedOrigin,
+              }),
           ...(fieldDayHold === null
             ? {}
             : { fieldDayExpensesHeld: fieldDayHold.heldIds, fieldDayExpensesNotHeld: fieldDayHold.notHeld }),
