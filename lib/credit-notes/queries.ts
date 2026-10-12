@@ -604,6 +604,13 @@ export async function createCreditNote(
     )
   }
 
+  // mytester4 LR4-03 — ใบลดหนี้ = ส่วนเกินของ Adjustment ที่ลดคร่อม (เท่าเพดานพอดี) ⇒ ไม่เตือนยอดไม่เท่า
+  const allowanceForWarning =
+    noteType === 'credit' && adjustment !== null && amounts.amountBeforeVatSatang < adjustment.amountSatang
+      ? ((await documentedAmountsForBatches(organizationId, [invoice.salesRecord.billingBatchId])).get(
+          invoice.salesRecord.billingBatchId,
+        )?.uninvoicedReduction.creditNoteAllowanceBeforeVatSatang ?? null)
+      : null
   const mismatchWarning =
     adjustment === null
       ? null
@@ -612,6 +619,7 @@ export async function createCreditNote(
           amountBeforeVatSatang: amounts.amountBeforeVatSatang,
           adjustmentAmountSatang: adjustment.amountSatang,
           formatSatang: (satang) => fmtSatangSymbol(satang),
+          allowanceBeforeVatSatang: allowanceForWarning,
         })
 
   const filePath = input.filePath ?? null

@@ -25,6 +25,7 @@ import { callApi, jsonRequest } from '@/lib/api/types'
 import {
   adjustmentAmountMismatch,
   creditableInvoiceBalance,
+  creditNoteAllowanceVatSatang,
   creditNoteFormLimit,
   CREDIT_NOTE_NOT_REQUIRED_TEXT,
   CREDIT_NOTE_TYPE_LABEL,
@@ -64,6 +65,8 @@ export interface CreditNoteInvoice {
   totalBeforeVatSatang: number
   vatSatang: number
   totalSatang: number
+  /** mytester4 LR4-03 — อัตรา VAT บนใบ (ข้อความ NUMERIC) · ใบเดิมหลายอัตรา/ไม่ทราบ = `null` */
+  vatRatePctUsed?: string | null
 }
 
 export function CreditNoteModal({
@@ -124,6 +127,8 @@ export function CreditNoteModal({
     allowanceBeforeVatSatang: creditNoteAllowanceBeforeVatSatang,
     // mytester4 G4-01 — ส่วนเกินที่ต้องออกใบลดหนี้ไม่ชนเพดานยอดค้าง (ลูกค้าชำระเกินแล้ว) — เพดานรวมภาษี = คงเหลือของใบ
     invoiceCreditableTotalSatang: creditable.totalSatang,
+    // mytester4 LR4-03 — เพดานรวมภาษีของส่วนเกิน = เพดานก่อนภาษี + VAT (ส่วนต่างที่ server เสนอ หรือตามอัตราบนใบ)
+    allowanceVatSatang: creditNoteAllowanceVatSatang(creditNoteAllowanceBeforeVatSatang, creditNoteClosingVatSatang, invoice.vatRatePctUsed ?? null),
   })
   const outstandingCapped = creditNoteCappedByOutstanding(creditNoteAllowanceBeforeVatSatang)
   // mytester4 — ลดเท่าส่วนที่ยังบันทึกได้พอดี ⇒ เสนอ VAT แบบส่วนต่าง (ผลรวมเอกสาร = มูลค่าสุทธิทุกสตางค์)
@@ -471,6 +476,8 @@ export function CreditNoteModal({
                 const mismatch = adjustmentAmountMismatch(
                   amountSatang,
                   awaitingOfType.find((row) => row.adjustmentId === adjustmentId)?.amountSatang ?? null,
+                  // mytester4 LR4-03 — ใบลดหนี้ส่วนเกินของ Adjustment ที่ลดคร่อม (ยอดต่างกันโดยนิยาม) ไม่เตือน
+                  isDebit ? null : creditNoteAllowanceBeforeVatSatang,
                 )
                 return mismatch === null ? null : (
                   <InlineAlert tone="warning" title="ยอดไม่เท่ารายการปรับปรุง">

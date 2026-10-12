@@ -92,6 +92,7 @@ export function SalesTab() {
       totalBeforeVatSatang: invoice.totalBeforeVatSatang,
       vatSatang: invoice.vatSatang,
       totalSatang: invoice.totalSatang,
+      vatRatePctUsed: invoice.vatRatePctUsed,
     })
   }
 

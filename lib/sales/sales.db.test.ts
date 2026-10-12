@@ -782,6 +782,8 @@ suite('มติ PO U95 — รับเงิน ⇒ ใบเสร็จร�
     const note = await credit.createCreditNote(ctx, { ...base, creditNoteNumber: `G401-${RUN}-2`, amountBeforeVatSatang: 3_936 })
     // mytester4 — ไม่กรอก VAT ⇒ VAT ส่วนต่าง 2.75 (เดิม round(39.36 × 7%) = 2.76 ⇒ เอกสาร 1,457.88 ต่างมูลค่าสุทธิ 0.01)
     expect(note).toMatchObject({ amountBeforeVatSatang: 3_936, vatSatang: 275, totalSatang: 4_211 })
+    // mytester4 LR4-03 — ใบลดหนี้ = ส่วนเกินของ Adjustment ที่ลดคร่อม (39.36 จาก 1,000) ⇒ ไม่เตือนยอดไม่เท่า
+    expect(note.warnings).toEqual([])
 
     const after = (await documentedAmountsForBatches(ORG_ID, [batch.id])).get(batch.id)
     // Σ ใบกำกับ − Σ ใบลดหนี้ = ยอดตามเอกสาร = มูลค่าสุทธิ 1,362.51 + 95.38 = 1,457.89 ทุกสตางค์

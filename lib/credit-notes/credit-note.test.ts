@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   adjustmentAmountMismatch,
+  adjustmentAmountMismatchWarning,
+  creditNoteAllowanceVatSatang,
   canWaiveAwaitingCreditNote,
   creditNoteExcessRecordable,
   creditNoteOffSystemOnly,
@@ -232,6 +234,57 @@ describe('mytester4 LR4-01 — บิลชำระครบ: นอกระ�
     const base = { billOutstandingSatang: 0, allowanceBeforeVatSatang: 0, remainingUninvoicedBeforeVatSatang: 139_875, pending: true }
     expect(creditNoteExcessRecordable({ ...base, amountSatang: 150_011 })).toBe(true)
     expect(creditNoteExcessRecordable({ ...base, amountSatang: 139_875 })).toBe(false)
+  })
+})
+
+describe('mytester4 LR4-03 — ฟอร์มใบลดหนี้ส่วนเกิน', () => {
+  it('ลดหนี้ได้สูงสุด (รวมภาษี) = เพดานก่อนภาษี + VAT ส่วนต่าง (101.36 + 7.09 = 108.45) ไม่ใช่คงเหลือใบกำกับ 1,000', () => {
+    const vat = creditNoteAllowanceVatSatang(10_136, 709, '7.00')
+    expect(vat).toBe(709)
+    expect(
+      creditNoteFormLimit({
+        noteType: 'credit',
+        maxCreditTotalSatang: 0,
+        allowanceBeforeVatSatang: 10_136,
+        invoiceCreditableTotalSatang: 100_000,
+        allowanceVatSatang: vat,
+      }),
+    ).toEqual({ blocked: null, maxTotalSatang: 10_845, maxBeforeVatSatang: 10_136 })
+    // คงเหลือของใบน้อยกว่า ⇒ ใช้คงเหลือของใบ
+    expect(
+      creditNoteFormLimit({
+        noteType: 'credit',
+        maxCreditTotalSatang: 0,
+        allowanceBeforeVatSatang: 10_136,
+        invoiceCreditableTotalSatang: 5_000,
+        allowanceVatSatang: vat,
+      }).maxTotalSatang,
+    ).toBe(5_000)
+  })
+  it('VAT ของเพดาน: ไม่มี VAT ส่วนต่าง ⇒ ตามอัตราบนใบ · ไม่ทราบอัตรา/ไม่มีเพดาน ⇒ null (ใช้คงเหลือของใบ)', () => {
+    expect(creditNoteAllowanceVatSatang(10_136, null, '7.00')).toBe(710)
+    expect(creditNoteAllowanceVatSatang(10_136, null, null)).toBeNull()
+    expect(creditNoteAllowanceVatSatang(null, 709, '7.00')).toBeNull()
+    expect(creditNoteAllowanceVatSatang(0, null, '7.00')).toBeNull()
+    expect(
+      creditNoteFormLimit({
+        noteType: 'credit',
+        maxCreditTotalSatang: 0,
+        allowanceBeforeVatSatang: 10_136,
+        invoiceCreditableTotalSatang: 100_000,
+        allowanceVatSatang: null,
+      }).maxTotalSatang,
+    ).toBe(100_000)
+  })
+  it('ใบลดหนี้ = ส่วนเกินของ Adjustment ที่ลดคร่อม (เท่าเพดานพอดี) ⇒ ไม่เตือนยอดไม่เท่า · ยอดอื่นยังเตือน', () => {
+    expect(adjustmentAmountMismatch(10_136, 150_011, 10_136)).toBeNull()
+    expect(adjustmentAmountMismatch(10_000, 150_011, 10_136)).toEqual({ amountSatang: 10_000, adjustmentSatang: 150_011 })
+    expect(adjustmentAmountMismatch(10_136, 150_011, null)).toEqual({ amountSatang: 10_136, adjustmentSatang: 150_011 })
+    const fmt = (satang: number) => String(satang)
+    const base = { amountBeforeVatSatang: 10_136, adjustmentAmountSatang: 150_011, formatSatang: fmt }
+    expect(adjustmentAmountMismatchWarning({ ...base, noteType: 'credit', allowanceBeforeVatSatang: 10_136 })).toBeNull()
+    expect(adjustmentAmountMismatchWarning({ ...base, noteType: 'credit' })).not.toBeNull()
+    expect(adjustmentAmountMismatchWarning({ ...base, noteType: 'debit', allowanceBeforeVatSatang: 10_136 })).not.toBeNull()
   })
 })
 

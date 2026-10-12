@@ -309,17 +309,41 @@ export function creditNoteFormLimit(input: {
    * แทนยอดค้างของรอบ ({@link creditNoteCappedByOutstanding}) · ไม่ส่ง = ใช้ `maxCreditTotalSatang`
    */
   invoiceCreditableTotalSatang?: number
+  /**
+   * mytester4 LR4-03 — VAT ของเพดานส่วนเกิน (VAT ส่วนต่างที่ server เสนอ หรือ `expectedCreditNoteVat(allowance, อัตรา)`) ⇒
+   * เพดานรวมภาษี = min(คงเหลือของใบ, allowance + VAT นี้) · `null`/ไม่ส่ง = ไม่ทราบอัตรา ⇒ คงเหลือของใบ
+   */
+  allowanceVatSatang?: number | null
 }): { blocked: 'uninvoiced' | 'outstanding' | null; maxTotalSatang: number | null; maxBeforeVatSatang: number | null } {
   const allowance = input.allowanceBeforeVatSatang === null ? null : Math.max(0, input.allowanceBeforeVatSatang)
   if (input.noteType === 'debit') return { blocked: null, maxTotalSatang: input.maxCreditTotalSatang, maxBeforeVatSatang: null }
   if (allowance === 0) return { blocked: 'uninvoiced', maxTotalSatang: 0, maxBeforeVatSatang: 0 }
   if (allowance !== null && input.invoiceCreditableTotalSatang !== undefined) {
-    return { blocked: null, maxTotalSatang: Math.max(0, input.invoiceCreditableTotalSatang), maxBeforeVatSatang: allowance }
+    const creditable = Math.max(0, input.invoiceCreditableTotalSatang)
+    const allowanceVat = input.allowanceVatSatang ?? null
+    const maxTotalSatang = allowanceVat === null ? creditable : Math.min(creditable, allowance + Math.max(0, allowanceVat))
+    return { blocked: null, maxTotalSatang, maxBeforeVatSatang: allowance }
   }
   if (isCreditNoteBlockedByOutstanding('credit', input.maxCreditTotalSatang)) {
     return { blocked: 'outstanding', maxTotalSatang: 0, maxBeforeVatSatang: allowance }
   }
   return { blocked: null, maxTotalSatang: input.maxCreditTotalSatang, maxBeforeVatSatang: allowance }
+}
+
+/**
+ * mytester4 LR4-03 — VAT ของเพดานใบลดหนี้ส่วนเกิน (แสดง "ลดหนี้ได้สูงสุด (รวมภาษี)") — VAT ส่วนต่างที่ server คำนวณไว้
+ * (`creditNoteClosingVatSatang` — คิดจากยอด = เพดานพอดี) ก่อน · ไม่มี ⇒ ตามอัตราบนใบ · ไม่ทราบอัตรา/ไม่มีเพดาน ⇒ `null`
+ */
+export function creditNoteAllowanceVatSatang(
+  allowanceBeforeVatSatang: number | null,
+  closingVatSatang: number | null,
+  vatRatePctText: string | null,
+): number | null {
+  if (allowanceBeforeVatSatang === null || allowanceBeforeVatSatang <= 0) return null
+  if (closingVatSatang !== null) return closingVatSatang
+  if (vatRatePctText === null || vatRatePctText.trim() === '') return null
+  const rate = Number(vatRatePctText)
+  return Number.isFinite(rate) && rate >= 0 ? expectedCreditNoteVat(allowanceBeforeVatSatang, rate) : null
 }
 
 /**
@@ -433,13 +457,38 @@ export function assertAdjustmentLinkable(
  * มติ PO U21 — ยอดก่อน VAT ของเอกสารไม่เท่ายอด Adjustment ที่อ้างถึง ⇒ **เตือน ไม่บล็อก**
  * (สำนักงานบัญชีอาจออกเอกสารรวม/แยกยอด) · คืนข้อความเตือนภาษาไทย หรือ `null` เมื่อยอดตรงกัน
  */
+/**
+ * mytester4 LR4-03 — ใบลดหนี้ส่วนเกินปกติ: Adjustment ลดคร่อมส่วนที่ยังไม่ออกใบ ⇒ ใบลดหนี้ = ส่วนที่ลดลงไปในยอดที่ออกใบแล้ว
+ * (เท่าเพดานที่ยังบันทึกได้พอดี และน้อยกว่ายอด Adjustment) — ยอดต่างกันโดยนิยาม ไม่ใช่ความผิดพลาด ⇒ ไม่เตือน "ยอดไม่เท่า"
+ */
+export function isExcessOfCrossingAdjustment(
+  amountBeforeVatSatang: number,
+  adjustmentAmountSatang: number,
+  allowanceBeforeVatSatang: number | null,
+): boolean {
+  return (
+    allowanceBeforeVatSatang !== null &&
+    amountBeforeVatSatang > 0 &&
+    amountBeforeVatSatang === allowanceBeforeVatSatang &&
+    amountBeforeVatSatang < adjustmentAmountSatang
+  )
+}
+
 export function adjustmentAmountMismatchWarning(input: {
   noteType: CreditNoteType
   amountBeforeVatSatang: number
   adjustmentAmountSatang: number
   formatSatang: (satang: number) => string
+  /** mytester4 LR4-03 — เพดานใบลดหนี้ส่วนเกินของรอบ ก่อนบันทึกใบนี้ · ไม่ส่ง = กติกาเดิม */
+  allowanceBeforeVatSatang?: number | null
 }): string | null {
   if (input.amountBeforeVatSatang === input.adjustmentAmountSatang) return null
+  if (
+    input.noteType === 'credit' &&
+    isExcessOfCrossingAdjustment(input.amountBeforeVatSatang, input.adjustmentAmountSatang, input.allowanceBeforeVatSatang ?? null)
+  ) {
+    return null
+  }
   return (
     `มูลค่าก่อนภาษีของ${CREDIT_NOTE_TYPE_LABEL[input.noteType]} (${input.formatSatang(input.amountBeforeVatSatang)}) ` +
     `ไม่เท่ากับยอดรายการปรับปรุงที่อ้างถึง (${input.formatSatang(input.adjustmentAmountSatang)}) — ` +
@@ -551,8 +600,11 @@ export function requireCreditNoteCancelReason(reason: string | null | undefined)
 export function adjustmentAmountMismatch(
   amountBeforeVatSatang: number | null,
   adjustmentAmountSatang: number | null,
+  /** mytester4 LR4-03 — เพดานใบลดหนี้ส่วนเกินของรอบ (`creditNoteAllowanceBeforeVatSatang`) · ไม่ส่ง/`null` = กติกาเดิม */
+  allowanceBeforeVatSatang: number | null = null,
 ): { amountSatang: number; adjustmentSatang: number } | null {
   if (amountBeforeVatSatang === null || adjustmentAmountSatang === null || amountBeforeVatSatang <= 0) return null
   if (amountBeforeVatSatang === adjustmentAmountSatang) return null
+  if (isExcessOfCrossingAdjustment(amountBeforeVatSatang, adjustmentAmountSatang, allowanceBeforeVatSatang)) return null
   return { amountSatang: amountBeforeVatSatang, adjustmentSatang: adjustmentAmountSatang }
 }
