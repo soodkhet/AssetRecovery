@@ -4,7 +4,7 @@ import ts from 'typescript'
 import { describe, expect, it } from 'vitest'
 
 /**
- * Rule 05 — ข้อความที่ผู้ใช้เห็นต้องเป็นภาษาไทย ไม่มีรหัส/ศัพท์ระบบ (mytester รอบ 2: A2-01 · B2-02 · G2-01 · J2-02 · LR-01 · รอบ 3: A3-04 · J3-01)
+ * Rule 05 — ข้อความที่ผู้ใช้เห็นต้องเป็นภาษาไทย ไม่มีรหัส/ศัพท์ระบบ (mytester รอบ 2: A2-01 · B2-02 · G2-01 · J2-02 · LR-01 · รอบ 3: A3-04 · J3-01 · LR3-05)
  *
  * สแกน **string literal + ข้อความ JSX** ด้วย TypeScript AST (comment ไม่นับ) ของ `app/` `components/` `lib/`
  * แล้วห้ามมีวลีที่เคยหลุดขึ้นจอ — กันไม่ให้กลับมาอีก · code identifier/คอมเมนต์ใช้ศัพท์อังกฤษได้ตามเดิม
@@ -25,6 +25,12 @@ const BANNED: readonly { phrase: RegExp; issue: string; inThaiText?: boolean }[]
   { phrase: /ไม่เก็บ record|role เจ้าของ|role อื่น|hardcode/i, issue: 'A3-04', inThaiText: true },
   // ตัวพิมพ์เล็กเท่านั้น — หัวข้อสองภาษาจาก mockup อย่าง "(Client Portal)" ใช้ได้
   { phrase: /\bportal\b|\bresume\b/, issue: 'J3-01', inThaiText: true },
+  // mytester3 LR3-05 — tooltip/ชื่อสิทธิ์ในหน้าต่างกำหนดสิทธิ์ (capability-catalog)
+  {
+    phrase: /กระทบ Revenue|Period Lock Policy|Executive เท่านั้น|Authorized Exception|Service Fee Template|Finance Company|Accountant Question|Role \/ Permission|Case Approval|Bank Payment File/,
+    issue: 'LR3-05',
+    inThaiText: true,
+  },
   { phrase: /รอบ (collecting|locked)|\(collecting → sent\)|ที่ locked|mark filed|map Cost Center \(manual\)|resolve\)/, issue: 'A2-01' },
 ]
 
