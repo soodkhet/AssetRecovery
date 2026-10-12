@@ -19,6 +19,8 @@ import {
   canWaiveAwaitingCreditNote,
   CREDIT_NOTE_STATUS_LABEL,
   CREDIT_NOTE_TYPE_LABEL,
+  CREDIT_NOTE_VAT_TOLERANCE_SATANG,
+  expectedCreditNoteVat,
   requireCreditNoteCancelReason,
   resolveCreditNoteAmounts,
   resolveCreditNoteVatRate,
@@ -525,6 +527,23 @@ async function assertCreditWithinOutstanding(
   assertWithinBillingOutstanding(outstanding.get(batch.id) ?? 0, amounts)
 }
 
+/** mytester4 — VAT แบบส่วนต่างของใบลดหนี้ส่วนเกินที่ปิดยอด (`closingCreditNoteVatSatang()`) · ไม่เข้าเงื่อนไข ⇒ `null` */
+async function closingCreditNoteVatOf(
+  organizationId: string,
+  billingBatchId: string,
+  amountBeforeVatSatang: number,
+  vatRatePct: number,
+): Promise<number | null> {
+  const documented = (await documentedAmountsForBatches(organizationId, [billingBatchId])).get(billingBatchId)
+  if (documented === undefined) return null
+  const closing = documented.creditNoteClosingVatSatang ?? null
+  // ค่าที่คำนวณไว้คิดจากมูลค่าที่ลด = ส่วนที่ยังบันทึกได้พอดี + อัตราเดียวของรอบ ⇒ ต้องตรงทั้งยอดและอัตราของใบนี้
+  if (closing === null || documented.uninvoicedReduction.creditNoteAllowanceBeforeVatSatang !== amountBeforeVatSatang) return null
+  return Math.abs(closing - expectedCreditNoteVat(amountBeforeVatSatang, vatRatePct)) <= CREDIT_NOTE_VAT_TOLERANCE_SATANG
+    ? closing
+    : null
+}
+
 /**
  * `POST /api/accounting/credit-notes` — บันทึกใบลดหนี้/ใบเพิ่มหนี้ที่สำนักงานบัญชีออกแล้ว
  *
@@ -554,10 +573,17 @@ export async function createCreditNote(
     invoice.vatRatePctUsed === null
       ? await vatRateOfInvoice(invoice.salesRecord.billingBatchId)
       : invoice.vatRatePctUsed.toNumber()
+  // mytester4 — ใบลดหนี้ส่วนเกินที่ปิดยอด (ลดเท่าส่วนที่ยังบันทึกได้พอดี) ไม่กรอก VAT ⇒ VAT แบบส่วนต่าง (`22` §6.8.3)
+  // ให้ผลรวมเอกสาร = มูลค่าสุทธิทุกสตางค์ · ค่าที่บันทึกยังตรวจเกณฑ์ ±1 สตางค์ของค่าตามอัตราเหมือนเดิม
+  const defaultVatSatang =
+    noteType === 'credit' && (input.vatSatang ?? null) === null
+      ? await closingCreditNoteVatOf(organizationId, invoice.salesRecord.billingBatchId, input.amountBeforeVatSatang, vatRatePct)
+      : null
   const amounts = resolveCreditNoteAmounts({
     amountBeforeVatSatang: input.amountBeforeVatSatang,
     vatSatang: input.vatSatang ?? null,
     vatRatePct,
+    defaultVatSatang,
   })
 
   // ใบเพิ่มหนี้ไม่มีเพดาน (U19) — ตรวจยอดคงเหลือเฉพาะใบลดหนี้

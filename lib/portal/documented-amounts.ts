@@ -1,3 +1,4 @@
+import { closingCreditNoteVatSatang } from '@/lib/credit-notes/credit-note'
 import { sumCreditNotesByInvoice } from '@/lib/credit-notes/totals'
 import { arOutstandingSatang, type BillingBatchAmounts } from '@/lib/finance/ar-calc'
 import { allocateLargestRemainder, type CustomerWhtNoteAmounts } from '@/lib/finance/wht-calc'
@@ -65,6 +66,11 @@ export interface DocumentedBillingAmounts {
   uninvoicedReduction: UninvoicedReduction
   /** ยอดตามเอกสาร = ใบกำกับ − ใบลดหนี้ + ใบเพิ่มหนี้ − ส่วนที่ลดก่อนออกใบ (ยอดที่พอร์ทัลแสดง/นับ) */
   documented: DocumentAmounts
+  /**
+   * mytester4 — VAT ที่ระบบเสนอของใบลดหนี้ส่วนเกินเมื่อลดเท่า `uninvoicedReduction.creditNoteAllowanceBeforeVatSatang` พอดี
+   * (`closingCreditNoteVatSatang()` — ส่วนต่างให้ผลรวมเอกสาร = มูลค่าสุทธิทุกสตางค์) · ไม่เข้าเงื่อนไข/ไม่คำนวณ ⇒ `null`/ไม่มี
+   */
+  creditNoteClosingVatSatang?: number | null
 }
 
 export type DocumentedBillingRef = { billingBatchId: string } | { taxInvoiceId: string }
@@ -292,6 +298,8 @@ export async function documentedAmountsForBatches(
             decreaseSatang: loaded.decreaseSatang,
             legacyInvoice: loaded.legacyInvoice,
           })
+    const documented = applyCreditNotes(invoiced, credit, debit, uninvoicedReduction)
+    const allowance = uninvoicedReduction.creditNoteAllowanceBeforeVatSatang
     result.set(batch.id, {
       billingBatchId: batch.id,
       taxInvoice: sales?.taxInvoices[0] ?? null,
@@ -299,7 +307,18 @@ export async function documentedAmountsForBatches(
       creditNotes: credit,
       debitNotes: debit,
       uninvoicedReduction,
-      documented: applyCreditNotes(invoiced, credit, debit, uninvoicedReduction),
+      documented,
+      creditNoteClosingVatSatang:
+        allowance === null
+          ? null
+          : closingCreditNoteVatSatang({
+              amountBeforeVatSatang: allowance,
+              allowanceBeforeVatSatang: allowance,
+              remainingUninvoicedBeforeVatSatang: uninvoicedReduction.remainingBeforeVatSatang,
+              documentedBeforeVatSatang: documented.beforeVatSatang,
+              documentedVatSatang: documented.vatSatang,
+              vatRatesPct: [...batch.revenues.map((row) => row.vatRatePctUsed.toNumber()), ...loaded.invoicedVatRatesPct],
+            }),
     })
   }
   return result

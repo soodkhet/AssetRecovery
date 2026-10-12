@@ -102,11 +102,66 @@ export function expectedCreditNoteVat(amountBeforeVatSatang: number, vatRatePct:
   return pctOfSatang(amountBeforeVatSatang, vatRatePct)
 }
 
+/**
+ * **VAT ของใบลดหนี้ส่วนเกินที่ปิดยอด** (mytester4 · `22` §6.8.3) — ใบลดหนี้ที่ลดเท่าส่วนที่ยังบันทึกได้พอดี
+ * (`required − C`) ขณะไม่มีมูลค่าที่ยังไม่ออกใบเหลือ (V − R = 0) ⇒ หลังบันทึก ยอดตามเอกสาร (ก่อน VAT) = มูลค่าสุทธิของรอบ
+ * ⇒ VAT คิดแบบ**ส่วนต่าง** ให้ผลรวมเอกสารตรงมูลค่าสุทธิทุกสตางค์ (สูตรเดียวกับใบปิดยอด §6.8.2):
+ * ```
+ * VAT ใบลดหนี้ = VAT ตามเอกสารของรอบ (ก่อนใบนี้) − round_half_up(มูลค่าสุทธิ × อัตรา)
+ * มูลค่าสุทธิ  = ยอดตามเอกสารก่อน VAT (ก่อนใบนี้) − มูลค่าที่ลด
+ * ```
+ * ใช้ได้เมื่ออัตราเดียวทั้งรอบ และผลต่างจาก `round(มูลค่าที่ลด × อัตรา)` ไม่เกินเกณฑ์ ±{@link CREDIT_NOTE_VAT_TOLERANCE_SATANG}
+ * สตางค์ (ค่าที่บันทึกยังผ่านการตรวจเดิม) · ไม่เข้าเงื่อนไข ⇒ `null` (ใช้สูตรอัตราเดิม)
+ * > BL-2569-003: ยอดตามเอกสาร 1,401.87 + 98.13 · ลด 39.36 ⇒ 98.13 − round(1,362.51 × 7%) = 98.13 − 95.38 = 2.75 (เดิม 2.76)
+ */
+export function closingCreditNoteVatSatang(input: {
+  amountBeforeVatSatang: number
+  /** ใบลดหนี้ที่ยังบันทึกได้ (`uninvoicedReductionOf().creditNoteAllowanceBeforeVatSatang`) — `null` = กติกานี้ไม่คุม */
+  allowanceBeforeVatSatang: number | null
+  /** V − R — มูลค่าที่ยังออกใบเสร็จฯ ได้อีก */
+  remainingUninvoicedBeforeVatSatang: number
+  /** ยอดตามเอกสารของรอบก่อนใบนี้ (ใบกำกับ − ใบลดหนี้ + ใบเพิ่มหนี้ − ส่วนที่ลดก่อนออกใบ) */
+  documentedBeforeVatSatang: number
+  documentedVatSatang: number
+  /** อัตราบนใบแจ้งหนี้/ใบกำกับของรอบ (+ อัตราของใบลดหนี้) — ต้องเท่ากันทุกตัว */
+  vatRatesPct: readonly number[]
+}): number | null {
+  const amount = input.amountBeforeVatSatang
+  if (input.allowanceBeforeVatSatang === null || amount <= 0 || amount !== input.allowanceBeforeVatSatang) return null
+  if (input.remainingUninvoicedBeforeVatSatang !== 0) return null
+  const [rate] = input.vatRatesPct
+  if (rate === undefined || !input.vatRatesPct.every((other) => Math.round(other * 100) === Math.round(rate * 100))) return null
+  const net = input.documentedBeforeVatSatang - amount
+  if (net < 0) return null
+  const vat = input.documentedVatSatang - pctOfSatang(net, rate)
+  if (vat < 0 || Math.abs(vat - expectedCreditNoteVat(amount, rate)) > CREDIT_NOTE_VAT_TOLERANCE_SATANG) return null
+  return vat
+}
+
+/**
+ * mytester4 — VAT ที่ฟอร์มเสนอ: ใบลดหนี้ที่ลดเท่าส่วนที่ยังบันทึกได้พอดีและ server คำนวณ VAT ส่วนต่างไว้ ⇒ ค่านั้น ·
+ * อื่น ๆ ⇒ `null` (ฟอร์มใช้ข้อความเดิม "คำนวณจากอัตรา")
+ */
+export function suggestedCreditNoteVatSatang(input: {
+  isDebit: boolean
+  amountBeforeVatSatang: number | null
+  allowanceBeforeVatSatang: number | null
+  closingVatSatang: number | null
+}): number | null {
+  if (input.isDebit || input.closingVatSatang === null || input.allowanceBeforeVatSatang === null) return null
+  return input.amountBeforeVatSatang === input.allowanceBeforeVatSatang ? input.closingVatSatang : null
+}
+
 export interface CreditNoteAmountInput {
   amountBeforeVatSatang: number
-  /** VAT ตามเอกสารจริง — `null`/ไม่ส่ง = ใช้ค่าที่คำนวณจากอัตรา */
+  /** VAT ตามเอกสารจริง — `null`/ไม่ส่ง = ใช้ค่าเริ่มต้น (`defaultVatSatang` หรือค่าที่คำนวณจากอัตรา) */
   vatSatang?: number | null
   vatRatePct: number
+  /**
+   * mytester4 — VAT ที่ระบบเสนอเมื่อไม่กรอก ({@link closingCreditNoteVatSatang} — ใบลดหนี้ส่วนเกินที่ปิดยอด) ·
+   * ต้องอยู่ในเกณฑ์ ±1 สตางค์ของค่าตามอัตรา (ตรวจเหมือนค่าที่กรอก) · ไม่ส่ง = ค่าตามอัตรา
+   */
+  defaultVatSatang?: number | null
 }
 
 export interface CreditNoteAmounts {
@@ -122,7 +177,7 @@ export function resolveCreditNoteAmounts(input: CreditNoteAmountInput): CreditNo
     throw new RangeError(`resolveCreditNoteAmounts: มูลค่าที่ลดต้องเป็นสตางค์จำนวนเต็มบวก (ได้ ${before})`)
   }
   const expected = expectedCreditNoteVat(before, input.vatRatePct)
-  const vat = input.vatSatang ?? expected
+  const vat = input.vatSatang ?? input.defaultVatSatang ?? expected
   if (!Number.isInteger(vat) || vat < 0) {
     throw new RangeError(`resolveCreditNoteAmounts: VAT ต้องเป็นสตางค์จำนวนเต็มไม่ติดลบ (ได้ ${vat})`)
   }

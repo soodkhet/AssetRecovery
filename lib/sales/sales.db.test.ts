@@ -763,6 +763,8 @@ suite('มติ PO U95 — รับเงิน ⇒ ใบเสร็จร�
     expect((await credit.listAdjustmentsAwaitingCreditNote(accountant)).some((row) => row.adjustmentId === adjustmentId)).toBe(true)
     const listed = (await sales.listSalesRecords(accountant, {})).items.find((item) => item.billingBatchId === batch.id)
     expect(listed?.creditNoteAllowanceBeforeVatSatang).toBe(3_936)
+    // mytester4 — VAT ที่ระบบเสนอแบบส่วนต่าง: 98.13 − round(1,362.51 × 7%) = 2.75
+    expect(listed?.creditNoteClosingVatSatang).toBe(275)
 
     const base = { taxInvoiceId: invoice.id, adjustmentId, issueDate: TODAY, reason: 'ลดส่วนที่ออกใบแล้วเกินมูลค่าใหม่' }
     await expectCode(
@@ -771,16 +773,17 @@ suite('มติ PO U95 — รับเงิน ⇒ ใบเสร็จร�
     )
     // เดิม: CREDIT_NOTE_EXCEEDS_OUTSTANDING "ลดได้ไม่เกิน ฿0.01" (เพดานยอดค้าง U171) ⇒ ป้ายรอใบลดหนี้ค้างถาวร
     const note = await credit.createCreditNote(ctx, { ...base, creditNoteNumber: `G401-${RUN}-2`, amountBeforeVatSatang: 3_936 })
-    expect(note).toMatchObject({ amountBeforeVatSatang: 3_936, vatSatang: 276, totalSatang: 4_212 })
+    // mytester4 — ไม่กรอก VAT ⇒ VAT ส่วนต่าง 2.75 (เดิม round(39.36 × 7%) = 2.76 ⇒ เอกสาร 1,457.88 ต่างมูลค่าสุทธิ 0.01)
+    expect(note).toMatchObject({ amountBeforeVatSatang: 3_936, vatSatang: 275, totalSatang: 4_211 })
 
     const after = (await documentedAmountsForBatches(ORG_ID, [batch.id])).get(batch.id)
-    // Σ ใบกำกับ − Σ ใบลดหนี้ = ยอดตามเอกสาร (ก่อน VAT = มูลค่าสุทธิ 2,462.51 − 1,100 = 1,362.51)
-    expect(after?.documented).toEqual({ beforeVatSatang: 136_251, vatSatang: 9_537, totalSatang: 145_788 })
+    // Σ ใบกำกับ − Σ ใบลดหนี้ = ยอดตามเอกสาร = มูลค่าสุทธิ 1,362.51 + 95.38 = 1,457.89 ทุกสตางค์
+    expect(after?.documented).toEqual({ beforeVatSatang: 136_251, vatSatang: 9_538, totalSatang: 145_789 })
     expect(invoice.totalSatang - note.totalSatang).toBe(after?.documented.totalSatang)
     expect(after?.uninvoicedReduction.creditNoteAllowanceBeforeVatSatang).toBe(0)
-    // ลูกค้าชำระเกิน 42.12 (ยอดค้างติดลบ) ⇒ คืนนอกระบบตาม U171 · ไม่มีป้ายรอใบลดหนี้ค้าง
+    // ลูกค้าชำระเกิน 42.11 (ยอดค้างติดลบ) ⇒ คืนนอกระบบตาม U171 · ไม่มีป้ายรอใบลดหนี้ค้าง
     const afterRow = await db().billingBatch.findUniqueOrThrow({ where: { id: batch.id } })
-    expect((await documentedOutstandingByBatch(ORG_ID, [afterRow])).get(batch.id)).toBe(-4_212)
+    expect((await documentedOutstandingByBatch(ORG_ID, [afterRow])).get(batch.id)).toBe(-4_211)
     expect(afterRow.status).toBe('paid')
     expect((await credit.listAdjustmentsAwaitingCreditNote(accountant)).some((row) => row.adjustmentId === adjustmentId)).toBe(false)
   })

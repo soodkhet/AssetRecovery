@@ -31,11 +31,12 @@ import {
   creditNoteCappedByOutstanding,
   maxCreditNoteTotalSatang,
   netInvoiceAmounts,
+  suggestedCreditNoteVatSatang,
 } from '@/lib/credit-notes/credit-note'
 import type { CreditNoteType } from '@/lib/credit-notes/schemas'
 import type { AwaitingCreditNoteDto, CreditNoteCreateResultDto, CreditNoteDto } from '@/lib/credit-notes/types'
 import { fmtDate, toInputDate } from '@/lib/format/datetime'
-import { bahtInputError, fmtSatangSymbol, parseBahtInput } from '@/lib/format/money'
+import { bahtInputError, fmtSatang, fmtSatangSymbol, parseBahtInput } from '@/lib/format/money'
 import { signedFileUrl, StorageUploadError, uploadToStorage } from '@/lib/uploads/client'
 
 /**
@@ -69,6 +70,7 @@ export function CreditNoteModal({
   invoice,
   billingOutstandingSatang,
   creditNoteAllowanceBeforeVatSatang = null,
+  creditNoteClosingVatSatang = null,
   notes,
   awaiting,
   canManage,
@@ -80,6 +82,8 @@ export function CreditNoteModal({
   billingOutstandingSatang: number | null
   /** ใบลดหนี้ที่ยังบันทึกได้ (ก่อนภาษี) ตามมติรีวิว R3 #1 จาก server · `0` = ไม่ต้องออกใบลดหนี้ · `null` = ไม่จำกัด */
   creditNoteAllowanceBeforeVatSatang?: number | null
+  /** mytester4 — VAT ที่ระบบเสนอเมื่อลดเท่าส่วนที่ยังบันทึกได้พอดี (แบบส่วนต่าง — server ใช้ค่าเดียวกันเมื่อเว้นว่าง) */
+  creditNoteClosingVatSatang?: number | null
   notes: readonly CreditNoteDto[]
   awaiting: readonly AwaitingCreditNoteDto[]
   canManage: boolean
@@ -122,6 +126,13 @@ export function CreditNoteModal({
     invoiceCreditableTotalSatang: creditable.totalSatang,
   })
   const outstandingCapped = creditNoteCappedByOutstanding(creditNoteAllowanceBeforeVatSatang)
+  // mytester4 — ลดเท่าส่วนที่ยังบันทึกได้พอดี ⇒ เสนอ VAT แบบส่วนต่าง (ผลรวมเอกสาร = มูลค่าสุทธิทุกสตางค์)
+  const suggestedVatSatang = suggestedCreditNoteVatSatang({
+    isDebit,
+    amountBeforeVatSatang: amountSatang,
+    allowanceBeforeVatSatang: creditNoteAllowanceBeforeVatSatang,
+    closingVatSatang: creditNoteClosingVatSatang,
+  })
   const maxCreditTotal = limit.maxTotalSatang
   const blockedReason = isDebit ? null : limit.blocked
   const canSubmit =
@@ -421,13 +432,18 @@ export function CreditNoteModal({
                 <Field
                   id="cn-vat"
                   label={`ภาษีมูลค่าเพิ่มที่${isDebit ? 'เพิ่ม' : 'ลด'} (บาท)`}
-                  hint="เว้นว่าง = คำนวณจากอัตราภาษีของใบกำกับเดิม · กรอกตามเอกสารได้ (คลาดได้ไม่เกิน 1 สตางค์)"
+                  hint={
+                    suggestedVatSatang === null
+                      ? 'เว้นว่าง = คำนวณจากอัตราภาษีของใบกำกับเดิม · กรอกตามเอกสารได้ (คลาดได้ไม่เกิน 1 สตางค์)'
+                      : `เว้นว่าง = ${fmtSatangSymbol(suggestedVatSatang)} (ระบบเสนอให้ยอดหลังลดตรงมูลค่าสุทธิของรอบทุกสตางค์) · กรอกตามเอกสารได้ (คลาดได้ไม่เกิน 1 สตางค์)`
+                  }
                   error={vatError ?? undefined}
                 >
                   <Input
                     id="cn-vat"
                     numeric
                     inputMode="decimal"
+                    placeholder={suggestedVatSatang === null ? undefined : fmtSatang(suggestedVatSatang)}
                     value={vatText}
                     invalid={vatError !== null}
                     onChange={(event) => setVatText(event.target.value)}

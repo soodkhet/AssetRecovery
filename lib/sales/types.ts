@@ -61,6 +61,11 @@ export interface SalesRecordDto {
    * `null` = กติกานี้ไม่จำกัด
    */
   creditNoteAllowanceBeforeVatSatang: number | null
+  /**
+   * mytester4 — VAT ที่ระบบเสนอของใบลดหนี้ส่วนเกินเมื่อลดเท่า `creditNoteAllowanceBeforeVatSatang` พอดี (แบบส่วนต่าง —
+   * ผลรวมเอกสาร = มูลค่าสุทธิทุกสตางค์) · `null` = ใช้ค่าตามอัตรา
+   */
+  creditNoteClosingVatSatang: number | null
   totalBeforeVatSatang: number
   vatSatang: number
   totalSatang: number

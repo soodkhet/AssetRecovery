@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   adjustmentAmountMismatch,
   canWaiveAwaitingCreditNote,
+  closingCreditNoteVatSatang,
   assertAdjustmentLinkable,
   assertCreditNoteCancellable,
   assertInvoiceCreditable,
@@ -21,6 +22,7 @@ import {
   resolveCreditNoteAmounts,
   resolveCreditNoteVatRate,
   sumActiveCreditNotes,
+  suggestedCreditNoteVatSatang,
   type CreditNoteAmountRow,
 } from '@/lib/credit-notes/credit-note'
 
@@ -300,5 +302,56 @@ describe('mytester4 G4-01 — ใบลดหนี้ส่วนเกิน�
       creditNoteFormLimit({ noteType: 'credit', maxCreditTotalSatang: 0, allowanceBeforeVatSatang: null, invoiceCreditableTotalSatang: 150_000 })
         .blocked,
     ).toBe('outstanding')
+  })
+})
+
+describe('mytester4 — VAT ใบลดหนี้ส่วนเกินที่ปิดยอดแบบส่วนต่าง (BL-2569-003)', () => {
+  // ยอดตามเอกสารก่อนใบลดหนี้ 1,401.87 + 98.13 (= ใบรับ 1,500 · R = V) · ส่วนที่ยังบันทึกได้ 39.36
+  const SPC = {
+    amountBeforeVatSatang: 3_936,
+    allowanceBeforeVatSatang: 3_936,
+    remainingUninvoicedBeforeVatSatang: 0,
+    documentedBeforeVatSatang: 140_187,
+    documentedVatSatang: 9_813,
+    vatRatesPct: [7, 7, 7],
+  }
+
+  it('VAT = 98.13 − round(1,362.51 × 7%) = 2.75 (ไม่ใช่ 2.76) ⇒ ยอดหลังลด 1,457.89 = มูลค่าสุทธิ', () => {
+    const vat = closingCreditNoteVatSatang(SPC)
+    expect(vat).toBe(275)
+    expect(expectedCreditNoteVat(3_936, 7)).toBe(276)
+    expect(150_000 - (3_936 + (vat ?? 0))).toBe(136_251 + 9_538)
+  })
+
+  it('ไม่เข้าเงื่อนไข ⇒ null (ลดไม่เท่าส่วนที่บันทึกได้ / ยังมีมูลค่าไม่ออกใบ / หลายอัตรา / กติกาไม่คุม)', () => {
+    expect(closingCreditNoteVatSatang({ ...SPC, amountBeforeVatSatang: 3_000 })).toBeNull()
+    expect(closingCreditNoteVatSatang({ ...SPC, remainingUninvoicedBeforeVatSatang: 100 })).toBeNull()
+    expect(closingCreditNoteVatSatang({ ...SPC, vatRatesPct: [7, 10] })).toBeNull()
+    expect(closingCreditNoteVatSatang({ ...SPC, allowanceBeforeVatSatang: null })).toBeNull()
+    expect(closingCreditNoteVatSatang({ ...SPC, vatRatesPct: [] })).toBeNull()
+  })
+
+  it('ส่วนต่างเกินเกณฑ์ ±1 สตางค์ของค่าตามอัตรา ⇒ null (ใช้สูตรอัตราเดิม)', () => {
+    expect(closingCreditNoteVatSatang({ ...SPC, documentedVatSatang: 9_820 })).toBeNull()
+  })
+
+  it('resolveCreditNoteAmounts: ไม่กรอก VAT ⇒ ใช้ค่าที่ระบบเสนอ · กรอกเอง ⇒ ใช้ค่าที่กรอก · ค่าเสนอเกินเกณฑ์ ⇒ ปฏิเสธ', () => {
+    expect(resolveCreditNoteAmounts({ amountBeforeVatSatang: 3_936, vatRatePct: 7, defaultVatSatang: 275 })).toEqual({
+      amountBeforeVatSatang: 3_936,
+      vatSatang: 275,
+      totalSatang: 4_211,
+    })
+    expect(resolveCreditNoteAmounts({ amountBeforeVatSatang: 3_936, vatRatePct: 7, vatSatang: 276, defaultVatSatang: 275 }).vatSatang).toBe(276)
+    expect(resolveCreditNoteAmounts({ amountBeforeVatSatang: 3_936, vatRatePct: 7, defaultVatSatang: null }).vatSatang).toBe(276)
+    expect(() => resolveCreditNoteAmounts({ amountBeforeVatSatang: 3_936, vatRatePct: 7, defaultVatSatang: 270 })).toThrow()
+  })
+
+  it('ฟอร์มเสนอค่าเฉพาะใบลดหนี้ที่ลดเท่าส่วนที่บันทึกได้พอดี', () => {
+    const base = { isDebit: false, amountBeforeVatSatang: 3_936, allowanceBeforeVatSatang: 3_936, closingVatSatang: 275 }
+    expect(suggestedCreditNoteVatSatang(base)).toBe(275)
+    expect(suggestedCreditNoteVatSatang({ ...base, amountBeforeVatSatang: 3_900 })).toBeNull()
+    expect(suggestedCreditNoteVatSatang({ ...base, amountBeforeVatSatang: null })).toBeNull()
+    expect(suggestedCreditNoteVatSatang({ ...base, isDebit: true })).toBeNull()
+    expect(suggestedCreditNoteVatSatang({ ...base, closingVatSatang: null })).toBeNull()
   })
 })

@@ -203,6 +203,7 @@ function toSalesDto(
   periodClosed: PeriodClosedLookup = PERIOD_ASSUMED_OPEN,
   outstandingByBatch: ReadonlyMap<string, number> = new Map(),
   allowanceByBatch: ReadonlyMap<string, number | null> = new Map(),
+  closingVatByBatch: ReadonlyMap<string, number | null> = new Map(),
 ): SalesRecordDto {
   const active = activeInvoiceOf(row)
   return {
@@ -217,6 +218,7 @@ function toSalesDto(
     billingStatus: row.billingBatch.status,
     billingOutstandingSatang: outstandingByBatch.get(row.billingBatchId) ?? 0,
     creditNoteAllowanceBeforeVatSatang: allowanceByBatch.get(row.billingBatchId) ?? null,
+    creditNoteClosingVatSatang: closingVatByBatch.get(row.billingBatchId) ?? null,
     totalBeforeVatSatang: row.totalBeforeVatSatang,
     vatSatang: row.vatSatang,
     totalSatang: row.totalSatang,
@@ -347,7 +349,10 @@ export async function listSalesRecords(user: SessionUser, query: SalesListQuery)
   const allowanceByBatch = new Map(
     [...documented].map(([batchId, amounts]) => [batchId, amounts.uninvoicedReduction.creditNoteAllowanceBeforeVatSatang]),
   )
-  const items = rows.map((row) => toSalesDto(row, periodClosed, outstandingByBatch, allowanceByBatch))
+  const closingVatByBatch = new Map(
+    [...documented].map(([batchId, amounts]) => [batchId, amounts.creditNoteClosingVatSatang ?? null]),
+  )
+  const items = rows.map((row) => toSalesDto(row, periodClosed, outstandingByBatch, allowanceByBatch, closingVatByBatch))
   return {
     items,
     totalBeforeVatSatang: items.reduce((sum, item) => sum + item.totalBeforeVatSatang, 0),
