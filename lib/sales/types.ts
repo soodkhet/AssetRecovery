@@ -86,6 +86,38 @@ export interface TaxInvoiceDto extends TaxInvoiceSummaryDto {
   createdByName: string
 }
 
+/**
+ * mytester3 LR3-02 — ส่วนประกอบของยอดใบเสร็จรับเงิน/ใบกำกับภาษี (คิดด้วย `receiptInvoiceAmounts()` ตัวเดียวกับตอนออก)
+ * ยอดบนใบ = เงินโอน + ภาษีที่ลูกค้าหัก + เครดิตจากใบลดหนี้ + ค่าธรรมเนียมที่ตัด − ส่วนที่รับเกิน
+ */
+export interface TaxInvoicePreviewBreakdown {
+  transferSatang: number
+  customerWhtSatang: number
+  /** เครดิตจากใบลดหนี้ (เงินที่ลูกค้าชำระไว้แล้ว) ที่ใบนี้นำมาชำระ */
+  creditAppliedSatang: number
+  /** ส่วนต่างที่ตัดเป็นค่าธรรมเนียมธนาคารที่ใบนี้รวมไว้ (เฉพาะใบปิดยอด) */
+  bankFeeSatang: number
+  /** ส่วนที่ลดในมูลค่าที่ยังไม่ออกใบของรอบ (ไม่ต้องออกใบลดหนี้ · รวม VAT) — ไม่นำมาออกใบ */
+  uninvoicedReductionTotalSatang: number
+  /** ใบนี้ปิดยอดคงเหลือของรอบ ("ครบยอด") · `false` = รับชำระบางส่วน */
+  coversRemainder: boolean
+  /** รับเกินยอดคงเหลือ (ไม่นำมาออกเอกสาร) */
+  excessSatang: number
+}
+
+/** `GET /api/accounting/tax-invoices/preview` — ยอดที่ระบบจะออกจริง (อ่านอย่างเดียว ไม่จองเลข) */
+export interface TaxInvoicePreviewDto {
+  docTitle: string
+  totalBeforeVatSatang: number
+  vatSatang: number
+  totalSatang: number
+  /** `null` = ใบแทนแบบเดิมหลายอัตรา */
+  vatRatePct: number | null
+  description: string
+  /** `null` = ออกแทนใบกำกับแบบเดิม (ยอด/อัตราเดิม) */
+  breakdown: TaxInvoicePreviewBreakdown | null
+}
+
 export interface TaxInvoiceListDto {
   items: TaxInvoiceDto[]
 }

@@ -483,7 +483,17 @@ suite('มติ PO U95 — รับเงิน ⇒ ใบเสร็จร�
     await setNumbering({ seq: 50 })
     // แบบ BL-2569-002: 2,871.54 + VAT 201.01 = 3,072.55
     const batch = await seedBilling({ status: 'sent', grossSatang: 287_154, vatSatang: 20_101 })
-    const first = await sales.issueTaxInvoice(ctx, { cashReceiptId: await seedReceipt(batch.id, { amountSatang: 200_000 }) })
+    const firstReceiptId = await seedReceipt(batch.id, { amountSatang: 200_000 })
+    // mytester3 LR3-02 — พรีวิวใช้สูตรเดียวกับตอนออก (รับบางส่วน) · ไม่จองเลข
+    const seqBefore = await invoiceSeq()
+    expect(await sales.previewTaxInvoice(ctx, { cashReceiptId: firstReceiptId })).toMatchObject({
+      totalBeforeVatSatang: 186_916,
+      vatSatang: 13_084,
+      totalSatang: 200_000,
+      breakdown: { transferSatang: 200_000, creditAppliedSatang: 0, bankFeeSatang: 0, coversRemainder: false },
+    })
+    expect(await invoiceSeq()).toBe(seqBefore)
+    const first = await sales.issueTaxInvoice(ctx, { cashReceiptId: firstReceiptId })
     expect(first).toMatchObject({ totalBeforeVatSatang: 186_916, vatSatang: 13_084, totalSatang: 200_000 })
 
     const note = async (type: 'credit' | 'debit', beforeVat: number, vat: number): Promise<void> => {
@@ -498,10 +508,24 @@ suite('มติ PO U95 — รับเงิน ⇒ ใบเสร็จร�
     }
     await note('credit', 18_692, 1_308) // CN 200.00 อ้างใบแรก (ลูกค้าชำระเต็มไปแล้ว)
 
-    const last = await sales.issueTaxInvoice(ctx, {
-      cashReceiptId: await seedReceipt(batch.id, { amountSatang: 78_640, whtSatang: 8_615 }),
+    const lastReceiptId = await seedReceipt(batch.id, { amountSatang: 78_640, whtSatang: 8_615 })
+    // mytester3 LR3-02 — พรีวิวต้องเห็นเครดิตใบลดหนี้ + ครบยอด ตรงกับใบที่ออกจริง (เดิมแสดงแค่ 872.55 รับบางส่วน)
+    expect(await sales.previewTaxInvoice(ctx, { cashReceiptId: lastReceiptId })).toMatchObject({
+      totalBeforeVatSatang: 100_238,
+      vatSatang: 7_017,
+      totalSatang: 107_255,
+      breakdown: {
+        transferSatang: 78_640,
+        customerWhtSatang: 8_615,
+        creditAppliedSatang: 20_000,
+        bankFeeSatang: 0,
+        coversRemainder: true,
+        excessSatang: 0,
+      },
     })
+    const last = await sales.issueTaxInvoice(ctx, { cashReceiptId: lastReceiptId })
     expect(last).toMatchObject({ totalBeforeVatSatang: 100_238, vatSatang: 7_017, totalSatang: 107_255 })
+    await expectCode(() => sales.previewTaxInvoice(ctx, { cashReceiptId: lastReceiptId }), 'TAX_INVOICE_ALREADY_ISSUED')
     // Σ ใบกำกับ − ใบลดหนี้ = ยอดสุทธิของรอบทุกสตางค์
     expect(first.totalSatang + last.totalSatang - 20_000).toBe(307_255 - 20_000)
     expect(first.vatSatang + last.vatSatang - 1_308).toBe(20_101 - 1_308)
@@ -543,6 +567,10 @@ suite('มติ PO U95 — รับเงิน ⇒ ใบเสร็จร�
       UPDATE billing_batches SET bank_fee_written_off_satang = 5350, bank_fee_written_off_date = '${TODAY.toISOString().slice(0, 10)}'
        WHERE id = '${batch.id}'
     `)
+    expect(await sales.previewTaxInvoice(ctx, { cashReceiptId: receiptId })).toMatchObject({
+      totalSatang: 64_200,
+      breakdown: { transferSatang: 58_850, creditAppliedSatang: 5_350, bankFeeSatang: 0, coversRemainder: true },
+    })
     const last = await sales.issueTaxInvoice(ctx, { cashReceiptId: receiptId })
     expect(last.totalSatang).toBe(64_200)
     const doc = buildTaxInvoiceDoc(await sales.getTaxInvoiceDocSource(accountant, last.id))
@@ -659,7 +687,12 @@ suite('มติ PO U95 — รับเงิน ⇒ ใบเสร็จร�
                                approved_by, approved_at, created_by)
       VALUES ('${ORG_ID}', 'decrease', 10000, 'ลดก่อนรับเงิน', 'approved', '${batch.id}', '${ACCOUNTING_ID}', now(), '${ACCOUNTING_ID}')
     `)
-    const last = await sales.issueTaxInvoice(ctx, { cashReceiptId: await seedReceipt(batch.id, { amountSatang: 96_300 }) })
+    const receiptId = await seedReceipt(batch.id, { amountSatang: 96_300 })
+    expect(await sales.previewTaxInvoice(ctx, { cashReceiptId: receiptId })).toMatchObject({
+      totalSatang: 96_300,
+      breakdown: { uninvoicedReductionTotalSatang: 10_700, coversRemainder: true, excessSatang: 0 },
+    })
+    const last = await sales.issueTaxInvoice(ctx, { cashReceiptId: receiptId })
     expect(last).toMatchObject({ totalBeforeVatSatang: 90_000, vatSatang: 6_300, totalSatang: 96_300 })
     const doc = buildTaxInvoiceDoc(await sales.getTaxInvoiceDocSource(accountant, last.id))
     expect(doc.description).not.toContain('บางส่วน')

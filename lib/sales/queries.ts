@@ -55,6 +55,8 @@ import type {
   SalesRecordDto,
   TaxInvoiceDto,
   TaxInvoiceListDto,
+  TaxInvoicePreviewBreakdown,
+  TaxInvoicePreviewDto,
   TaxInvoiceSummaryDto,
 } from '@/lib/sales/types'
 import { documentYear, formatDocumentNumber, nextDocumentSequence } from '@/lib/document-numbering/format'
@@ -444,6 +446,8 @@ interface IssueAmounts {
   amounts: SalesAmounts
   vatRatePct: number | null
   description: string
+  /** mytester3 LR3-02 — ส่วนประกอบของยอด (ใบเสร็จฯ เท่านั้น · ใบแทนแบบเดิม = `null`) ใช้แสดงพรีวิวก่อนออก */
+  breakdown: TaxInvoicePreviewBreakdown | null
 }
 
 /** แผนการออกเอกสาร 1 ใบ — ตรวจทุกอย่างที่ตรวจได้นอก transaction ก่อน แล้วคิดยอดจริงหลังล็อกตัวเดินเลข */
@@ -454,8 +458,11 @@ interface IssuePlan {
   receivedDate: Date | null
   defaultDate: Date
   replaces: { id: string; invoiceNumber: string } | null
-  /** คิดยอดใน transaction (หลังล็อกแถวองค์กร ⇒ ใบของรอบเดียวกันที่ออกพร้อมกันต่อคิว ยอดไม่ซ้อน) */
-  amounts: (tx: Tx) => Promise<IssueAmounts>
+  /**
+   * คิดยอดใน transaction (หลังล็อกแถวองค์กร ⇒ ใบของรอบเดียวกันที่ออกพร้อมกันต่อคิว ยอดไม่ซ้อน)
+   * · `lock: false` = พรีวิวอ่านอย่างเดียว (mytester3 LR3-02 — สูตรเดียวกัน ไม่ล็อกแถว)
+   */
+  amounts: (tx: Tx, options?: { lock: boolean }) => Promise<IssueAmounts>
 }
 
 const RECEIPT_SELECT = {
@@ -537,10 +544,12 @@ async function planReceiptInvoice(
     receivedDate: receipt.receivedDate,
     defaultDate: receipt.receivedDate,
     replaces,
-    amounts: async (tx) => {
+    amounts: async (tx, options = { lock: true }) => {
       // รีวิว mytester3 #7 — ล็อกแถวรอบวางบิล (ล็อกเดียวกับฝั่งบันทึก/ยกเลิกใบลดหนี้ · รับเงิน — U171) ก่อนอ่าน
       // ใบลดหนี้/ใบก่อนหน้า ⇒ ใบลดหนี้ที่บันทึกพร้อมกันต่อคิว ไม่หลุดจากเครดิตที่ใบนี้คิด
-      await tx.$queryRaw`SELECT id FROM billing_batches WHERE id = ${receipt.billingBatchId}::uuid FOR UPDATE`
+      if (options.lock) {
+        await tx.$queryRaw`SELECT id FROM billing_batches WHERE id = ${receipt.billingBatchId}::uuid FOR UPDATE`
+      }
       // ตรวจซ้ำหลังล็อก — คำขอที่ต่อคิวมาหลังอีกคนออกใบของเงินรับนี้ไปแล้วต้องได้ code ที่ตรงความจริง
       const raced = await tx.taxInvoice.findFirst({
         where: { cashReceiptId, status: 'active' },
@@ -610,6 +619,15 @@ async function planReceiptInvoice(
           billingBatchNumber: receipt.billingBatch.batchNumber,
           coversRemainder: computed.coversRemainder,
         }),
+        breakdown: {
+          transferSatang: receipt.amountSatang,
+          customerWhtSatang: receipt.whtWithheldByCustomerSatang,
+          creditAppliedSatang: computed.creditAppliedSatang,
+          bankFeeSatang: computed.bankFeeSatang,
+          uninvoicedReductionTotalSatang: documented?.uninvoicedReduction.totalSatang ?? 0,
+          coversRemainder: computed.coversRemainder,
+          excessSatang: computed.excessSatang,
+        },
       }
     },
   }
@@ -662,6 +680,7 @@ async function planReplacement(ctx: SalesMutationContext, replacesInvoiceId: str
         },
         vatRatePct,
         description: invoice.description,
+        breakdown: null,
       }
     },
   }
@@ -823,6 +842,32 @@ export async function issueTaxInvoice(
     })
 
   return toInvoiceDto(created, sales)
+}
+
+/**
+ * `GET /api/accounting/tax-invoices/preview` (mytester3 LR3-02) — ยอดที่ {@link issueTaxInvoice} จะออกจริง ณ ตอนนี้
+ *
+ * ใช้แผน + สูตรเดียวกับการออก (`receiptInvoiceAmounts()` + เครดิตใบลดหนี้ + ค่าธรรมเนียม + ส่วนที่ลดก่อนออกใบ) แต่**ไม่ล็อกแถว
+ * ไม่จองเลข ไม่บันทึกเอกสาร** ⇒ หน้าต่างออกใบแสดงยอด/ป้าย "ครบยอด"/"รับชำระบางส่วน" ตรงกับใบที่จะได้ (ห้ามคิดซ้ำฝั่ง client)
+ * · ตรวจเงื่อนไขเดียวกับการออก (ออกไปแล้ว / ไม่มียอดให้ออก / บริษัทไม่มี VAT) ⇒ ได้ error code เดียวกันก่อนกดยืนยัน
+ * · ข้อยกเว้นเดียวที่อาจเขียน: รายการขายของรอบหายเพราะ sync ตอนส่งบิลล้ม ⇒ สร้างซ้ำแบบ idempotent (เหมือนตอนออก)
+ */
+export async function previewTaxInvoice(ctx: SalesMutationContext, input: TaxInvoiceCreateInput): Promise<TaxInvoicePreviewDto> {
+  const today = defaultInvoiceDate()
+  const plan =
+    input.cashReceiptId !== undefined
+      ? await planReceiptInvoice(ctx, input.cashReceiptId, null)
+      : await planReplacement(ctx, input.replacesInvoiceId ?? '', today)
+  const issue = await plan.amounts(prisma, { lock: false })
+  return {
+    docTitle: TAX_INVOICE_DOC_KIND_TITLE[plan.docKind],
+    totalBeforeVatSatang: issue.amounts.totalBeforeVatSatang,
+    vatSatang: issue.amounts.vatSatang,
+    totalSatang: issue.amounts.totalSatang,
+    vatRatePct: issue.vatRatePct,
+    description: issue.description,
+    breakdown: issue.breakdown,
+  }
 }
 
 async function findTaxInvoice(user: SessionUser, invoiceId: string): Promise<{ invoice: TaxInvoiceRow; sales: SalesRow }> {

@@ -1,18 +1,26 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { OrganizationProfileNotice } from '@/components/settings/organization-profile-notice'
-import { Button, Field, InlineAlert, Input, Modal, useToast } from '@/components/ui'
-import { callApi, jsonRequest } from '@/lib/api/types'
+import { Button, Field, InlineAlert, Input, LoadingState, Modal, StatusBadge, useToast } from '@/components/ui'
+import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
 import { fmtDate, toInputDate } from '@/lib/format/datetime'
-import { fmtSatangSymbol } from '@/lib/format/money'
-import type { CashReceiptDto, SalesRecordDto, TaxInvoiceDto, TaxInvoiceSummaryDto } from '@/lib/sales/types'
+import { fmtRatePct, fmtSatangSymbol } from '@/lib/format/money'
+import type {
+  CashReceiptDto,
+  SalesRecordDto,
+  TaxInvoiceDto,
+  TaxInvoicePreviewDto,
+  TaxInvoiceSummaryDto,
+} from '@/lib/sales/types'
 
 /**
  * Modal ออกเอกสารภาษี (มติ PO U95 · mockup `accounting.html` `issue-tax-invoice`)
  *
- * - `receipt` = ออก **ใบเสร็จรับเงิน/ใบกำกับภาษี** จากเงินรับ — ยอดตามเงินที่รับ (+ภาษีที่ลูกค้าหัก) ·
- *   VAT อัตรา ณ วันรับเงิน (คิดที่ server) · วันที่เอกสารเริ่มต้น = วันรับเงิน
+ * - `receipt` = ออก **ใบเสร็จรับเงิน/ใบกำกับภาษี** จากเงินรับ — ยอดตามเงินที่รับ (+ภาษีที่ลูกค้าหัก + เครดิตใบลดหนี้ +
+ *   ค่าธรรมเนียมที่ตัด) · VAT อัตรา ณ วันรับเงิน · วันที่เอกสารเริ่มต้น = วันรับเงิน
+ * - mytester3 LR3-02 — ยอด/ป้ายทั้งหมดมาจาก `GET /api/accounting/tax-invoices/preview` (สูตรเดียวกับตอนออก)
+ *   **ห้ามคิดยอดซ้ำฝั่ง client** · ยืนยันได้เมื่อพรีวิวสำเร็จเท่านั้น
  * - `replace` = ออกแทนใบกำกับแบบเดิมที่ยกเลิกแล้ว (ยอด/อัตราเดิม · พิมพ์ "ออกแทนฉบับเลขที่ …")
  *
  * ⚠️ **ไม่มีช่องเลขที่/ยอดเงิน** — ระบบเดินเลขให้เองแบบไม่ขาดช่วงและคิดยอดจากเงินรับ (`31` §10)
@@ -36,6 +44,31 @@ export function IssueTaxInvoiceModal({
     toInputDate(target?.kind === 'receipt' ? target.receipt.receivedDate : new Date()),
   )
   const [saving, setSaving] = useState(false)
+  const [preview, setPreview] = useState<PreviewState>({ status: 'loading' })
+  const previewQuery =
+    target === null
+      ? null
+      : target.kind === 'receipt'
+        ? `cashReceiptId=${encodeURIComponent(target.receipt.id)}`
+        : `replacesInvoiceId=${encodeURIComponent(target.invoice.id)}`
+
+  // เปลี่ยนเป้าหมาย = remount ด้วย `key` จากผู้เรียก ⇒ ไม่ต้องรีเซ็ต state ใน effect
+  useEffect(() => {
+    if (previewQuery === null) return
+    let cancelled = false
+    void (async () => {
+      const result = await callApi<TaxInvoicePreviewDto>(`/api/accounting/tax-invoices/preview?${previewQuery}`)
+      if (cancelled) return
+      setPreview(
+        result.error !== undefined || result.data === undefined
+          ? { status: 'error', error: result.error ?? { title: 'คำนวณยอดไม่สำเร็จ', message: 'กรุณาลองใหม่อีกครั้ง' } }
+          : { status: 'ready', data: result.data },
+      )
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [previewQuery])
 
   if (target === null) return null
 
@@ -84,7 +117,7 @@ export function IssueTaxInvoiceModal({
           <Button variant="secondary" onClick={onClose}>
             ยกเลิก
           </Button>
-          <Button loading={saving} onClick={() => void submit()}>
+          <Button loading={saving} disabled={preview.status !== 'ready'} onClick={() => void submit()}>
             ยืนยันออกเอกสาร
           </Button>
         </>
@@ -93,56 +126,7 @@ export function IssueTaxInvoiceModal({
       <div className="space-y-4">
         {/* มติ PO U99 — ข้อมูลผู้ขายยังเป็นค่าตัวอย่าง ⇒ เตือน (ไม่บล็อก) */}
         <OrganizationProfileNotice />
-        {target.kind === 'receipt' ? (
-          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs">
-            <div className="flex justify-between py-0.5">
-              <span className="text-slate-500">เงินโอนเข้า</span>
-              <span className="font-mono font-semibold">{fmtSatangSymbol(target.receipt.amountSatang)}</span>
-            </div>
-            <div className="flex justify-between py-0.5">
-              <span className="text-slate-500">ภาษีที่ลูกค้าหัก ณ ที่จ่าย (นับเป็นการรับชำระ)</span>
-              <span className="font-mono font-semibold">{fmtSatangSymbol(target.receipt.whtWithheldByCustomerSatang)}</span>
-            </div>
-            {target.receipt.billingBankFeeWrittenOffSatang > 0 && (
-              <div className="flex justify-between py-0.5">
-                <span className="text-slate-500">ส่วนต่างที่ตัดเป็นค่าธรรมเนียมธนาคาร (เรารับภาระ)</span>
-                <span className="font-mono font-semibold">
-                  {fmtSatangSymbol(target.receipt.billingBankFeeWrittenOffSatang)}
-                </span>
-              </div>
-            )}
-            <div className="mt-1 flex justify-between border-t border-slate-200 pt-1.5">
-              <span className="font-semibold text-slate-700">ยอดรับชำระบนเอกสาร (รวม VAT)</span>
-              <span className="font-mono font-bold text-slate-900">
-                {fmtSatangSymbol(
-                  target.receipt.amountSatang +
-                    target.receipt.whtWithheldByCustomerSatang +
-                    target.receipt.billingBankFeeWrittenOffSatang,
-                )}
-              </span>
-            </div>
-            <p className="mt-2 text-slate-500">
-              {target.receipt.billingBankFeeWrittenOffSatang > 0
-                ? 'บิลนี้ปิดด้วยการตัดส่วนต่างเป็นค่าธรรมเนียมธนาคาร ⇒ ใบที่ปิดยอดออกเต็มยอดใบแจ้งหนี้ สถานะรับชำระครบ · ภาษีมูลค่าเพิ่มคิดจากมูลค่าบริการเต็ม ณ วันรับเงิน'
-                : 'ภาษีมูลค่าเพิ่มคิดตามอัตรา ณ วันรับเงิน · รับไม่ครบยอดใบแจ้งหนี้ = ออกตามยอดที่รับ (รับชำระบางส่วน)'}
-            </p>
-          </div>
-        ) : (
-          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs">
-            <div className="flex justify-between py-0.5">
-              <span className="text-slate-500">มูลค่าก่อนภาษี (ตามใบเดิม)</span>
-              <span className="font-mono font-semibold">{fmtSatangSymbol(target.invoice.totalBeforeVatSatang)}</span>
-            </div>
-            <div className="flex justify-between py-0.5">
-              <span className="text-slate-500">ภาษีมูลค่าเพิ่ม</span>
-              <span className="font-mono font-semibold">{fmtSatangSymbol(target.invoice.vatSatang)}</span>
-            </div>
-            <div className="mt-1 flex justify-between border-t border-slate-200 pt-1.5">
-              <span className="font-semibold text-slate-700">รวมทั้งสิ้น</span>
-              <span className="font-mono font-bold text-slate-900">{fmtSatangSymbol(target.invoice.totalSatang)}</span>
-            </div>
-          </div>
-        )}
+        <TaxInvoicePreviewSummary preview={preview} />
 
         <Field
           id="invoice-date"
@@ -161,5 +145,94 @@ export function IssueTaxInvoiceModal({
         </InlineAlert>
       </div>
     </Modal>
+  )
+}
+
+export type PreviewState =
+  | { status: 'loading' }
+  | { status: 'error'; error: Pick<ApiCallError, 'title' | 'message'> }
+  | { status: 'ready'; data: TaxInvoicePreviewDto }
+
+function Row({ label, value, sign = '' }: { label: string; value: number; sign?: '' | '−' }) {
+  return (
+    <div className="flex justify-between gap-3 py-0.5">
+      <span className="text-slate-500">{label}</span>
+      <span className="font-mono font-semibold whitespace-nowrap">
+        {sign}
+        {fmtSatangSymbol(value)}
+      </span>
+    </div>
+  )
+}
+
+/**
+ * สรุปยอดที่จะออกจริง (mytester3 LR3-02) — แสดงตามผลจาก server ล้วน ไม่คำนวณเงินเอง
+ * · ใบเสร็จฯ: เงินโอน + ภาษีที่ลูกค้าหัก + เครดิตจากใบลดหนี้ + ค่าธรรมเนียม − ส่วนที่รับเกิน = ยอดบนเอกสาร
+ * · ใบแทนแบบเดิม: มูลค่าก่อนภาษี/VAT/รวม ตามใบเดิม
+ */
+export function TaxInvoicePreviewSummary({ preview }: { preview: PreviewState }) {
+  if (preview.status === 'loading') return <LoadingState message="กำลังคำนวณยอดที่จะออก..." className="py-4" />
+  if (preview.status === 'error') {
+    return (
+      <InlineAlert tone="error" title={preview.error.title}>
+        {preview.error.message}
+      </InlineAlert>
+    )
+  }
+  const { data } = preview
+  const breakdown = data.breakdown
+  const vatLabel = data.vatRatePct === null ? 'ภาษีมูลค่าเพิ่ม' : `ภาษีมูลค่าเพิ่ม ${fmtRatePct(data.vatRatePct)}`
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs">
+      {breakdown !== null && (
+        <>
+          <div className="mb-1.5 flex items-center justify-between gap-3">
+            <span className="font-semibold text-slate-700">{data.docTitle}</span>
+            {breakdown.coversRemainder ? (
+              <StatusBadge group="success" label="ครบยอด" />
+            ) : (
+              <StatusBadge group="partial" label="รับชำระบางส่วน" />
+            )}
+          </div>
+          <Row label="เงินโอนเข้า" value={breakdown.transferSatang} />
+          <Row label="ภาษีที่ลูกค้าหัก ณ ที่จ่าย (นับเป็นการรับชำระ)" value={breakdown.customerWhtSatang} />
+          {breakdown.creditAppliedSatang > 0 && (
+            <Row label="เครดิตจากใบลดหนี้ (เงินที่ลูกค้าชำระไว้แล้ว) นำมาชำระ" value={breakdown.creditAppliedSatang} />
+          )}
+          {breakdown.bankFeeSatang > 0 && (
+            <Row label="ส่วนต่างที่ตัดเป็นค่าธรรมเนียมธนาคาร (เรารับภาระ)" value={breakdown.bankFeeSatang} />
+          )}
+          {breakdown.excessSatang > 0 && (
+            <Row label="ส่วนที่รับเกินยอดคงเหลือ (ไม่นำมาออกเอกสาร)" value={breakdown.excessSatang} sign="−" />
+          )}
+        </>
+      )}
+      <div className={breakdown === null ? '' : 'mt-1 border-t border-slate-200 pt-1.5'}>
+        <Row label="มูลค่าก่อนภาษี" value={data.totalBeforeVatSatang} />
+        <Row label={vatLabel} value={data.vatSatang} />
+      </div>
+      <div className="mt-1 flex justify-between border-t border-slate-200 pt-1.5">
+        <span className="font-semibold text-slate-700">
+          {breakdown === null ? 'รวมทั้งสิ้น' : 'ยอดบนเอกสาร (รวมภาษีมูลค่าเพิ่ม)'}
+        </span>
+        <span className="font-mono font-bold text-slate-900">{fmtSatangSymbol(data.totalSatang)}</span>
+      </div>
+      {breakdown !== null && (
+        <div className="mt-2 space-y-1 text-slate-500">
+          {breakdown.uninvoicedReductionTotalSatang > 0 && (
+            <p>
+              รอบนี้ปรับลดยอด {fmtSatangSymbol(breakdown.uninvoicedReductionTotalSatang)} ในส่วนที่ยังไม่ออกใบกำกับภาษี — ไม่นำมาออกใบ
+              และไม่ต้องออกใบลดหนี้
+            </p>
+          )}
+          <p>
+            {breakdown.coversRemainder
+              ? 'ใบนี้ปิดยอดคงเหลือของรอบ ⇒ รับชำระครบ · ภาษีมูลค่าเพิ่มคิดตามอัตรา ณ วันรับเงิน'
+              : 'ยอดที่รับยังไม่ครบยอดคงเหลือของรอบ ⇒ ออกตามยอดที่รับ (รับชำระบางส่วน) · ภาษีมูลค่าเพิ่มคิดตามอัตรา ณ วันรับเงิน'}
+          </p>
+        </div>
+      )}
+    </div>
   )
 }

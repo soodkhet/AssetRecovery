@@ -45,6 +45,7 @@
 | v3.28 | 11/10/2569 | **mytester G-05** — §6.7 เพิ่ม `GET /api/billing-batches/preview?companyId=&cutoffDate=` (สรุปจำนวน/ยอดรายได้ที่วันตัดรอบนี้จะดึงเข้ารอบวางบิล + รายได้ที่อยู่หลังวันตัดรอบ · manage `manage_billing` · อ่านอย่างเดียว ไม่ลง audit) |
 | v3.29 | 11/10/2569 | **mytester F-04 · รีวิวเฟส 4 ข้อ 2** — §6.6 `PayoutBatchDto`: `compensationSatang` = ค่าตอบแทน (เงินได้จริง) **ไม่รวมเงินทดรองจ่าย** · เพิ่ม `advancePaidSatang` (ยอดเงินทดรองจ่ายในรอบ — ไม่มี = 0) · ⇒ `compensationSatang + advancePaidSatang + whtPaidByPayerSatang = grossSatang` (ดู `17` v2.12) |
 | v3.30 | 12/10/2569 | **mytester2 F2-01** — §6.5 เพิ่ม `GET /api/compensation/bulk-preview?ids=` (อ่านอย่างเดียว · capability/scope เดียวกับ `GET /api/compensation`) ยอดสรุปของหน้าต่าง "อนุมัติที่เลือก (N)": ชุดที่เลือกรวมกลุ่มต่อผู้รับกับรายการ `approved` ที่ยังไม่เข้ารอบ + ยอดสะสมของเดือน แล้วคิด WHT แบบรอบจ่ายด้วย pure module เดียวกับคิว (`22` §6.9) — ยอดสุทธิ = ส่วนที่รอบจ่ายถัดไปเพิ่มขึ้น · เป็นประมาณการ (ขั้นอนุมัติที่เหลือ/วันตัดรอบ) · **สูตรไม่เปลี่ยน** |
+| v3.31 | 12/10/2569 | **mytester3 LR3-02** — §6.10 เพิ่ม `GET /api/accounting/tax-invoices/preview?cashReceiptId=|replacesInvoiceId=` (ยอด/ส่วนประกอบที่ระบบจะออกจริง — เงินโอน + ภาษีที่ลูกค้าหัก + เครดิตใบลดหนี้ + ค่าธรรมเนียม · ครบยอด/บางส่วน · สูตรเดียวกับ POST · manage `manage_tax_invoice` · อ่านอย่างเดียว ไม่จองเลข ไม่ลง audit) |
 
 ขอบเขตเอกสารนี้: รวม API Endpoint ทั้งหมดของโมดูล Finance/Accounting เป็นรายการเดียว จัดกลุ่มตาม resource เพื่อให้ backend implement ตาม REST convention เดียวกันทั้งระบบ
 
@@ -206,6 +207,7 @@ GET    /api/reports/profitability/:dimension_id/drilldown
 ```
 GET    /api/accounting/sales
 POST   /api/accounting/tax-invoices
+GET    /api/accounting/tax-invoices/preview                (v3.31 — พรีวิวยอดที่จะออกจริง อ่านอย่างเดียว · LR3-02)
 PATCH  /api/accounting/tax-invoices/:id/cancel
 POST   /api/accounting/credit-notes/awaiting/:adjustmentId/waive   (v3.25 — ปิดป้ายรอใบลดหนี้ของบิลที่ชำระครบ = จัดการนอกระบบ · E-016)
 GET    /api/accounting/cash-receipts
