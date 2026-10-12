@@ -1,6 +1,7 @@
 import { documentedAmountsForBatches } from '@/lib/portal/documented-amounts'
 import { prisma } from '@/lib/prisma'
 import {
+  adjustmentNetByBatch,
   evaluateTaxInvoiceCoverage,
   receiptAwaitsTaxInvoice,
   type TaxInvoiceCoverageBatch,
@@ -63,16 +64,20 @@ export async function loadTaxInvoiceCoverage(
         adjustmentType: { in: ['decrease', 'increase'] },
         OR: [{ billingBatchId: { in: batchIds } }, { revenue: { billingBatchId: { in: batchIds } } }],
       },
-      select: { adjustmentType: true, amountSatang: true, billingBatchId: true, revenue: { select: { billingBatchId: true } } },
+      select: {
+        adjustmentType: true,
+        amountSatang: true,
+        billingBatchId: true,
+        creditNoteWaivedAt: true,
+        creditNoteWaiveReason: true,
+        revenue: { select: { billingBatchId: true } },
+      },
     }),
   ])
-  const adjustmentNet = new Map<string, number>()
-  for (const row of adjustments) {
-    const batchId = row.billingBatchId ?? row.revenue?.billingBatchId ?? null
-    if (batchId === null) continue
-    const signed = row.adjustmentType === 'decrease' ? -row.amountSatang : row.amountSatang
-    adjustmentNet.set(batchId, (adjustmentNet.get(batchId) ?? 0) + signed)
-  }
+  // รีวิว mytester4 — รายการลดยอดที่ปิดป้าย "จัดการนอกระบบ" ไม่นับ (ดู `adjustmentNetByBatch()`)
+  const adjustmentNet = adjustmentNetByBatch(
+    adjustments.map((row) => ({ ...row, batchId: row.billingBatchId ?? row.revenue?.billingBatchId ?? null })),
+  )
 
   const rows: TaxInvoiceCoverageBatch[] = batches.flatMap((batch) => {
     const amounts = documented.get(batch.id)
@@ -122,6 +127,7 @@ export async function loadTaxInvoiceCoverage(
           (receipt) => receipt.receivedDate >= period.start && receipt.receivedDate < period.end,
         ),
         netValueBeforeVatSatang: amounts.invoiced.beforeVatSatang + (adjustmentNet.get(batch.id) ?? 0),
+        taxInvoiceCount: invoices.length,
       },
     ]
   })

@@ -1,5 +1,6 @@
 import { sumSatang } from '@/lib/finance/satang'
 import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
+import { UNINVOICED_REDUCTION_WAIVE_REASON } from '@/lib/sales/uninvoiced-reduction'
 
 /**
  * **ใบกำกับภาษีครอบเงินที่รับครบไหม** (mytester3 H3-02 · `30` §6.2 · `37` §6.1 Control Totals · หลักการตรวจ `22` §6.8.2)
@@ -23,8 +24,12 @@ import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
  * ```
  * เอกสารสุทธิ (ก่อน VAT) = Σ ใบกำกับ active − Σ ใบลดหนี้ active + Σ ใบเพิ่มหนี้ active
  * มูลค่าสุทธิของรอบ       = ใบแจ้งหนี้ − Σ Adjustment ลดยอด approved + Σ Adjustment เพิ่มยอด approved
- * เอกสารสุทธิ > มูลค่าสุทธิ ⇒ ภาษีขายเกิน (ส่วนที่ลดลงไปในยอดที่ออกใบแล้วยังไม่มีใบลดหนี้) ⇒ เตือน
+ * เอกสารสุทธิ > มูลค่าสุทธิ + เกณฑ์ปัดเศษ ⇒ ภาษีขายเกิน (ส่วนที่ลดลงไปในยอดที่ออกใบแล้วยังไม่มีใบลดหนี้) ⇒ เตือน
  * ```
+ * - Adjustment ลดยอดที่ปิดป้าย "จัดการนอกระบบ" (`credit_note_waived_at` ≠ null และเหตุผลไม่ใช่การปิดอัตโนมัติเพราะลดในส่วนที่
+ *   ยังไม่ออกใบ) ไม่นับในมูลค่าสุทธิ — เอกสารของรายการนั้นอยู่นอกระบบ ({@link adjustmentNetByBatch} · รีวิว mytester4)
+ * - เกณฑ์ปัดเศษ ±1 สตางค์ต่อใบกำกับ (`taxInvoiceCount`) — ใบรับชำระบางส่วนถอด VAT จากยอดรวมแล้วปัดทีละใบ ⇒ Σ ก่อน VAT
+ *   เกินมูลค่าสุทธิได้เล็กน้อยโดยไม่ได้ออกใบเกินจริง (รีวิว mytester4)
  * รอบที่ข้อตรวจ "เท่ากันพอดี" ข้างบนจับแล้วไม่ซ้ำ
  */
 
@@ -68,6 +73,10 @@ export interface TaxInvoiceCoverageBatch {
    * · ไม่ส่ง = ไม่ตรวจ "ใบกำกับเกินมูลค่าสุทธิ" (ต้องส่ง `beforeVatSatang` ของใบกำกับ/ใบลดหนี้/ใบเพิ่มหนี้มาด้วย)
    */
   netValueBeforeVatSatang?: number
+  /**
+   * รีวิว mytester4 — จำนวนใบกำกับ active ของรอบ ⇒ เกณฑ์ปัดเศษของข้อตรวจ "เกินมูลค่าสุทธิ" = 1 สตางค์ต่อใบ · ไม่ส่ง = 0
+   */
+  taxInvoiceCount?: number
   /**
    * mytester4 H4-01 — รอบมีเงินรับลงวันที่ในงวด (ไม่ส่ง = มี) · `false` = โหลดมาเพราะมีใบกำกับในงวดเท่านั้น
    * ⇒ ตรวจเฉพาะ "เกินมูลค่าสุทธิ" ไม่เข้าข้อตรวจเท่ากันพอดี/ผลรวมงวด (ขอบเขตเดิม: รอบที่มีเงินรับในงวด)
@@ -139,13 +148,42 @@ export function taxInvoiceExcessOverNetValue(batch: TaxInvoiceCoverageBatch): Ta
   if (net === undefined || invoiced <= 0) return null
   const documents = invoiced - (batch.creditNotes.beforeVatSatang ?? 0) + (batch.debitNotes.beforeVatSatang ?? 0)
   const excess = documents - net
-  if (excess <= 0) return null
+  // รีวิว mytester4 — ±1 สตางค์ต่อใบ (ปัดเศษ VAT ของใบรับชำระบางส่วนทีละใบ)
+  if (excess <= (batch.taxInvoiceCount ?? 0)) return null
   return {
     batchNumber: batch.batchNumber,
     netValueBeforeVatSatang: net,
     documentsBeforeVatSatang: documents,
     excessBeforeVatSatang: excess,
   }
+}
+
+/** Adjustment ลด/เพิ่มยอด approved ของรอบ (ระดับรอบหรือระดับรายได้ในรอบ — `batchId` แก้ให้แล้ว) */
+export interface CoverageAdjustmentRow {
+  adjustmentType: string
+  amountSatang: number
+  batchId: string | null
+  creditNoteWaivedAt: Date | null
+  creditNoteWaiveReason: string | null
+}
+
+/**
+ * mytester4 H4-01 — ผลรวมสุทธิ Adjustment ต่อรอบ (ลดยอด = ลบ · เพิ่มยอด = บวก) สำหรับมูลค่าสุทธิของรอบ
+ * · รีวิว mytester4 — Adjustment **ลดยอด**ที่ปิดป้าย "จัดการนอกระบบ" (`creditNoteWaivedAt` ≠ null และเหตุผล ≠
+ *   {@link UNINVOICED_REDUCTION_WAIVE_REASON}) ไม่นับ — ใบลดหนี้ของรายการนั้นออกนอกระบบ ไม่ต้องเตือนซ้ำทุกงวด ·
+ *   รายการที่ระบบปิดอัตโนมัติเพราะลดในส่วนที่ยังไม่ออกใบ**ยังนับ** (มูลค่าลดลงจริง ใบกำกับต้องไม่เกิน)
+ */
+export function adjustmentNetByBatch(rows: readonly CoverageAdjustmentRow[]): Map<string, number> {
+  const net = new Map<string, number>()
+  for (const row of rows) {
+    if (row.batchId === null) continue
+    if (row.adjustmentType !== 'decrease' && row.adjustmentType !== 'increase') continue
+    const handledOutside = row.creditNoteWaivedAt !== null && row.creditNoteWaiveReason !== UNINVOICED_REDUCTION_WAIVE_REASON
+    if (row.adjustmentType === 'decrease' && handledOutside) continue
+    const signed = row.adjustmentType === 'decrease' ? -row.amountSatang : row.amountSatang
+    net.set(row.batchId, (net.get(row.batchId) ?? 0) + signed)
+  }
+  return net
 }
 
 export interface TaxInvoiceCoverageResult {

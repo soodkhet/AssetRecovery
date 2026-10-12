@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { receiptInvoiceAmounts, type PriorInvoiceAmounts } from '@/lib/sales/receipt-invoice'
 import {
+  adjustmentNetByBatch,
   countReceiptsAwaitingTaxInvoice,
   evaluateTaxInvoiceCoverage,
   receiptAwaitsTaxInvoice,
@@ -8,6 +10,7 @@ import {
   taxInvoiceOverNetValueWarning,
   type TaxInvoiceCoverageBatch,
 } from '@/lib/sales/tax-invoice-coverage'
+import { UNINVOICED_REDUCTION_WAIVE_REASON } from '@/lib/sales/uninvoiced-reduction'
 
 /** mytester3 H3-02 — ใบกำกับภาษีครอบเงินที่รับครบไหม (ต่อรอบที่รับชำระครบ + ผลรวมทั้งงวด) */
 
@@ -288,5 +291,92 @@ describe('mytester4 H4-01 — ใบกำกับเกินมูลค่�
     const late = evaluateTaxInvoiceCoverage([spc({ fullyPaid: true, receivedInPeriod: false })])
     expect(late.checkedCount).toBe(0)
     expect(late.overNetValue).toHaveLength(1)
+  })
+})
+
+describe('รีวิว mytester4 — มูลค่าสุทธิไม่นับรายการ "จัดการนอกระบบ" + เกณฑ์ปัดเศษต่อใบ', () => {
+  const waivedAt = new Date('2026-10-12T03:00:00Z')
+  const row = (overrides: Partial<Parameters<typeof adjustmentNetByBatch>[0][number]> = {}) => ({
+    adjustmentType: 'decrease',
+    amountSatang: 10_000,
+    batchId: 'b1',
+    creditNoteWaivedAt: null,
+    creditNoteWaiveReason: null,
+    ...overrides,
+  })
+
+  it('ลดยอดที่ปิดป้ายจัดการนอกระบบ ⇒ ไม่นับ · ปิดอัตโนมัติเพราะลดในส่วนที่ยังไม่ออกใบ ⇒ ยังนับ · เพิ่มยอดนับเสมอ', () => {
+    const net = adjustmentNetByBatch([
+      row({ amountSatang: 3_936 }),
+      row({ amountSatang: 50_000, creditNoteWaivedAt: waivedAt, creditNoteWaiveReason: 'ออกใบลดหนี้ด้วยมือแล้ว' }),
+      row({ amountSatang: 106_064, creditNoteWaivedAt: waivedAt, creditNoteWaiveReason: UNINVOICED_REDUCTION_WAIVE_REASON }),
+      row({ adjustmentType: 'increase', amountSatang: 5_000, creditNoteWaivedAt: waivedAt, creditNoteWaiveReason: 'นอกระบบ' }),
+      row({ batchId: null, amountSatang: 999 }),
+      row({ batchId: 'b2', adjustmentType: 'write_off', amountSatang: 777 }),
+    ])
+    expect(net.get('b1')).toBe(-3_936 - 106_064 + 5_000)
+    expect(net.has('b2')).toBe(false)
+  })
+
+  it('ส่วนเกินที่ปิดป้ายนอกระบบแล้วไม่เตือนซ้ำในงวดถัดไป', () => {
+    // BL-2569-003: ใบรับ 1,401.87 ก่อน VAT · ลด 1,060.64 (ส่วนที่ยังไม่ออกใบ — ปิดอัตโนมัติ) + 39.36 (จัดการนอกระบบ)
+    const adjustments = adjustmentNetByBatch([
+      row({ amountSatang: 106_064, creditNoteWaivedAt: waivedAt, creditNoteWaiveReason: UNINVOICED_REDUCTION_WAIVE_REASON }),
+      row({ amountSatang: 3_936, creditNoteWaivedAt: waivedAt, creditNoteWaiveReason: 'ออกใบลดหนี้นอกระบบแล้ว' }),
+    ])
+    const result = evaluateTaxInvoiceCoverage([
+      batch({
+        batchNumber: 'BL-2569-003',
+        invoiced: { beforeVatSatang: 246_251, vatSatang: 17_238, totalSatang: 263_489 },
+        taxInvoices: { beforeVatSatang: 140_187, vatSatang: 9_813, totalSatang: 150_000 },
+        creditNotes: { beforeVatSatang: 0, vatSatang: 0, totalSatang: 0 },
+        debitNotes: { beforeVatSatang: 0, vatSatang: 0, totalSatang: 0 },
+        fullyPaid: false,
+        netValueBeforeVatSatang: 246_251 + (adjustments.get('b1') ?? 0),
+        taxInvoiceCount: 1,
+      }),
+    ])
+    expect(result.overNetValue).toEqual([])
+  })
+
+  it('ใบรับชำระบางส่วนหลายใบปัด VAT ทีละใบ ⇒ Σ ก่อน VAT เกินมูลค่าสุทธิ 1 สตางค์ ⇒ อยู่ในเกณฑ์ ไม่เตือน', () => {
+    // ใบแจ้งหนี้ 1,000 + 70 · ลด 100 + 7 ในส่วนที่ยังไม่ออกใบ ⇒ มูลค่าสุทธิ 900 (รวม VAT 963)
+    // ลูกค้าชำระ 100 × 9 + 62.99 (ยังค้าง 0.01 ⇒ ทุกใบเป็นใบรับบางส่วน ถอด VAT แล้วปัดทีละใบ)
+    const basis = { billedBeforeVatSatang: 100_000, billedVatSatang: 7_000, billedVatRatesPct: [7] }
+    const prior: PriorInvoiceAmounts[] = []
+    const uninvoicedReduction = { beforeVatSatang: 10_000, vatSatang: 700 }
+    for (const paid of [...Array<number>(9).fill(10_000), 6_299]) {
+      const amounts = receiptInvoiceAmounts({ basis, prior, paidSatang: paid, vatRatePct: 7, uninvoicedReduction })
+      expect(amounts.coversRemainder).toBe(false)
+      prior.push({
+        amountBeforeVatSatang: amounts.totalBeforeVatSatang,
+        vatSatang: amounts.vatSatang,
+        vatRatePct: 7,
+        totalSatang: amounts.totalSatang,
+        receivedSatang: paid,
+      })
+    }
+    const invoices = {
+      beforeVatSatang: prior.reduce((sum, invoice) => sum + invoice.amountBeforeVatSatang, 0),
+      vatSatang: prior.reduce((sum, invoice) => sum + invoice.vatSatang, 0),
+      totalSatang: 96_299,
+    }
+    expect(invoices.beforeVatSatang).toBe(90_001)
+    const rounded = batch({
+      invoiced: { beforeVatSatang: 100_000, vatSatang: 7_000, totalSatang: 107_000 },
+      taxInvoices: invoices,
+      creditNotes: { beforeVatSatang: 0, vatSatang: 0, totalSatang: 0 },
+      debitNotes: { beforeVatSatang: 0, vatSatang: 0, totalSatang: 0 },
+      fullyPaid: false,
+      netValueBeforeVatSatang: 90_000,
+    })
+    // ไม่มีเกณฑ์ ⇒ เตือนผิด 0.01 · เกณฑ์ 1 สตางค์ต่อใบ (10 ใบ) ⇒ ไม่เตือน
+    expect(taxInvoiceExcessOverNetValue(rounded)?.excessBeforeVatSatang).toBe(1)
+    expect(taxInvoiceExcessOverNetValue({ ...rounded, taxInvoiceCount: prior.length })).toBeNull()
+    // เกินจริงเกินเกณฑ์ ⇒ ยังเตือน
+    expect(
+      taxInvoiceExcessOverNetValue({ ...rounded, taxInvoiceCount: prior.length, netValueBeforeVatSatang: 89_990 })
+        ?.excessBeforeVatSatang,
+    ).toBe(11)
   })
 })
