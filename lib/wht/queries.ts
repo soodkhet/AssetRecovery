@@ -1117,7 +1117,13 @@ export async function getWhtCertificateDocSource(
             where: {
               organizationId: user.organizationId,
               // mytester2 F2-04 — เงินทดรองจ่ายไม่ใช่เงินได้ ไม่นับเป็นรายการของใบ
-              payoutBatchItem: { payoutBatchId: certificate.payoutBatchId, payeeId: certificate.payeeId, advanceId: null },
+              // mytester3 F3-02 — รายการนอกฐานภาษี (ค่าที่พัก/รายการกรอกเอง) ไม่อยู่ในยอดเงินได้ของใบ ⇒ ไม่นับ
+              payoutBatchItem: {
+                payoutBatchId: certificate.payoutBatchId,
+                payeeId: certificate.payeeId,
+                advanceId: null,
+                whtBaseIncluded: true,
+              },
             },
           }),
         }

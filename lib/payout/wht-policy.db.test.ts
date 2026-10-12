@@ -574,7 +574,8 @@ suite('ใบ 50 ทวิ ต่อผู้รับต่อรอบ vs ต�
     expect(all.filter((row) => row.status === 'active')).toHaveLength(1)
 
     const doc = await wht.getWhtCertificateDocSource(finance, replacement!.id)
-    expect(doc.coverage).toEqual({ payoutBatchName: batch.name, itemCount: 4 })
+    // mytester3 F3-02 — นับเฉพาะ 3 รายการในฐาน (ค่าที่พัก ฿600 นอกฐาน ไม่อยู่ในยอดเงินได้ ฿1,350 ของใบ)
+    expect(doc.coverage).toEqual({ payoutBatchName: batch.name, itemCount: 3 })
   })
 
   it('mytester2 F2-04 — หมายเหตุ "(n รายการ)" บนใบต่อรอบไม่นับแถวเงินทดรอง (ไม่ใช่เงินได้)', async () => {
@@ -592,7 +593,8 @@ suite('ใบ 50 ทวิ ต่อผู้รับต่อรอบ vs ต�
     const [certificate] = (await wht.listWhtCertificates(finance, {})).items
     expect(certificate).toMatchObject({ grossSatang: 135_000, whtSatang: 4050 })
     const doc = await wht.getWhtCertificateDocSource(finance, certificate!.id)
-    expect(doc.coverage).toEqual({ payoutBatchName: batch.name, itemCount: 4 })
+    // ไม่นับเงินทดรอง (F2-04) และไม่นับค่าที่พักนอกฐาน (mytester3 F3-02)
+    expect(doc.coverage).toEqual({ payoutBatchName: batch.name, itemCount: 3 })
   })
 
   it('(จ) ต่อรายการ: ใบต่อรายการที่หักภาษี — ยอดภาษีรวมเท่ากับแบบต่อรอบ', async () => {
