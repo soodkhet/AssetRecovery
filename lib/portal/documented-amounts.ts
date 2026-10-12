@@ -1,6 +1,6 @@
 import { sumCreditNotesByInvoice } from '@/lib/credit-notes/totals'
 import { arOutstandingSatang, type BillingBatchAmounts } from '@/lib/finance/ar-calc'
-import { allocateLargestRemainder } from '@/lib/finance/wht-calc'
+import { allocateLargestRemainder, type CustomerWhtNoteAmounts } from '@/lib/finance/wht-calc'
 import type { CreditNoteType } from '@/lib/generated/prisma/enums'
 import { prisma } from '@/lib/prisma'
 
@@ -114,6 +114,17 @@ async function loadCreditNoteTotals(
   accumulate(credit, creditTotals)
   accumulate(debit, debitTotals)
   return { credit, debit }
+}
+
+/** mytester3 G3-02 — ใบลด/เพิ่มหนี้ของรอบในรูปที่ `estimateCustomerWhtForBilling()` รับ (`22` §6.16) */
+export function customerWhtNotesOf(amounts: DocumentedBillingAmounts | undefined): CustomerWhtNoteAmounts | undefined {
+  if (amounts === undefined) return undefined
+  return {
+    creditBeforeVatSatang: amounts.creditNotes.beforeVatSatang,
+    creditTotalSatang: amounts.creditNotes.totalSatang,
+    debitBeforeVatSatang: amounts.debitNotes.beforeVatSatang,
+    debitTotalSatang: amounts.debitNotes.totalSatang,
+  }
 }
 
 /** ยอดตามเอกสารของหลายรอบวางบิลในครั้งเดียว (ไม่พบ/ถูกลบ ⇒ ไม่มีคีย์ใน Map) */

@@ -613,12 +613,47 @@ export function estimateCustomerWhtForBilling(input: {
   totalSatang: number
   recordedWhtSatang: number
   whtPct: number | null
+  /**
+   * mytester3 G3-02 — ใบลดหนี้/ใบเพิ่มหนี้ active ของรอบ (ไม่ส่ง = ไม่มี) ⇒ ฐาน/ยอดรวม = **ยอดตามเอกสาร**
+   * (ใบแจ้งหนี้ − ใบลดหนี้ + ใบเพิ่มหนี้) · ส่ง `amountBeforeVatSatang`/`totalSatang` เป็นยอดใบแจ้งหนี้เดิม
+   */
+  notes?: CustomerWhtNoteAmounts
 }): { whtSatang: number; isEstimate: boolean; expectedReceiptSatang: number } {
   assertNonNegativeSatang(input.totalSatang, 'ยอดเรียกเก็บของรอบวางบิล')
   assertNonNegativeSatang(input.recordedWhtSatang, 'ภาษีที่ลูกค้าหักที่บันทึกแล้ว')
+  const documented = documentedBillingAmounts(input)
   const isEstimate = input.recordedWhtSatang === 0
   const whtSatang = isEstimate
-    ? calculateCustomerWithheldWht({ amountBeforeVatSatang: input.amountBeforeVatSatang, whtPct: input.whtPct })
+    ? calculateCustomerWithheldWht({ amountBeforeVatSatang: documented.beforeVatSatang, whtPct: input.whtPct })
     : input.recordedWhtSatang
-  return { whtSatang, isEstimate, expectedReceiptSatang: Math.max(0, input.totalSatang - whtSatang) }
+  return { whtSatang, isEstimate, expectedReceiptSatang: Math.max(0, documented.totalSatang - whtSatang) }
+}
+
+/** ผลรวมใบลดหนี้/ใบเพิ่มหนี้ active ของรอบวางบิล (ก่อน VAT และรวม VAT) — mytester3 G3-02 */
+export interface CustomerWhtNoteAmounts {
+  creditBeforeVatSatang: number
+  creditTotalSatang: number
+  debitBeforeVatSatang: number
+  debitTotalSatang: number
+}
+
+/**
+ * ยอดตามเอกสารของรอบ (`22` §6.16 — มติ 12/10/2569 G3-02): ใบแจ้งหนี้ − ใบลดหนี้ + ใบเพิ่มหนี้ ทั้งฐานก่อน VAT และยอดรวม
+ * · ผลลัพธ์ไม่ติดลบ (ใบลดหนี้ถูกจำกัดไม่เกินยอดค้างอยู่แล้ว — ยามไว้เท่านั้น)
+ */
+export function documentedBillingAmounts(input: {
+  amountBeforeVatSatang: number
+  totalSatang: number
+  notes?: CustomerWhtNoteAmounts
+}): { beforeVatSatang: number; totalSatang: number } {
+  const notes = input.notes
+  if (notes === undefined) return { beforeVatSatang: input.amountBeforeVatSatang, totalSatang: input.totalSatang }
+  assertNonNegativeSatang(notes.creditBeforeVatSatang, 'ใบลดหนี้ก่อน VAT')
+  assertNonNegativeSatang(notes.creditTotalSatang, 'ใบลดหนี้รวม VAT')
+  assertNonNegativeSatang(notes.debitBeforeVatSatang, 'ใบเพิ่มหนี้ก่อน VAT')
+  assertNonNegativeSatang(notes.debitTotalSatang, 'ใบเพิ่มหนี้รวม VAT')
+  return {
+    beforeVatSatang: Math.max(0, input.amountBeforeVatSatang - notes.creditBeforeVatSatang + notes.debitBeforeVatSatang),
+    totalSatang: Math.max(0, input.totalSatang - notes.creditTotalSatang + notes.debitTotalSatang),
+  }
 }

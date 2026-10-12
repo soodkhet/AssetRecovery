@@ -4,6 +4,7 @@ import {
   calculateCustomerWithheldWht,
   calculateWht,
   calculateWhtForPayee,
+  documentedBillingAmounts,
   estimateCustomerWhtForBilling,
   isPayerBorneWhtCondition,
   payoutItemTaxSplit,
@@ -220,6 +221,58 @@ describe('estimateCustomerWhtForBilling — BUG-165 ภาษีที่ลู�
     expect(
       estimateCustomerWhtForBilling({ amountBeforeVatSatang: 100_000, totalSatang: 107_000, recordedWhtSatang: 0, whtPct: null }),
     ).toEqual({ whtSatang: 0, isEstimate: true, expectedReceiptSatang: 107_000 })
+  })
+})
+
+describe('mytester3 G3-02 — ภาษีลูกค้าจะหัก/ยอดคาดรับคิดจากยอดตามเอกสาร (หลังใบลดหนี้/ใบเพิ่มหนี้)', () => {
+  it('BL-2569-002: ใบแจ้งหนี้ 2,871.54 + VAT 201.01 · ใบลดหนี้ 186.92 + 13.08 ⇒ หัก 80.54 · คาดรับ 2,792.01', () => {
+    expect(
+      estimateCustomerWhtForBilling({
+        amountBeforeVatSatang: 287_154,
+        totalSatang: 307_255,
+        recordedWhtSatang: 0,
+        whtPct: 3,
+        notes: { creditBeforeVatSatang: 18_692, creditTotalSatang: 20_000, debitBeforeVatSatang: 0, debitTotalSatang: 0 },
+      }),
+    ).toEqual({ whtSatang: 8_054, isEstimate: true, expectedReceiptSatang: 279_201 })
+  })
+
+  it('BL-2569-005: ฐาน 2,646.33 รวม 2,831.52 · ใบเพิ่มหนี้ 20.00 + VAT 1.40 ⇒ หัก 79.99 · คาดรับ 2,772.93', () => {
+    expect(
+      estimateCustomerWhtForBilling({
+        amountBeforeVatSatang: 264_633,
+        totalSatang: 283_152,
+        recordedWhtSatang: 0,
+        whtPct: 3,
+        notes: { creditBeforeVatSatang: 0, creditTotalSatang: 0, debitBeforeVatSatang: 2_000, debitTotalSatang: 2_140 },
+      }),
+    ).toEqual({ whtSatang: 7_999, isEstimate: true, expectedReceiptSatang: 277_293 })
+  })
+
+  it('บันทึกยอดหักจริงแล้ว ⇒ ใช้ยอดจริง แต่ยอดคาดรับยังคิดจากยอดตามเอกสาร', () => {
+    expect(
+      estimateCustomerWhtForBilling({
+        amountBeforeVatSatang: 100_000,
+        totalSatang: 107_000,
+        recordedWhtSatang: 2_700,
+        whtPct: 3,
+        notes: { creditBeforeVatSatang: 10_000, creditTotalSatang: 10_700, debitBeforeVatSatang: 0, debitTotalSatang: 0 },
+      }),
+    ).toEqual({ whtSatang: 2_700, isEstimate: false, expectedReceiptSatang: 93_600 })
+  })
+
+  it('ไม่ส่ง notes ⇒ ผลเดิม · ยอดตามเอกสารไม่ติดลบ', () => {
+    expect(documentedBillingAmounts({ amountBeforeVatSatang: 100_000, totalSatang: 107_000 })).toEqual({
+      beforeVatSatang: 100_000,
+      totalSatang: 107_000,
+    })
+    expect(
+      documentedBillingAmounts({
+        amountBeforeVatSatang: 100,
+        totalSatang: 107,
+        notes: { creditBeforeVatSatang: 200, creditTotalSatang: 214, debitBeforeVatSatang: 0, debitTotalSatang: 0 },
+      }),
+    ).toEqual({ beforeVatSatang: 0, totalSatang: 0 })
   })
 })
 
