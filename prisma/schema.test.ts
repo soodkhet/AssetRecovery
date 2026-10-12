@@ -165,6 +165,33 @@ describe('migrations — constraint ที่ Prisma ไม่รองรับ
     expect(sql).toContain(name)
   })
 
+  /**
+   * `toContain(name)` ด้านบนผ่านแม้ migration ใหม่ `DROP INDEX` ทิ้งภายหลัง — Prisma ไม่รู้จัก unique แบบ partial
+   * จึง `migrate dev` ครั้งถัดไปจะแถม DROP INDEX ของสองตัวนี้มาเงียบๆ (รีวิว mytester3 #2)
+   * ⇒ ไล่ migration ตามลำดับเวลา (ชื่อโฟลเดอร์ = timestamp) แล้วดูว่าคำสั่ง**สุดท้าย**ที่แตะ index คือ
+   * `CREATE UNIQUE INDEX ... WHERE "deleted_at" IS NULL` (มติผู้ใช้ 12/10/2569 B3-02)
+   */
+  it.each(['cases_organization_id_company_id_case_ref_tracking_round_key', 'uniq_cases_company_case_ref'])(
+    'สถานะสุดท้ายของ `%s` ต้องเป็น partial unique (ไม่มี DROP ค้างท้าย)',
+    (name) => {
+      const statements = readdirSync(migrationsDir, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => entry.name)
+        .sort()
+        .flatMap((dir) =>
+          readFileSync(new URL(`${dir}/migration.sql`, migrationsDir), 'utf8')
+            .replace(/--[^\n]*/g, '')
+            .split(';')
+            .map((statement) => statement.replace(/\s+/g, ' ').trim())
+            .filter((statement) => statement.includes(`"${name}"`) || new RegExp(`\\b${name}\\b`).test(statement))
+            .map((statement) => `${dir}: ${statement}`),
+        )
+      const last = statements.at(-1) ?? ''
+      expect(last, `คำสั่งสุดท้ายที่แตะ ${name}: ${last}`).toMatch(/CREATE UNIQUE INDEX/)
+      expect(last).toContain('WHERE "deleted_at" IS NULL')
+    },
+  )
+
   it('advances.return_satang ต้องเป็น generated column (ห้ามให้ app เขียนค่าเอง)', () => {
     expect(sql).toMatch(/"return_satang" INTEGER GENERATED ALWAYS AS \(GREATEST\(0, COALESCE/)
   })
