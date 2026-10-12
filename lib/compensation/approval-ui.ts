@@ -6,6 +6,7 @@ import { advanceExcessSource } from '@/lib/advances/advance'
 import { isManualClaim } from '@/lib/claims/claim'
 import { canExpenseAction } from '@/lib/field/expense-status'
 import { EXPENSE_STATUS_LABEL } from '@/lib/field/expense-ui'
+import { approvalRoleColumn } from '@/lib/settings/approval-matrix'
 import type { ExpenseStatus, ExpenseType } from '@/lib/generated/prisma/enums'
 import type { StatusBadgeGroup } from '@/lib/ui/status-badge'
 
@@ -65,6 +66,25 @@ export function approvalStepText(item: CompensationApprovalDto): string {
   if (item.status === 'pending_warehouse_confirm') return 'รอคลังยืนยันก่อนเข้าคิวอนุมัติ'
   const role = item.pendingStepRole === null ? 'ยังไม่ได้ตั้งสายอนุมัติ' : `รอ ${item.pendingStepRole}`
   return `ขั้น ${item.approvalStepCurrent}/${item.approvalStepTotal}: ${role}`
+}
+
+/** ป้ายสถานะของรายการที่รอขั้นบริหาร (mytester3 F3-03) — enum ยังเป็น `pending_finance_approval` ตาม state machine */
+export const EXECUTIVE_PENDING_LABEL = 'รอผู้บริหารอนุมัติ'
+
+/**
+ * ป้ายสถานะของแถวในคิวอนุมัติ/รายละเอียด — mytester3 F3-03: สายยอดสูง (ผู้จัดการ > การเงิน > บริหาร) ขั้นที่ 3
+ * enum ยังเป็น `pending_finance_approval` (`23` §6.3 ไม่มีสถานะแยก) แต่ขั้นที่รออยู่คือบริหาร
+ * ⇒ ป้ายบอก "รอผู้บริหารอนุมัติ" (ไม่ใช่ "รอการเงินอนุมัติ" ที่ทำให้การเงินที่อนุมัติแล้วเห็นว่ายังรอตัวเอง)
+ */
+export function claimStatusLabel(item: Pick<CompensationApprovalDto, 'status' | 'pendingStepRole'>): string {
+  if (
+    item.status === 'pending_finance_approval' &&
+    item.pendingStepRole !== null &&
+    approvalRoleColumn(item.pendingStepRole) === 'executive'
+  ) {
+    return EXECUTIVE_PENDING_LABEL
+  }
+  return EXPENSE_STATUS_LABEL[item.status]
 }
 
 export function approvalStepTone(status: ExpenseStatus): StatusBadgeGroup {

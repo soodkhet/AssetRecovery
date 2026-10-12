@@ -29,12 +29,13 @@ import {
   approvalStepTone,
   bulkApprovableIds,
   bulkApproveSummary,
+  claimStatusLabel,
   expenseRowActions,
   expenseRowHighlight,
   isResubmittedClaim,
   whtAmountLabel,
 } from '@/lib/compensation/approval-ui'
-import { EXPENSE_STATUS_LABEL, EXPENSE_TYPE_LABEL, expenseStatusBadgeGroup } from '@/lib/field/expense-ui'
+import { EXPENSE_TYPE_LABEL, expenseStatusBadgeGroup } from '@/lib/field/expense-ui'
 import { fmtSatangSymbol } from '@/lib/format/money'
 import { SubstituteReceiptPanel } from '@/components/substitute-receipts/substitute-receipt-panel'
 import { RejectReasonNotes } from '@/components/finance/reject-reason-notes'
@@ -189,7 +190,7 @@ export function CompensationTab() {
                       <StatusBadge
                         status={item.status}
                         group={expenseStatusBadgeGroup(item.status)}
-                        label={EXPENSE_STATUS_LABEL[item.status]}
+                        label={claimStatusLabel(item)}
                       />
                       <div className="mt-1">
                         <Badge className={approvalStepTone(item.status) === 'neutral' ? undefined : 'bg-white'}>
