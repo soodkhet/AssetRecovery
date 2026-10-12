@@ -310,6 +310,9 @@ export function SalesTab() {
         billingOutstandingSatang={
           data.items.find((row) => row.id === creditInvoice?.salesRecordId)?.billingOutstandingSatang ?? null
         }
+        creditNoteAllowanceBeforeVatSatang={
+          data.items.find((row) => row.id === creditInvoice?.salesRecordId)?.creditNoteAllowanceBeforeVatSatang ?? null
+        }
         notes={creditInvoice === null ? [] : (creditNotes.byInvoice.get(creditInvoice.id) ?? [])}
         awaiting={awaitingCreditNotes.items.filter((item) => item.taxInvoiceId === creditInvoice?.id)}
         canManage={canManageInvoice}

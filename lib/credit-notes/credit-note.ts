@@ -235,6 +235,30 @@ export function isCreditNoteBlockedByOutstanding(noteType: 'credit' | 'debit', m
   return noteType === 'credit' && maxCreditTotalSatang !== null && maxCreditTotalSatang <= 0
 }
 
+/** ข้อความเมื่อส่วนที่ลดยังไม่ได้ออกใบกำกับ (ลดหนี้ได้ ฿0 ตามมติรีวิว R3 #1) — ใช้ทั้งฟอร์มและ server */
+export const CREDIT_NOTE_NOT_REQUIRED_TEXT = 'ส่วนที่ลดยังไม่ได้ออกใบกำกับภาษี ไม่ต้องออกใบลดหนี้'
+
+/**
+ * mytester3 LR3-01 — เพดานในฟอร์มใบลดหนี้ (แสดงผลเท่านั้น · server ตรวจซ้ำเสมอ) รวม 2 กติกา:
+ * - U171 ยอดค้างของรอบ ⇒ `maxCreditTotalSatang` (รวมภาษี — {@link maxCreditNoteTotalSatang})
+ * - รีวิว R3 #1 ส่วนที่ออกใบแล้วเกินมูลค่าใหม่ ⇒ `allowanceBeforeVatSatang` (ก่อนภาษี — `uninvoicedReductionOf()` · `null` = ไม่จำกัด)
+ * ⇒ `blocked`: `'uninvoiced'` (ส่วนที่ลดยังไม่ออกใบ — ไม่ต้องออกใบลดหนี้) มาก่อน `'outstanding'` (ลำดับเดียวกับ server) ·
+ *   ใบเพิ่มหนี้ไม่บล็อก · บล็อกแล้วเพดานรวมภาษีที่แสดง = 0
+ */
+export function creditNoteFormLimit(input: {
+  noteType: 'credit' | 'debit'
+  maxCreditTotalSatang: number | null
+  allowanceBeforeVatSatang: number | null
+}): { blocked: 'uninvoiced' | 'outstanding' | null; maxTotalSatang: number | null; maxBeforeVatSatang: number | null } {
+  const allowance = input.allowanceBeforeVatSatang === null ? null : Math.max(0, input.allowanceBeforeVatSatang)
+  if (input.noteType === 'debit') return { blocked: null, maxTotalSatang: input.maxCreditTotalSatang, maxBeforeVatSatang: null }
+  if (allowance === 0) return { blocked: 'uninvoiced', maxTotalSatang: 0, maxBeforeVatSatang: 0 }
+  if (isCreditNoteBlockedByOutstanding('credit', input.maxCreditTotalSatang)) {
+    return { blocked: 'outstanding', maxTotalSatang: 0, maxBeforeVatSatang: allowance }
+  }
+  return { blocked: null, maxTotalSatang: input.maxCreditTotalSatang, maxBeforeVatSatang: allowance }
+}
+
 /**
  * มติ PO U171 — ใบลดหนี้ต้องไม่เกิน**ยอดค้างตามเอกสาร**ของรอบวางบิล ณ ตอนบันทึก (บิลชำระครบไม่มียอดค้าง ⇒ บันทึกไม่ได้)
  * ระบบไม่มีที่เก็บเครดิตลูกค้า/การคืนเงิน ⇒ ส่วนที่เกินให้สำนักงานบัญชีจัดการคืนเงินนอกระบบ · ใบเพิ่มหนี้ไม่ต้องเรียก
@@ -269,12 +293,14 @@ export function assertWithinUninvoicedAllowance(allowanceBeforeVatSatang: number
       creditNoteAllowanceBeforeVatSatang: available,
       requestedBeforeVatSatang: next.amountBeforeVatSatang,
     },
+    // mytester3 LR3-01 — หัวข้อตรงเหตุผลจริง (ไม่ใช่ "เกินยอดค้างชำระ")
+    title: available === 0 ? 'ไม่ต้องออกใบลดหนี้' : 'ยอดใบลดหนี้เกินส่วนที่ออกใบกำกับภาษีแล้ว',
     message:
       available === 0
-        ? 'ส่วนที่ลดยังไม่ได้ออกใบกำกับภาษี ไม่ต้องออกใบลดหนี้ — ยอดที่ลดผ่านรายการปรับปรุง (ลดยอด) ของรอบนี้ ' +
+        ? `${CREDIT_NOTE_NOT_REQUIRED_TEXT} — ยอดที่ลดผ่านรายการปรับปรุง (ลดยอด) ของรอบนี้ ` +
           'หักจากยอดเรียกเก็บให้แล้ว และใบเสร็จรับเงิน/ใบกำกับภาษีครั้งถัดไปจะออกตามยอดหลังลด'
         : `ใบลดหนี้ลดได้เฉพาะส่วนที่ลดลงไปในยอดที่ออกใบกำกับภาษีแล้ว ไม่เกิน ${fmtSatangSymbol(available)} (ก่อนภาษี) — ` +
-          'ส่วนที่ลดยังไม่ได้ออกใบกำกับภาษี ไม่ต้องออกใบลดหนี้',
+          CREDIT_NOTE_NOT_REQUIRED_TEXT,
   })
 }
 

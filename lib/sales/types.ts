@@ -55,6 +55,12 @@ export interface SalesRecordDto {
   billingStatus: BillingBatchStatus
   /** มติ O74 — ยอดค้างตามเอกสารของรอบ (ใบแจ้งหนี้ − ใบลดหนี้ + ใบเพิ่มหนี้ − รับแล้ว) · ใช้กับป้ายสถานะรอบ */
   billingOutstandingSatang: number
+  /**
+   * mytester3 LR3-01 — ใบลดหนี้ที่ยังบันทึกได้ (ก่อนภาษี) ตามมติรีวิว R3 #1 = ส่วนที่ลดลงไปในยอดที่ออกใบแล้ว
+   * (`uninvoicedReductionOf().creditNoteAllowanceBeforeVatSatang`) · `0` = ส่วนที่ลดยังไม่ออกใบ ไม่ต้องออกใบลดหนี้ ·
+   * `null` = กติกานี้ไม่จำกัด
+   */
+  creditNoteAllowanceBeforeVatSatang: number | null
   totalBeforeVatSatang: number
   vatSatang: number
   totalSatang: number

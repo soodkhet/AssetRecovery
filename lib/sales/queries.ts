@@ -201,6 +201,7 @@ function toSalesDto(
   row: SalesRow,
   periodClosed: PeriodClosedLookup = PERIOD_ASSUMED_OPEN,
   outstandingByBatch: ReadonlyMap<string, number> = new Map(),
+  allowanceByBatch: ReadonlyMap<string, number | null> = new Map(),
 ): SalesRecordDto {
   const active = activeInvoiceOf(row)
   return {
@@ -214,6 +215,7 @@ function toSalesDto(
     billingBatchNumber: row.billingBatch.batchNumber,
     billingStatus: row.billingBatch.status,
     billingOutstandingSatang: outstandingByBatch.get(row.billingBatchId) ?? 0,
+    creditNoteAllowanceBeforeVatSatang: allowanceByBatch.get(row.billingBatchId) ?? null,
     totalBeforeVatSatang: row.totalBeforeVatSatang,
     vatSatang: row.vatSatang,
     totalSatang: row.totalSatang,
@@ -329,14 +331,22 @@ export async function listSalesRecords(user: SessionUser, query: SalesListQuery)
     select: SALES_SELECT,
   })
 
-  const [periodClosed, outstandingByBatch] = await Promise.all([
+  const [periodClosed, outstandingByBatch, documented] = await Promise.all([
     loadPeriodClosedLookup(user.organizationId),
     documentedOutstandingByBatch(
       user.organizationId,
       rows.map((row) => row.billingBatch),
     ),
+    // mytester3 LR3-01 — เพดานใบลดหนี้ตามมติรีวิว R3 #1 (ตัวเดียวกับที่ server ตรวจตอนบันทึก)
+    documentedAmountsForBatches(
+      user.organizationId,
+      rows.map((row) => row.billingBatchId),
+    ),
   ])
-  const items = rows.map((row) => toSalesDto(row, periodClosed, outstandingByBatch))
+  const allowanceByBatch = new Map(
+    [...documented].map(([batchId, amounts]) => [batchId, amounts.uninvoicedReduction.creditNoteAllowanceBeforeVatSatang]),
+  )
+  const items = rows.map((row) => toSalesDto(row, periodClosed, outstandingByBatch, allowanceByBatch))
   return {
     items,
     totalBeforeVatSatang: items.reduce((sum, item) => sum + item.totalBeforeVatSatang, 0),

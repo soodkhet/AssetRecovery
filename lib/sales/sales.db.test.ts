@@ -655,6 +655,9 @@ suite('มติ PO U95 — รับเงิน ⇒ ใบเสร็จร�
     const documented = (await documentedAmountsForBatches(ORG_ID, [batch.id])).get(batch.id)
     expect(documented?.documented.totalSatang).toBe(96_300)
     expect(documented?.uninvoicedReduction).toMatchObject({ beforeVatSatang: 10_000, vatSatang: 700, creditNoteAllowanceBeforeVatSatang: 0 })
+    // mytester3 LR3-01 — ฟอร์มใบลดหนี้ได้เพดานเดียวกับที่ server ตรวจ (0 ⇒ ไม่ต้องออกใบลดหนี้)
+    const listed = (await sales.listSalesRecords(accountant, {})).items.find((item) => item.billingBatchId === batch.id)
+    expect(listed?.creditNoteAllowanceBeforeVatSatang).toBe(0)
     expect((await db().billingBatch.findUniqueOrThrow({ where: { id: batch.id } })).status).toBe('paid')
     expect((await credit.listAdjustmentsAwaitingCreditNote(accountant)).some((row) => row.adjustmentId === created.id)).toBe(false)
 

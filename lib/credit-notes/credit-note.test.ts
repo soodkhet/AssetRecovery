@@ -8,6 +8,9 @@ import {
   assertIssueDateNotBeforeInvoice,
   assertWithinBillingOutstanding,
   assertWithinInvoiceBalance,
+  assertWithinUninvoicedAllowance,
+  creditNoteFormLimit,
+  CREDIT_NOTE_NOT_REQUIRED_TEXT,
   expectedCreditNoteVat,
   isAwaitingCreditNote,
   isCreditNoteBlockedByOutstanding,
@@ -218,5 +221,51 @@ describe('mytester G-10 — ปิดปุ่มบันทึกใบลด�
     expect(isCreditNoteBlockedByOutstanding('debit', 0)).toBe(false)
     expect(isCreditNoteBlockedByOutstanding('credit', null)).toBe(false)
     expect(isCreditNoteBlockedByOutstanding('credit', 15_000)).toBe(false)
+  })
+})
+
+describe('mytester3 LR3-01 — เพดานฟอร์มใบลดหนี้ตามมติรีวิว R3 #1', () => {
+  it('ส่วนที่ลดยังไม่ออกใบ (allowance 0) ⇒ บล็อก "uninvoiced" + เพดาน 0 แม้ยอดค้างของรอบยังเหลือ 5,000', () => {
+    expect(
+      creditNoteFormLimit({ noteType: 'credit', maxCreditTotalSatang: 500_000, allowanceBeforeVatSatang: 0 }),
+    ).toEqual({ blocked: 'uninvoiced', maxTotalSatang: 0, maxBeforeVatSatang: 0 })
+  })
+
+  it('ยอดค้าง 0 ⇒ บล็อก "outstanding" · allowance เหลือ ⇒ แสดงเพดานก่อนภาษีด้วย', () => {
+    expect(creditNoteFormLimit({ noteType: 'credit', maxCreditTotalSatang: 0, allowanceBeforeVatSatang: null })).toEqual({
+      blocked: 'outstanding',
+      maxTotalSatang: 0,
+      maxBeforeVatSatang: null,
+    })
+    expect(
+      creditNoteFormLimit({ noteType: 'credit', maxCreditTotalSatang: 500_000, allowanceBeforeVatSatang: 20_000 }),
+    ).toEqual({ blocked: null, maxTotalSatang: 500_000, maxBeforeVatSatang: 20_000 })
+  })
+
+  it('ใบเพิ่มหนี้ไม่บล็อก · ไม่จำกัด (null) ⇒ ใช้เพดานยอดค้างตามเดิม', () => {
+    expect(creditNoteFormLimit({ noteType: 'debit', maxCreditTotalSatang: 0, allowanceBeforeVatSatang: 0 }).blocked).toBeNull()
+    expect(
+      creditNoteFormLimit({ noteType: 'credit', maxCreditTotalSatang: 10_700, allowanceBeforeVatSatang: null }),
+    ).toEqual({ blocked: null, maxTotalSatang: 10_700, maxBeforeVatSatang: null })
+  })
+
+  it('server ปฏิเสธด้วยหัวข้อตรงเหตุผล — "ไม่ต้องออกใบลดหนี้" (ไม่ใช่ "เกินยอดค้างชำระ")', () => {
+    const amounts = { amountBeforeVatSatang: 100_000, vatSatang: 7_000, totalSatang: 107_000 }
+    try {
+      assertWithinUninvoicedAllowance(0, amounts)
+      expect.unreachable()
+    } catch (error) {
+      const { code, title, userMessage } = error as { code: string; title: string; userMessage: string }
+      expect(code).toBe('CREDIT_NOTE_EXCEEDS_OUTSTANDING')
+      expect(title).toBe('ไม่ต้องออกใบลดหนี้')
+      expect(userMessage).toContain(CREDIT_NOTE_NOT_REQUIRED_TEXT)
+    }
+    try {
+      assertWithinUninvoicedAllowance(20_000, amounts)
+      expect.unreachable()
+    } catch (error) {
+      expect((error as { title: string }).title).toBe('ยอดใบลดหนี้เกินส่วนที่ออกใบกำกับภาษีแล้ว')
+      expect((error as { userMessage: string }).userMessage).toContain('฿200.00')
+    }
   })
 })

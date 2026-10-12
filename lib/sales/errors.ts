@@ -189,13 +189,21 @@ export function salesErrorMessage(code: SalesErrorCode): ErrorMessage {
 }
 
 export class SalesError extends ModuleError<SalesErrorCode> {
-  /** `message` = ข้อความไทยเฉพาะกรณี (เช่น บอกเลขเอกสารที่ต้องยกเลิกก่อน) แทนข้อความกลางของ code */
+  /**
+   * `message` = ข้อความไทยเฉพาะกรณี (เช่น บอกเลขเอกสารที่ต้องยกเลิกก่อน) แทนข้อความกลางของ code
+   * · `title` = หัวข้อเฉพาะกรณีเมื่อ code เดียวครอบหลายเหตุผล (mytester3 LR3-01 — หัว toast ต้องตรงเหตุผลจริง)
+   */
   constructor(
     code: SalesErrorCode,
-    options?: { detail?: string; context?: Record<string, unknown>; message?: string },
+    options?: { detail?: string; context?: Record<string, unknown>; message?: string; title?: string },
   ) {
     const base = MESSAGES[code]
-    super(code, options?.message === undefined ? base : { ...base, message: options.message }, HTTP_STATUS[code], options)
+    super(
+      code,
+      { title: options?.title ?? base.title, message: options?.message ?? base.message },
+      HTTP_STATUS[code],
+      options,
+    )
     this.name = 'SalesError'
   }
 }
