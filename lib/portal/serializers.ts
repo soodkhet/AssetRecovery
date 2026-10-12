@@ -1,6 +1,9 @@
 import { netInvoiceAmounts } from '@/lib/credit-notes/credit-note'
 import { arOutstandingSatang } from '@/lib/finance/ar-calc'
+import { pctOfSatang } from '@/lib/finance/satang'
 import type {
+  AdjustmentStatus,
+  AdjustmentType,
   AssetCondition,
   AssignmentStatus,
   BillingBatchStatus,
@@ -32,6 +35,7 @@ import {
 import { ROW_KEY, type ReportData, type ReportRow } from '@/lib/reports/payload'
 import { hasDebitNoteOutstanding, REVENUE_FEE_MODEL_LABEL } from '@/lib/revenue/revenue-ui'
 import { TAX_INVOICE_DOC_KIND_TITLE } from '@/lib/sales/receipt-invoice'
+import { creditNoteStillRequired, UNINVOICED_REDUCTION_WAIVE_REASON } from '@/lib/sales/uninvoiced-reduction'
 import { intakePhotoAngleLabel } from '@/lib/warehouse/intake-photos'
 import { INVOICE_DELIVERY_FORMAT_LABEL } from '@/lib/sales/sales'
 import { SERVICE_FEE_BASIS_LABEL } from '@/lib/service-fee/template'
@@ -149,7 +153,58 @@ export interface PortalCaseServiceFeeSource {
    * มติชั่วคราว M9 — รายได้จริงของเคส (แถวที่ยังไม่ถูกลบ) · ไม่ส่ง/`null` = ยังไม่เกิดรายได้
    * · มติ PO 12/10/2569 I2-01 — `creditNotes` = ใบลดหนี้ **active** ที่ผูกกับรายได้ของเคสผ่าน Adjustment (เรียงตามวันที่ออก)
    */
-  revenue?: { totalSatang: number; vatSatang: number; creditNotes?: readonly PortalCaseCreditNoteSource[] } | null
+  revenue?: {
+    totalSatang: number
+    vatSatang: number
+    creditNotes?: readonly PortalCaseCreditNoteSource[]
+    /**
+     * mytester3 LR3-03 — ส่วนที่ลดแบบ "ไม่ต้องออกใบลดหนี้" ของรายได้เคส (รวม VAT · {@link portalCaseUninvoicedReductionSatang})
+     * · ไม่ส่ง = 0
+     */
+    uninvoicedReductionSatang?: number
+  } | null
+}
+
+/** Adjustment ของรายได้เคส — ใช้หาส่วนที่ลดแบบไม่ต้องออกใบลดหนี้ (mytester3 LR3-03) */
+export interface PortalCaseReductionAdjustment {
+  adjustmentType: AdjustmentType
+  status: AdjustmentStatus
+  /** ยอดก่อน VAT */
+  amountSatang: number
+  hasActiveCreditNote: boolean
+  creditNoteWaivedAt: Date | null
+  creditNoteWaiveReason: string | null
+}
+
+/**
+ * pure — ส่วนที่ลดของรายได้เคสที่**ไม่ต้องออกใบลดหนี้** (ลดในมูลค่าที่ยังไม่ออกใบกำกับ — มติรีวิว R3 #1) รวม VAT · satang ล้วน
+ * (mytester3 LR3-03 — Claude ตัดสินแทน PO ต่อจากมติ I2-01 "ยอดในพอร์ทัลตรงกับเอกสารที่ลูกค้าได้รับจริง")
+ *
+ * นับ Adjustment ลดยอด `approved` ที่ยังไม่มีใบลดหนี้ active และ
+ * - ปิดอัตโนมัติด้วยเหตุผล "ส่วนที่ลดยังไม่ได้ออกใบกำกับภาษี — ไม่ต้องออกใบลดหนี้" หรือ
+ * - ยังไม่ปิดป้าย และรอบไม่เหลือส่วนที่ต้องออกใบลดหนี้ (`creditNoteStillRequired(allowance) = false` — เกณฑ์เดียวกับป้าย
+ *   "รอใบลดหนี้" ⇒ ข้อมูลก่อนมติที่ไม่ได้ตั้งป้ายย้อนหลังก็นับ)
+ * ไม่นับ: ยัง "รอใบลดหนี้" จริง (หักเมื่อออกใบลดหนี้ตามมติ I2-01) · ปิดป้าย "จัดการนอกระบบ" (ไม่มีเอกสารในระบบ)
+ * · VAT = อัตราของรายได้เคส (รายได้ไม่มี VAT ⇒ 0)
+ */
+export function portalCaseUninvoicedReductionSatang(input: {
+  adjustments: readonly PortalCaseReductionAdjustment[]
+  creditNoteAllowanceBeforeVatSatang: number | null | undefined
+  vatRatePct: number
+  revenueHasVat: boolean
+}): number {
+  const notRequired = !creditNoteStillRequired(input.creditNoteAllowanceBeforeVatSatang)
+  const beforeVat = input.adjustments
+    .filter(
+      (row) =>
+        row.adjustmentType === 'decrease' &&
+        row.status === 'approved' &&
+        !row.hasActiveCreditNote &&
+        (row.creditNoteWaiveReason === UNINVOICED_REDUCTION_WAIVE_REASON || (row.creditNoteWaivedAt === null && notRequired)),
+    )
+    .reduce((sum, row) => sum + row.amountSatang, 0)
+  if (beforeVat <= 0) return 0
+  return beforeVat + (input.revenueHasVat ? pctOfSatang(beforeVat, input.vatRatePct) : 0)
 }
 
 /** ใบลดหนี้ที่ออกแล้วของเคส (มติ PO 12/10/2569 I2-01) — ยอดรวม VAT ตามเอกสาร */
@@ -159,12 +214,17 @@ export interface PortalCaseCreditNoteSource {
 }
 
 /**
- * pure — ค่าบริการยอดจริงระดับเคส = ยอดรายได้ (รวม VAT) − ใบลดหนี้ที่ออกแล้ว (รวม VAT) · satang ล้วน
- * (มติ PO 12/10/2569 I2-01) · ลดเกินยอด ⇒ 0 (ไม่ติดลบ) · ผู้เรียกกรองใบที่ยกเลิก/ใบเพิ่มหนี้ออกมาแล้ว
+ * pure — ค่าบริการยอดจริงระดับเคส = ยอดรายได้ (รวม VAT) − ใบลดหนี้ที่ออกแล้ว (รวม VAT) − ส่วนที่ลดแบบไม่ต้องออกใบลดหนี้
+ * (รวม VAT — mytester3 LR3-03) · satang ล้วน (มติ PO 12/10/2569 I2-01) · ลดเกินยอด ⇒ 0 (ไม่ติดลบ)
+ * · ผู้เรียกกรองใบที่ยกเลิก/ใบเพิ่มหนี้ออกมาแล้ว
  */
-export function portalCaseNetRevenueSatang(revenueTotalSatang: number, creditNotes: readonly PortalCaseCreditNoteSource[]): number {
+export function portalCaseNetRevenueSatang(
+  revenueTotalSatang: number,
+  creditNotes: readonly PortalCaseCreditNoteSource[],
+  uninvoicedReductionSatang = 0,
+): number {
   const credited = creditNotes.reduce((sum, note) => sum + note.totalSatang, 0)
-  return Math.max(0, revenueTotalSatang - credited)
+  return Math.max(0, revenueTotalSatang - credited - uninvoicedReductionSatang)
 }
 
 /** staging E-073 (`97` §17) — ป้าย VAT ของยอดค่าบริการในพอร์ทัล (ภาษาไทย ไม่ส่ง enum) */
@@ -213,6 +273,8 @@ export interface PortalServiceFeeDto {
   actualRevenueOriginalSatang: number | null
   /** มติ PO 12/10/2569 I2-01 — ใบลดหนี้ที่ออกแล้วของเคส (ว่าง = ไม่มี ⇒ ไม่แสดงบรรทัดย่อย) */
   actualRevenueCreditNotes: PortalCaseCreditNoteSource[]
+  /** mytester3 LR3-03 — ส่วนที่ลดแบบไม่ต้องออกใบลดหนี้ (รวม VAT · 0 = ไม่มี) ⇒ บรรทัดย่อย "ปรับลด −฿x" (ไม่มีเลขเอกสาร) */
+  actualRevenueUninvoicedReductionSatang: number
   /** ป้าย VAT ของยอดจริง ("รวม VAT แล้ว"/"ไม่มี VAT") · `null` เมื่อไม่มียอดจริง */
   actualRevenueVatLabel: string | null
 }
@@ -254,9 +316,13 @@ function serializeServiceFee(row: PortalCaseServiceFeeSource, closedFail: boolea
     projectedRevenueSatang: row.projectedRevenueSatang,
     vatLabel: row.companyVatMode == null ? null : PORTAL_VAT_MODE_LABEL[row.companyVatMode],
     closedFail,
-    actualRevenueSatang: revenue === null ? null : portalCaseNetRevenueSatang(revenue.totalSatang, creditNotes),
+    actualRevenueSatang:
+      revenue === null
+        ? null
+        : portalCaseNetRevenueSatang(revenue.totalSatang, creditNotes, revenue.uninvoicedReductionSatang ?? 0),
     actualRevenueOriginalSatang: revenue === null ? null : revenue.totalSatang,
     actualRevenueCreditNotes: creditNotes.map((note) => ({ creditNoteNumber: note.creditNoteNumber, totalSatang: note.totalSatang })),
+    actualRevenueUninvoicedReductionSatang: revenue?.uninvoicedReductionSatang ?? 0,
     actualRevenueVatLabel:
       revenue === null ? null : revenue.vatSatang > 0 ? PORTAL_VAT_MODE_LABEL.include_vat : PORTAL_VAT_MODE_LABEL.no_vat,
   }

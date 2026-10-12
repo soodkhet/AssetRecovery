@@ -141,6 +141,7 @@ describe('portalServiceFeeRows — ค่าบริการใน drawer', ()
     actualRevenueVatLabel: null,
     actualRevenueOriginalSatang: null,
     actualRevenueCreditNotes: [],
+    actualRevenueUninvoicedReductionSatang: 0,
   }
 
   it('มติชั่วคราว M9 (PT-01): เคสไม่สำเร็จ ⇒ ประมาณการ = ค่าบริการกรณีไม่สำเร็จ · ไม่ตั้ง = ไม่เรียกเก็บ', () => {
@@ -198,6 +199,30 @@ describe('portalServiceFeeRows — ค่าบริการใน drawer', ()
       ],
     })
     expect(many?.at(-1)?.detail).toBe('ยอดเดิม ฿214.00 · ลดหนี้ CN-1 −฿53.50 · ลดหนี้ CN-2 −฿10.50')
+  })
+
+  it('mytester3 LR3-03 — ลดแบบไม่ต้องออกใบลดหนี้ ⇒ บรรทัด "ปรับลด" ไม่มีเลขเอกสาร (ก่อนใบลดหนี้)', () => {
+    const rows = portalServiceFeeRows({
+      ...base,
+      actualRevenueSatang: 749_000 - 107_000,
+      actualRevenueOriginalSatang: 749_000,
+      actualRevenueVatLabel: 'รวม VAT แล้ว',
+      actualRevenueUninvoicedReductionSatang: 107_000,
+    })
+    expect(rows?.at(-1)).toEqual({
+      label: 'ค่าบริการ (ยอดจริง)',
+      value: '฿6,420.00 (รวม VAT แล้ว)',
+      detail: 'ยอดเดิม ฿7,490.00 · ปรับลด −฿1,070.00',
+      detailParts: ['ยอดเดิม ฿7,490.00', 'ปรับลด −฿1,070.00'],
+    })
+    const both = portalServiceFeeRows({
+      ...base,
+      actualRevenueSatang: 10_000,
+      actualRevenueOriginalSatang: 21_400,
+      actualRevenueUninvoicedReductionSatang: 1_070,
+      actualRevenueCreditNotes: [{ creditNoteNumber: 'CN-1', totalSatang: 10_330 }],
+    })
+    expect(both?.at(-1)?.detail).toBe('ยอดเดิม ฿214.00 · ปรับลด −฿10.70 · ลดหนี้ CN-1 −฿103.30')
   })
 
   it('มติ PO 12/10/2569 I2-01 — เคสไม่สำเร็จที่ไม่เรียกเก็บคงเดิม', () => {

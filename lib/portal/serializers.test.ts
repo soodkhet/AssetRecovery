@@ -3,6 +3,8 @@ import { AssignmentStatus, CaseStatus, HandoverLotStatus } from '@/lib/generated
 import {
   portalAssetPhotoMeta,
   portalCaseNetRevenueSatang,
+  portalCaseUninvoicedReductionSatang,
+  type PortalCaseReductionAdjustment,
   serializePortalBillingBatch,
   serializePortalBillingBatches,
   serializePortalCaseDetail,
@@ -376,6 +378,61 @@ describe('portal serializers — เนื้อหา', () => {
     expect(portalCaseNetRevenueSatang(20_000, [{ creditNoteNumber: 'A', totalSatang: 20_000 }])).toBe(0)
     expect(portalCaseNetRevenueSatang(20_000, [{ creditNoteNumber: 'A', totalSatang: 25_000 }])).toBe(0)
     expect(Number.isInteger(portalCaseNetRevenueSatang(10_001, [{ creditNoteNumber: 'A', totalSatang: 3_333 }]))).toBe(true)
+  })
+
+  describe('mytester3 LR3-03 — ส่วนที่ลดแบบไม่ต้องออกใบลดหนี้หักในยอดจริงของเคส', () => {
+    const adj = (over: Partial<PortalCaseReductionAdjustment> = {}): PortalCaseReductionAdjustment => ({
+      adjustmentType: 'decrease',
+      status: 'approved',
+      amountSatang: 100_000,
+      hasActiveCreditNote: false,
+      creditNoteWaivedAt: null,
+      creditNoteWaiveReason: null,
+      ...over,
+    })
+    const waived = { creditNoteWaivedAt: new Date('2026-10-12T03:00:00Z'), creditNoteWaiveReason: 'ส่วนที่ลดยังไม่ได้ออกใบกำกับภาษี — ไม่ต้องออกใบลดหนี้' }
+
+    it('ปิดอัตโนมัติ "ไม่ต้องออกใบลดหนี้" ⇒ หัก 1,000 + VAT 7% = 1,070 (FT-06: 7,490 → 6,420)', () => {
+      const reduction = portalCaseUninvoicedReductionSatang({
+        adjustments: [adj(waived)],
+        creditNoteAllowanceBeforeVatSatang: null,
+        vatRatePct: 7,
+        revenueHasVat: true,
+      })
+      expect(reduction).toBe(107_000)
+      expect(portalCaseNetRevenueSatang(749_000, [], reduction)).toBe(642_000)
+    })
+
+    it('ยังไม่ตั้งป้ายย้อนหลังแต่รอบไม่ต้องออกใบลดหนี้แล้ว (allowance 0) ⇒ หัก · รายได้ไม่มี VAT ⇒ ไม่บวก VAT', () => {
+      expect(
+        portalCaseUninvoicedReductionSatang({ adjustments: [adj()], creditNoteAllowanceBeforeVatSatang: 0, vatRatePct: 7, revenueHasVat: false }),
+      ).toBe(100_000)
+    })
+
+    it('ยังรอใบลดหนี้จริง / มีใบลดหนี้แล้ว / ปิดป้ายจัดการนอกระบบ / ยังไม่อนุมัติ / เพิ่มยอด ⇒ ไม่หัก', () => {
+      const none = (adjustments: PortalCaseReductionAdjustment[], allowance: number | null) =>
+        portalCaseUninvoicedReductionSatang({ adjustments, creditNoteAllowanceBeforeVatSatang: allowance, vatRatePct: 7, revenueHasVat: true })
+      expect(none([adj()], 50_000)).toBe(0)
+      expect(none([adj()], null)).toBe(0)
+      expect(none([adj({ ...waived, hasActiveCreditNote: true })], 0)).toBe(0)
+      expect(none([adj({ creditNoteWaivedAt: new Date(), creditNoteWaiveReason: 'จัดการนอกระบบ' })], 0)).toBe(0)
+      expect(none([adj({ status: 'pending_approval' })], 0)).toBe(0)
+      expect(none([adj({ adjustmentType: 'increase' })], 0)).toBe(0)
+    })
+
+    it('serializer — ยอดจริงหักส่วนที่ปรับลด + ส่งยอดปรับลดให้บรรทัดย่อย · ไม่ส่ง = 0', () => {
+      const fee = serializePortalCaseDetail(
+        caseRow('closed_success', { revenue: { totalSatang: 749_000, vatSatang: 49_000, uninvoicedReductionSatang: 107_000 } }),
+      ).serviceFee
+      expect(fee).toMatchObject({
+        actualRevenueSatang: 642_000,
+        actualRevenueOriginalSatang: 749_000,
+        actualRevenueUninvoicedReductionSatang: 107_000,
+        actualRevenueCreditNotes: [],
+      })
+      const plain = serializePortalCaseDetail(caseRow('closed_success', { revenue: { totalSatang: 21_400, vatSatang: 1_400 } })).serviceFee
+      expect(plain?.actualRevenueUninvoicedReductionSatang).toBe(0)
+    })
   })
 
   it('รูปทรัพย์เฉพาะ "ติดตามสำเร็จ" (ไม่ถูกตีกลับ)', () => {

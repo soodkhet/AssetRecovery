@@ -5,6 +5,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import type { SessionUser } from '@/lib/auth/types'
 import { AssignmentStatus, CaseStatus, HandoverLotStatus } from '@/lib/generated/prisma/enums'
 import { PrismaClient } from '@/lib/generated/prisma/client'
+import { UNINVOICED_REDUCTION_WAIVE_REASON } from '@/lib/sales/uninvoiced-reduction'
 
 /**
  * เทสต์ระดับ DB ของ Portal-P4 — `GET /api/portal/{dashboard,cases,cases/:id,company-profile,assets/:id/photos/:index}`
@@ -584,6 +585,81 @@ suite('Portal-P4 — GET /api/portal/cases/:id (`97` §6.1/§6.6 v4.1 · §12 ·
     expect(JSON.stringify(cross.body).includes(cnNumber)).toBe(false)
     const own = dataOf<{ serviceFee: Record<string, unknown> }>((await json(await call(caseIds.recovered))).body)
     expect(own.serviceFee).toMatchObject({ actualRevenueSatang: null, actualRevenueCreditNotes: [] })
+  })
+
+  it('mytester3 LR3-03 — ลดส่วนที่ยังไม่ออกใบ (ไม่ต้องออกใบลดหนี้) ⇒ หักในยอดจริง + "ปรับลด" · ยังรอใบลดหนี้จริงไม่หัก', async () => {
+    const tx = db()
+    const co5 = await insertCompany(5)
+    const caseA = await insertCase({ company: co5, ref: `P5R-${RUN}-A`, status: 'closed_fail', assignment: 'closed_fail', approved: true })
+    const caseB = await insertCase({ company: co5, ref: `P5R-${RUN}-B`, status: 'closed_fail', assignment: 'closed_fail', approved: true })
+    const caseC = await insertCase({ company: co5, ref: `P5R-${RUN}-C`, status: 'closed_fail', assignment: 'closed_fail', approved: true })
+    const period = await tx.$queryRawUnsafe<{ id: string }[]>(`
+      INSERT INTO accounting_periods (organization_id, period_label, year_be, month, status, created_by)
+      VALUES ('${ORG_ID}', 'งวดทดสอบ P5', 2569, 10, 'collecting', '${INTERNAL_USER}')
+      ON CONFLICT (organization_id, year_be, month) DO UPDATE SET period_label = accounting_periods.period_label
+      RETURNING id
+    `)
+    const batchOf = async (): Promise<{ batchId: string; salesId: string }> => {
+      const batch = await tx.$queryRawUnsafe<{ id: string }[]>(`
+        INSERT INTO billing_batches (organization_id, company_id, period, status, total_satang, received_satang, due_date, sent_at, created_by)
+        VALUES ('${ORG_ID}', '${co5}', 'ตุลาคม 2569', 'sent', 107000, 0, '2026-11-30', NOW(), '${INTERNAL_USER}') RETURNING id
+      `)
+      const batchId = batch[0]?.id ?? ''
+      const sales = await tx.$queryRawUnsafe<{ id: string }[]>(`
+        INSERT INTO sales_records (organization_id, period_id, billing_batch_id, company_id, total_before_vat_satang, vat_satang,
+                                   total_satang, created_by)
+        VALUES ('${ORG_ID}', '${period[0]?.id}', '${batchId}', '${co5}', 100000, 7000, 107000, '${INTERNAL_USER}') RETURNING id
+      `)
+      return { batchId, salesId: sales[0]?.id ?? '' }
+    }
+    const revenueOf = async (caseId: string, batchId: string, gross: number, vat: number): Promise<string> => {
+      const rows = await tx.$queryRawUnsafe<{ id: string }[]>(`
+        INSERT INTO revenues (organization_id, case_id, company_id, billing_batch_id, gross_satang, vat_satang, vat_rate_pct_used,
+                              total_satang, fee_model_snapshot, vat_mode_snapshot, status, revenue_date, created_by)
+        VALUES ('${ORG_ID}', '${caseId}', '${co5}', '${batchId}', ${gross}, ${vat}, 7.00, ${gross + vat}, 'HYBRID',
+                'include_vat', 'billed', '2026-10-05', '${INTERNAL_USER}') RETURNING id
+      `)
+      return rows[0]?.id ?? ''
+    }
+    const decrease = async (revenueId: string, amount: number, waiveReason: string | null): Promise<void> => {
+      await tx.$executeRawUnsafe(`
+        INSERT INTO adjustments (organization_id, adjustment_type, amount_satang, reason, status, revenue_id, created_by,
+                                 credit_note_waived_at, credit_note_waived_by, credit_note_waive_reason)
+        VALUES ('${ORG_ID}', 'decrease', ${amount}, 'ปรับลดทดสอบ LR3-03', 'approved', '${revenueId}', '${INTERNAL_USER}',
+                ${waiveReason === null ? 'NULL, NULL, NULL' : `NOW(), '${INTERNAL_USER}', $$${waiveReason}$$`})
+      `)
+    }
+
+    // รอบที่ 1 (ยังไม่ออกใบกำกับ) — A ลด 100 ปิดอัตโนมัติ "ไม่ต้องออก" · B ลด 50 ข้อมูลก่อนมติ (ไม่ได้ตั้งป้าย) แต่รอบไม่ต้องออกใบลดหนี้
+    const first = await batchOf()
+    await decrease(await revenueOf(caseA, first.batchId, 50_000, 3_500), 10_000, UNINVOICED_REDUCTION_WAIVE_REASON)
+    await decrease(await revenueOf(caseB, first.batchId, 50_000, 3_500), 5_000, null)
+
+    // รอบที่ 2 — ออกใบเสร็จฯ ไปแล้ว 950 ก่อน VAT ⇒ เหลือยังไม่ออกใบ 50 · C ลด 100 ⇒ ส่วนเกิน 50 ยังรอใบลดหนี้จริง ⇒ ไม่หัก
+    const second = await batchOf()
+    await decrease(await revenueOf(caseC, second.batchId, 100_000, 7_000), 10_000, null)
+    const fixture = taxInvoiceFixtureValues(second.salesId)
+      .replace(`'tax_invoice'`, `'receipt_tax_invoice'`)
+      .replace(`(SELECT s.total_before_vat_satang FROM sales_records s WHERE s.id = '${second.salesId}')`, '95000')
+      .replace(`(SELECT s.vat_satang FROM sales_records s WHERE s.id = '${second.salesId}')`, '6650')
+      .replace(`(SELECT s.total_satang FROM sales_records s WHERE s.id = '${second.salesId}')`, '101650')
+    await tx.$executeRawUnsafe(`
+      INSERT INTO tax_invoices (organization_id, sales_record_id, invoice_number, invoice_date, buyer_branch_code, seller_branch_code,
+                                status, created_by, ${TAX_INVOICE_FIXTURE_COLUMNS})
+      VALUES ('${ORG_ID}', '${second.salesId}', 'INVP5-${RUN}', '2026-10-05', '00000', '00000', 'active', '${INTERNAL_USER}', ${fixture})
+    `)
+
+    getRawSessionUserMock.mockResolvedValue(portalUser(co5, FULL_CAPS))
+    const feeOf = async (caseId: string) =>
+      dataOf<{ serviceFee: Record<string, unknown> }>((await json(await call(caseId))).body).serviceFee
+    expect(await feeOf(caseA)).toMatchObject({
+      actualRevenueSatang: 53_500 - 10_700,
+      actualRevenueOriginalSatang: 53_500,
+      actualRevenueUninvoicedReductionSatang: 10_700,
+      actualRevenueCreditNotes: [],
+    })
+    expect(await feeOf(caseB)).toMatchObject({ actualRevenueSatang: 53_500 - 5_350, actualRevenueUninvoicedReductionSatang: 5_350 })
+    expect(await feeOf(caseC)).toMatchObject({ actualRevenueSatang: 107_000, actualRevenueUninvoicedReductionSatang: 0 })
   })
 
   it('id ของ CO2 → 403 PERMISSION_DENIED + audit access_denied (cause cross_company)', async () => {

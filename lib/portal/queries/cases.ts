@@ -1,12 +1,15 @@
 import { z } from 'zod'
 import type { AssignmentStatus, Prisma } from '@/lib/generated/prisma/client'
+import { documentedAmountsForBatches } from '@/lib/portal/documented-amounts'
 import type { PortalContext } from '@/lib/portal/guard'
 import {
+  portalCaseUninvoicedReductionSatang,
   serializePortalCaseDetail,
   serializePortalCaseListItem,
   type PortalCaseAssetSource,
   type PortalCaseDetailDto,
   type PortalCaseListItemDto,
+  type PortalCaseReductionAdjustment,
   type PortalCaseServiceFeeSource,
 } from '@/lib/portal/serializers'
 import { PORTAL_CASE_STATUS_CODES, type PortalCaseStatusCode } from '@/lib/portal/status-map'
@@ -176,10 +179,18 @@ export async function findPortalCaseDetail(ctx: PortalContext, id: string): Prom
         select: {
           totalSatang: true,
           vatSatang: true,
+          vatRatePctUsed: true,
+          billingBatchId: true,
           // มติ PO 12/10/2569 I2-01 — ใบลดหนี้ที่ออกแล้ว (active) ที่ผูกกับรายได้ของเคสผ่าน Adjustment
-          // · Adjustment ที่ยังไม่มีใบลดหนี้ไม่สะท้อน · ใบยกเลิก/ใบเพิ่มหนี้ไม่นับ
+          // · Adjustment ที่ยังรอใบลดหนี้ไม่สะท้อน · ใบยกเลิก/ใบเพิ่มหนี้ไม่นับ
+          // · mytester3 LR3-03 — Adjustment ลดยอดที่ไม่ต้องออกใบลดหนี้ (ลดในส่วนที่ยังไม่ออกใบ) หักด้วย
           adjustments: {
             select: {
+              adjustmentType: true,
+              status: true,
+              amountSatang: true,
+              creditNoteWaivedAt: true,
+              creditNoteWaiveReason: true,
               creditNotes: {
                 where: { organizationId: ctx.user.organizationId, status: 'active', noteType: 'credit' },
                 select: { creditNoteNumber: true, totalSatang: true, issueDate: true },
@@ -202,7 +213,7 @@ export async function findPortalCaseDetail(ctx: PortalContext, id: string): Prom
       assignmentStatus: row.assignments[0]?.status ?? null,
       asset,
       companyVatMode: row.company.vatMode,
-      revenue: portalCaseRevenueSource(row.revenues[0] ?? null),
+      revenue: await portalCaseRevenueSource(ctx, row.revenues[0] ?? null),
     }),
   }
 }
@@ -210,12 +221,47 @@ export async function findPortalCaseDetail(ctx: PortalContext, id: string): Prom
 interface PortalCaseRevenueRow {
   totalSatang: number
   vatSatang: number
-  adjustments: { creditNotes: { creditNoteNumber: string; totalSatang: number; issueDate: Date }[] }[]
+  vatRatePctUsed: { toNumber(): number }
+  billingBatchId: string | null
+  adjustments: (Omit<PortalCaseReductionAdjustment, 'hasActiveCreditNote'> & {
+    creditNotes: { creditNoteNumber: string; totalSatang: number; issueDate: Date }[]
+  })[]
 }
 
-/** รวมใบลดหนี้ของทุก Adjustment ของรายได้เคส — เรียงวันที่ออก แล้วเลขที่ (มติ PO 12/10/2569 I2-01) */
-function portalCaseRevenueSource(revenue: PortalCaseRevenueRow | null): PortalCaseServiceFeeSource['revenue'] {
+/**
+ * รวมใบลดหนี้ของทุก Adjustment ของรายได้เคส — เรียงวันที่ออก แล้วเลขที่ (มติ PO 12/10/2569 I2-01)
+ * · mytester3 LR3-03 — ส่วนที่ลดแบบไม่ต้องออกใบลดหนี้ ({@link portalCaseUninvoicedReductionSatang} · เพดานของรอบจาก
+ *   `documentedAmountsForBatches()` ตัวเดียวกับป้าย "รอใบลดหนี้" — อ่านเฉพาะเมื่อมี Adjustment ลดยอดที่ยังไม่มีใบลดหนี้)
+ */
+async function portalCaseRevenueSource(
+  ctx: PortalContext,
+  revenue: PortalCaseRevenueRow | null,
+): Promise<PortalCaseServiceFeeSource['revenue']> {
   if (revenue === null) return null
+  const adjustments: PortalCaseReductionAdjustment[] = revenue.adjustments.map((row) => ({
+    adjustmentType: row.adjustmentType,
+    status: row.status,
+    amountSatang: row.amountSatang,
+    creditNoteWaivedAt: row.creditNoteWaivedAt,
+    creditNoteWaiveReason: row.creditNoteWaiveReason,
+    hasActiveCreditNote: row.creditNotes.length > 0,
+  }))
+  const candidate = adjustments.some(
+    (row) => row.adjustmentType === 'decrease' && row.status === 'approved' && !row.hasActiveCreditNote,
+  )
+  const allowance =
+    candidate && revenue.billingBatchId !== null
+      ? (await documentedAmountsForBatches(ctx.user.organizationId, [revenue.billingBatchId])).get(revenue.billingBatchId)
+          ?.uninvoicedReduction.creditNoteAllowanceBeforeVatSatang
+      : undefined
+  const uninvoicedReductionSatang = candidate
+    ? portalCaseUninvoicedReductionSatang({
+        adjustments,
+        creditNoteAllowanceBeforeVatSatang: allowance,
+        vatRatePct: revenue.vatRatePctUsed.toNumber(),
+        revenueHasVat: revenue.vatSatang > 0,
+      })
+    : 0
   const creditNotes = revenue.adjustments
     .flatMap((adjustment) => adjustment.creditNotes)
     .sort(
@@ -223,7 +269,7 @@ function portalCaseRevenueSource(revenue: PortalCaseRevenueRow | null): PortalCa
         a.issueDate.getTime() - b.issueDate.getTime() || a.creditNoteNumber.localeCompare(b.creditNoteNumber),
     )
     .map((note) => ({ creditNoteNumber: note.creditNoteNumber, totalSatang: note.totalSatang }))
-  return { totalSatang: revenue.totalSatang, vatSatang: revenue.vatSatang, creditNotes }
+  return { totalSatang: revenue.totalSatang, vatSatang: revenue.vatSatang, creditNotes, uninvoicedReductionSatang }
 }
 
 /** นับเคส "กำลังดำเนินการติดตาม" ของบริษัท — การ์ด KPI ภาพรวม (`97` §5) */

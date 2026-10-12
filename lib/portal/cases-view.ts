@@ -164,6 +164,7 @@ export function portalServiceFeeRows(fee: PortalServiceFeeDto | null): PortalSer
     const actualVat = fee.actualRevenueVatLabel === null ? '' : ` (${fee.actualRevenueVatLabel})`
     const actualRow: PortalServiceFeeRow = { label: 'ค่าบริการ (ยอดจริง)', value: `${fmtSatangSymbol(fee.actualRevenueSatang)}${actualVat}` }
     // มติ PO 12/10/2569 I2-01 — ยอดจริงหักใบลดหนี้ที่ออกแล้ว ⇒ บอกยอดเดิม + เลขใบลดหนี้ทุกใบ
+    // · mytester3 LR3-03 — หักส่วนที่ลดแบบไม่ต้องออกใบลดหนี้ด้วย (บรรทัด "ปรับลด")
     const parts = actualRevenueCreditNoteDetail(fee)
     if (parts !== null) {
       actualRow.detail = parts.join(' · ')
@@ -182,13 +183,21 @@ export function portalServiceFeeRows(fee: PortalServiceFeeDto | null): PortalSer
   return rows
 }
 
-/** "ยอดเดิม ฿200.00 · ลดหนี้ CN-… −฿200.00" — ไม่มีใบลดหนี้ ⇒ `null` (มติ PO 12/10/2569 I2-01) */
+/**
+ * "ยอดเดิม ฿200.00 · ปรับลด −฿107.00 · ลดหนี้ CN-… −฿200.00" — ไม่มีใบลดหนี้และไม่มีส่วนที่ปรับลด ⇒ `null`
+ * (มติ PO 12/10/2569 I2-01 · mytester3 LR3-03 — ส่วนที่ลดแบบไม่ต้องออกใบลดหนี้ไม่มีเลขเอกสาร)
+ */
 function actualRevenueCreditNoteDetail(fee: PortalServiceFeeDto): string[] | null {
-  if (fee.actualRevenueCreditNotes.length === 0 || fee.actualRevenueOriginalSatang === null) return null
+  const reduction = fee.actualRevenueUninvoicedReductionSatang
+  if ((fee.actualRevenueCreditNotes.length === 0 && reduction <= 0) || fee.actualRevenueOriginalSatang === null) return null
   const notes = fee.actualRevenueCreditNotes.map(
     (note) => `ลดหนี้ ${note.creditNoteNumber} −${fmtSatangSymbol(note.totalSatang)}`,
   )
-  return [`ยอดเดิม ${fmtSatangSymbol(fee.actualRevenueOriginalSatang)}`, ...notes]
+  return [
+    `ยอดเดิม ${fmtSatangSymbol(fee.actualRevenueOriginalSatang)}`,
+    ...(reduction > 0 ? [`ปรับลด −${fmtSatangSymbol(reduction)}`] : []),
+    ...notes,
+  ]
 }
 
 /** มติ U165 — ยอดกรณีไม่สำเร็จแยกจากกรณีสำเร็จ ใช้ได้ทุกโมเดล */
