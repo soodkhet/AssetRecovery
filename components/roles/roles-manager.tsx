@@ -178,7 +178,7 @@ export function RolesManager() {
           <CardHeader
             title={ROLE_GROUP_LABEL[visibleGroup]}
             // กำลังโหลด/โหลดไม่สำเร็จ แสดง '—' ไม่ใช่ 0 (preship R5-015)
-            description={`${state.loading || state.error !== null ? '—' : visibleRoles.length} บทบาท — Superadmin มีสิทธิ์ทุกรายการโดยนิยาม (ไม่เก็บ record)`}
+            description={`${state.loading || state.error !== null ? '—' : visibleRoles.length} บทบาท — Superadmin มีสิทธิ์ทุกรายการเสมอโดยอัตโนมัติ`}
           />
 
           <Table>

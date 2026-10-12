@@ -345,7 +345,7 @@ export function TaxProfilesTab() {
         onClose={() => setFormOpen(false)}
         size="lg"
         title={editing === null ? 'เพิ่ม Tax Profile' : `แก้ไข Tax Profile — ${editing.name}`}
-        description="อัตราและเกณฑ์ทั้งหมดเป็นค่าตั้งได้ — ระบบไม่ hardcode อัตราภาษีไว้ในสูตรคำนวณ"
+        description="อัตราและเกณฑ์ทั้งหมดเป็นค่าตั้งได้ — ระบบไม่ได้ฝังอัตราภาษีไว้ตายตัวในการคำนวณ"
         footer={
           <>
             <Button variant="secondary" onClick={() => setFormOpen(false)} disabled={saving}>

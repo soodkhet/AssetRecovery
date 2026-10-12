@@ -3,7 +3,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { usePermission } from '@/components/auth/permission-provider'
 import { Badge, Button, ErrorState, Field, InlineAlert, LoadingState, Modal, Select, Textarea, useToast } from '@/components/ui'
-import { MATRIX_LEVELS, MATRIX_LEVEL_LABEL, type MatrixLevel, type MatrixSection } from '@/lib/roles/matrix'
+import {
+  MATRIX_LEVELS,
+  MATRIX_LEVEL_LABEL,
+  capabilityTooltip,
+  type MatrixLevel,
+  type MatrixSection,
+} from '@/lib/roles/matrix'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { REASON_MAX } from '@/lib/api/validation'
 import type { RoleDetail, RolePermissionsPayload } from '@/lib/roles/types'
@@ -176,7 +182,7 @@ export function PermissionMatrixModal({
           {role !== null && canManageRoles && !editableRole && !state.loading && (
             <InlineAlert tone="warning">
               {role.name === 'Superadmin'
-                ? 'Superadmin มีสิทธิ์ทุกรายการโดยนิยาม (ไม่เก็บ record) จึงแก้ไม่ได้'
+                ? 'Superadmin มีสิทธิ์ทุกรายการเสมอโดยอัตโนมัติ จึงแก้ไม่ได้'
                 : 'สิทธิ์ของบทบาทนี้เป็นค่าตายตัวของระบบ แก้ไขไม่ได้'}
             </InlineAlert>
           )}
@@ -196,8 +202,8 @@ export function PermissionMatrixModal({
                   <li key={row.code} className="flex flex-col gap-2 px-4 py-2.5 sm:flex-row sm:items-center sm:gap-3">
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        {/* รหัส capability เป็นข้อมูลภายใน — mockup ไม่แสดง จึงเก็บไว้แค่ tooltip (UAT BUG-019) */}
-                        <span className="text-sm font-semibold text-slate-800 sm:truncate" title={row.code}>
+                        {/* รหัส capability เป็นข้อมูลภายใน ไม่แสดงแม้ใน tooltip (UAT BUG-019 · mytester3 A3-03) */}
+                        <span className="text-sm font-semibold text-slate-800 sm:truncate" title={capabilityTooltip(row)}>
                           {row.label}
                         </span>
                         {row.locked && <Badge className="bg-slate-900 text-white">🔒 {row.lockOwner}</Badge>}
