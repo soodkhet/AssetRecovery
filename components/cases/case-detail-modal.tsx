@@ -650,7 +650,10 @@ function ContactSection({ detail }: { detail: CaseDetailDto }) {
             detail.debtorPhoneMobile === null ? (
               '—'
             ) : (
-              <a className="focus-ring rounded font-mono text-sky-700 underline" href={`tel:${detail.debtorPhoneMobile}`}>
+              <a
+                className="focus-ring inline-flex items-center rounded font-mono text-sky-700 underline max-sm:min-h-11 pointer-coarse:min-h-11"
+                href={`tel:${detail.debtorPhoneMobile}`}
+              >
                 {detail.debtorPhoneMobile}
               </a>
             )
