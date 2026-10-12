@@ -14,6 +14,8 @@ export const PAYEE_ERROR_CODES = [
   'PAYEE_ID_DOCUMENT_REQUIRED',
   'REQUIRED_MISSING',
   'INVALID_TAX_ID_FORMAT',
+  // mytester3 A3-01 — เลขบัญชีผู้รับผิดรูปแบบ (ข้อมูลเก่า) ขณะกดยืนยัน
+  'INVALID_BANK_ACCOUNT_FORMAT',
   // มติ PO 06/10/2569 U105 — เลือก (2)/(3) ขณะที่ค่าตั้งภาษียังไม่อนุญาต (code ร่วมกับหมวดรอบจ่าย)
   'WHT_CONDITION_NOT_ALLOWED',
 ] as const
@@ -27,6 +29,7 @@ const HTTP_STATUS: Record<PayeeErrorCode, number> = {
   PAYEE_ID_DOCUMENT_REQUIRED: 400,
   REQUIRED_MISSING: 400,
   INVALID_TAX_ID_FORMAT: 400,
+  INVALID_BANK_ACCOUNT_FORMAT: 400,
   WHT_CONDITION_NOT_ALLOWED: 400,
 }
 
@@ -50,6 +53,10 @@ const MESSAGES: Record<PayeeErrorCode, ErrorMessage> = {
   INVALID_TAX_ID_FORMAT: {
     title: 'เลขประจำตัวผู้เสียภาษีไม่ถูกต้อง',
     message: 'เลขบัตรประชาชน/เลขทะเบียนนิติบุคคลต้องเป็นตัวเลข 13 หลัก',
+  },
+  INVALID_BANK_ACCOUNT_FORMAT: {
+    title: 'เลขบัญชีธนาคารไม่ถูกต้อง',
+    message: 'เลขบัญชีต้องเป็นตัวเลขอย่างน้อย 8 หลัก (มี - หรือช่องว่างคั่นได้) — แก้เลขบัญชีของผู้รับก่อนยืนยัน',
   },
   WHT_CONDITION_NOT_ALLOWED: {
     title: 'เงื่อนไขการหักภาษีนี้ยังไม่เปิดใช้',

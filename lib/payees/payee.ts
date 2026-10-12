@@ -1,6 +1,7 @@
 import type { PayeeType, WhtCondition, WhtIncomeCategory } from '@/lib/generated/prisma/enums'
 import { formatThaiAddressLine } from '@/lib/address/address-value'
 import { isValidTaxId, normalizeTaxId } from '@/lib/finance-companies/company'
+import { BANK_ACCOUNT_NUMBER_MIN_DIGITS, bankAccountNumberProblem } from '@/lib/format/bank-account'
 import { HEAD_OFFICE_BRANCH_CODE } from '@/lib/format/branch'
 import { PayeeError } from '@/lib/payees/errors'
 
@@ -374,8 +375,20 @@ export function missingFieldsForVerification(
   )
     ? []
     : [WHT_RATE_SOURCE_FIELD]
-  return [...missing, ...REQUIRED_FOR_VERIFY.filter((field) => normalized[field] === null)]
+  const required = REQUIRED_FOR_VERIFY.filter((field) => normalized[field] === null)
+  // mytester3 A3-01 — ข้อมูลเก่าที่บันทึกก่อนมีการตรวจรูปแบบ (เช่น "123") ยืนยันไม่ได้จนกว่าจะแก้เลขบัญชี
+  const invalidAccount = normalized.accountNumber !== null && bankAccountNumberProblem(normalized.accountNumber) !== null
+  return [...missing, ...required, ...(invalidAccount ? [ACCOUNT_NUMBER_FORMAT_FIELD] : [])]
 }
+
+/**
+ * รายการใน `missingFieldsForVerification()` ที่หมายถึง "มีเลขบัญชีแต่รูปแบบผิด" (ไม่ใช่ช่องว่าง) — mytester3 A3-01
+ * ปุ่มยืนยันกดไม่ได้ + คำใบ้บอกให้แก้เลขบัญชี · API ตอบ `INVALID_BANK_ACCOUNT_FORMAT`
+ */
+export const ACCOUNT_NUMBER_FORMAT_FIELD = 'accountNumberFormat'
+
+/** ข้อความเมื่อเลขบัญชีผู้รับผิดรูปแบบ — ใช้ทั้งคำใบ้บนปุ่มและ error ของ API */
+export const INVALID_ACCOUNT_NUMBER_HINT = `เลขบัญชีของผู้รับรายนี้ไม่ถูกต้อง — ต้องเป็นตัวเลขอย่างน้อย ${BANK_ACCOUNT_NUMBER_MIN_DIGITS} หลัก (มี - หรือช่องว่างคั่นได้) แก้เลขบัญชีก่อนยืนยัน`
 
 /** ข้อความเมื่อขาดแหล่งอัตราภาษีอย่างเดียว — บอกทางแก้ชัด (ไม่ใช่ "ข้อมูลไม่ครบ" ลอย ๆ) */
 export const WHT_RATE_SOURCE_MISSING_MESSAGE = {
@@ -388,6 +401,7 @@ export const WHT_RATE_SOURCE_MISSING_MESSAGE = {
 export function verificationHint(missing: readonly string[]): string | null {
   if (missing.length === 0) return null
   if (missing.length === 1 && missing[0] === WHT_RATE_SOURCE_FIELD) return WHT_RATE_SOURCE_MISSING_MESSAGE.message
+  if (missing.length === 1 && missing[0] === ACCOUNT_NUMBER_FORMAT_FIELD) return INVALID_ACCOUNT_NUMBER_HINT
   return 'กรอกข้อมูลภาษี ที่อยู่ และบัญชีธนาคารให้ครบก่อนยืนยัน'
 }
 
@@ -403,16 +417,23 @@ export function assertPayeeReadyForVerification(input: {
   /** มติชั่วคราว M4 — ทีมของผู้รับผูกแผนค่าตอบแทน (fallback อัตราแผน) */
   planRateAvailable?: boolean
 }): void {
-  const missing = missingFieldsForVerification(input.values, {
+  const notReady = missingFieldsForVerification(input.values, {
     typeDefaultAvailable: input.typeDefaultAvailable,
     planRateAvailable: input.planRateAvailable,
   })
+  const missing = notReady.filter((field) => field !== ACCOUNT_NUMBER_FORMAT_FIELD)
   if (missing.length > 0) {
     const onlyRateSource = missing.length === 1 && missing[0] === WHT_RATE_SOURCE_FIELD
     throw new PayeeError('REQUIRED_MISSING', {
       detail: `missing=${missing.join(',')}`,
       context: { fields: missing },
       ...(onlyRateSource ? { message: WHT_RATE_SOURCE_MISSING_MESSAGE } : {}),
+    })
+  }
+  if (notReady.includes(ACCOUNT_NUMBER_FORMAT_FIELD)) {
+    throw new PayeeError('INVALID_BANK_ACCOUNT_FORMAT', {
+      detail: 'account_number format invalid',
+      context: { fields: { accountNumber: INVALID_ACCOUNT_NUMBER_HINT } },
     })
   }
   assertPayeeNationalId(normalizePayeeValues(input.values).nationalId)

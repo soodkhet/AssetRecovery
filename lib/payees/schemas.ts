@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { pctSchema, reasonSchema, requiredIdSchema } from '@/lib/api/validation'
+import { bankAccountNumberProblem } from '@/lib/format/bank-account'
 import { BRANCH_CODE_PATTERN } from '@/lib/format/branch'
 import { CORPORATE_LEGAL_NAME_REQUIRED, PAYEE_INCOME_CATEGORY_OVERRIDES, WHT_CONDITIONS } from '@/lib/payees/payee'
 
@@ -58,7 +59,22 @@ export const payeeFieldsSchema = z.object({
   nationalId: optionalText(20, 'เลขประจำตัวผู้เสียภาษี'),
   bankName: optionalText(120, 'ชื่อธนาคาร'),
   accountName: optionalText(120, 'ชื่อบัญชี'),
-  accountNumber: optionalText(30, 'เลขบัญชี'),
+  /**
+   * mytester3 A3-01 — รูปแบบเดียวกับบัญชีธนาคารบริษัท (`bankAccountNumberProblem()`: ตัวเลข + ขีด/ช่องว่างคั่น
+   * ≥ 8 หลัก) · ว่างได้ตอนบันทึก (ความครบบังคับตอนยืนยัน) · ข้อมูลเก่าที่ผิดรูปแบบถูกบล็อกตอนยืนยัน
+   */
+  accountNumber: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? null : value),
+    z
+      .string()
+      .trim()
+      .superRefine((value, ctx) => {
+        const problem = bankAccountNumberProblem(value)
+        if (problem !== null) ctx.addIssue({ code: 'custom', message: problem })
+      })
+      .nullable()
+      .default(null),
+  ),
   /** มติ PO U150 — path ไฟล์จากกลไกอัปโหลดของ server (target `payee_id_document`) · server ตรวจไฟล์ + SHA-256 ตอนบันทึก */
   idDocumentUrl: optionalText(1024, 'path ของไฟล์เอกสารยืนยันตัวตน'),
   /**

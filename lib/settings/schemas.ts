@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { bankAccountNumberProblem } from '@/lib/format/bank-account'
 import {
   DEFAULT_SUBSTITUTE_RECEIPT_MAX_PER_DOC_SATANG,
   DEFAULT_SUBSTITUTE_RECEIPT_MAX_PER_MONTH_SATANG,
@@ -265,8 +266,7 @@ export const assignmentPolicyUpdateSchema = assignmentPolicyFields.extend({ reas
 // ── §6.3 บัญชีธนาคารบริษัท ─────────────────────────────────────────────
 
 /**
- * เลขบัญชีธนาคาร — ตรวจ "ต้องเป็นตัวเลข" **ก่อน** ความยาว (mytester A-03: กรอก "abc-12" ต้องบอกว่า
- * ต้องเป็นตัวเลข ไม่ใช่ "สั้นเกินไป") · นับความยาวจากตัวเลขล้วน ไม่นับขีด/ช่องว่างคั่น
+ * เลขบัญชีธนาคาร — กติกาอยู่ที่ `bankAccountNumberProblem()` (ใช้ร่วมกับเลขบัญชีผู้รับเงิน — mytester3 A3-01)
  */
 export const bankAccountNumberSchema = z
   .string()
@@ -274,13 +274,8 @@ export const bankAccountNumberSchema = z
   .min(1, 'กรุณาระบุเลขบัญชี')
   .superRefine((value, ctx) => {
     if (value === '') return
-    if (!/^[\d\s-]+$/.test(value)) {
-      ctx.addIssue({ code: 'custom', message: 'เลขบัญชีต้องเป็นตัวเลข (มี - หรือช่องว่างคั่นได้)' })
-      return
-    }
-    const digits = value.replace(/\D/g, '').length
-    if (digits < 8) ctx.addIssue({ code: 'custom', message: 'เลขบัญชีต้องมีตัวเลขอย่างน้อย 8 หลัก' })
-    else if (value.length > 30) ctx.addIssue({ code: 'custom', message: 'เลขบัญชียาวเกินไป' })
+    const problem = bankAccountNumberProblem(value)
+    if (problem !== null) ctx.addIssue({ code: 'custom', message: problem })
   })
 export const bankAccountUsageSchema = z.enum(['receive', 'pay', 'both'])
 

@@ -21,6 +21,9 @@ import {
   assertCorporateLegalName,
   payeeLegalName,
   CORPORATE_LEGAL_NAME_REQUIRED,
+  ACCOUNT_NUMBER_FORMAT_FIELD,
+  INVALID_ACCOUNT_NUMBER_HINT,
+  verificationHint,
 } from '@/lib/payees/payee'
 import { payeeFieldsSchema } from '@/lib/payees/schemas'
 
@@ -388,5 +391,39 @@ describe('ชื่อนิติบุคคล + ประเภทเงิ�
   it('แก้ชื่อนิติบุคคล/ประเภทเงินได้ ⇒ ต้องยืนยันใหม่ และลง audit', () => {
     expect(changedVerificationFields(complete(), complete({ incomeCategoryOverride: 'sec_40_2' }))).toEqual(['incomeCategoryOverride'])
     expect(toPayeeAuditPayload(complete({ incomeCategoryOverride: 'sec_40_8' })).income_category_override).toBe('sec_40_8')
+  })
+})
+
+describe('mytester3 A3-01 — เลขบัญชีผู้รับเงินตรวจรูปแบบเดียวกับบัญชีบริษัท', () => {
+  const base = { payeeType: 'individual', bankName: '', accountName: '' }
+  const accountError = (accountNumber: string): string | undefined =>
+    payeeFieldsSchema
+      .safeParse({ ...base, accountNumber })
+      .error?.issues.find((issue) => issue.path[0] === 'accountNumber')?.message
+
+  it('Zod: "123" / ตัวอักษร ⇒ error ใต้ช่องเลขบัญชี · ว่าง = ยังไม่กรอก · ขีด/ช่องว่างคั่นได้', () => {
+    expect(accountError('123')).toBe('เลขบัญชีต้องมีตัวเลขอย่างน้อย 8 หลัก')
+    expect(accountError('abc-12345678')).toBe('เลขบัญชีต้องเป็นตัวเลข (มี - หรือช่องว่างคั่นได้)')
+    expect(accountError('1'.repeat(31))).toBe('เลขบัญชียาวเกินไป')
+    expect(accountError('123-4-56789-0')).toBeUndefined()
+    expect(accountError('1234 5678')).toBeUndefined()
+    expect(payeeFieldsSchema.parse({ ...base, accountNumber: '  ' }).accountNumber).toBeNull()
+  })
+
+  it('ข้อมูลเก่าเลขบัญชี "123" ⇒ ปุ่มยืนยันกดไม่ได้ + คำใบ้เฉพาะ · ยืนยัน = INVALID_BANK_ACCOUNT_FORMAT', () => {
+    const values = complete({ accountNumber: '123' })
+    expect(missingFieldsForVerification(values)).toEqual([ACCOUNT_NUMBER_FORMAT_FIELD])
+    expect(verificationHint(missingFieldsForVerification(values))).toBe(INVALID_ACCOUNT_NUMBER_HINT)
+    expect(() => assertPayeeReadyForVerification({ values, requireIdDocument: false })).toThrow(
+      expect.objectContaining({ code: 'INVALID_BANK_ACCOUNT_FORMAT' }),
+    )
+  })
+
+  it('ขาดช่องอื่นด้วย ⇒ REQUIRED_MISSING ก่อน (รายชื่อช่องที่ขาดไม่รวมตัวบอกรูปแบบ)', () => {
+    const values = complete({ accountNumber: '12', bankName: null })
+    expect(missingFieldsForVerification(values)).toEqual(['bankName', ACCOUNT_NUMBER_FORMAT_FIELD])
+    expect(() => assertPayeeReadyForVerification({ values, requireIdDocument: false })).toThrow(
+      expect.objectContaining({ code: 'REQUIRED_MISSING', context: { fields: ['bankName'] } }),
+    )
   })
 })
