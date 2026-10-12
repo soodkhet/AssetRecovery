@@ -662,6 +662,82 @@ suite('Portal-P4 — GET /api/portal/cases/:id (`97` §6.1/§6.6 v4.1 · §12 ·
     expect(await feeOf(caseC)).toMatchObject({ actualRevenueSatang: 107_000, actualRevenueUninvoicedReductionSatang: 0 })
   })
 
+  it('mytester3 V3-01 — กราฟรายได้พอร์ทัลหักส่วนที่ลดแบบไม่ต้องออกใบลดหนี้ตรงรายได้ของเคส · ผลรวม = ยอดก่อน VAT ตามเอกสาร', async () => {
+    const tx = db()
+    const { documentedAmountsForBatches, documentedRevenueAmounts } = await import('@/lib/portal/documented-amounts')
+    const co6 = await insertCompany(6)
+    const caseA = await insertCase({ company: co6, ref: `P6R-${RUN}-A`, status: 'closed_fail', assignment: 'closed_fail', approved: true })
+    const caseB = await insertCase({ company: co6, ref: `P6R-${RUN}-B`, status: 'closed_fail', assignment: 'closed_fail', approved: true })
+    const caseC = await insertCase({ company: co6, ref: `P6R-${RUN}-C`, status: 'closed_fail', assignment: 'closed_fail', approved: true })
+    const period = await tx.$queryRawUnsafe<{ id: string }[]>(`
+      INSERT INTO accounting_periods (organization_id, period_label, year_be, month, status, created_by)
+      VALUES ('${ORG_ID}', 'งวดทดสอบ P6', 2569, 10, 'collecting', '${INTERNAL_USER}')
+      ON CONFLICT (organization_id, year_be, month) DO UPDATE SET period_label = accounting_periods.period_label
+      RETURNING id
+    `)
+    const batchOf = async (): Promise<{ batchId: string; salesId: string }> => {
+      const batch = await tx.$queryRawUnsafe<{ id: string }[]>(`
+        INSERT INTO billing_batches (organization_id, company_id, period, status, total_satang, received_satang, due_date, sent_at, created_by)
+        VALUES ('${ORG_ID}', '${co6}', 'ตุลาคม 2569', 'sent', 107000, 0, '2026-11-30', NOW(), '${INTERNAL_USER}') RETURNING id
+      `)
+      const batchId = batch[0]?.id ?? ''
+      const sales = await tx.$queryRawUnsafe<{ id: string }[]>(`
+        INSERT INTO sales_records (organization_id, period_id, billing_batch_id, company_id, total_before_vat_satang, vat_satang,
+                                   total_satang, created_by)
+        VALUES ('${ORG_ID}', '${period[0]?.id}', '${batchId}', '${co6}', 100000, 7000, 107000, '${INTERNAL_USER}') RETURNING id
+      `)
+      return { batchId, salesId: sales[0]?.id ?? '' }
+    }
+    const revenueOf = async (caseId: string, batchId: string, gross: number, vat: number): Promise<string> => {
+      const rows = await tx.$queryRawUnsafe<{ id: string }[]>(`
+        INSERT INTO revenues (organization_id, case_id, company_id, billing_batch_id, gross_satang, vat_satang, vat_rate_pct_used,
+                              total_satang, fee_model_snapshot, vat_mode_snapshot, status, revenue_date, created_by)
+        VALUES ('${ORG_ID}', '${caseId}', '${co6}', '${batchId}', ${gross}, ${vat}, 7.00, ${gross + vat}, 'HYBRID',
+                'include_vat', 'billed', '2026-10-05', '${INTERNAL_USER}') RETURNING id
+      `)
+      return rows[0]?.id ?? ''
+    }
+    const decrease = async (revenueId: string, amount: number, waiveReason: string | null): Promise<void> => {
+      await tx.$executeRawUnsafe(`
+        INSERT INTO adjustments (organization_id, adjustment_type, amount_satang, reason, status, revenue_id, created_by,
+                                 credit_note_waived_at, credit_note_waived_by, credit_note_waive_reason)
+        VALUES ('${ORG_ID}', 'decrease', ${amount}, 'ปรับลดทดสอบ V3-01', 'approved', '${revenueId}', '${INTERNAL_USER}',
+                ${waiveReason === null ? 'NULL, NULL, NULL' : `NOW(), '${INTERNAL_USER}', $$${waiveReason}$$`})
+      `)
+    }
+
+    // รอบที่ 1 (ยังไม่ออกใบกำกับ) — A ลด 100 (ปิดป้าย "ไม่ต้องออก") · B ลด 50 (ข้อมูลก่อนมติ) ⇒ R = 150 หักตรงเคส
+    const first = await batchOf()
+    const revA = await revenueOf(caseA, first.batchId, 50_000, 3_500)
+    const revB = await revenueOf(caseB, first.batchId, 50_000, 3_500)
+    await decrease(revA, 10_000, UNINVOICED_REDUCTION_WAIVE_REASON)
+    await decrease(revB, 5_000, null)
+
+    // รอบที่ 2 — ออกใบเสร็จฯ ไปแล้ว 950 ⇒ C ลด 100: 50 ลดก่อนออกใบ (หัก) · 50 ยังรอใบลดหนี้จริง (ไม่หัก)
+    const second = await batchOf()
+    const revC = await revenueOf(caseC, second.batchId, 100_000, 7_000)
+    await decrease(revC, 10_000, null)
+    const fixture = taxInvoiceFixtureValues(second.salesId)
+      .replace(`'tax_invoice'`, `'receipt_tax_invoice'`)
+      .replace(`(SELECT s.total_before_vat_satang FROM sales_records s WHERE s.id = '${second.salesId}')`, '95000')
+      .replace(`(SELECT s.vat_satang FROM sales_records s WHERE s.id = '${second.salesId}')`, '6650')
+      .replace(`(SELECT s.total_satang FROM sales_records s WHERE s.id = '${second.salesId}')`, '101650')
+    await tx.$executeRawUnsafe(`
+      INSERT INTO tax_invoices (organization_id, sales_record_id, invoice_number, invoice_date, buyer_branch_code, seller_branch_code,
+                                status, created_by, ${TAX_INVOICE_FIXTURE_COLUMNS})
+      VALUES ('${ORG_ID}', '${second.salesId}', 'INVP6-${RUN}', '2026-10-05', '00000', '00000', 'active', '${INTERNAL_USER}', ${fixture})
+    `)
+
+    const batches = [first.batchId, second.batchId]
+    const chart = await documentedRevenueAmounts(ORG_ID, batches)
+    expect(chart.get(revA)).toBe(40_000)
+    expect(chart.get(revB)).toBe(45_000)
+    expect(chart.get(revC)).toBe(95_000)
+    const documented = await documentedAmountsForBatches(ORG_ID, batches)
+    expect((chart.get(revA) ?? 0) + (chart.get(revB) ?? 0)).toBe(documented.get(first.batchId)?.documented.beforeVatSatang)
+    expect(chart.get(revC)).toBe(documented.get(second.batchId)?.documented.beforeVatSatang)
+  })
+
   it('id ของ CO2 → 403 PERMISSION_DENIED + audit access_denied (cause cross_company)', async () => {
     getRawSessionUserMock.mockResolvedValue(portalUser(co1, FULL_CAPS))
     const { status, body } = await json(await call(caseIds.other))

@@ -3,8 +3,10 @@ import {
   allocateDocumentedRevenue,
   allocateRevenueAfterCreditNotes,
   applyCreditNotes,
+  uninvoicedReductionRevenueNotes,
   ZERO_AMOUNTS,
 } from '@/lib/portal/documented-amounts'
+import { UNINVOICED_REDUCTION_WAIVE_REASON } from '@/lib/sales/uninvoiced-reduction'
 
 describe('applyCreditNotes (มติ U14 — ยอดตามเอกสาร = ใบกำกับ − ใบลดหนี้)', () => {
   const invoiced = { beforeVatSatang: 37_300_000, vatSatang: 2_611_000, totalSatang: 39_911_000 }
@@ -91,5 +93,52 @@ describe('allocateRevenueAfterCreditNotes — หักใบลดหนี้�
     expect(first.get('a')).toBe(27_000)
     expect(first.get('b')).toBe(54_000)
     expect(allocateRevenueAfterCreditNotes(100_000, revenues, notes)).toEqual(first)
+  })
+})
+
+describe('uninvoicedReductionRevenueNotes — mytester3 V3-01 ส่วนที่ลดแบบไม่ต้องออกใบลดหนี้ในกราฟรายได้', () => {
+  it('R = 0 ⇒ ไม่มีรายการหัก', () => {
+    expect(uninvoicedReductionRevenueNotes(0, [{ amountSatang: 5_000, revenueId: 'a', creditNoteWaiveReason: null }])).toEqual([])
+  })
+
+  it('ผูก Adjustment ระดับรายได้ ⇒ หักตรงใบนั้น (ป้าย "ไม่ต้องออกใบลดหนี้" ก่อน) · ไม่เกินยอดรายการ · ผลรวม = R', () => {
+    const notes = uninvoicedReductionRevenueNotes(12_000, [
+      { amountSatang: 10_000, revenueId: 'b', creditNoteWaiveReason: null },
+      { amountSatang: 5_000, revenueId: 'a', creditNoteWaiveReason: UNINVOICED_REDUCTION_WAIVE_REASON },
+    ])
+    expect(notes).toEqual([
+      { amountBeforeVatSatang: 5_000, revenueId: 'a', noteType: 'credit' },
+      { amountBeforeVatSatang: 7_000, revenueId: 'b', noteType: 'credit' },
+    ])
+  })
+
+  it('ระดับรอบ / R เกินผลรวมรายการ ⇒ ก้อนไม่ผูก', () => {
+    expect(
+      uninvoicedReductionRevenueNotes(9_000, [
+        { amountSatang: 3_000, revenueId: null, creditNoteWaiveReason: null },
+        { amountSatang: 2_000, revenueId: 'a', creditNoteWaiveReason: null },
+      ]),
+    ).toEqual([
+      { amountBeforeVatSatang: 3_000, revenueId: null, noteType: 'credit' },
+      { amountBeforeVatSatang: 2_000, revenueId: 'a', noteType: 'credit' },
+      { amountBeforeVatSatang: 4_000, revenueId: null, noteType: 'credit' },
+    ])
+  })
+
+  it('รวมกับ allocateRevenueAfterCreditNotes ⇒ หักตรงรายได้ของเคส · ผลรวม = ยอดใบแจ้งหนี้ − R (SPC ต.ค. 5,303.45 → 5,253.45)', () => {
+    const revenues = [
+      { id: 'spc05', grossSatang: 480_218 },
+      { id: 'spc06', grossSatang: 50_127 },
+    ]
+    const map = allocateRevenueAfterCreditNotes(
+      530_345,
+      revenues,
+      uninvoicedReductionRevenueNotes(5_000, [
+        { amountSatang: 5_000, revenueId: 'spc06', creditNoteWaiveReason: UNINVOICED_REDUCTION_WAIVE_REASON },
+      ]),
+    )
+    expect(map.get('spc05')).toBe(480_218)
+    expect(map.get('spc06')).toBe(45_127)
+    expect([...map.values()].reduce((sum, value) => sum + value, 0)).toBe(525_345)
   })
 })
