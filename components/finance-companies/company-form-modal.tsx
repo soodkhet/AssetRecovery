@@ -6,7 +6,7 @@ import { SettingHelp } from '@/components/settings/setting-help'
 import { useCurrentVatRate } from '@/components/settings/use-current-vat-rate'
 import { toFieldErrors } from '@/lib/api/validation'
 import { Button, Field, InlineAlert, Input, Modal, Select, Textarea, useToast } from '@/components/ui'
-import { EMPTY_ADDRESS, type AddressValue } from '@/lib/address/address-value'
+import { EMPTY_ADDRESS, formatThaiAddressLineFull, type AddressValue } from '@/lib/address/address-value'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import {
   branchCodeFromForm,
@@ -17,6 +17,8 @@ import {
   DEFAULT_CUSTOMER_WHT_PCT,
   DEFAULT_VAT_MODE,
   isHeadOfficeBranch,
+  isUntouchedLegacyAddress,
+  legacyCompanyAddressSuggestion,
   missingCompanyAddressFields,
   VAT_MODE_OPTIONS,
   type BranchKind,
@@ -334,10 +336,12 @@ export function CompanyFormModal({
             errors={addressErrors}
           />
           {legacyAddress !== null && (
-            <p className="mt-1 text-[11px] text-slate-500">
-              ที่อยู่เดิมบันทึกเป็นข้อความเดียว จึงอยู่ในช่องบ้านเลขที่ทั้งหมด — ถ้าแก้ที่อยู่ ให้แยกกรอกรหัสไปรษณีย์/จังหวัด/อำเภอ/ตำบล
-              ให้ครบ
-            </p>
+            <LegacyAddressBox
+              legacyText={legacyAddress}
+              suggestion={legacyCompanyAddressSuggestion(legacyAddress)}
+              untouched={isUntouchedLegacyAddress({ value: form.address, legacyText: legacyAddress })}
+              onApply={(next) => set('address', next)}
+            />
           )}
           {errors.address !== undefined && <p className="mt-1 text-xs text-red-600">{errors.address}</p>}
         </div>
@@ -492,5 +496,57 @@ export function CompanyFormModal({
         </Field>
       </div>
     </Modal>
+  )
+}
+
+/**
+ * mytester3 A3-02 — ที่อยู่เดิมที่บันทึกเป็นข้อความเดียว: แสดงข้อความเดิมเต็มก้อน + ข้อเสนอแยกช่อง (ถ้าเดาได้)
+ * ให้ผู้ใช้กดเลือกเอง · ไม่กดอะไร = บันทึกข้อความเดิมทุกตัวอักษร (ข้อมูลเดิมไม่เสีย)
+ */
+function LegacyAddressBox({
+  legacyText,
+  suggestion,
+  untouched,
+  onApply,
+}: {
+  legacyText: string
+  suggestion: AddressValue | null
+  untouched: boolean
+  onApply: (next: AddressValue) => void
+}) {
+  const suggestionLine = suggestion === null ? null : formatThaiAddressLineFull(suggestion)
+  return (
+    <div className="mt-2 space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+      <div>
+        <div className="font-semibold">ที่อยู่เดิม (บันทึกเป็นข้อความเดียว)</div>
+        <p className="mt-0.5 break-words">{legacyText}</p>
+      </div>
+      {suggestionLine !== null && (
+        <div>
+          <div className="font-semibold">ระบบลองแยกเป็นช่องให้ — ตรวจให้ถูกต้องก่อนใช้</div>
+          <p className="mt-0.5 break-words">{suggestionLine}</p>
+        </div>
+      )}
+      <p className="text-[11px] text-amber-800">
+        {untouched
+          ? 'ถ้าไม่แก้ที่อยู่ ระบบจะเก็บข้อความเดิมไว้ตามเดิม · ถ้าจะแก้ ให้แยกกรอกรหัสไปรษณีย์/จังหวัด/อำเภอ/ตำบลให้ครบ'
+          : 'กำลังแก้ที่อยู่ — ต้องกรอกรหัสไปรษณีย์/จังหวัด/อำเภอ/ตำบลให้ครบก่อนบันทึก'}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {suggestion !== null && (
+          <Button variant="secondary" onClick={() => onApply(suggestion)}>
+            แยกเป็นช่องตามนี้
+          </Button>
+        )}
+        <Button variant="secondary" onClick={() => onApply(EMPTY_ADDRESS)}>
+          ล้างช่องเพื่อกรอกใหม่
+        </Button>
+        {!untouched && (
+          <Button variant="ghost" onClick={() => onApply({ ...EMPTY_ADDRESS, detail: legacyText })}>
+            ใช้ที่อยู่เดิมตามเดิม
+          </Button>
+        )}
+      </div>
+    </div>
   )
 }

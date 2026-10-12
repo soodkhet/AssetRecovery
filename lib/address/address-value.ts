@@ -5,6 +5,8 @@
  * เอง (`caseAddressSchema` ทำ preprocess ไว้แล้ว) — ห้ามแปลงเป็น `null` ที่ชั้น component
  */
 
+import { isThaiProvince } from '@/lib/address/thai-address'
+
 export interface AddressValue {
   detail: string
   postalCode: string
@@ -114,6 +116,40 @@ const BANGKOK_LINE = /^(.*\S)\s+แขวง(\S+)\s+เขต(\S+)\s+กรุ�
  * · ต้องครบ 5 ช่อง **และ** จัดรูปกลับแล้วได้ข้อความเดิมทุกตัวอักษร ⇒ ไม่เช่นนั้น `null` (ข้อความพิมพ์เองแบบเก่า
  *   ผู้เรียกต้องเก็บไว้ทั้งก้อน ห้ามเดาแยก)
  */
+const SUGGEST_POSTAL = /\s*(\d{5})\s*$/
+const SUGGEST_BANGKOK = /(?:^|\s)(?:จังหวัด|จ\.)?\s*(?:กรุงเทพมหานคร|กรุงเทพฯ|กรุงเทพ|กทม\.?)\s*$/
+const SUGGEST_PROVINCE = /(?:^|\s)(?:จังหวัด|จ\.)\s*(\S+)\s*$/
+const SUGGEST_DISTRICT = /(?:^|\s)(?:อำเภอ|อ\.|เขต)\s*(\S+)\s*$/
+const SUGGEST_SUBDISTRICT = /(?:^|\s)(?:ตำบล|ต\.|แขวง)\s*(\S+)\s*$/
+
+/**
+ * **เดา** 5 ช่องจากที่อยู่ข้อความอิสระแบบเก่า (mytester3 A3-02) — ไล่ตัดจากท้ายข้อความ: รหัสไปรษณีย์ 5 หลัก →
+ * จังหวัด ("จังหวัด…"/"จ.…"/กรุงเทพฯ/กทม.) → อำเภอ/เขต → ตำบล/แขวง · ที่เหลือข้างหน้า = บ้านเลขที่/ถนน
+ *
+ * ใช้เป็น **ข้อเสนอให้ผู้ใช้กดยืนยัน** เท่านั้น ห้ามแทนค่าเงียบ ๆ (ต่างจาก {@link parseThaiAddressLine} ที่ต้องตรงตัว)
+ * · คืน `null` เมื่อหาจังหวัดในทะเบียน 77 จังหวัดไม่เจอ (เดาต่อไม่ปลอดภัย) · ช่องที่หาไม่เจอ = `''`
+ */
+export function suggestThaiAddressFromText(text: string): AddressValue | null {
+  let rest = text.trim().replace(/\s+/g, ' ')
+  const take = (pattern: RegExp): string | null => {
+    const match = pattern.exec(rest)
+    if (match === null) return null
+    rest = rest.slice(0, match.index).trim()
+    return match[1] ?? ''
+  }
+  const postalCode = take(SUGGEST_POSTAL) ?? ''
+  let province: string
+  if (take(SUGGEST_BANGKOK) !== null) province = 'กรุงเทพมหานคร'
+  else {
+    const found = take(SUGGEST_PROVINCE)
+    if (found === null || !isThaiProvince(found)) return null
+    province = found
+  }
+  const district = take(SUGGEST_DISTRICT) ?? ''
+  const subdistrict = take(SUGGEST_SUBDISTRICT) ?? ''
+  return { detail: rest, postalCode, province, district, subdistrict }
+}
+
 export function parseThaiAddressLine(line: string): AddressValue | null {
   const text = line.trim()
   const provincial = PROVINCIAL_LINE.exec(text)
