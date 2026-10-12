@@ -36,6 +36,7 @@ import { PayoutError } from '@/lib/payout/errors'
 import { payslipStatsOf, type PayoutDocIssuer, type PayoutPayeeDocInfo } from '@/lib/payout/payout-doc'
 import {
   assertHasItemsToPay,
+  assertPayeeAccountNumbersValid,
   assertPayeesVerified,
   assertPayoutCancellable,
   assertPayoutNotCancelled,
@@ -459,6 +460,8 @@ interface Candidate {
   payeeId: string
   payeeName: string
   isVerified: boolean
+  /** รีวิว mytester3 #6 — ตรวจรูปแบบก่อนสร้างรอบ (`assertPayeeAccountNumbersValid()`) */
+  accountNumber: string | null
   side: PayoutBatchSide | null
   trackingRound: number
   grossSatang: number
@@ -526,6 +529,7 @@ async function collectExpenseCandidates(
         select: {
           id: true,
           isVerified: true,
+          accountNumber: true,
           taxProfileId: true,
           wht402Pct: true,
           // มติ PO U105 — เงื่อนไขการหัก (1)/(2)/(3) ⇒ snapshot ลงรายการ + ตรวจกับค่าตั้ง
@@ -661,6 +665,7 @@ async function collectExpenseCandidates(
       payeeId: row.payee.id,
       payeeName: row.payee.user.fullName,
       isVerified: row.payee.isVerified,
+      accountNumber: row.payee.accountNumber,
       side: payeeSide,
       trackingRound: payoutItemTrackingRound(row),
       // U105 — ผู้จ่ายออกภาษีให้ ⇒ gross = ยอดรายการ + ภาษีที่ออกให้ (เงินได้บนใบ 50 ทวิ) · net = ยอดรายการเต็ม
@@ -711,6 +716,7 @@ async function collectAdvanceCandidates(
         select: {
           id: true,
           isVerified: true,
+          accountNumber: true,
           taxProfileId: true,
           user: {
             select: { fullName: true, team: { select: { side: true } }, role: { select: { roleGroup: true } } },
@@ -735,6 +741,7 @@ async function collectAdvanceCandidates(
       payeeId: row.payee.id,
       payeeName: row.payee.user.fullName,
       isVerified: row.payee.isVerified,
+      accountNumber: row.payee.accountNumber,
       side: resolvePayoutSide({
         teamSide: row.payee.user.team?.side ?? null,
         roleGroup: row.payee.user.role.roleGroup,
@@ -946,6 +953,7 @@ export async function previewPayoutBatch(
     try {
       assertHasItemsToPay(candidates.length)
       assertPayeesVerified(candidates)
+      assertPayeeAccountNumbersValid(candidates)
     } catch (error) {
       blocked = error instanceof PayoutError || error instanceof PayeeError ? error.userMessage : null
       if (blocked === null) throw error
@@ -1020,6 +1028,7 @@ export async function createPayoutBatch(
   const candidates = [...expenses, ...advances].filter((candidate) => candidate.side === input.side)
   assertHasItemsToPay(candidates.length)
   assertPayeesVerified(candidates)
+  assertPayeeAccountNumbersValid(candidates)
   assertSingleSide(input.side, candidates)
 
   const totals = summarizePayoutBatch(candidates)
@@ -1383,6 +1392,15 @@ export async function generatePaymentFile(
       transferSatang: payoutTransferSatang(item.netSatang, item.advanceOffsetSatang, item.recoveryOffsetSatang),
       remarkParts: item.advanceReturns.map((entry) => advanceOffsetLineLabel(entry.advance.advanceNumber)),
       payee: item.payee,
+    })),
+  )
+
+  // รีวิว mytester3 #6 — รอบที่สร้างก่อนแก้เลขบัญชี/ข้อมูลเก่า ⇒ ตรวจอีกชั้นก่อนออกไฟล์ (บล็อกพร้อมรายชื่อ)
+  assertPayeeAccountNumbersValid(
+    transfers.map(({ payee, payeeId }) => ({
+      payeeId,
+      payeeName: payeeLegalName({ payeeType: payee.payeeType, legalName: payee.legalName, userFullName: payee.user.fullName }),
+      accountNumber: payee.accountNumber,
     })),
   )
 

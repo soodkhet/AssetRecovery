@@ -20,6 +20,9 @@ export const PAYOUT_ERROR_CODES = [
   'WHT_40_2_RATE_MISSING',
   // มติ PO 06/10/2569 U105 — ผู้รับตั้งเงื่อนไข (2)/(3) แต่ค่าตั้งภาษียังไม่อนุญาต ⇒ บล็อกทั้งรอบพร้อมรายชื่อ
   'WHT_CONDITION_NOT_ALLOWED',
+  // รีวิว mytester3 #6 (A3-01) — ผู้รับที่ยืนยันแล้วแต่เลขบัญชีผิดรูปแบบ (ข้อมูลเก่า) ⇒ บล็อกทั้งรอบ/ไฟล์โอนพร้อมรายชื่อ
+  // (code ร่วมกับหมวดผู้รับเงิน)
+  'INVALID_BANK_ACCOUNT_FORMAT',
   // มติ PO 06/10/2569 U121 — ผู้รับมีรายการในฐาน WHT แต่ไม่มีอัตราเลย (ไม่มี Tax Profile รายคน/ค่าเริ่มต้นตามประเภท/อัตราแผน)
   'WHT_RATE_MISSING',
   // มติ PO U67 (05/10/2569) — ยกเลิกรอบจ่าย: เหตุผลบังคับ (code ร่วมกับหมวดเอกสาร) · โอนแล้วยกเลิกไม่ได้
@@ -41,6 +44,7 @@ const HTTP_STATUS: Record<PayoutErrorCode, number> = {
   PAYMENT_FILE_NOT_GENERATED: 404,
   WHT_40_2_RATE_MISSING: 400,
   WHT_CONDITION_NOT_ALLOWED: 400,
+  INVALID_BANK_ACCOUNT_FORMAT: 400,
   WHT_RATE_MISSING: 400,
   CANCEL_REQUIRES_REASON: 400,
   PAYOUT_BATCH_ALREADY_PAID: 400,
@@ -87,6 +91,11 @@ const MESSAGES: Record<PayoutErrorCode, ErrorMessage> = {
     title: 'เงื่อนไขการหักภาษีของผู้รับยังไม่เปิดใช้',
     message:
       'มีผู้รับเงินที่ตั้งเงื่อนไข "ออกให้ตลอดไป" หรือ "ออกให้ครั้งเดียว" แต่ค่าตั้งภาษียังไม่อนุญาตเงื่อนไขนี้ — เปลี่ยนผู้รับเป็น "หัก ณ ที่จ่าย" หรือเปิดค่าตั้งก่อนสร้างรอบจ่าย',
+  },
+  INVALID_BANK_ACCOUNT_FORMAT: {
+    title: 'เลขบัญชีของผู้รับเงินไม่ถูกต้อง',
+    message:
+      'มีผู้รับเงินที่เลขบัญชีผิดรูปแบบ (ต้องเป็นตัวเลขอย่างน้อย 8 หลัก มี - หรือช่องว่างคั่นได้) — แก้เลขบัญชีในข้อมูลผู้รับเงินก่อนสร้างรอบจ่ายหรือไฟล์โอน',
   },
   CANCEL_REQUIRES_REASON: {
     title: 'ต้องระบุเหตุผลการยกเลิก',

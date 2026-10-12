@@ -1,5 +1,6 @@
 import type { ApiWarning } from '@/lib/api/envelope'
 import { sumPayoutTaxSplit, type payoutItemTaxSplit, type PayoutTaxSplit } from '@/lib/finance/wht-calc'
+import { bankAccountNumberProblem } from '@/lib/format/bank-account'
 import { fmtDate, fmtDateTime } from '@/lib/format/datetime'
 import type { PayoutBatchSide, PayoutBatchStatus, RoleGroup, TeamSide } from '@/lib/generated/prisma/enums'
 import { PayoutError } from '@/lib/payout/errors'
@@ -113,6 +114,24 @@ export function assertPayeesVerified(candidates: readonly PayoutCandidateGuard[]
   throw new PayoutError('UNVERIFIED_PAYEE_IN_PAYOUT', {
     detail: `payees=${[...new Set(unverified.map((candidate) => candidate.payeeId))].join(',')}`,
     context: { payees: names },
+  })
+}
+
+/**
+ * รีวิว mytester3 #6 (A3-01) — ผู้รับที่ยืนยันไว้ก่อนมีการตรวจรูปแบบเลขบัญชีอาจมีเลขผิดรูปแบบค้าง ⇒ บล็อกทั้งรอบ/ไฟล์โอน
+ * พร้อมรายชื่อ (แนวเดียวกับ `WHT_CONDITION_NOT_ALLOWED`) · กติกาเดียวกับตอนยืนยัน (`bankAccountNumberProblem()`)
+ * · เลขบัญชีว่าง (`null`) ไม่ใช่ข้อนี้ (ไฟล์โอนตอบ `REQUIRED_MISSING`)
+ */
+export function assertPayeeAccountNumbersValid(
+  payees: readonly { payeeId: string; payeeName: string; accountNumber: string | null }[],
+): void {
+  const invalid = payees.filter(
+    (payee) => payee.accountNumber !== null && bankAccountNumberProblem(payee.accountNumber) !== null,
+  )
+  if (invalid.length === 0) return
+  throw new PayoutError('INVALID_BANK_ACCOUNT_FORMAT', {
+    detail: `payees=${[...new Set(invalid.map((payee) => payee.payeeId))].join(',')}`,
+    context: { payees: [...new Set(invalid.map((payee) => payee.payeeName))] },
   })
 }
 

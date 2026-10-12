@@ -167,7 +167,9 @@ async function reset(): Promise<void> {
   await tx.$executeRawUnsafe(`DELETE FROM advances WHERE organization_id = '${ORG_ID}'`)
   // คืนทั้ง `is_verified` และ `tax_profile_id` — เทสต์ WHT fallback ถอด Tax Profile ออกชั่วคราว
   await tx.$executeRawUnsafe(
-    `UPDATE payee_profiles SET is_verified = true, tax_profile_id = '${TAX_PROFILE_ID}', payee_type = 'individual', legal_name = NULL WHERE organization_id = '${ORG_ID}'`,
+    `UPDATE payee_profiles SET is_verified = true, tax_profile_id = '${TAX_PROFILE_ID}', payee_type = 'individual', legal_name = NULL,
+            account_number = CASE id WHEN '${PAYEE_OUT_ID}' THEN '1234567890' ELSE '9876543210' END
+      WHERE organization_id = '${ORG_ID}'`,
   )
   await tx.$executeRawUnsafe(
     `UPDATE bank_file_formats SET test_status = 'passed' WHERE id = '${FORMAT_OK_ID}'`,
@@ -433,6 +435,20 @@ suite('ยามก่อนสร้างรอบ (`17` §10/§11 · `18` §1
     expect(batches).toHaveLength(0)
   })
 
+  it('รีวิว mytester3 #6 — ผู้รับยืนยันแล้วแต่เลขบัญชีผิดรูปแบบ (ข้อมูลเก่า "123") ⇒ INVALID_BANK_ACCOUNT_FORMAT พร้อมรายชื่อ · ไม่มีรอบเกิด', async () => {
+    await db().$executeRawUnsafe(`UPDATE payee_profiles SET account_number = '123' WHERE id = '${PAYEE_OUT_ID}'`)
+    await seedExpense({ id: '00000000-0000-4000-8000-0000000034d4', payeeId: PAYEE_OUT_ID, grossSatang: 500_000 })
+
+    const error = await payout
+      .createPayoutBatch(ctx, { side: 'outsource', cutoffDate: CUTOFF, name: null })
+      .catch((caught: unknown) => caught)
+    expect(codeOf(error)).toBe('INVALID_BANK_ACCOUNT_FORMAT')
+    expect((error as { context?: { payees?: string[] } }).context?.payees).toHaveLength(1)
+    expect(await db().payoutBatch.count({ where: { organizationId: ORG_ID } })).toBe(0)
+    const preview = await payout.previewPayoutBatch(finance, { side: 'outsource', cutoffDate: CUTOFF })
+    expect(preview.blocked).toContain('เลขบัญชี')
+  })
+
   it('รอบ inhouse ไม่ดึงรายการฝั่ง outsource มาปน (`17` §6.1)', async () => {
     await seedExpense({ id: '00000000-0000-4000-8000-0000000034d2', payeeId: PAYEE_OUT_ID, grossSatang: 500_000 })
     await seedExpense({ id: '00000000-0000-4000-8000-0000000034d3', payeeId: PAYEE_IN_ID, grossSatang: 300_000 })
@@ -457,6 +473,15 @@ suite('ไฟล์โอนเงิน + idempotency (`17` §6.3/§16 · `13` 
       () => payout.generatePaymentFile(ctx, batchId, { ...generateInput, bankFileFormatId: FORMAT_PENDING_ID }),
       'BANK_FILE_NOT_TESTED',
     )
+  })
+
+  it('รีวิว mytester3 #6 — เลขบัญชีผู้รับถูกแก้เป็นผิดรูปแบบหลังสร้างรอบ ⇒ สร้างไฟล์โอนไม่ได้ INVALID_BANK_ACCOUNT_FORMAT', async () => {
+    const batchId = await batchWithOneItem()
+    await db().$executeRawUnsafe(`UPDATE payee_profiles SET account_number = 'ABC-123' WHERE id = '${PAYEE_OUT_ID}'`)
+    const error = await payout.generatePaymentFile(ctx, batchId, generateInput).catch((caught: unknown) => caught)
+    expect(codeOf(error)).toBe('INVALID_BANK_ACCOUNT_FORMAT')
+    expect((error as { context?: { payees?: string[] } }).context?.payees).toHaveLength(1)
+    expect((await db().payoutBatch.findUniqueOrThrow({ where: { id: batchId } })).status).not.toBe('file_generated')
   })
 
   it('สร้างครั้งแรก: ได้ idempotency key + สถานะ file_generated + ไฟล์มีเนื้อจริง', async () => {

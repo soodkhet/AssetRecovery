@@ -4,6 +4,7 @@ import {
   assertHasItemsToPay,
   assertPayoutCancellable,
   assertPayoutNotCancelled,
+  assertPayeeAccountNumbersValid,
   assertPayeesVerified,
   assertSingleSide,
   buildIdempotencyKey,
@@ -284,5 +285,23 @@ describe('payoutBatchAmountSplit — ค่าตอบแทนไม่รว�
       whtPaidByPayerSatang: 0,
       advancePaidSatang: 0,
     })
+  })
+})
+
+describe('assertPayeeAccountNumbersValid — รีวิว mytester3 #6 (A3-01)', () => {
+  const ok = { payeeId: 'p1', payeeName: 'สมชาย', accountNumber: '123-4-56789-0' }
+
+  it('เลขบัญชีผิดรูปแบบ ⇒ INVALID_BANK_ACCOUNT_FORMAT พร้อมรายชื่อ (ไม่ซ้ำ)', () => {
+    const bad = { payeeId: 'p2', payeeName: 'สมหญิง', accountNumber: '123' }
+    try {
+      assertPayeeAccountNumbersValid([ok, bad, bad, { payeeId: 'p3', payeeName: 'สมศรี', accountNumber: '12AB5678' }])
+      expect.unreachable()
+    } catch (error) {
+      expect(error).toMatchObject({ code: 'INVALID_BANK_ACCOUNT_FORMAT', context: { payees: ['สมหญิง', 'สมศรี'] } })
+    }
+  })
+
+  it('ถูกรูปแบบ / ว่าง (ข้อนี้ไม่ตรวจ) ⇒ ผ่าน', () => {
+    expect(() => assertPayeeAccountNumbersValid([ok, { payeeId: 'p4', payeeName: 'ว่าง', accountNumber: null }])).not.toThrow()
   })
 })
