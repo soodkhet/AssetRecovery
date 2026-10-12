@@ -788,6 +788,106 @@ suite('มติ PO U95 — รับเงิน ⇒ ใบเสร็จร�
     expect((await credit.listAdjustmentsAwaitingCreditNote(accountant)).some((row) => row.adjustmentId === adjustmentId)).toBe(false)
   })
 
+  it('รีวิว mytester4 — BL-2569-003: ยกเลิกใบลดหนี้ส่วนเกินแล้วบันทึกใหม่ ⇒ ส่วนที่บันทึกได้กลับมา · VAT ส่วนต่างเดิม · ยอดตามเอกสารเท่าเดิม', async () => {
+    const credit = await import('@/lib/credit-notes/queries')
+    const { documentedAmountsForBatches } = await import('@/lib/portal/documented-amounts')
+    await setNumbering({ seq: 3060 })
+    const batch = await seedBilling({ status: 'sent', grossSatang: 246_251, vatSatang: 17_238 })
+    await sales.syncSalesRecordFromBilling(ctx, batch.id)
+    const approvedDecrease = async (amountSatang: number, reason: string): Promise<string> => {
+      const rows = await db().$queryRawUnsafe<{ id: string }[]>(`
+        INSERT INTO adjustments (organization_id, adjustment_type, amount_satang, reason, status, billing_batch_id,
+                                 approved_by, approved_at, created_by)
+        VALUES ('${ORG_ID}', 'decrease', ${amountSatang}, $$${reason}$$, 'approved', '${batch.id}', '${ACCOUNTING_ID}', now(), '${ACCOUNTING_ID}')
+        RETURNING id
+      `)
+      return rows[0]?.id ?? ''
+    }
+    await approvedDecrease(10_000, 'SPC-0005 ลดก่อนรับเงิน')
+    const invoice = await sales.issueTaxInvoice(ctx, { cashReceiptId: await seedReceipt(batch.id, { amountSatang: 150_000 }) })
+    await db().$executeRawUnsafe(
+      `UPDATE billing_batches SET status = 'partially_paid', received_satang = 150000 WHERE id = '${batch.id}'`,
+    )
+    const adjustmentId = await approvedDecrease(100_000, 'SPC-0031 ลดหลังรับเงินบางส่วน')
+    const base = { taxInvoiceId: invoice.id, adjustmentId, issueDate: TODAY, reason: 'ลดส่วนที่ออกใบแล้วเกินมูลค่าใหม่' }
+
+    const first = await credit.createCreditNote(ctx, { ...base, creditNoteNumber: `R4C-${RUN}-1`, amountBeforeVatSatang: 3_936 })
+    expect(first).toMatchObject({ vatSatang: 275, totalSatang: 4_211 })
+    await credit.cancelCreditNote(ctx, first.id, { reason: 'เลขที่เอกสารผิด' })
+
+    const reopened = (await documentedAmountsForBatches(ORG_ID, [batch.id])).get(batch.id)
+    expect(reopened?.uninvoicedReduction.creditNoteAllowanceBeforeVatSatang).toBe(3_936)
+    expect(reopened?.creditNoteClosingVatSatang).toBe(275)
+    expect(reopened?.documented.totalSatang).toBe(150_000)
+    expect((await credit.listAdjustmentsAwaitingCreditNote(accountant)).some((row) => row.adjustmentId === adjustmentId)).toBe(true)
+
+    const second = await credit.createCreditNote(ctx, { ...base, creditNoteNumber: `R4C-${RUN}-2`, amountBeforeVatSatang: 3_936 })
+    expect(second).toMatchObject({ vatSatang: 275, totalSatang: 4_211 })
+    const after = (await documentedAmountsForBatches(ORG_ID, [batch.id])).get(batch.id)
+    expect(after?.documented).toEqual({ beforeVatSatang: 136_251, vatSatang: 9_538, totalSatang: 145_789 })
+    expect(after?.uninvoicedReduction.creditNoteAllowanceBeforeVatSatang).toBe(0)
+  })
+
+  it('รีวิว mytester4 — BL-2569-003: ลด 980 + 20 หลังรับเงิน ⇒ ใบลดหนี้ 2 ใบในรอบเดียว (20 + 19.36) ⇒ ใบที่ปิดยอดใช้ VAT ส่วนต่าง · Σ เอกสาร = มูลค่าสุทธิทุกสตางค์', async () => {
+    const credit = await import('@/lib/credit-notes/queries')
+    const { documentedAmountsForBatches } = await import('@/lib/portal/documented-amounts')
+    await setNumbering({ seq: 3080 })
+    const batch = await seedBilling({ status: 'sent', grossSatang: 246_251, vatSatang: 17_238 })
+    await sales.syncSalesRecordFromBilling(ctx, batch.id)
+    const approvedDecrease = async (amountSatang: number, reason: string): Promise<string> => {
+      const rows = await db().$queryRawUnsafe<{ id: string }[]>(`
+        INSERT INTO adjustments (organization_id, adjustment_type, amount_satang, reason, status, billing_batch_id,
+                                 approved_by, approved_at, created_by)
+        VALUES ('${ORG_ID}', 'decrease', ${amountSatang}, $$${reason}$$, 'approved', '${batch.id}', '${ACCOUNTING_ID}', now(), '${ACCOUNTING_ID}')
+        RETURNING id
+      `)
+      return rows[0]?.id ?? ''
+    }
+    await approvedDecrease(10_000, 'SPC-0005 ลดก่อนรับเงิน')
+    const invoice = await sales.issueTaxInvoice(ctx, { cashReceiptId: await seedReceipt(batch.id, { amountSatang: 150_000 }) })
+    await db().$executeRawUnsafe(
+      `UPDATE billing_batches SET status = 'partially_paid', received_satang = 150000 WHERE id = '${batch.id}'`,
+    )
+    // ส่วนที่ยังไม่ออกใบ 960.64 ⇒ ลด 980 เกินไปในส่วนที่ออกใบแล้ว 19.36 · ลด 20 อยู่ในส่วนที่ออกใบแล้วทั้งก้อน (รวมเกิน 39.36)
+    const crossingId = await approvedDecrease(98_000, 'ลดหลังรับเงินบางส่วน ก้อนแรก')
+    const invoicedOnlyId = await approvedDecrease(2_000, 'ลดหลังรับเงินบางส่วน ก้อนที่สอง')
+    const base = { taxInvoiceId: invoice.id, issueDate: TODAY, reason: 'ลดส่วนที่ออกใบแล้วเกินมูลค่าใหม่' }
+    const before = (await documentedAmountsForBatches(ORG_ID, [batch.id])).get(batch.id)
+    expect(before?.uninvoicedReduction).toMatchObject({ beforeVatSatang: 106_064, vatSatang: 7_425, creditNoteAllowanceBeforeVatSatang: 3_936 })
+
+    // ใบแรกไม่ปิดยอด ⇒ VAT ตามอัตรา round(20 × 7%) = 1.40
+    const first = await credit.createCreditNote(ctx, {
+      ...base,
+      adjustmentId: invoicedOnlyId,
+      creditNoteNumber: `R4M-${RUN}-1`,
+      amountBeforeVatSatang: 2_000,
+    })
+    expect(first).toMatchObject({ vatSatang: 140, totalSatang: 2_140 })
+    const middle = (await documentedAmountsForBatches(ORG_ID, [batch.id])).get(batch.id)
+    expect(middle?.uninvoicedReduction.creditNoteAllowanceBeforeVatSatang).toBe(1_936)
+    // ใบที่สองปิดยอด ⇒ VAT ส่วนต่าง (2.75 − 1.40 = 1.35 · ตามอัตรา round(19.36 × 7%) = 1.36)
+    expect(middle?.creditNoteClosingVatSatang).toBe(135)
+    await expectCode(
+      () =>
+        credit.createCreditNote(ctx, { ...base, adjustmentId: crossingId, creditNoteNumber: `R4M-${RUN}-x`, amountBeforeVatSatang: 1_937 }),
+      'CREDIT_NOTE_EXCEEDS_OUTSTANDING',
+    )
+    const second = await credit.createCreditNote(ctx, {
+      ...base,
+      adjustmentId: crossingId,
+      creditNoteNumber: `R4M-${RUN}-2`,
+      amountBeforeVatSatang: 1_936,
+    })
+    expect(second).toMatchObject({ vatSatang: 135, totalSatang: 2_071 })
+
+    const after = (await documentedAmountsForBatches(ORG_ID, [batch.id])).get(batch.id)
+    expect(after?.documented).toEqual({ beforeVatSatang: 136_251, vatSatang: 9_538, totalSatang: 145_789 })
+    expect(invoice.totalSatang - first.totalSatang - second.totalSatang).toBe(after?.documented.totalSatang)
+    expect(after?.uninvoicedReduction.creditNoteAllowanceBeforeVatSatang).toBe(0)
+    const awaiting = await credit.listAdjustmentsAwaitingCreditNote(accountant)
+    expect(awaiting.some((row) => row.adjustmentId === crossingId || row.adjustmentId === invoicedOnlyId)).toBe(false)
+  })
+
   it('mytester4 H4-01 — BL-2569-003 SPC ใบกำกับเกินมูลค่าสุทธิ 39.36 (รอบยังไม่ paid) ⇒ ข้อตรวจครอบยอดจับได้ · ออกใบลดหนี้แล้วหาย', async () => {
     const credit = await import('@/lib/credit-notes/queries')
     const { loadTaxInvoiceCoverage } = await import('@/lib/sales/tax-invoice-coverage-queries')
