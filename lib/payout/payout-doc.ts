@@ -4,7 +4,8 @@ import { summarizePayoutBatch, type PayoutBatchTotals } from '@/lib/finance/payo
 import { payoutTransferSatang } from '@/lib/finance/advance-offset-calc'
 import { payoutItemTaxSplit, sumPayoutTaxSplit, type PayoutTaxSplit } from '@/lib/finance/wht-calc'
 import { advanceOffsetLineLabel } from '@/lib/advances/advance'
-import { usesPerPayeeWhtRate } from '@/lib/settings/wht-policy'
+import { LEGACY_WHT_POLICY } from '@/lib/settings/wht-policy'
+import { groupCertificateSources } from '@/lib/wht/wht'
 import type { PayoutBatchStatus } from '@/lib/generated/prisma/enums'
 import { bahtInWords } from '@/lib/payout/baht-text'
 import { PayoutError } from '@/lib/payout/errors'
@@ -506,7 +507,7 @@ export function buildPaymentVoucherDocs(
     payerTaxLine: payerTaxLineOf(group),
     paymentChannelText: `โอนเข้าบัญชี ${payeeBankLine(group)}`,
     signers: ['ผู้จัดทำ', 'ผู้อนุมัติ', 'ผู้รับเงิน'],
-    footnote: hasWhtCertificate(group) ? WHT_CERTIFICATE_SEPARATE_NOTE : '',
+    footnote: hasWhtCertificate(group, batch) ? WHT_CERTIFICATE_SEPARATE_NOTE : '',
     bankLine: payeeBankLine(group),
     description: `${describeVoucherItems(group.items)} รอบ ${batch.name}`,
     batchName: batch.name,
@@ -566,15 +567,29 @@ function whtBaseSuffix(group: PayoutPayeeGroup): string {
 }
 
 /**
- * mytester4 F4-02 — ผู้รับคนนี้มีใบ 50 ทวิ จากรอบนี้หรือไม่ (เงื่อนไขเดียวกับ `shouldIssueCertificate()` = มีภาษีจริง
- * รวมภาษีที่บริษัทออกให้) · ข้อยกเว้นเงินได้ 40(1)/40(2) อัตรา 0% ที่ออกใบยอดภาษี 0 (`shouldIssueZeroRate402Certificate`)
- * ⇒ ถือว่ามีใบเมื่อมีเงินได้ในฐานของหมวดนั้น · ต่ำกว่าเกณฑ์ 40(8) / มีแต่เงินทดรอง ⇒ ไม่มีใบ ไม่ต้องบอกว่า "ออกแยกต่างหาก"
+ * mytester4 F4-02 — ผู้รับคนนี้มีใบ 50 ทวิ จากรอบนี้หรือไม่ · รีวิว mytester4 — ใช้ `groupCertificateSources()` ตัวเดียวกับฝั่ง
+ * ออกใบ (ระดับกลุ่มตามรูปแบบใบของรอบ + `shouldIssueZeroRate402Certificate()`) กับ snapshot ค่าตั้งของรอบ
+ * (`whtPolicy` — รอบเก่าไม่มี snapshot ⇒ ใบต่อรายการ · ไม่ออกใบ 40(1)/40(2) อัตรา 0%) ⇒ ภาษี 0 ที่ค่าตั้ง 0% ปิด /
+ * ต่ำกว่าเกณฑ์ 40(8) / มีแต่เงินทดรอง ⇒ ไม่มีใบ ไม่ต้องบอกว่า "ออกแยกต่างหาก"
  */
-function hasWhtCertificate(group: PayoutPayeeGroup): boolean {
-  if (group.items.some((item) => item.whtSatang > 0)) return true
-  return group.items.some(
-    (item) =>
-      item.source === 'expense' && item.whtBaseIncluded && item.grossSatang > 0 && usesPerPayeeWhtRate(item.whtIncomeCategory),
+function hasWhtCertificate(group: PayoutPayeeGroup, batch: PayoutBatchDetailDto): boolean {
+  const policy = batch.whtPolicy ?? LEGACY_WHT_POLICY
+  // ฝั่งออกใบอ่านเฉพาะรายการค่าใช้จ่าย (เงินทดรองจ่ายไม่ใช่เงินได้)
+  const sources = group.items
+    .filter((item) => item.source === 'expense')
+    .map((item) => ({
+      id: item.id,
+      payeeId: item.payeeId,
+      grossSatang: item.grossSatang,
+      whtSatang: item.whtSatang,
+      whtBaseIncluded: item.whtBaseIncluded,
+      incomeCategory: item.whtIncomeCategory,
+      carriedBaseSatang: item.whtCarriedBaseSatang ?? 0,
+    }))
+  return (
+    groupCertificateSources(sources, policy.certificateMode, {
+      issueZeroRate402Certificate: policy.issueZeroRate402Certificate,
+    }).length > 0
   )
 }
 
@@ -735,7 +750,7 @@ export function buildPayslipDocs(
     netText: fmtSatang(group.transferSatang),
     note: [
       'เอกสารนี้ออกโดยระบบ ไม่ต้องลงลายมือชื่อ',
-      hasWhtCertificate(group) ? WHT_CERTIFICATE_SEPARATE_NOTE : null,
+      hasWhtCertificate(group, batch) ? WHT_CERTIFICATE_SEPARATE_NOTE : null,
       'หากรายการไม่ถูกต้องโปรดติดต่อฝ่ายการเงิน',
     ]
       .filter((part): part is string => part !== null)

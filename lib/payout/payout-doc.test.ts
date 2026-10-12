@@ -15,6 +15,7 @@ import {
   type PayoutPayeeDocInfo,
 } from '@/lib/payout/payout-doc'
 import type { PayoutBatchDetailDto, PayoutBatchItemDto } from '@/lib/payout/types'
+import { DEFAULT_WHT_POLICY } from '@/lib/settings/wht-policy'
 
 const ISSUER: PayoutDocIssuer = {
   name: 'บริษัท ใจดี โมบาย จำกัด',
@@ -600,10 +601,25 @@ describe('mytester4 F4-01/F4-02 — ฐานยกมาจากรอบก�
     }
   })
 
-  it('F4-02 มีภาษีถูกหัก หรือเงินได้ 40(2) อัตรา 0% (ออกใบยอดภาษี 0) ⇒ ยังพิมพ์ว่า 50 ทวิ ออกแยกต่างหาก', () => {
+  it('F4-02 มีภาษีถูกหัก ⇒ ยังพิมพ์ว่า 50 ทวิ ออกแยกต่างหาก', () => {
     expect(buildPayslipDocs(batch([item()]), ISSUER)[0]?.note).toContain('(50 ทวิ) ออกแยกต่างหาก')
     expect(buildPaymentVoucherDocs(batch([item()]), ISSUER)[0]?.footnote).toContain('(50 ทวิ) ออกแยกต่างหาก')
+  })
+
+  it('รีวิว mytester4 — เงินได้ 40(2) อัตรา 0% พิมพ์ว่ามีใบ 50 ทวิ เฉพาะเมื่อค่าตั้งของรอบให้ออกใบยอดภาษี 0', () => {
     const zeroRate402 = item({ whtIncomeCategory: 'sec_40_2', whtPctSnapshot: 0, whtSatang: 0, netSatang: 850_000, transferSatang: 850_000 })
-    expect(buildPaymentVoucherDocs(batch([zeroRate402]), ISSUER)[0]?.footnote).toContain('50 ทวิ')
+    const issue = batch([zeroRate402], { whtPolicy: { ...DEFAULT_WHT_POLICY, issueZeroRate402Certificate: true } })
+    expect(buildPaymentVoucherDocs(issue, ISSUER)[0]?.footnote).toContain('50 ทวิ')
+    expect(buildPayslipDocs(issue, ISSUER)[0]?.note).toContain('(50 ทวิ) ออกแยกต่างหาก')
+    // ค่าตั้งปิด / รอบเก่าไม่มี snapshot ⇒ ฝั่งออกใบไม่ออก ⇒ ไม่บอกว่ามีใบ
+    const off = batch([zeroRate402], { whtPolicy: { ...DEFAULT_WHT_POLICY, issueZeroRate402Certificate: false } })
+    for (const rows of [off, batch([zeroRate402])]) {
+      expect(buildPaymentVoucherDocs(rows, ISSUER)[0]?.footnote).toBe('')
+      expect(buildPayslipDocs(rows, ISSUER)[0]?.note).not.toContain('50 ทวิ')
+    }
+    // เงินได้ 40(2) แต่อยู่นอกฐานทั้งหมด ⇒ ไม่มีเงินได้ให้รับรอง ⇒ ไม่มีใบ
+    const outOfBase = item({ ...zeroRate402, whtBaseIncluded: false })
+    const noIncome = batch([outOfBase], { whtPolicy: { ...DEFAULT_WHT_POLICY, issueZeroRate402Certificate: true } })
+    expect(buildPaymentVoucherDocs(noIncome, ISSUER)[0]?.footnote).toBe('')
   })
 })
