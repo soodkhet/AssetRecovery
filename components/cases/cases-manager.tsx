@@ -16,6 +16,7 @@ import { Can, usePermission } from '@/components/auth/permission-provider'
 import { CaseDetailModal } from '@/components/cases/case-detail-modal'
 import { CaseFormModal } from '@/components/cases/case-form-modal'
 import { CaseImportWizard } from '@/components/cases/case-import-wizard'
+import { ReasonConfirmModal } from '@/components/settings/reason-confirm-modal'
 import {
   Badge,
   Button,
@@ -38,10 +39,11 @@ import {
   useToast,
 } from '@/components/ui'
 import { apiPath } from '@/lib/api/contract'
+import { REASON_MAX } from '@/lib/api/validation'
 import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
 import { THAI_PROVINCES } from '@/lib/address/thai-address'
 import { isCaseEditable, readinessGapText } from '@/lib/cases/case'
-import { caseRowActions, caseRowOpensReview, type CaseActionButton } from '@/lib/cases/case-actions'
+import { canDeleteDraftCase, caseRowActions, caseRowOpensReview, type CaseActionButton } from '@/lib/cases/case-actions'
 import {
   BULK_SUBMIT_ACTION,
   bulkSubmitSummary,
@@ -169,6 +171,10 @@ export function CasesManager({
   const [importOpen, setImportOpen] = useState(false)
   /** เคสที่กำลังเปลี่ยนสถานะจากปุ่มบนแถว (ส่งตรวจสอบ / กลับไปแก้ไข) */
   const [rowBusyId, setRowBusyId] = useState<string | null>(null)
+  /** มติผู้ใช้ 12/10/2569 B3-02 — เคสร่างที่กำลังจะลบ (กล่องยืนยัน + เหตุผล) */
+  const [deleting, setDeleting] = useState<CaseListItemDto | null>(null)
+  const [deleteReason, setDeleteReason] = useState('')
+  const [deleteBusy, setDeleteBusy] = useState(false)
   /** staging E-029 — ส่งตรวจหลายเคส: ที่เลือก · กล่องยืนยัน · ความคืบหน้า · ผลต่อแถว */
   const [bulkSelected, setBulkSelected] = useState<ReadonlySet<string>>(() => new Set())
   const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false)
@@ -308,6 +314,29 @@ export function CasesManager({
       await reload()
     } finally {
       setRowBusyId(null)
+    }
+  }
+
+  async function confirmDeleteDraft(): Promise<void> {
+    const target = deleting
+    if (target === null) return
+    setDeleteBusy(true)
+    try {
+      const response = await callApi<{ id: string; caseRef: string }>(
+        apiPath('case.delete', { id: target.id }),
+        jsonRequest('DELETE', { reason: deleteReason.trim() }),
+      )
+      if (response.error !== undefined) {
+        showToast({ tone: 'error', title: response.error.title, description: response.error.message })
+        return
+      }
+      showToast({ tone: 'success', title: 'ลบเคสร่างแล้ว', description: target.caseRef })
+      setDeleting(null)
+      setDeleteReason('')
+      setLoading(true)
+      await reload()
+    } finally {
+      setDeleteBusy(false)
     }
   }
 
@@ -613,6 +642,10 @@ export function CasesManager({
                         onEdit={() => void openEdit(item)}
                         onOpenDetail={() => setDetailCaseId(item.id)}
                         onRunAction={(button) => void runRowAction(item, button)}
+                        onDelete={() => {
+                          setDeleteReason('')
+                          setDeleting(item)
+                        }}
                       />
                     </Td>
                   </Tr>
@@ -694,6 +727,10 @@ export function CasesManager({
                   onEdit={() => void openEdit(item)}
                   onOpenDetail={() => setDetailCaseId(item.id)}
                   onRunAction={(button) => void runRowAction(item, button)}
+                  onDelete={() => {
+                    setDeleteReason('')
+                    setDeleting(item)
+                  }}
                 />
               </div>
             ))}
@@ -735,6 +772,22 @@ export function CasesManager({
           </div>
         )}
       </Card>
+
+      <ReasonConfirmModal
+        open={deleting !== null}
+        title={`ลบเคสร่าง ${deleting?.caseRef ?? ''}`}
+        description="เคสร่างนี้จะถูกนำออกจากรายการและย้อนกลับไม่ได้ (เก็บประวัติไว้ตรวจสอบ) — เลขที่สัญญานี้สร้างเคสใหม่ได้อีกครั้ง"
+        confirmLabel="ยืนยันลบเคสร่าง"
+        loading={deleteBusy}
+        reason={deleteReason}
+        onReasonChange={setDeleteReason}
+        onClose={() => {
+          if (!deleteBusy) setDeleting(null)
+        }}
+        onConfirm={() => void confirmDeleteDraft()}
+        placeholder="เช่น สร้างซ้ำกับเคสเดิม / กรอกเลขสัญญาผิด (อย่างน้อย 5 ตัวอักษร)"
+        maxLength={REASON_MAX}
+      />
 
       <ConfirmModal
         open={bulkConfirmOpen}
@@ -843,6 +896,7 @@ function CaseRowActions({
   onEdit,
   onOpenDetail,
   onRunAction,
+  onDelete,
 }: {
   item: CaseListItemDto
   busy: boolean
@@ -850,12 +904,14 @@ function CaseRowActions({
   onEdit: () => void
   onOpenDetail: () => void
   onRunAction: (button: CaseActionButton) => void
+  onDelete: () => void
 }) {
   const { can } = usePermission()
   const canEdit =
     isCaseEditable(item.status) && CASE_EDIT_CAPABILITIES.some((capability) => can('manage', capability))
   const workflow = caseRowActions(item.status, (capability) => can('manage', capability))
   const opensReview = caseRowOpensReview(item.status, (capability) => can('manage', capability))
+  const canDelete = canDeleteDraftCase(item.status, (capability) => can('manage', capability))
 
   return (
     // ปุ่มคำไทยห้ามหักกลางคำ (preship R4-009/R3-040) — แถวยัง flex-wrap ⇒ จอแคบปุ่มลงบรรทัดใหม่แทนล้น
@@ -881,6 +937,11 @@ function CaseRowActions({
       <Button variant={opensReview ? 'success' : 'secondary'} size="sm" className="whitespace-nowrap" onClick={onOpenDetail}>
         {opensReview ? 'พิจารณา' : 'ดูรายละเอียด'}
       </Button>
+      {canDelete && (
+        <Button variant="danger" size="sm" className="whitespace-nowrap" disabled={workflowBusy} onClick={onDelete}>
+          ลบ
+        </Button>
+      )}
     </div>
   )
 }

@@ -35,6 +35,7 @@
 | v3.17 | 11/10/2569 | **mytester B-04/B-06/B-10/B-13/B-14** — §6.4 `edit_history`: แนบไฟล์ตอนแก้เคส (`PATCH /api/cases/:id` รับ `attachingDocuments: true` เมื่อฟอร์มมีไฟล์รออัปโหลด) และลบเอกสาร (`DELETE …/documents/:documentId`) ลงประวัติเป็นฟิลด์ "เอกสารแนบ" (`changed_fields = ['documents']` · ลบมีชื่อไฟล์/เหตุผลใน note) · §12 นำเข้าไฟล์: แถว `CASE_REF_DUPLICATE` ที่ซ้ำเคสในระบบส่ง `existingCaseId` ให้หน้าจอทำลิงก์ "เปิดเคสเดิม" (ครบทุกช่องทาง) · §7.3 ป้ายช่องเอกสารแยก "อัปโหลดแล้ว" (ผูกกับเคสแล้ว) / "รออัปโหลด" (เลือกไว้ ยังไม่ส่ง) · อัปโหลดหลังบันทึกขึ้น Storage พร้อมกันสูงสุด 3 ไฟล์ แล้วผูกเข้าเคสตามลำดับ · มีความคืบหน้า (x/y ไฟล์) + ปุ่มยกเลิกการอัปโหลด + เตือนก่อนปิดแท็บ · §7.5 รูปสินค้าแสดงภาพย่อ · ไม่มี schema ใหม่ |
 | v3.18 | 11/10/2569 | **มติชั่วคราว M1 (mytester B-03 — Claude ตัดสินแทน PO รอยืนยัน)** — §6.2 `asset_imei_serial`: IMEI ตรงกับ**เคสอื่นที่ยังดำเนินการอยู่** (pending_review/need_info/approved/active/pending_recycle_review — รวมเคสของบริษัทไฟแนนซ์อื่น · ไม่นับร่าง/ไม่รับ/ปิดแล้ว) = **คำเตือน ไม่บล็อก** ตอนบันทึก/ส่งตรวจ/เปิดดูเคส พร้อมเลขเคส (+ชื่อบริษัทถ้าต่างบริษัท) — ข้อมูลประกอบใน `data` ช่อง `activeCaseImeiWarning` (ไม่ใช่ error code) · ผู้ใช้ฝั่งบริษัทไฟแนนซ์เห็นเฉพาะเคสของบริษัทตัวเอง |
 | v3.19 | 12/10/2569 | **มติผู้ใช้ 12/10/2569 I3-01 (mytester3)** — ไม่รับเคส (`reject_case`) แยกเหตุผล 2 ช่อง: **"เหตุผลที่แจ้งบริษัทไฟแนนซ์"** (`reason` → `cases.client_reject_reason` · บังคับ — ไม่กรอก = `CASE_STATUS_REASON_REQUIRED` · ช่องเดียวที่พอร์ทัลแสดง) และ **"หมายเหตุภายใน"** (`internalNote` → `cases.review_note` · ไม่บังคับ · เห็นเฉพาะพนักงาน) · กล่องยืนยันไม่รับเคสระบุชัดว่าช่องไหนบริษัทเห็น · audit before/after มีทั้งสองช่อง · เคสที่ปฏิเสธก่อนแยกช่อง พอร์ทัลแสดงข้อความกลาง (`02` v4.72 · `97` v6.12) |
+| v3.20 | 12/10/2569 | **มติผู้ใช้ 12/10/2569 B3-02 (mytester3)** — implement "ลบเคส draft" ของ §7.3: ปุ่ม "ลบ" บนแถวเคสร่าง (ผู้มีสิทธิ์สร้างเคส — ธุรการ/แอดมิน) → กล่องยืนยัน destructive + เหตุผลบังคับ → `DELETE /api/cases/{id}` soft delete (`deleted_at`) เฉพาะ `draft` (สถานะอื่น `CASE_INVALID_STATUS_TRANSITION` · นอก scope `CASE_NOT_FOUND`) · audit `delete` ของ `cases` พร้อมเหตุผล · **เลขที่สัญญาของเคสที่ลบแล้วสร้างใหม่ได้** (unique เป็น partial — `02` v4.73 · §11 ไม่นับเคสที่ลบ) · ไฟล์เอกสารใน Storage ไม่ลบ (แนวเดียวกับลบเอกสารที่แนบผิด §6.3.3) |
 
 ขอบเขตเอกสารนี้: รับเคสติดตามทรัพย์จากบริษัทไฟแนนซ์เข้าสู่ระบบ ผ่าน 3 ช่องทาง (API / Import ไฟล์ / กรอกฟอร์มมือ) ตรวจสอบความครบถ้วนและความซ้ำซ้อนของข้อมูล จากนั้นระบบเสนอทีมที่ดูแลพื้นที่ให้เจ้าหน้าที่อนุมัติเคสพิจารณารับเคสและยืนยัน/เปลี่ยนทีมเอง — รวมถึง Recycle Flow สำหรับเคสไม่สำเร็จที่ไฟแนนซ์ขอให้ลองใหม่
 
@@ -278,7 +279,7 @@
   - debtor_address_current.province ต้องเลือกจาก dropdown จังหวัดมาตรฐาน 77 จังหวัด (ไม่จำกัดเฉพาะจังหวัดที่มีทีม — ถ้าไม่มีทีมตรงจังหวัด ระบบแจ้ง CASE_NO_TEAM_MATCH ตาม §12 แทนการจำกัด choice)
   - debtor_national_id (เมื่อสัญชาติไทย) ต้องเป็นตัวเลข 13 หลักพอดี — input filter ตัวอักษรที่ไม่ใช่เลขออกทันทีที่พิมพ์ ไม่ปล่อยให้พิมพ์เกิน 13 หลัก
   - debtor_phone_mobile และ contact_phone (ของผู้ติดต่ออื่นทุกคน) ต้องเป็นตัวเลข 10 หลักพอดี; debtor_phone_work ต้องเป็นตัวเลข 9-10 หลัก — input filter ตัวอักษรที่ไม่ใช่เลขออกทันที
-- Destructive actions (ลบเคส draft) ต้อง confirm
+- Destructive actions (ลบเคส draft) ต้อง confirm — (v3.20 B3-02) ปุ่ม "ลบ" บนแถวเคสร่างเฉพาะผู้มีสิทธิ์สร้างเคส → ConfirmModal destructive + เหตุผลบังคับ → `DELETE /api/cases/{id}` (soft delete · audit · เลขที่สัญญาสร้างใหม่ได้)
 
 ### 7.4 Team Suggestion UI
 
@@ -448,6 +449,7 @@
 | POST | /api/cases/import | Import ไฟล์ Excel/CSV แบบ batch |
 | GET | /api/cases | List พร้อม filter (status, source_channel, finance_company_id, province) |
 | GET | /api/cases/{id} | รายละเอียดเคส |
+| DELETE | /api/cases/{id} | (v3.20 B3-02) ลบเคสร่าง — soft delete เฉพาะ `draft` · body `{ reason }` บังคับ · สิทธิ์เดียวกับสร้างเคส · audit `delete` |
 | POST | /api/cases/{id}/documents | อัปโหลดเอกสารต่อ slot (document_type ระบุใน payload) |
 | DELETE | /api/cases/{id}/documents/{documentId} | ลบเอกสารที่แนบผิด (v3.5) — soft-delete เฉพาะเคส `draft`/`need_info` · ไม่ลบไฟล์ใน Storage · body `{ reason? }` · สิทธิ์ + scope เดียวกับการแนบเอกสาร |
 | PATCH | /api/cases/{id}/status | เปลี่ยนสถานะ (review/accept/reject/request_more_info) — body ต้องมี `reason` เมื่อ action เป็น reject/need_info/เปลี่ยนทีม |

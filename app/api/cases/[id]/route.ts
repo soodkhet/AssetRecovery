@@ -1,9 +1,9 @@
 import type { NextRequest } from 'next/server'
 import { readJsonBody, validationErrorResponse, withEndpoint } from '@/lib/api/http'
 import { getRequestMeta } from '@/lib/auth/request-meta'
-import { getCase, updateCase } from '@/lib/cases/queries'
-import { CASE_EDIT_CAPABILITIES, CASE_READ_CAPABILITIES } from '@/lib/cases/permissions'
-import { caseUpdateSchema } from '@/lib/cases/schemas'
+import { deleteDraftCase, getCase, updateCase } from '@/lib/cases/queries'
+import { CASE_EDIT_CAPABILITIES, CASE_READ_CAPABILITIES, CASE_WRITE_CAPABILITY } from '@/lib/cases/permissions'
+import { caseDeleteSchema, caseUpdateSchema } from '@/lib/cases/schemas'
 import type { CaseDetailDto } from '@/lib/cases/types'
 
 type RouteContext = { params: Promise<{ id: string }> }
@@ -35,5 +35,27 @@ export const PATCH = withEndpoint<RouteContext, CaseDetailDto>({
 
     const updated = await updateCase(user, id, parsed.data, { actor: user, meta: getRequestMeta(request) })
     return { data: updated }
+  },
+})
+
+/**
+ * `DELETE /api/cases/:id` (มติผู้ใช้ 12/10/2569 B3-02 · `38` §7.3/§17.1 · `45` §6.1) — ลบเคสร่างที่สร้างผิด/ซ้ำ
+ * สิทธิ์เดียวกับการสร้างเคส (ธุรการ/แอดมิน) + scope ระดับแถว · เฉพาะ `draft` · body `{ reason }` บังคับ · soft delete + audit
+ */
+export const DELETE = withEndpoint<RouteContext, { id: string; caseRef: string; deletedAt: string }>({
+  endpoint: 'case.delete',
+  action: 'manage',
+  resource: CASE_WRITE_CAPABILITY,
+  handler: async (request: NextRequest, context, user) => {
+    const { id } = await context.params
+    const parsed = caseDeleteSchema.safeParse((await readJsonBody(request)) ?? {})
+    if (!parsed.success) return validationErrorResponse(parsed.error)
+
+    const deleted = await deleteDraftCase(user, id, {
+      actor: user,
+      meta: getRequestMeta(request),
+      reason: parsed.data.reason,
+    })
+    return { data: deleted }
   },
 })

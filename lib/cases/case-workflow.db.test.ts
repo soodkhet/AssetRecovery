@@ -408,6 +408,63 @@ suite('Phase 2.3 — state machine + snapshot + recycle (DB จริง)', () =
     expect(Number(rows[0]?.count)).toBe(1)
   })
 
+  it('ลบเคสร่าง (B3-02): soft delete + audit พร้อมเหตุผล · สร้างเลขเดิมใหม่ได้ · ref-check/นำเข้าไม่นับเคสที่ลบ', async () => {
+    const { createCase, deleteDraftCase, checkCaseRef, getCase } = await import('@/lib/cases/queries')
+    const { caseCreateSchema } = await import('@/lib/cases/schemas')
+    const make = () => createCase(caseCreateSchema.parse({ caseRef: 'SF-2066-0101', financeCompanyId: COMPANY_ID }), { actor, meta })
+
+    const first = await make()
+    const deleted = await deleteDraftCase(actor, first.id, { actor, meta, reason: 'สร้างซ้ำกับเคสเดิม' })
+    expect(deleted).toMatchObject({ id: first.id, caseRef: 'SF-2066-0101' })
+    expect((await caseRow(first.id)) ?? null).not.toBeNull()
+    const softDeleted = await db().$queryRawUnsafe<Array<{ deleted_at: Date | null }>>(
+      `SELECT deleted_at FROM cases WHERE id = '${first.id}'`,
+    )
+    expect(softDeleted[0]?.deleted_at).not.toBeNull()
+    await expect(getCase(actor, first.id)).rejects.toMatchObject({ code: 'CASE_NOT_FOUND' })
+
+    const audits = await db().$queryRawUnsafe<
+      Array<{ before_data: Record<string, unknown>; after_data: Record<string, unknown>; reason: string; target_type: string }>
+    >(`SELECT before_data, after_data, reason, target_type FROM audit_logs WHERE target_id = '${first.id}' AND action = 'delete'`)
+    expect(audits).toHaveLength(1)
+    expect(audits[0]).toMatchObject({ reason: 'สร้างซ้ำกับเคสเดิม', target_type: 'cases' })
+    expect(audits[0]?.before_data).toMatchObject({ status: 'draft', caseRef: 'SF-2066-0101', deletedAt: null })
+    expect(audits[0]?.after_data).toMatchObject({ storageFileKept: true })
+    expect(audits[0]?.after_data['deletedAt']).toEqual(expect.any(String))
+
+    // เลขเดิมว่างแล้ว — ref-check ไม่เจอ · สร้างใหม่ได้ · ลบซ้ำ = ไม่พบ
+    expect((await checkCaseRef(actor, { companyId: COMPANY_ID, caseRef: 'sf-2066-0101' })).duplicate).toBeNull()
+    const second = await make()
+    expect(second.id).not.toBe(first.id)
+    await expect(make()).rejects.toMatchObject({ code: 'CASE_REF_DUPLICATE' })
+    await expect(deleteDraftCase(actor, first.id, { actor, meta, reason: 'ลบซ้ำอีกครั้ง' })).rejects.toMatchObject({
+      code: 'CASE_NOT_FOUND',
+    })
+  })
+
+  it('ลบเคสร่าง (B3-02): ลบได้เฉพาะ draft · นอก scope (บริษัทอื่น) = ไม่พบ', async () => {
+    const { deleteDraftCase } = await import('@/lib/cases/queries')
+    const pending = await seedCase('SF-2066-0102', { withDocuments: false, status: 'pending_review' })
+    await expect(deleteDraftCase(actor, pending, { actor, meta, reason: 'ทดสอบลบเคสที่ส่งตรวจแล้ว' })).rejects.toMatchObject({
+      code: 'CASE_INVALID_STATUS_TRANSITION',
+    })
+    expect((await caseRow(pending))?.status).toBe('pending_review')
+
+    const draft = await seedCase('SF-2066-0103', { withDocuments: true })
+    const otherCompanyUser: SessionUser = {
+      ...actor,
+      isSuperadmin: false,
+      scope: { kind: 'company', teamIds: [], companyId: '00000000-0000-4000-8000-0000000023ff', userId: actor.id },
+    }
+    await expect(
+      deleteDraftCase(otherCompanyUser, draft, { actor: otherCompanyUser, meta, reason: 'ลบเคสของบริษัทอื่น' }),
+    ).rejects.toMatchObject({ code: 'CASE_NOT_FOUND' })
+    const still = await db().$queryRawUnsafe<Array<{ deleted_at: Date | null }>>(
+      `SELECT deleted_at FROM cases WHERE id = '${draft}'`,
+    )
+    expect(still[0]?.deleted_at).toBeNull()
+  })
+
   it('ลบเอกสาร: soft-delete (แถว + file_url ยังอยู่ ไม่แตะ Storage) + audit before/after + เหตุผลมาตรฐาน', async () => {
     const { deleteCaseDocument, CASE_DOCUMENT_DELETE_DEFAULT_REASON } = await import('@/lib/cases/queries')
     const caseId = await seedCase('SF-2026-2352', { withDocuments: true })

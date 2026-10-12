@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   CASE_ACTION_CONFIRM,
+  canDeleteDraftCase,
   caseActionSuccessTitle,
   caseDetailDescription,
   caseDetailMode,
@@ -149,5 +150,17 @@ describe('ข้อความรีไซเคิล/คำบรรยาย
     expect(buttons.find((b) => b.action === 'approve_recycle')?.confirmRequired).toBe(true)
     expect(CASE_ACTION_CONFIRM.approve_recycle?.danger).toBe(false)
     expect(caseReasonFieldLabel('recycle_review')).toContain('อนุมัติ')
+  })
+})
+
+describe('canDeleteDraftCase (มติผู้ใช้ 12/10/2569 B3-02)', () => {
+  const admin = (capability: string) => capability === 'record_admin_data'
+  const approver = (capability: string) => capability === 'approve_case'
+  it('เฉพาะเคสร่าง + ผู้ถือสิทธิ์สร้างเคส', () => {
+    expect(canDeleteDraftCase('draft', admin)).toBe(true)
+    expect(canDeleteDraftCase('draft', approver)).toBe(false)
+    for (const status of ['pending_review', 'need_info', 'approved', 'rejected']) {
+      expect(canDeleteDraftCase(status, admin)).toBe(false)
+    }
   })
 })

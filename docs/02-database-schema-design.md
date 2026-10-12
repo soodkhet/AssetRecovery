@@ -97,6 +97,7 @@
 | v4.70 | 11/10/2569 | **staging E-014 (มติ PO 10/10/2569)** — migration `20261011120000_payee_recoveries`: ตารางใหม่ `payee_recoveries` (adjustment_id UNIQUE · amount > 0) + `payee_recovery_collections` (insert-only · กลับรายการด้วย reversed_* · partial unique ต่อ (recovery, item) ที่ยังไม่กลับรายการ · trigger กันยอดสะสมเกินยอดเรียกคืน + ห้ามลบ) · `payout_batch_items`/`payout_batches` + `recovery_offset_satang` (CHECK advance + recovery ≤ net) — `22` §6.14.1 |
 | v4.71 | 11/10/2569 | **staging E-069 (มติ PO 10/10/2569)** — migration `20261011130000_period_readiness_result`: `accounting_periods` + `last_readiness_passed_count` / `last_readiness_total_count` (SMALLINT · CHECK `chk_accounting_periods_readiness_result`) — บันทึกผลทุกครั้งที่ตรวจความพร้อม (`POST /api/accounting/periods/:id/readiness`) |
 | v4.72 | 12/10/2569 | **มติผู้ใช้ 12/10/2569 I3-01 (mytester3)** — migration `20261012100000_case_client_reject_reason`: `cases` + `client_reject_reason TEXT` (nullable · additive ไม่แตะข้อมูลเดิม) = เหตุผลไม่รับเคสที่แจ้งบริษัทไฟแนนซ์ (บังคับตอน reject · ช่องเดียวที่พอร์ทัลแสดง) · `review_note` ของเคส `rejected` เปลี่ยนความหมายเป็น**หมายเหตุภายใน** (ไม่บังคับ · พนักงานเห็นเท่านั้น) — `need_info` ใช้ `review_note` เป็นข้อความถึงบริษัทตามเดิม · เคสที่ปฏิเสธก่อน migration (`client_reject_reason` NULL) ⇒ พอร์ทัลแสดงข้อความกลาง ไม่ใช้ `review_note` เดิม |
+| v4.73 | 12/10/2569 | **มติผู้ใช้ 12/10/2569 B3-02 (mytester3 — ลบเคสร่าง)** — migration `20261012110000_case_ref_unique_partial`: `UNIQUE(organization_id, company_id, case_ref, tracking_round)` และ `uniq_cases_company_case_ref` เปลี่ยนเป็น **partial `WHERE deleted_at IS NULL` ทั้งคู่** (แทนมติ v4.0 ที่ให้เคสที่ลบยังจองเลข — ตอนนั้นยังไม่มีทางลบเคส) ⇒ เคสร่างที่ลบแล้ว (soft delete) ไม่จองเลขที่สัญญา · index ใหม่หลวมกว่าเดิม ไม่กระทบข้อมูลเดิม · recycle ยังเพิ่ม `tracking_round` บนแถวเดิม · Prisma ประกาศ unique แบบ partial ไม่ได้ ⇒ ถอด `@@unique` ออกจาก schema.prisma (index อยู่ใน raw SQL) |
 
 ขอบเขตเอกสารนี้: Full Production Database Schema — ทุก table, column, type, FK, index, unique constraint, enum, migration order และ seed data สรุปจาก spec ไฟล์ทั้งหมดไว้ในที่เดียว ใช้เป็น source of truth เดียวก่อนเขียน Prisma schema
 
@@ -1155,12 +1156,13 @@ CREATE TABLE cases (
   created_by          UUID        NOT NULL REFERENCES users(id),
   updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_by          UUID        REFERENCES users(id),
-  deleted_at          TIMESTAMPTZ,
-  UNIQUE(organization_id, company_id, case_ref, tracking_round)
+  deleted_at          TIMESTAMPTZ
 );
+-- v4.73 (B3-02 ลบเคสร่าง) — unique ทั้งสองตัวเป็น partial: เคสที่ soft delete แล้วไม่จองเลขที่สัญญา
+CREATE UNIQUE INDEX cases_organization_id_company_id_case_ref_tracking_round_key
+  ON cases(organization_id, company_id, case_ref, tracking_round) WHERE deleted_at IS NULL;
 -- เพิ่ม 14/08/2569 (Phase 2.2) — ไฟล์ 38 §11 กันเลขที่สัญญาซ้ำภายในบริษัทไฟแนนซ์เดียวกัน (ชั้น DB ของการกันซ้ำ 2 ชั้น)
--- ไม่ partial: UNIQUE ด้านบนก็ไม่ partial ⇒ เคสที่ soft delete แล้วยังจองเลขไว้เหมือนกันทั้งคู่
-CREATE UNIQUE INDEX uniq_cases_company_case_ref ON cases(organization_id, company_id, case_ref_normalized);
+CREATE UNIQUE INDEX uniq_cases_company_case_ref ON cases(organization_id, company_id, case_ref_normalized) WHERE deleted_at IS NULL;
 CREATE INDEX idx_cases_org_status     ON cases(organization_id, status);
 CREATE INDEX idx_cases_org_company    ON cases(organization_id, company_id);
 CREATE INDEX idx_cases_org_team       ON cases(organization_id, assigned_team_id);

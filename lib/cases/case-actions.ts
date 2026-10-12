@@ -202,3 +202,14 @@ export function caseRowActions(status: string, can: (capability: string) => bool
 export function showsReasonBox(status: string): boolean {
   return caseDetailMode(status) !== 'readonly'
 }
+
+/**
+ * ปุ่ม "ลบ" บนแถวเคส (มติผู้ใช้ 12/10/2569 B3-02) — เฉพาะเคสร่าง + ผู้ถือสิทธิ์สร้างเคส (`record_admin_data`)
+ * · UX เท่านั้น — `DELETE /api/cases/:id` ตรวจสิทธิ์/scope/สถานะซ้ำเสมอ (DEC-002)
+ */
+export function canDeleteDraftCase(status: string, hasCapability: (capability: string) => boolean): boolean {
+  return status === 'draft' && hasCapability(CASE_DRAFT_DELETE_CAPABILITY)
+}
+
+/** ตรงกับ `CASE_WRITE_CAPABILITY` (`lib/cases/permissions.ts`) — ประกาศซ้ำเป็นค่าคงที่เพื่อให้ไฟล์นี้ pure ล้วน */
+const CASE_DRAFT_DELETE_CAPABILITY = 'record_admin_data'

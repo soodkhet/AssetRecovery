@@ -29,6 +29,7 @@
 | v1.14 | 11/10/2569 | **staging E-027** — §6.1 เพิ่ม `GET /api/cases/ref-check` (สิทธิ์รับเคส · อ่านอย่างเดียว · normalize แบบเดียวกับการกันซ้ำ · ผู้ใช้ฝั่งบริษัทถามได้เฉพาะบริษัทตัวเอง) |
 | v1.15 | 11/10/2569 | **มติชั่วคราว M5 (mytester WH-05 — Claude ตัดสินแทน PO รอยืนยัน)** — §6.5 เติม `PATCH /api/handover-lots/:id/remove-asset` นำเครื่องออกจากล็อตที่ยังไม่ยืนยัน (เหตุผลบังคับ · audit · สิทธิ์ `create_handover_lot`) · ล็อตว่างยืนยันไม่ได้ (`EMPTY_LOT`) |
 | v1.16 | 12/10/2569 | **มติผู้ใช้ 12/10/2569 I3-01 (mytester3)** — §6.1 `PATCH /api/cases/:id/status` action `reject` รับ `internalNote` (ไม่บังคับ · หมายเหตุภายใน) เพิ่มจาก `reason` (= เหตุผลที่แจ้งบริษัทไฟแนนซ์ · บังคับ) — ไม่มี endpoint ใหม่ |
+| v1.17 | 12/10/2569 | **มติผู้ใช้ 12/10/2569 B3-02 (mytester3)** — §6.1 เติม `DELETE /api/cases/:id` ลบเคสร่าง: soft delete (`deleted_at`) เฉพาะ `draft` (นอกนั้น `CASE_INVALID_STATUS_TRANSITION`) · body `{ reason }` บังคับ · สิทธิ์ `record_admin_data` + scope เดียวกับสร้างเคส · audit `delete` · unique ของเลขที่สัญญาเป็น partial ⇒ สร้างเลขเดิมใหม่ได้ · ไม่ลบไฟล์ใน Storage |
 
 ขอบเขตเอกสารนี้: รวม API Endpoint ทั้งหมดของโมดูล Case Workflow (รับเคส/มอบหมาย/ภาคสนาม) และ Warehouse (คลังสินค้า) เป็นรายการเดียว จัดกลุ่มตาม resource เพื่อให้ backend implement ตาม REST convention เดียวกันทั้งระบบ — คู่กันกับ `27-finance-api-contracts.md` ที่รวม endpoint ฝั่ง Finance/Accounting
 
@@ -59,6 +60,7 @@ GET    /api/cases                       List พร้อม filter (status, sou
 GET    /api/cases/ref-check             ตรวจเลขที่สัญญาซ้ำระหว่างกรอก (companyId, caseRef, excludeCaseId — staging E-027)
 GET    /api/cases/:id                   รายละเอียดเคส
 PATCH  /api/cases/:id                   แก้ไขเคส (edit_case — เฉพาะ draft/pending_review/need_info) เพิ่มแถวใน edit_history ทุกครั้ง
+DELETE /api/cases/:id                   ลบเคสร่าง — soft delete เฉพาะ draft · body { reason } บังคับ · สิทธิ์เดียวกับสร้างเคส · audit · เลขที่สัญญาที่ลบแล้วสร้างใหม่ได้ (มติผู้ใช้ 12/10/2569 B3-02 — `38` v3.20)
 POST   /api/cases/:id/documents         อัปโหลดเอกสารต่อ slot (document_type ระบุใน payload)
 DELETE /api/cases/:id/documents/:documentId  ลบเอกสารที่แนบผิด — soft-delete เฉพาะเคส draft/need_info (ก่อนส่งตรวจ) · ไม่ลบไฟล์ใน Storage · audit · body { reason? } (มติ PO 04/10/2569 — `38` v3.4)
 PATCH  /api/cases/:id/status            เปลี่ยนสถานะ (review/accept/reject/request_more_info) — body ต้องมี reason เมื่อ action เป็น reject/need_info/เปลี่ยนทีม · reject: reason = เหตุผลที่แจ้งบริษัทไฟแนนซ์ + internalNote? = หมายเหตุภายใน (มติผู้ใช้ 12/10/2569 I3-01)

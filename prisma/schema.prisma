@@ -1993,7 +1993,9 @@ model Case {
   expenses       Expense[]
   revenues       Revenue[]
 
-  @@unique([organizationId, companyId, caseRef, trackingRound])
+  // UNIQUE(organization_id, company_id, case_ref, tracking_round) + `uniq_cases_company_case_ref` เป็น **partial**
+  // (`WHERE deleted_at IS NULL`) ใน raw SQL migration `20261012110000_case_ref_unique_partial` — Prisma ประกาศ
+  // unique แบบ partial ไม่ได้ จึงไม่มี @@unique ที่นี่ (มติผู้ใช้ 12/10/2569 B3-02 — ลบเคสร่างแล้วใช้เลขเดิมได้)
   @@index([organizationId, status, closedAt], map: "idx_cases_org_status_closed_at")
   @@index([organizationId, createdAt], map: "idx_cases_org_created_at")
   @@index([organizationId, assignedTeamId], map: "idx_cases_org_team")

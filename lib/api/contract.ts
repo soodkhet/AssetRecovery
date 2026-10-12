@@ -78,6 +78,13 @@ export const API_CONTRACT = {
     source: '38 §8 (edit_case) · 45 §6.1',
     summary: 'แก้ไขเคส (draft/pending_review/need_info เท่านั้น) — เพิ่มแถวใน edit_history ทุกครั้ง',
   },
+  'case.delete': {
+    method: 'DELETE',
+    path: '/api/cases/:id',
+    module: 'case',
+    source: '38 §7.3/§17.1 (v3.20) · 45 §6.1',
+    summary: 'ลบเคสร่าง (soft delete เฉพาะ draft · เหตุผลบังคับ · ปล่อยเลขที่สัญญาให้สร้างใหม่ได้)',
+  },
   'case.uploadDocument': {
     method: 'POST',
     path: '/api/cases/:id/documents',

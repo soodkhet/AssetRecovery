@@ -64,8 +64,9 @@ async function findExistingCaseRefs(
   const normalized = [...new Set(rows.map((row) => normalizeCaseRef(row.input.caseRef)))]
   if (normalized.length === 0) return new Map()
   const existing = await prisma.case.findMany({
-    where: { organizationId, companyId, caseRefNormalized: { in: normalized } },
-    // รอบล่าสุดก่อน — ลิงก์ไปเคสที่ยังไม่ถูกลบรอบล่าสุด (เคสที่ลบแล้วยังจองเลขแต่เปิดดูไม่ได้)
+    // มติผู้ใช้ 12/10/2569 B3-02 — unique index เป็น partial แล้ว ⇒ เคสร่างที่ถูกลบไม่จองเลข (นับเฉพาะเคสที่ยังอยู่)
+    where: { organizationId, companyId, caseRefNormalized: { in: normalized }, deletedAt: null },
+    // รอบล่าสุดก่อน
     orderBy: { trackingRound: 'desc' },
     select: { id: true, caseRefNormalized: true, deletedAt: true },
   })

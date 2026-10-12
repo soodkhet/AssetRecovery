@@ -83,6 +83,18 @@ const ROUTES: RouteCase[] = [
     request: () => get(`/api/cases/${ID}`),
     withId: true,
   },
+  {
+    // มติผู้ใช้ 12/10/2569 B3-02 — ลบเคสร่าง: ผู้ใช้บริษัทถือ record_admin_data ก็ยังถูกปัด
+    name: 'DELETE /api/cases/:id',
+    load: async () => (await import('@/app/api/cases/[id]/route')).DELETE as Handler,
+    request: () =>
+      new NextRequest(`http://localhost/api/cases/${ID}`, {
+        method: 'DELETE',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ reason: 'สร้างซ้ำกับเคสเดิม' }),
+      }),
+    withId: true,
+  },
   { name: 'GET /api/assets', load: async () => (await import('@/app/api/assets/route')).GET as Handler, request: () => get('/api/assets') },
   {
     name: 'GET /api/handover-lots',

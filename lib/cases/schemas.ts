@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { satangSchema } from '@/lib/api/validation'
+import { reasonSchema, satangSchema } from '@/lib/api/validation'
 import { DEBTOR_NATIONALITIES, DOCUMENT_MODES, DOCUMENT_SLOTS, isAcceptableAssetIdentifier } from '@/lib/cases/case'
 import { IMEI_FORMAT_MESSAGE } from '@/lib/warehouse/imei'
 import { CASE_STATUS_ACTIONS, CASE_STATUSES } from '@/lib/cases/state-machine'
@@ -154,6 +154,13 @@ export const caseDocumentDeleteSchema = z.object({
 })
 
 export type CaseDocumentDeleteInput = z.infer<typeof caseDocumentDeleteSchema>
+
+/** ลบเคสร่าง (มติผู้ใช้ 12/10/2569 B3-02) — เหตุผลบังคับ (ลงประวัติ audit) */
+export const caseDeleteSchema = z.object({
+  reason: reasonSchema,
+})
+
+export type CaseDeleteInput = z.infer<typeof caseDeleteSchema>
 
 export const caseStatusChangeSchema = z.object({
   action: z.enum(CASE_STATUS_ACTIONS),

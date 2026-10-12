@@ -141,11 +141,14 @@ suite('Phase 2.2 — กันเลขที่สัญญาซ้ำระ�
     await expect(insertCase('SF-2026-0003', 'manual', COMPANY_B)).resolves.toBeGreaterThan(0)
   })
 
-  it('เคสที่ถูก soft delete แล้วยังจองเลขที่สัญญาไว้ (index ไม่ partial — ตรงกับ UNIQUE ของ `02` §6)', async () => {
+  // มติผู้ใช้ 12/10/2569 B3-02 — unique ทั้งสองตัวเป็น partial (`deleted_at IS NULL`) ⇒ ลบเคสร่างแล้วปล่อยเลขคืน
+  // (เดิม: เคสที่ลบยังจองเลข — เปลี่ยนตามมติ ไม่ใช่แก้เทสต์ให้ผ่าน) · เคส active สองแถวเลขเดียวกันยังชนเหมือนเดิม
+  it('เคสที่ถูก soft delete ไม่จองเลขที่สัญญา — สร้างเลขเดิมใหม่ได้ แต่ active ซ้ำยังชน (B3-02 · `02` v4.73)', async () => {
     await insertCase('SF-2026-0004', 'manual')
     await db().$executeRawUnsafe(
       `UPDATE cases SET deleted_at = NOW() WHERE organization_id = '${ORG_ID}' AND case_ref_normalized = 'SF-2026-0004'`,
     )
+    await expect(insertCase('SF-2026-0004', 'manual')).resolves.toBeGreaterThan(0)
     await expect(insertCase('SF-2026-0004', 'manual')).rejects.toThrow(/duplicate key/i)
   })
 

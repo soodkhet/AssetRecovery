@@ -691,7 +691,7 @@ function rethrowDuplicate(error: unknown, caseRef: string): never {
 
 /**
  * `GET /api/cases/ref-check` (staging E-027) — ตรวจเลขที่สัญญาซ้ำ**ระหว่างกรอก** (ก่อนกดบันทึก) ด้วยกติกาเดียวกับ
- * `assertCaseRefAvailable()` (normalize + บริษัทเดียวกัน + รวมเคสที่ถูกลบ) · อ่านอย่างเดียว
+ * `assertCaseRefAvailable()` (normalize + บริษัทเดียวกัน · ไม่นับเคสร่างที่ถูกลบ — B3-02) · อ่านอย่างเดียว
  * ผู้ใช้ฝั่งบริษัทไฟแนนซ์ถามได้เฉพาะบริษัทตัวเอง (บริษัทอื่น ⇒ ตอบไม่ซ้ำ — ไม่ leak)
  */
 export async function checkCaseRef(
@@ -704,6 +704,7 @@ export async function checkCaseRef(
       organizationId: user.organizationId,
       companyId: input.companyId,
       caseRefNormalized: normalizeCaseRef(input.caseRef),
+      deletedAt: null,
       ...(input.excludeCaseId === undefined ? {} : { id: { not: input.excludeCaseId } }),
     },
     select: { id: true, caseRef: true, status: true, trackingRound: true },
@@ -724,7 +725,8 @@ async function assertCaseRefAvailable(
       organizationId,
       companyId,
       caseRefNormalized: normalized,
-      // ไม่กรอง `deleted_at` — unique index ระดับ DB ไม่ partial ⇒ เคสที่ถูกลบยังจองเลขไว้ (ดู migration 2.2)
+      // มติผู้ใช้ 12/10/2569 B3-02 — unique index เป็น partial (`deleted_at IS NULL`) แล้ว ⇒ เคสร่างที่ถูกลบไม่จองเลข
+      deletedAt: null,
       ...(excludeCaseId ? { id: { not: excludeCaseId } } : {}),
     },
     select: { id: true, caseRef: true, status: true, trackingRound: true },
@@ -1322,5 +1324,86 @@ export async function deleteCaseDocument(
 
     const refreshed = await tx.case.findUniqueOrThrow({ where: { id: caseId }, select: detailSelect })
     return toDetailDto(refreshed)
+  })
+}
+
+/**
+ * `DELETE /api/cases/:id` (มติผู้ใช้ 12/10/2569 B3-02 · `38` §7.3/§17.1 · `45` §6.1) — ลบเคสร่างที่สร้างผิด/ซ้ำ
+ *
+ * - เฉพาะสถานะ `draft` (นอกนั้น `CASE_INVALID_STATUS_TRANSITION`) · นอก scope/ลบไปแล้ว = `CASE_NOT_FOUND`
+ * - **soft delete** (`deleted_at`) — แถวเคส/เอกสาร/ผู้ติดต่อคงอยู่เพื่อ audit · unique index ของเลขที่สัญญาเป็น partial
+ *   ⇒ สร้างเคสเลขเดิมใหม่ได้ทันที
+ * - ไฟล์เอกสารใน Storage **ไม่ลบ** (แนวเดียวกับลบเอกสารที่แนบผิด — soft delete ย้อนตรวจได้ · ผู้ทำ audit เปิดดูต้นฉบับได้)
+ * - audit `delete` ของ `cases` + reason บังคับ (Zod `reasonSchema`) · ล็อกแถวกันชนกับการกดส่งตรวจพร้อมกัน
+ */
+export async function deleteDraftCase(
+  user: SessionUser,
+  caseId: string,
+  context: CaseMutationContext & { reason: string },
+): Promise<{ id: string; caseRef: string; deletedAt: string }> {
+  const organizationId = context.actor.organizationId
+  if (!UUID_PATTERN.test(caseId)) throw new CaseError('CASE_NOT_FOUND')
+
+  return await prisma.$transaction(async (tx) => {
+    const locked = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT id FROM cases WHERE id = ${caseId}::uuid AND organization_id = ${organizationId}::uuid FOR UPDATE`
+    const current =
+      locked.length === 0
+        ? null
+        : await tx.case.findFirst({
+            where: { id: caseId, organizationId, deletedAt: null, ...caseScopeWhere(user) },
+            select: {
+              id: true,
+              caseRef: true,
+              companyId: true,
+              status: true,
+              trackingRound: true,
+              source: true,
+              debtorName: true,
+              createdAt: true,
+              createdBy: true,
+              _count: { select: { documents: { where: { deletedAt: null } } } },
+            },
+          })
+    if (current === null) throw new CaseError('CASE_NOT_FOUND')
+    if (current.status !== 'draft') {
+      throw new CaseError('CASE_INVALID_STATUS_TRANSITION', {
+        context: { status: current.status, action: 'delete_draft', allowedFrom: ['draft'] },
+      })
+    }
+
+    const deletedAt = new Date()
+    await tx.case.update({ where: { id: caseId }, data: { deletedAt, updatedBy: context.actor.id } })
+
+    const before = {
+      caseRef: current.caseRef,
+      companyId: current.companyId,
+      status: current.status,
+      trackingRound: current.trackingRound,
+      source: current.source,
+      debtorName: current.debtorName,
+      documentCount: current._count.documents,
+      createdAt: current.createdAt.toISOString(),
+      createdBy: current.createdBy,
+      deletedAt: null,
+    }
+    await emitAudit(
+      {
+        organizationId,
+        actorId: context.actor.id,
+        actorRole: context.actor.roleName,
+        action: 'delete',
+        targetType: 'cases',
+        targetId: caseId,
+        before,
+        after: { ...before, deletedAt: deletedAt.toISOString(), storageFileKept: true },
+        reason: context.reason,
+        ipAddress: context.meta.ipAddress,
+        userAgent: context.meta.userAgent,
+      },
+      tx as CaseTxClient,
+    )
+
+    return { id: caseId, caseRef: current.caseRef, deletedAt: deletedAt.toISOString() }
   })
 }
