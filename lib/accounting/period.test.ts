@@ -513,6 +513,25 @@ describe('mytester3 H3-02 — ใบกำกับไม่ครอบยอ�
     })
     expect(result.warnings).toEqual(evaluateReadiness(readyInput).warnings)
   })
+
+  it('mytester4 H4-01 — รอบที่ใบกำกับเกินมูลค่าสุทธิ (แม้ยังรับไม่ครบ) ⇒ คำเตือน (ไม่บล็อก)', () => {
+    const result = evaluateReadiness({
+      ...readyInput,
+      taxInvoiceCoverage: {
+        checkedCount: 0,
+        documentsSatang: 0,
+        settledSatang: 0,
+        overpaymentSatang: 0,
+        differenceSatang: 0,
+        mismatches: [],
+        overNetValue: [
+          { batchNumber: 'BL-2569-003', netValueBeforeVatSatang: 136_251, documentsBeforeVatSatang: 140_187, excessBeforeVatSatang: 3_936 },
+        ],
+      },
+    })
+    expect(result.ready).toBe(true)
+    expect(result.warnings.some((warning) => warning.includes('BL-2569-003 เกิน ฿39.36 ก่อนภาษี'))).toBe(true)
+  })
 })
 
 describe('readinessScore / readinessRowText — staging E-069', () => {

@@ -1380,8 +1380,32 @@ describe('00_Control_Totals.csv + หน้าปก (มติ PO 06/10/2569 U9
     expect(get('tax_invoice_coverage_documents')).toMatchObject({ rowCount: 3, amountSatang: 2_035_295 })
     expect(get('tax_invoice_coverage_settled')).toMatchObject({ rowCount: 3, amountSatang: 2_063_855 })
     expect(get('tax_invoice_coverage_difference')).toMatchObject({ rowCount: 1, amountSatang: 28_560 })
+    // mytester4 H4-01 — ไม่ส่งรายการเกินมูลค่าสุทธิ ⇒ บรรทัด 0
+    expect(get('tax_invoice_over_net_value')).toMatchObject({ rowCount: 0, amountSatang: 0 })
     expect(controlTotalsCsv(covered)).toContain(',tax_invoice_coverage_difference,')
     expect(lines.some((line) => line.item.startsWith('tax_invoice_coverage'))).toBe(false)
+  })
+
+  it('mytester4 H4-01 — บรรทัดใบกำกับเกินมูลค่าสุทธิ: จำนวนรอบ + Σ ส่วนเกินก่อน VAT', () => {
+    const over = buildControlTotals({
+      ...CONTROL_TOTALS_FIXTURE,
+      taxInvoiceCoverage: {
+        checkedCount: 0,
+        documentsSatang: 0,
+        settledSatang: 0,
+        overpaymentSatang: 0,
+        differenceSatang: 0,
+        mismatches: [],
+        overNetValue: [
+          { batchNumber: 'BL-2569-003', netValueBeforeVatSatang: 136_251, documentsBeforeVatSatang: 140_187, excessBeforeVatSatang: 3_936 },
+          { batchNumber: 'BL-2569-004', netValueBeforeVatSatang: 10_000, documentsBeforeVatSatang: 10_100, excessBeforeVatSatang: 100 },
+        ],
+      },
+    })
+    expect(over.find((line) => line.section === 'summary' && line.item === 'tax_invoice_over_net_value')).toMatchObject({
+      rowCount: 2,
+      amountSatang: 4_036,
+    })
   })
 
   it('หน้าปก: จำนวนแถวต่อไฟล์ + ตารางยอดสรุปค่าเดียวกับไฟล์ 00 · ช่วงไฟล์ 00–18 · หมายเหตุโฟลเดอร์ PDF', () => {

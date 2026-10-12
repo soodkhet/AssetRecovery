@@ -17,6 +17,15 @@ import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
  * - รอบที่ยังมีเงินรับรอออกใบ (คำเตือน U95 เดิม) ไม่นำมาตรวจ — ไม่เตือนซ้ำ
  * - รอบที่มีใบอัตรา VAT ต่างจากใบแจ้งหนี้ (U96 #9) ⇒ เทียบเฉพาะยอดก่อน VAT (รีวิว mytester3 #4)
  * - ระดับ = **คำเตือน ไม่บล็อก** (แนวเดียวกับ U95 "รับเงินแล้วแต่ยังไม่ออกใบ" · ไม่มี error code บล็อกใน `24`)
+ *
+ * **ใบกำกับเกินมูลค่าสุทธิ** (mytester4 H4-01) — ตรวจ**ทุกรอบ**ที่ส่ง `netValueBeforeVatSatang` มา (รอบที่มีใบกำกับ/เงินรับในงวด
+ * ไม่ว่ารับครบหรือยัง) ด้วยยอด**ก่อน VAT** (ไม่ขึ้นกับอัตรา VAT ของแต่ละใบ — รีวิว mytester3 #4):
+ * ```
+ * เอกสารสุทธิ (ก่อน VAT) = Σ ใบกำกับ active − Σ ใบลดหนี้ active + Σ ใบเพิ่มหนี้ active
+ * มูลค่าสุทธิของรอบ       = ใบแจ้งหนี้ − Σ Adjustment ลดยอด approved + Σ Adjustment เพิ่มยอด approved
+ * เอกสารสุทธิ > มูลค่าสุทธิ ⇒ ภาษีขายเกิน (ส่วนที่ลดลงไปในยอดที่ออกใบแล้วยังไม่มีใบลดหนี้) ⇒ เตือน
+ * ```
+ * รอบที่ข้อตรวจ "เท่ากันพอดี" ข้างบนจับแล้วไม่ซ้ำ
  */
 
 export interface CoverageAmounts {
@@ -54,6 +63,16 @@ export interface TaxInvoiceCoverageBatch {
    * ⇒ หักจากยอดสุทธิของรอบ · ไม่ส่ง = 0
    */
   uninvoicedReduction?: CoverageAmounts
+  /**
+   * mytester4 H4-01 — มูลค่าสุทธิของรอบ (ก่อน VAT) = ใบแจ้งหนี้ − Adjustment ลดยอด + Adjustment เพิ่มยอด (approved ทั้งหมด)
+   * · ไม่ส่ง = ไม่ตรวจ "ใบกำกับเกินมูลค่าสุทธิ" (ต้องส่ง `beforeVatSatang` ของใบกำกับ/ใบลดหนี้/ใบเพิ่มหนี้มาด้วย)
+   */
+  netValueBeforeVatSatang?: number
+  /**
+   * mytester4 H4-01 — รอบมีเงินรับลงวันที่ในงวด (ไม่ส่ง = มี) · `false` = โหลดมาเพราะมีใบกำกับในงวดเท่านั้น
+   * ⇒ ตรวจเฉพาะ "เกินมูลค่าสุทธิ" ไม่เข้าข้อตรวจเท่ากันพอดี/ผลรวมงวด (ขอบเขตเดิม: รอบที่มีเงินรับในงวด)
+   */
+  receivedInPeriod?: boolean
 }
 
 /**
@@ -102,6 +121,33 @@ export interface TaxInvoiceCoverageMismatch {
   vatDifferenceSatang: number
 }
 
+/** mytester4 H4-01 — รอบที่ใบกำกับ − ใบลดหนี้ + ใบเพิ่มหนี้ เกินมูลค่าสุทธิของรอบ (ก่อน VAT) */
+export interface TaxInvoiceOverNetValue {
+  batchNumber: string
+  netValueBeforeVatSatang: number
+  documentsBeforeVatSatang: number
+  /** เอกสารสุทธิ − มูลค่าสุทธิ (> 0) */
+  excessBeforeVatSatang: number
+}
+
+/**
+ * mytester4 H4-01 — เอกสารสุทธิ (ก่อน VAT) เกินมูลค่าสุทธิของรอบเท่าไร · ไม่ส่งมูลค่าสุทธิ / ไม่มีใบกำกับ / ไม่เกิน ⇒ `null`
+ */
+export function taxInvoiceExcessOverNetValue(batch: TaxInvoiceCoverageBatch): TaxInvoiceOverNetValue | null {
+  const net = batch.netValueBeforeVatSatang
+  const invoiced = batch.taxInvoices.beforeVatSatang ?? 0
+  if (net === undefined || invoiced <= 0) return null
+  const documents = invoiced - (batch.creditNotes.beforeVatSatang ?? 0) + (batch.debitNotes.beforeVatSatang ?? 0)
+  const excess = documents - net
+  if (excess <= 0) return null
+  return {
+    batchNumber: batch.batchNumber,
+    netValueBeforeVatSatang: net,
+    documentsBeforeVatSatang: documents,
+    excessBeforeVatSatang: excess,
+  }
+}
+
 export interface TaxInvoiceCoverageResult {
   /** จำนวนรอบที่ตรวจ */
   checkedCount: number
@@ -114,10 +160,17 @@ export interface TaxInvoiceCoverageResult {
   /** settled − overpayment − documents (0 = ครอบครบ) */
   differenceSatang: number
   mismatches: readonly TaxInvoiceCoverageMismatch[]
+  /**
+   * mytester4 H4-01 — รอบที่ใบกำกับเกินมูลค่าสุทธิ (ทุกรอบที่ส่งมา ไม่จำกัดรับครบ · ไม่ซ้ำกับ `mismatches`) ·
+   * ไม่ส่ง = ไม่มี (ผลจากรุ่นก่อน/ fixture)
+   */
+  overNetValue?: readonly TaxInvoiceOverNetValue[]
 }
 
 export function evaluateTaxInvoiceCoverage(batches: readonly TaxInvoiceCoverageBatch[]): TaxInvoiceCoverageResult {
-  const checked = batches.filter((batch) => batch.fullyPaid && !batch.hasReceiptsAwaitingInvoice)
+  const checked = batches.filter(
+    (batch) => batch.receivedInPeriod !== false && batch.fullyPaid && !batch.hasReceiptsAwaitingInvoice,
+  )
   const rows = checked.map((batch) => {
     const notesTotal = batch.debitNotes.totalSatang - batch.creditNotes.totalSatang
     const reduction = batch.uninvoicedReduction ?? { beforeVatSatang: 0, vatSatang: 0, totalSatang: 0 }
@@ -154,6 +207,12 @@ export function evaluateTaxInvoiceCoverage(batches: readonly TaxInvoiceCoverageB
       vatDifference,
     }
   })
+  const mismatched = new Set(rows.filter((row) => row.mismatch).map((row) => row.batchNumber))
+  const overNetValue = batches.flatMap((batch) => {
+    if (mismatched.has(batch.batchNumber)) return []
+    const excess = taxInvoiceExcessOverNetValue(batch)
+    return excess === null ? [] : [excess]
+  })
   const documentsSatang = sumSatang(rows.map((row) => row.documents), 'เอกสารสุทธิ')
   const settledSatang = sumSatang(rows.map((row) => row.settled), 'ยอดรับชำระ')
   const overpaymentSatang = sumSatang(rows.map((row) => row.overpayment), 'ส่วนเกินที่ไม่ออกเอกสาร')
@@ -172,6 +231,7 @@ export function evaluateTaxInvoiceCoverage(batches: readonly TaxInvoiceCoverageB
         differenceSatang: row.difference,
         vatDifferenceSatang: row.vatDifference,
       })),
+    overNetValue,
   }
 }
 
@@ -190,5 +250,24 @@ export function taxInvoiceCoverageWarning(result: TaxInvoiceCoverageResult | und
     `(${shown.join(', ')}${more > 0 ? ` และอีก ${fmtCount(more)} รอบ` : ''}) — ` +
     'ยอดใบกำกับ − ใบลดหนี้ + ใบเพิ่มหนี้ต้องเท่ายอดสุทธิของรอบ ภาษีขายอาจขาด/เกิน ' +
     'ตรวจที่แท็บรายได้และขาย และแจ้งสำนักงานบัญชีก่อนส่ง · ปิดงวดได้'
+  )
+}
+
+/**
+ * mytester4 H4-01 — คำเตือน "ใบกำกับเกินมูลค่าสุทธิของรอบ" (ระดับเดียวกับ {@link taxInvoiceCoverageWarning} — ปิดงวดได้) ·
+ * ไม่มีรอบที่เกิน ⇒ `null`
+ */
+export function taxInvoiceOverNetValueWarning(result: TaxInvoiceCoverageResult | undefined): string | null {
+  const rows = result?.overNetValue ?? []
+  if (rows.length === 0) return null
+  const shown = rows
+    .slice(0, MISMATCH_NUMBERS_SHOWN)
+    .map((row) => `${row.batchNumber} เกิน ${fmtSatangSymbol(row.excessBeforeVatSatang)} ก่อนภาษี`)
+  const more = rows.length - shown.length
+  return (
+    `ใบเสร็จรับเงิน/ใบกำกับภาษีเกินมูลค่าสุทธิของรอบวางบิล ${fmtCount(rows.length)} รอบ ` +
+    `(${shown.join(', ')}${more > 0 ? ` และอีก ${fmtCount(more)} รอบ` : ''}) — ` +
+    'ยอดใบกำกับ − ใบลดหนี้ + ใบเพิ่มหนี้ต้องไม่เกินมูลค่าหลังปรับปรุงยอด ภาษีขายอาจเกิน ' +
+    'ออกใบลดหนี้ส่วนที่ลดลงไปในยอดที่ออกใบแล้ว หรือแจ้งสำนักงานบัญชีก่อนส่ง · ปิดงวดได้'
   )
 }

@@ -785,6 +785,52 @@ suite('มติ PO U95 — รับเงิน ⇒ ใบเสร็จร�
     expect((await credit.listAdjustmentsAwaitingCreditNote(accountant)).some((row) => row.adjustmentId === adjustmentId)).toBe(false)
   })
 
+  it('mytester4 H4-01 — BL-2569-003 SPC ใบกำกับเกินมูลค่าสุทธิ 39.36 (รอบยังไม่ paid) ⇒ ข้อตรวจครอบยอดจับได้ · ออกใบลดหนี้แล้วหาย', async () => {
+    const credit = await import('@/lib/credit-notes/queries')
+    const { loadTaxInvoiceCoverage } = await import('@/lib/sales/tax-invoice-coverage-queries')
+    const period = { start: TODAY, end: new Date(TODAY.getTime() + 86_400_000) }
+    await setNumbering({ seq: 3040 })
+    const batch = await seedBilling({ status: 'sent', grossSatang: 246_251, vatSatang: 17_238 })
+    await sales.syncSalesRecordFromBilling(ctx, batch.id)
+    const approvedDecrease = async (amountSatang: number, reason: string): Promise<string> => {
+      const rows = await db().$queryRawUnsafe<{ id: string }[]>(`
+        INSERT INTO adjustments (organization_id, adjustment_type, amount_satang, reason, status, billing_batch_id,
+                                 approved_by, approved_at, created_by)
+        VALUES ('${ORG_ID}', 'decrease', ${amountSatang}, $$${reason}$$, 'approved', '${batch.id}', '${ACCOUNTING_ID}', now(), '${ACCOUNTING_ID}')
+        RETURNING id
+      `)
+      return rows[0]?.id ?? ''
+    }
+    await approvedDecrease(10_000, 'SPC-0005 ลดก่อนรับเงิน')
+    const invoice = await sales.issueTaxInvoice(ctx, { cashReceiptId: await seedReceipt(batch.id, { amountSatang: 150_000 }) })
+    // สถานะตอนพบ issue: AR ค้าง 0.01 ⇒ ยังไม่ paid (ข้อตรวจเท่ากันพอดีไม่ตรวจรอบนี้)
+    await db().$executeRawUnsafe(
+      `UPDATE billing_batches SET status = 'partially_paid', received_satang = 150000 WHERE id = '${batch.id}'`,
+    )
+    const adjustmentId = await approvedDecrease(100_000, 'SPC-0031 ลดหลังรับเงินบางส่วน')
+
+    const { batchNumber } = await db().billingBatch.findUniqueOrThrow({ where: { id: batch.id }, select: { batchNumber: true } })
+    const before = await loadTaxInvoiceCoverage(ORG_ID, period)
+    expect(before.mismatches.some((row) => row.batchNumber === batchNumber)).toBe(false)
+    expect(before.overNetValue?.find((row) => row.batchNumber === batchNumber)).toEqual({
+      batchNumber,
+      netValueBeforeVatSatang: 136_251,
+      documentsBeforeVatSatang: 140_187,
+      excessBeforeVatSatang: 3_936,
+    })
+
+    await credit.createCreditNote(ctx, {
+      taxInvoiceId: invoice.id,
+      adjustmentId,
+      issueDate: TODAY,
+      reason: 'ลดส่วนที่ออกใบแล้วเกินมูลค่าใหม่',
+      creditNoteNumber: `H401-${RUN}`,
+      amountBeforeVatSatang: 3_936,
+    })
+    const after = await loadTaxInvoiceCoverage(ORG_ID, period)
+    expect(after.overNetValue?.some((row) => row.batchNumber === batchNumber)).toBe(false)
+  })
+
   it('รีวิว mytester3 #5 — เงินรับส่วนเพิ่มหนี้หลังใบปิดยอดของรอบที่รับครบ ⇒ ไม่นับ "รอออกใบ" (คำเตือน U95) · รอบที่ยังออกไม่ครบยังนับ', async () => {
     const { loadReceiptsAwaitingTaxInvoice } = await import('@/lib/sales/tax-invoice-coverage-queries')
     const tomorrow = new Date(TODAY.getTime() + 86_400_000)

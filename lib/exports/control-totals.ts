@@ -115,6 +115,9 @@ export const CONTROL_SUMMARY_ITEMS = {
     'กระทบใบกำกับกับเงินรับ: เงินรับ + ภาษีลูกค้าหัก + ค่าธรรมเนียมที่ตัด − ส่วนเกินที่ไม่ออกเอกสาร ของรอบเดียวกัน',
   tax_invoice_coverage_difference:
     'กระทบใบกำกับกับเงินรับ: ผลต่าง (ยอดรับชำระ − เอกสาร) ต้องเป็น 0 · จำนวนแถว = รอบที่ใบกำกับไม่ครอบยอด',
+  // mytester4 H4-01 — ทุกรอบที่มีใบกำกับ/เงินรับในงวด (ไม่จำกัดรับครบ)
+  tax_invoice_over_net_value:
+    'ใบกำกับเกินมูลค่าสุทธิ: ใบเสร็จรับเงิน/ใบกำกับภาษี − ใบลดหนี้ + ใบเพิ่มหนี้ ส่วนที่เกินมูลค่าหลังปรับปรุงยอดของรอบ (ก่อน VAT) ต้องเป็น 0 · จำนวนแถว = รอบที่เกิน',
 } as const
 
 export type ControlSummaryItem = keyof typeof CONTROL_SUMMARY_ITEMS
@@ -241,6 +244,8 @@ export function buildControlTotals(input: ControlTotalsInput): ControlTotalLine[
       coverage.settledSatang - coverage.overpaymentSatang,
     )
     summary('12', 'tax_invoice_coverage_difference', coverage.mismatches.length, coverage.differenceSatang)
+    const over = coverage.overNetValue ?? []
+    summary('12', 'tax_invoice_over_net_value', over.length, sum(over.map((row) => row.excessBeforeVatSatang)))
   }
 
   return lines

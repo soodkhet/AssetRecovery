@@ -4,6 +4,8 @@ import {
   evaluateTaxInvoiceCoverage,
   receiptAwaitsTaxInvoice,
   taxInvoiceCoverageWarning,
+  taxInvoiceExcessOverNetValue,
+  taxInvoiceOverNetValueWarning,
   type TaxInvoiceCoverageBatch,
 } from '@/lib/sales/tax-invoice-coverage'
 
@@ -41,6 +43,7 @@ describe('evaluateTaxInvoiceCoverage', () => {
       overpaymentSatang: 0,
       differenceSatang: 0,
       mismatches: [],
+      overNetValue: [],
     })
     expect(taxInvoiceCoverageWarning(result)).toBeNull()
   })
@@ -192,5 +195,98 @@ describe('mytester4 G4-03 — การ์ด "ยังไม่ออกใบ
         item({ coveredByLegacyInvoice: true }),
       ]),
     ).toBe(1)
+  })
+})
+
+describe('mytester4 H4-01 — ใบกำกับเกินมูลค่าสุทธิของรอบ (ทุกรอบ ไม่จำกัดรับครบ)', () => {
+  // BL-2569-003 SPC: ใบแจ้งหนี้ 2,462.51 + 172.38 · ลด 100 + 1,000 ⇒ มูลค่าสุทธิ 1,362.51 · ใบรับ 1,500 = 1,401.87 + 98.13
+  // R = 1,060.64 + 74.25 ⇒ ยอดตามเอกสาร 1,500 = รับแล้ว · ส่วนเกิน 39.36 (+2.76) ยังไม่มีใบลดหนี้
+  const spc = (overrides: Partial<TaxInvoiceCoverageBatch> = {}): TaxInvoiceCoverageBatch =>
+    batch({
+      batchNumber: 'BL-2569-003',
+      invoiced: { beforeVatSatang: 246_251, vatSatang: 17_238, totalSatang: 263_489 },
+      creditNotes: { beforeVatSatang: 0, vatSatang: 0, totalSatang: 0 },
+      debitNotes: { beforeVatSatang: 0, vatSatang: 0, totalSatang: 0 },
+      taxInvoices: { beforeVatSatang: 140_187, vatSatang: 9_813, totalSatang: 150_000 },
+      uninvoicedReduction: { beforeVatSatang: 106_064, vatSatang: 7_425, totalSatang: 113_489 },
+      receivedSatang: 150_000,
+      customerWhtSatang: 0,
+      fullyPaid: false,
+      netValueBeforeVatSatang: 246_251 - 110_000,
+      ...overrides,
+    })
+
+  it('ค้าง AR 0.01 (ยังไม่รับครบ) ⇒ ข้อตรวจเท่ากันพอดีข้าม แต่จับใบกำกับเกิน 39.36 ⇒ เตือน', () => {
+    const result = evaluateTaxInvoiceCoverage([spc()])
+    expect(result.checkedCount).toBe(0)
+    expect(result.mismatches).toEqual([])
+    expect(result.overNetValue).toEqual([
+      { batchNumber: 'BL-2569-003', netValueBeforeVatSatang: 136_251, documentsBeforeVatSatang: 140_187, excessBeforeVatSatang: 3_936 },
+    ])
+    const warning = taxInvoiceOverNetValueWarning(result)
+    expect(warning).toContain('1 รอบ')
+    expect(warning).toContain('BL-2569-003 เกิน ฿39.36 ก่อนภาษี')
+    expect(warning).toContain('ปิดงวดได้')
+    expect(warning).not.toMatch(/§|`\d/)
+  })
+
+  it('รับครบแล้ว (ยอดตามเอกสาร = รับ) ⇒ ข้อตรวจเท่ากันพอดีผ่าน แต่ยังจับใบกำกับเกินได้', () => {
+    const result = evaluateTaxInvoiceCoverage([spc({ fullyPaid: true })])
+    expect(result.checkedCount).toBe(1)
+    expect(result.mismatches).toEqual([])
+    expect(result.overNetValue).toHaveLength(1)
+  })
+
+  it('ออกใบลดหนี้ส่วนเกิน 39.36 แล้ว ⇒ เอกสารสุทธิ = มูลค่าสุทธิ ⇒ ไม่เตือน', () => {
+    const result = evaluateTaxInvoiceCoverage([
+      spc({ creditNotes: { beforeVatSatang: 3_936, vatSatang: 275, totalSatang: 4_211 } }),
+    ])
+    expect(result.overNetValue).toEqual([])
+    expect(taxInvoiceOverNetValueWarning(result)).toBeNull()
+  })
+
+  it('ใบกำกับต่ำกว่ามูลค่าสุทธิ (ยังรับไม่ครบ) / ไม่มีใบ / ไม่ส่งมูลค่าสุทธิ ⇒ ไม่เตือน', () => {
+    expect(taxInvoiceExcessOverNetValue(spc({ netValueBeforeVatSatang: 200_000 }))).toBeNull()
+    expect(taxInvoiceExcessOverNetValue(spc({ taxInvoices: ZERO }))).toBeNull()
+    expect(taxInvoiceExcessOverNetValue(spc({ netValueBeforeVatSatang: undefined }))).toBeNull()
+    expect(taxInvoiceOverNetValueWarning(undefined)).toBeNull()
+  })
+
+  it('ใบเพิ่มหนี้บวกทั้งสองฝั่ง ⇒ เพิ่มยอดที่มีใบเพิ่มหนี้ไม่ทำให้เกิน', () => {
+    const result = evaluateTaxInvoiceCoverage([
+      spc({
+        creditNotes: { beforeVatSatang: 3_936, vatSatang: 275, totalSatang: 4_211 },
+        debitNotes: { beforeVatSatang: 5_000, vatSatang: 350, totalSatang: 5_350 },
+        netValueBeforeVatSatang: 246_251 - 110_000 + 5_000,
+      }),
+    ])
+    expect(result.overNetValue).toEqual([])
+  })
+
+  it('อัตรา VAT ของใบต่างจากใบแจ้งหนี้ ⇒ เทียบก่อน VAT ไม่ขึ้นกับ VAT ของใบ', () => {
+    // ใบแจ้งหนี้ 1,000 (7%) · ลด 100 ⇒ มูลค่าสุทธิ 900 · ใบรับหลังอัตราเป็น 10% = 950 + 95
+    const over = spc({
+      invoiced: { beforeVatSatang: 100_000, vatSatang: 7_000, totalSatang: 107_000 },
+      taxInvoices: { beforeVatSatang: 95_000, vatSatang: 9_500, totalSatang: 104_500 },
+      uninvoicedReduction: undefined,
+      vatRateDiffers: true,
+      netValueBeforeVatSatang: 90_000,
+    })
+    expect(taxInvoiceExcessOverNetValue(over)?.excessBeforeVatSatang).toBe(5_000)
+    expect(taxInvoiceExcessOverNetValue({ ...over, taxInvoices: { beforeVatSatang: 90_000, vatSatang: 9_000, totalSatang: 99_000 } })).toBeNull()
+  })
+
+  it('รอบที่ข้อตรวจเท่ากันพอดีจับแล้ว ⇒ ไม่ซ้ำใน overNetValue · รอบที่ไม่มีเงินรับในงวด ⇒ ตรวจเฉพาะเกินมูลค่าสุทธิ', () => {
+    const exact = batch({
+      taxInvoices: { beforeVatSatang: 300_000, vatSatang: 21_000, totalSatang: 321_000 },
+      creditNotes: { beforeVatSatang: 18_692, vatSatang: 1_308, totalSatang: 20_000 },
+      netValueBeforeVatSatang: 268_462,
+    })
+    const first = evaluateTaxInvoiceCoverage([exact])
+    expect(first.mismatches).toHaveLength(1)
+    expect(first.overNetValue).toEqual([])
+    const late = evaluateTaxInvoiceCoverage([spc({ fullyPaid: true, receivedInPeriod: false })])
+    expect(late.checkedCount).toBe(0)
+    expect(late.overNetValue).toHaveLength(1)
   })
 })

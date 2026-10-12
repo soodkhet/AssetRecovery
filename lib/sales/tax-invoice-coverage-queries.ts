@@ -20,7 +20,15 @@ export async function loadTaxInvoiceCoverage(
     where: {
       organizationId,
       deletedAt: null,
-      cashReceipts: { some: { receivedDate: { gte: period.start, lt: period.end } } },
+      // mytester4 H4-01 — รวมรอบที่มีใบกำกับลงวันที่ในงวด (ตรวจใบกำกับเกินมูลค่าสุทธิ แม้ยังรับไม่ครบ)
+      OR: [
+        { cashReceipts: { some: { receivedDate: { gte: period.start, lt: period.end } } } },
+        {
+          salesRecord: {
+            taxInvoices: { some: { status: 'active', invoiceDate: { gte: period.start, lt: period.end } } },
+          },
+        },
+      ],
     },
     orderBy: [{ batchNumber: 'asc' }],
     select: {
@@ -40,14 +48,31 @@ export async function loadTaxInvoiceCoverage(
         },
       },
       revenues: { where: { deletedAt: null }, select: { vatRatePctUsed: true } },
-      cashReceipts: { select: { taxInvoices: { where: { status: 'active' }, select: { id: true } } } },
+      cashReceipts: { select: { receivedDate: true, taxInvoices: { where: { status: 'active' }, select: { id: true } } } },
     },
   })
   if (batches.length === 0) return evaluateTaxInvoiceCoverage([])
-  const documented = await documentedAmountsForBatches(
-    organizationId,
-    batches.map((batch) => batch.id),
-  )
+  const batchIds = batches.map((batch) => batch.id)
+  const [documented, adjustments] = await Promise.all([
+    documentedAmountsForBatches(organizationId, batchIds),
+    // mytester4 H4-01 — มูลค่าสุทธิของรอบ = ใบแจ้งหนี้ − ลดยอด + เพิ่มยอด (Adjustment approved ระดับรอบ + ระดับรายได้ในรอบ)
+    prisma.adjustment.findMany({
+      where: {
+        organizationId,
+        status: 'approved',
+        adjustmentType: { in: ['decrease', 'increase'] },
+        OR: [{ billingBatchId: { in: batchIds } }, { revenue: { billingBatchId: { in: batchIds } } }],
+      },
+      select: { adjustmentType: true, amountSatang: true, billingBatchId: true, revenue: { select: { billingBatchId: true } } },
+    }),
+  ])
+  const adjustmentNet = new Map<string, number>()
+  for (const row of adjustments) {
+    const batchId = row.billingBatchId ?? row.revenue?.billingBatchId ?? null
+    if (batchId === null) continue
+    const signed = row.adjustmentType === 'decrease' ? -row.amountSatang : row.amountSatang
+    adjustmentNet.set(batchId, (adjustmentNet.get(batchId) ?? 0) + signed)
+  }
 
   const rows: TaxInvoiceCoverageBatch[] = batches.flatMap((batch) => {
     const amounts = documented.get(batch.id)
@@ -70,8 +95,8 @@ export async function loadTaxInvoiceCoverage(
           vatSatang: amounts.invoiced.vatSatang,
           totalSatang: amounts.invoiced.totalSatang,
         },
-        creditNotes: { vatSatang: amounts.creditNotes.vatSatang, totalSatang: amounts.creditNotes.totalSatang },
-        debitNotes: { vatSatang: amounts.debitNotes.vatSatang, totalSatang: amounts.debitNotes.totalSatang },
+        creditNotes: amounts.creditNotes,
+        debitNotes: amounts.debitNotes,
         taxInvoices: {
           beforeVatSatang: invoicedBeforeVat,
           vatSatang: invoices.reduce((sum, invoice) => sum + invoice.vatSatang, 0),
@@ -93,6 +118,10 @@ export async function loadTaxInvoiceCoverage(
         ),
         vatRateDiffers,
         uninvoicedReduction: amounts.uninvoicedReduction,
+        receivedInPeriod: batch.cashReceipts.some(
+          (receipt) => receipt.receivedDate >= period.start && receipt.receivedDate < period.end,
+        ),
+        netValueBeforeVatSatang: amounts.invoiced.beforeVatSatang + (adjustmentNet.get(batch.id) ?? 0),
       },
     ]
   })

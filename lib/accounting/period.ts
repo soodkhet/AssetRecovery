@@ -8,7 +8,11 @@ import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
 import type { AccountingPeriodStatus, PayoutBatchStatus } from '@/lib/generated/prisma/enums'
 import { PAYOUT_STATUS_LABEL_SHORT } from '@/lib/payout/payout-ui'
 import { isDirectEditRejected, periodLockPolicyFor } from '@/lib/settings/period-lock'
-import { taxInvoiceCoverageWarning, type TaxInvoiceCoverageResult } from '@/lib/sales/tax-invoice-coverage'
+import {
+  taxInvoiceCoverageWarning,
+  taxInvoiceOverNetValueWarning,
+  type TaxInvoiceCoverageResult,
+} from '@/lib/sales/tax-invoice-coverage'
 
 /**
  * กติกาของรอบบัญชี (ไฟล์ 30) — **pure ล้วน ไม่มี I/O** ใช้ร่วม FE/BE
@@ -557,6 +561,9 @@ export function evaluateReadiness(input: ReadinessInput): ReadinessResult {
   if (costCenterWarning !== null) warnings.push(costCenterWarning)
   const coverageWarning = taxInvoiceCoverageWarning(input.taxInvoiceCoverage)
   if (coverageWarning !== null) warnings.push(coverageWarning)
+  // mytester4 H4-01 — ใบกำกับเกินมูลค่าสุทธิของรอบ (ทุกรอบที่มีใบกำกับ/เงินรับในงวด ไม่จำกัดรับครบ)
+  const overNetValueWarning = taxInvoiceOverNetValueWarning(input.taxInvoiceCoverage)
+  if (overNetValueWarning !== null) warnings.push(overNetValueWarning)
 
   return {
     ready: checks.every((check) => check.passed),
