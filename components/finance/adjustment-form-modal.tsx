@@ -23,6 +23,7 @@ import {
   targetSearchState,
 } from '@/lib/adjustments/adjustment-ui'
 import type { AdjustmentDto, AdjustmentTargetDto } from '@/lib/adjustments/types'
+import { CREDIT_NOTE_EXCESS_HINT } from '@/components/finance/credit-note-waive'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { fmtDate } from '@/lib/format/datetime'
 import { fmtSatangSymbol, parseBahtInput } from '@/lib/format/money'
@@ -142,6 +143,10 @@ export function AdjustmentFormModal({
         description:
           'หลังอนุมัติ ให้สำนักงานบัญชีจัดการใบลดหนี้/คืนเงินนอกระบบ แล้วฝ่ายบัญชีกด "จัดการนอกระบบ" ที่ใบกำกับในแท็บ "รายได้และขาย" ของเมนูบัญชี',
       })
+    }
+    // mytester4 LR4-01 — บิลชำระครบแต่ใบลดหนี้ส่วนเกินบันทึกในระบบได้ (ไม่ใช่นอกระบบ)
+    if (result.data?.targetBillFullyPaid !== true && result.data?.targetBillCreditNoteExcess === true) {
+      showToast({ tone: 'info', title: 'หลังอนุมัติ บันทึกใบลดหนี้ส่วนเกินในระบบ', description: CREDIT_NOTE_EXCESS_HINT })
     }
     onCreated()
     close()

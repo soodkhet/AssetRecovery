@@ -15,6 +15,7 @@ import {
   type PeriodKey,
 } from '@/lib/adjustments/adjustment'
 import { AdjustmentError } from '@/lib/adjustments/errors'
+import { creditNoteExcessRecordable, creditNoteOffSystemOnly } from '@/lib/credit-notes/credit-note'
 import type {
   AdjustmentApproveInput,
   AdjustmentCreateInput,
@@ -380,7 +381,7 @@ function targetTextOf(row: AdjustmentRow, targetType: AdjustmentTargetType): { r
 function toDto(
   row: AdjustmentRow,
   approvedRoles: readonly string[],
-  paidBills: ReadonlySet<string> = new Set(),
+  paidBills: ReadonlyMap<string, PaidBillState> = new Map(),
   recoveries: ReadonlyMap<string, { amountSatang: number; outstandingSatang: number }> = new Map(),
 ): AdjustmentDto {
   const { targetType, targetId } = adjustmentTargetOf(row)
@@ -409,10 +410,31 @@ function toDto(
     approvedAt: row.approvedAt === null ? null : toIso(row.approvedAt),
     createdAt: toIso(row.createdAt),
     createdByName: row.createdByUser.fullName,
-    targetBillFullyPaid: decreaseBillingBatchIdOf(row) !== null && paidBills.has(decreaseBillingBatchIdOf(row)!),
+    ...paidBillFlags(row, paidBills),
     creditNoteWaivedAt: row.creditNoteWaivedAt === null ? null : toIso(row.creditNoteWaivedAt),
     creditNoteWaiveReason: row.creditNoteWaiveReason,
     recovery: recoveries.get(row.id) ?? null,
+  }
+}
+
+/**
+ * staging E-016 + mytester4 LR4-01 — `targetBillFullyPaid` = ออกใบลดหนี้ในระบบไม่ได้จริง (นอกระบบเท่านั้น) ·
+ * `targetBillCreditNoteExcess` = บิลชำระครบแต่ยังบันทึกใบลดหนี้ส่วนเกินในระบบได้ (มติ G4-01) — ไม่แนะนำ "จัดการนอกระบบ"
+ */
+function paidBillFlags(
+  row: AdjustmentRow,
+  paidBills: ReadonlyMap<string, PaidBillState>,
+): Pick<AdjustmentDto, 'targetBillFullyPaid' | 'targetBillCreditNoteExcess'> {
+  const batchId = decreaseBillingBatchIdOf(row)
+  const state = batchId === null ? undefined : paidBills.get(batchId)
+  if (state === undefined) return { targetBillFullyPaid: false, targetBillCreditNoteExcess: false }
+  return {
+    targetBillFullyPaid: creditNoteOffSystemOnly(state),
+    targetBillCreditNoteExcess: creditNoteExcessRecordable({
+      ...state,
+      pending: row.status === 'pending_approval',
+      amountSatang: row.amountSatang,
+    }),
   }
 }
 
@@ -426,15 +448,36 @@ function decreaseBillingBatchIdOf(row: AdjustmentRow): string | null {
  * staging E-016 (มติ PO 10/10/2569) — รอบวางบิลที่ยอดค้างตามเอกสาร = 0 (ชำระครบ) ของรายการลดยอด ⇒ หน้าจอเตือนตอน
  * สร้าง/อนุมัติว่าออกใบลดหนี้ในระบบไม่ได้ (U171) ต้องจัดการคืนเงินนอกระบบ · สูตรยอดค้างตัวเดียวกับ U171
  */
-async function fullyPaidBills(organizationId: string, rows: readonly AdjustmentRow[]): Promise<Set<string>> {
+async function fullyPaidBills(organizationId: string, rows: readonly AdjustmentRow[]): Promise<Map<string, PaidBillState>> {
+  const result = new Map<string, PaidBillState>()
   const ids = [...new Set(rows.map(decreaseBillingBatchIdOf).filter((id): id is string => id !== null))]
-  if (ids.length === 0) return new Set()
+  if (ids.length === 0) return result
   const batches = await prisma.billingBatch.findMany({
     where: { organizationId, id: { in: ids } },
     select: { id: true, totalSatang: true, receivedSatang: true, whtWithheldByCustomerSatang: true, bankFeeWrittenOffSatang: true },
   })
-  const outstanding = await documentedOutstandingByBatch(organizationId, batches)
-  return new Set(batches.filter((batch) => (outstanding.get(batch.id) ?? 0) <= 0).map((batch) => batch.id))
+  const [outstanding, documented] = await Promise.all([
+    documentedOutstandingByBatch(organizationId, batches),
+    documentedAmountsForBatches(organizationId, ids),
+  ])
+  for (const batch of batches) {
+    const billOutstandingSatang = outstanding.get(batch.id) ?? 0
+    if (billOutstandingSatang > 0) continue
+    const reduction = documented.get(batch.id)?.uninvoicedReduction
+    result.set(batch.id, {
+      billOutstandingSatang,
+      allowanceBeforeVatSatang: reduction?.creditNoteAllowanceBeforeVatSatang ?? null,
+      remainingUninvoicedBeforeVatSatang: reduction?.remainingBeforeVatSatang ?? 0,
+    })
+  }
+  return result
+}
+
+/** mytester4 LR4-01 — รอบที่ยอดค้างตามเอกสาร ≤ 0 + เพดานใบลดหนี้ส่วนเกินของรอบ (แยก "นอกระบบ" กับ "บันทึกใบลดหนี้ส่วนเกิน") */
+interface PaidBillState {
+  billOutstandingSatang: number
+  allowanceBeforeVatSatang: number | null
+  remainingUninvoicedBeforeVatSatang: number
 }
 
 // ── ทะเบียนผู้อนุมัติ (อ่านจาก audit log — immutable + append-only) ──────────

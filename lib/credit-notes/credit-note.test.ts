@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   adjustmentAmountMismatch,
   canWaiveAwaitingCreditNote,
+  creditNoteExcessRecordable,
+  creditNoteOffSystemOnly,
   closingCreditNoteVatSatang,
   assertAdjustmentLinkable,
   assertCreditNoteCancellable,
@@ -202,10 +204,34 @@ describe('มติ PO U171 — เพดานยอดค้างตามเ
 
 describe('canWaiveAwaitingCreditNote (staging E-016)', () => {
   it('ปิดป้ายได้เฉพาะรอใบลดหนี้ของบิลที่ไม่มียอดค้าง', () => {
-    expect(canWaiveAwaitingCreditNote({ noteType: 'credit', billOutstandingSatang: 0 })).toBe(true)
-    expect(canWaiveAwaitingCreditNote({ noteType: 'credit', billOutstandingSatang: 1 })).toBe(false)
-    expect(canWaiveAwaitingCreditNote({ noteType: 'debit', billOutstandingSatang: 0 })).toBe(false)
-    expect(canWaiveAwaitingCreditNote({ noteType: null, billOutstandingSatang: 0 })).toBe(false)
+    expect(canWaiveAwaitingCreditNote({ noteType: 'credit', billOutstandingSatang: 0, allowanceBeforeVatSatang: null })).toBe(true)
+    expect(canWaiveAwaitingCreditNote({ noteType: 'credit', billOutstandingSatang: 1, allowanceBeforeVatSatang: null })).toBe(false)
+    expect(canWaiveAwaitingCreditNote({ noteType: 'debit', billOutstandingSatang: 0, allowanceBeforeVatSatang: null })).toBe(false)
+    expect(canWaiveAwaitingCreditNote({ noteType: null, billOutstandingSatang: 0, allowanceBeforeVatSatang: null })).toBe(false)
+  })
+})
+
+describe('mytester4 LR4-01 — บิลชำระครบ: นอกระบบ vs ใบลดหนี้ส่วนเกิน', () => {
+  it('รอบที่ยังมีมูลค่าไม่ออกใบ (allowance ≠ null) ⇒ ไม่ใช่นอกระบบ + ปิดป้ายนอกระบบไม่ได้', () => {
+    expect(creditNoteOffSystemOnly({ billOutstandingSatang: -10_845, allowanceBeforeVatSatang: 10_136 })).toBe(false)
+    expect(creditNoteOffSystemOnly({ billOutstandingSatang: 0, allowanceBeforeVatSatang: 0 })).toBe(false)
+    expect(canWaiveAwaitingCreditNote({ noteType: 'credit', billOutstandingSatang: -10_845, allowanceBeforeVatSatang: 10_136 })).toBe(false)
+  })
+  it('ใบกำกับครบรอบ/แบบเดิม (allowance = null) + ชำระครบ ⇒ นอกระบบตามเดิม', () => {
+    expect(creditNoteOffSystemOnly({ billOutstandingSatang: 0, allowanceBeforeVatSatang: null })).toBe(true)
+    expect(creditNoteOffSystemOnly({ billOutstandingSatang: 1, allowanceBeforeVatSatang: null })).toBe(false)
+  })
+  it('อนุมัติแล้ว: ยังเหลือเพดาน ⇒ บอกให้บันทึกใบลดหนี้ · บันทึกครบ (allowance 0) ⇒ ไม่มีข้อความค้าง', () => {
+    const base = { billOutstandingSatang: -10_845, remainingUninvoicedBeforeVatSatang: 0, pending: false, amountSatang: 150_011 }
+    expect(creditNoteExcessRecordable({ ...base, allowanceBeforeVatSatang: 10_136 })).toBe(true)
+    expect(creditNoteExcessRecordable({ ...base, allowanceBeforeVatSatang: 0 })).toBe(false)
+    expect(creditNoteExcessRecordable({ ...base, allowanceBeforeVatSatang: null })).toBe(false)
+    expect(creditNoteExcessRecordable({ ...base, billOutstandingSatang: 1, allowanceBeforeVatSatang: 10_136 })).toBe(false)
+  })
+  it('รออนุมัติ: เกินมูลค่าที่ยังไม่ออกใบที่เหลือ ⇒ จะต้องบันทึกใบลดหนี้ส่วนเกิน · อยู่ในส่วนที่ยังไม่ออกใบทั้งหมด ⇒ ไม่ต้อง', () => {
+    const base = { billOutstandingSatang: 0, allowanceBeforeVatSatang: 0, remainingUninvoicedBeforeVatSatang: 139_875, pending: true }
+    expect(creditNoteExcessRecordable({ ...base, amountSatang: 150_011 })).toBe(true)
+    expect(creditNoteExcessRecordable({ ...base, amountSatang: 139_875 })).toBe(false)
   })
 })
 

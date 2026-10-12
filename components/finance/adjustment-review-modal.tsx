@@ -9,6 +9,7 @@ import {
   periodStatusLabel,
 } from '@/lib/adjustments/adjustment-ui'
 import type { AdjustmentDto } from '@/lib/adjustments/types'
+import { CREDIT_NOTE_EXCESS_HINT } from '@/components/finance/credit-note-waive'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { fmtSatangSymbol } from '@/lib/format/money'
 
@@ -108,6 +109,12 @@ export function AdjustmentReviewModal({
           <InlineAlert tone="warning" title="บิลนี้ชำระครบแล้ว — ออกใบลดหนี้ในระบบไม่ได้">
             อนุมัติได้ แต่ใบลดหนี้/การคืนเงินลูกค้าต้องให้สำนักงานบัญชีจัดการนอกระบบ แล้วฝ่ายบัญชีกด &quot;จัดการนอกระบบ&quot;
             ที่ใบกำกับในแท็บ &quot;รายได้และขาย&quot; ของเมนูบัญชี เพื่อปิดป้ายรอใบลดหนี้
+          </InlineAlert>
+        )}
+        {/* mytester4 LR4-01 — บิลชำระครบแต่ใบลดหนี้ส่วนเกินบันทึกในระบบได้ */}
+        {mode === 'approve' && adjustment.targetBillFullyPaid !== true && adjustment.targetBillCreditNoteExcess === true && (
+          <InlineAlert tone="info" title="หลังอนุมัติ บันทึกใบลดหนี้ส่วนเกินในระบบ">
+            {CREDIT_NOTE_EXCESS_HINT}
           </InlineAlert>
         )}
         {locked && (

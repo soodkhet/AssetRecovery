@@ -235,6 +235,7 @@ export function AdjustmentTab() {
                       <CreditNoteWaiveNotice
                         awaiting={awaitingInvoiceOf.get(row.id)}
                         targetBillFullyPaid={row.targetBillFullyPaid === true}
+                        creditNoteExcess={row.targetBillCreditNoteExcess === true}
                         waivedAt={row.creditNoteWaivedAt ?? null}
                         waiveReason={row.creditNoteWaiveReason ?? null}
                         onWaived={() => {

@@ -11,6 +11,11 @@ import type { AwaitingCreditNoteDto } from '@/lib/credit-notes/types'
 import { fmtDateTime } from '@/lib/format/datetime'
 import { UNINVOICED_REDUCTION_WAIVE_REASON } from '@/lib/sales/uninvoiced-reduction'
 
+/** mytester4 LR4-01 — ข้อความเมื่อบิลชำระครบแต่ยังบันทึกใบลดหนี้ส่วนเกินในระบบได้ (ใช้ในแถว/ฟอร์ม/อนุมัติ) */
+export const CREDIT_NOTE_EXCESS_HINT =
+  'บิลนี้ชำระแล้ว — ส่วนที่ลดลงไปในยอดที่ออกใบกำกับภาษีแล้วต้องบันทึกใบลดหนี้ในระบบ ' +
+  'ที่ใบกำกับในแท็บ "รายได้และขาย" ของเมนูบัญชี (ไม่ต้องจัดการนอกระบบ)'
+
 /**
  * staging E-016 (มติ PO 10/10/2569) — ลดยอดของบิลที่ชำระครบแล้ว: บอกว่าออกใบลดหนี้ในระบบไม่ได้ + ปุ่ม "จัดการนอกระบบ"
  * (ปิดป้ายรอใบลดหนี้พร้อมเหตุผล) · ปุ่มเห็นเฉพาะผู้บันทึกใบลดหนี้ได้ — API ตรวจสิทธิ์/เงื่อนไขซ้ำเสมอ (DEC-002)
@@ -18,12 +23,15 @@ import { UNINVOICED_REDUCTION_WAIVE_REASON } from '@/lib/sales/uninvoiced-reduct
 export function CreditNoteWaiveNotice({
   awaiting,
   targetBillFullyPaid,
+  creditNoteExcess = false,
   waivedAt,
   waiveReason,
   onWaived,
 }: {
   awaiting: AwaitingCreditNoteDto | undefined
   targetBillFullyPaid: boolean
+  /** mytester4 LR4-01 — บิลชำระครบแต่ยังบันทึกใบลดหนี้ส่วนเกินในระบบได้ ⇒ บอกให้บันทึกใบลดหนี้ (ไม่ใช่นอกระบบ) */
+  creditNoteExcess?: boolean
   waivedAt: string | null
   waiveReason: string | null
   onWaived: () => void
@@ -43,6 +51,9 @@ export function CreditNoteWaiveNotice({
         {waiveReason !== null && ` — ${waiveReason}`}
       </p>
     )
+  }
+  if (creditNoteExcess && !targetBillFullyPaid) {
+    return <p className="mt-1 text-[10px] text-amber-700">{CREDIT_NOTE_EXCESS_HINT}</p>
   }
   if (!targetBillFullyPaid) return null
 

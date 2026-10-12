@@ -502,8 +502,39 @@ export function isAwaitingCreditNote(input: {
  * staging E-016 (มติ PO 10/10/2569) — ปิดป้าย "รอใบลดหนี้" เป็น "จัดการนอกระบบ" ได้ไหม: รอใบลดหนี้อยู่จริง (ลดยอด)
  * และบิลไม่มียอดค้างตามเอกสารแล้ว (ชำระครบ ⇒ บันทึกใบลดหนี้ในระบบไม่ได้ตาม U171) · ยังมียอดค้าง = ต้องออกใบลดหนี้ตามปกติ
  */
-export function canWaiveAwaitingCreditNote(input: { noteType: CreditNoteType | null; billOutstandingSatang: number }): boolean {
-  return input.noteType === 'credit' && input.billOutstandingSatang <= 0
+export function canWaiveAwaitingCreditNote(input: {
+  noteType: CreditNoteType | null
+  billOutstandingSatang: number
+  /** mytester4 LR4-01 — `creditNoteAllowanceBeforeVatSatang` ของรอบ (`uninvoicedReductionOf()`) */
+  allowanceBeforeVatSatang: number | null
+}): boolean {
+  return input.noteType === 'credit' && creditNoteOffSystemOnly(input)
+}
+
+/**
+ * mytester4 LR4-01 — บิลชำระครบแล้ว "ออกใบลดหนี้ในระบบไม่ได้ ต้องจัดการนอกระบบ" (E-016) จริงไหม: ยอดค้างตามเอกสาร ≤ 0
+ * **และ** เพดานยอดค้าง (U171) คุมใบลดหนี้ของรอบนี้ (`allowance = null` — ใบกำกับแบบเดิม/ออกใบครบรอบแล้ว) ·
+ * รอบที่ยังมีมูลค่าไม่ออกใบ (allowance ≠ null) ⇒ ใบลดหนี้ส่วนเกินบันทึกในระบบได้ (มติ G4-01) หรือไม่ต้องออกเลย — ห้ามแนะนำนอกระบบ
+ */
+export function creditNoteOffSystemOnly(input: { billOutstandingSatang: number; allowanceBeforeVatSatang: number | null }): boolean {
+  return input.billOutstandingSatang <= 0 && creditNoteCappedByOutstanding(input.allowanceBeforeVatSatang)
+}
+
+/**
+ * mytester4 LR4-01 — รายการลดยอดของบิลที่ชำระครบแล้วแต่ยังบันทึก "ใบลดหนี้ส่วนเกิน" ในระบบได้ (มติ G4-01) ⇒ หน้าจอบอกให้บันทึกใบลดหนี้
+ * · `amountSatang`/`pending` = รายการที่ยังไม่อนุมัติ (ยอดยังไม่นับในรอบ ⇒ เกินมูลค่าที่ยังไม่ออกใบที่เหลือไหม)
+ * · อนุมัติแล้ว ⇒ ยังเหลือเพดานใบลดหนี้ส่วนเกิน (บันทึกครบแล้ว allowance = 0 ⇒ `false` ไม่มีข้อความค้าง)
+ */
+export function creditNoteExcessRecordable(input: {
+  billOutstandingSatang: number
+  allowanceBeforeVatSatang: number | null
+  remainingUninvoicedBeforeVatSatang: number
+  pending: boolean
+  amountSatang: number
+}): boolean {
+  if (input.billOutstandingSatang > 0 || input.allowanceBeforeVatSatang === null) return false
+  if (input.pending) return input.amountSatang > input.remainingUninvoicedBeforeVatSatang
+  return input.allowanceBeforeVatSatang > 0
 }
 
 /** เหตุผลบังคับ (บันทึก/ยกเลิก) — คืนค่าที่ trim แล้ว · ว่าง = `CANCEL_REQUIRES_REASON` สำหรับการยกเลิก */

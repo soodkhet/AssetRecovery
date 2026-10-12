@@ -760,7 +760,14 @@ suite('มติ PO U95 — รับเงิน ⇒ ใบเสร็จร�
     expect(before?.documented.totalSatang).toBe(150_000)
     const batchRow = await db().billingBatch.findUniqueOrThrow({ where: { id: batch.id } })
     expect((await documentedOutstandingByBatch(ORG_ID, [batchRow])).get(batch.id)).toBe(0)
-    expect((await credit.listAdjustmentsAwaitingCreditNote(accountant)).some((row) => row.adjustmentId === adjustmentId)).toBe(true)
+    // mytester4 LR4-01 — บิลชำระครบแต่ใบลดหนี้ส่วนเกินบันทึกในระบบได้ ⇒ ไม่เสนอ "จัดการนอกระบบ" · แถวปรับปรุงบอกให้บันทึกใบลดหนี้
+    const awaitingRow = (await credit.listAdjustmentsAwaitingCreditNote(accountant)).find((row) => row.adjustmentId === adjustmentId)
+    expect(awaitingRow?.canWaive).toBe(false)
+    await expectCode(() => credit.waiveAwaitingCreditNote(ctx, adjustmentId, { reason: 'จัดการนอกระบบ' }), 'CREDIT_NOTE_WAIVE_NOT_ALLOWED')
+    const adjustmentsModule = await import('@/lib/adjustments/queries')
+    const adjustmentRowOf = async () =>
+      (await adjustmentsModule.listAdjustments(accountant, { status: 'all' })).find((row) => row.id === adjustmentId)
+    expect(await adjustmentRowOf()).toMatchObject({ targetBillFullyPaid: false, targetBillCreditNoteExcess: true })
     const listed = (await sales.listSalesRecords(accountant, {})).items.find((item) => item.billingBatchId === batch.id)
     expect(listed?.creditNoteAllowanceBeforeVatSatang).toBe(3_936)
     // mytester4 — VAT ที่ระบบเสนอแบบส่วนต่าง: 98.13 − round(1,362.51 × 7%) = 2.75
@@ -786,6 +793,8 @@ suite('มติ PO U95 — รับเงิน ⇒ ใบเสร็จร�
     expect((await documentedOutstandingByBatch(ORG_ID, [afterRow])).get(batch.id)).toBe(-4_211)
     expect(afterRow.status).toBe('paid')
     expect((await credit.listAdjustmentsAwaitingCreditNote(accountant)).some((row) => row.adjustmentId === adjustmentId)).toBe(false)
+    // mytester4 LR4-01 — บันทึกใบลดหนี้ครบแล้ว ⇒ ไม่มีข้อความ "ชำระครบ/นอกระบบ" หรือ "บันทึกใบลดหนี้" ค้างที่แถว
+    expect(await adjustmentRowOf()).toMatchObject({ targetBillFullyPaid: false, targetBillCreditNoteExcess: false })
   })
 
   it('รีวิว mytester4 — BL-2569-003: ยกเลิกใบลดหนี้ส่วนเกินแล้วบันทึกใหม่ ⇒ ส่วนที่บันทึกได้กลับมา · VAT ส่วนต่างเดิม · ยอดตามเอกสารเท่าเดิม', async () => {

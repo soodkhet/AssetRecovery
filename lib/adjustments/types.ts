@@ -38,6 +38,11 @@ export interface AdjustmentDto {
   createdByName: string
   /** staging E-016 — ลดยอดของรอบวางบิลที่ชำระครบแล้ว ⇒ ออกใบลดหนี้ในระบบไม่ได้ (U171) ต้องจัดการคืนเงินนอกระบบ */
   targetBillFullyPaid?: boolean
+  /**
+   * mytester4 LR4-01 — ลดยอดของบิลที่ชำระครบแล้ว แต่ยังบันทึกใบลดหนี้ส่วนเกิน (ส่วนที่ลดลงไปในยอดที่ออกใบกำกับแล้ว) ในระบบได้
+   * ⇒ บอกให้บันทึกใบลดหนี้ ไม่ใช่จัดการนอกระบบ · บันทึกครบแล้ว = `false`
+   */
+  targetBillCreditNoteExcess?: boolean
   /** staging E-016 — ปิดป้าย "รอใบลดหนี้" เป็น "จัดการนอกระบบ" เมื่อไร + เหตุผล · ยังไม่ปิด = `null` */
   creditNoteWaivedAt?: string | null
   creditNoteWaiveReason?: string | null

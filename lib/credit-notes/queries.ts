@@ -347,6 +347,7 @@ export async function listAdjustmentsAwaitingCreditNote(user: SessionUser): Prom
     ) {
       continue
     }
+    const allowance = documentedByBatch.get(batchId)?.uninvoicedReduction.creditNoteAllowanceBeforeVatSatang ?? null
     awaiting.push({
       adjustmentId: row.id,
       noteType,
@@ -356,7 +357,11 @@ export async function listAdjustmentsAwaitingCreditNote(user: SessionUser): Prom
       billingBatchId: batchId,
       amountSatang: row.amountSatang,
       billOutstandingSatang: outstandingByBatch.get(batchId) ?? 0,
-      canWaive: canWaiveAwaitingCreditNote({ noteType, billOutstandingSatang: outstandingByBatch.get(batchId) ?? 0 }),
+      canWaive: canWaiveAwaitingCreditNote({
+        noteType,
+        billOutstandingSatang: outstandingByBatch.get(batchId) ?? 0,
+        allowanceBeforeVatSatang: allowance,
+      }),
     })
   }
   return awaiting
