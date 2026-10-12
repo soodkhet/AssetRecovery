@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { canRejectFieldEvidence, checkinTypeLabel, fieldEvidenceAccess, fieldEvidenceFile } from '@/lib/field/evidence-review-ui'
+import {
+  canRejectFieldEvidence,
+  checkinTypeLabel,
+  fieldEvidenceAccess,
+  fieldEvidenceFile,
+  revisionEditableHint,
+} from '@/lib/field/evidence-review-ui'
 
 describe('หน้าตรวจหลักฐานปิดงาน (UAT BUG-045)', () => {
   it('ปุ่มตีกลับแสดงเฉพาะสถานะปิดงาน', () => {
@@ -66,5 +72,19 @@ describe('fieldEvidenceAccess (มติชั่วคราว M10 DO-03)', ()
     expect(
       fieldEvidenceAccess({ ...base, roleGroup: 'finance_company', scope: { kind: 'company', teamIds: [], companyId: 'c', userId: 'u' } }),
     ).toBe('none')
+  })
+})
+
+describe('revisionEditableHint — mytester3 V3-02 (จุดเริ่มเดินทางปรับได้ในโหมดแก้ไขหลักฐาน)', () => {
+  it('ทีมคิดค่าน้ำมันตามระยะทาง ⇒ รวมจุดเริ่มเดินทาง', () => {
+    expect(revisionEditableHint(true)).toBe(
+      'แก้ไขได้เฉพาะรูป/วิดีโอ/เสียง/รูปสินค้า และจุดเริ่มเดินทาง — เช็คอินและผลการติดตามล็อกไว้ตามรอบเดิม',
+    )
+  })
+  it('ทีมเหมาจ่ายรายวัน (ไม่มีกล่องจุดเริ่มเดินทาง) ⇒ เฉพาะสื่อหลักฐาน', () => {
+    expect(revisionEditableHint(false)).toBe('แก้ไขได้เฉพาะรูป/วิดีโอ/เสียง/รูปสินค้า — เช็คอินและผลการติดตามล็อกไว้ตามรอบเดิม')
+  })
+  it('ฝั่งผู้อนุมัติ (ไม่รู้โหมดค่าน้ำมัน) ⇒ บอกเงื่อนไข', () => {
+    expect(revisionEditableHint(null)).toContain('และจุดเริ่มเดินทาง (ทีมที่คิดค่าน้ำมันตามระยะทาง)')
   })
 })

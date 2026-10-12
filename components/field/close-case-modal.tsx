@@ -48,6 +48,7 @@ import {
 } from '@/lib/field/fail-reasons'
 import { createDeferredSave, flushOnPageHide } from '@/lib/field/deferred-save'
 import { closeExpenseToastDescription } from '@/lib/field/expense-ui'
+import { revisionEditableHint } from '@/lib/field/evidence-review-ui'
 import { currentPosition, GeolocationError } from '@/lib/field/geolocation'
 import { mapsPointHref } from '@/lib/field/field-ui'
 import { DRAG_THRESHOLD_PX, dragShiftLabel, formatCoordinates, panCenter } from '@/lib/field/map-pan'
@@ -993,7 +994,7 @@ export function CloseCaseModal({
               </div>
               <div className="mt-1.5 text-sm text-orange-700">เหตุผล: {detail.rejectReason}</div>
               <div className="mt-1 text-[11px] text-orange-500">
-                แก้ไขได้เฉพาะรูป/วิดีโอ/เสียง/รูปสินค้า — เช็คอินและผลการติดตามล็อกไว้ตามรอบเดิม
+                {revisionEditableHint(detail.fuelMode === 'PER_KM')}
               </div>
             </div>
           )}
@@ -1253,7 +1254,7 @@ export function CloseCaseModal({
               )}
               <p className="text-center text-[11px] text-slate-400">
                 {mode.revision
-                  ? 'แก้ไขได้เฉพาะรูป/วิดีโอ/เสียง/รูปสินค้า — เช็คอินและผลการติดตามล็อกไว้ตามรอบเดิม'
+                  ? revisionEditableHint(detail?.fuelMode === 'PER_KM')
                   : 'บันทึก Draft ได้ก่อนครบทุกหลักฐาน — กลับมาทำต่อได้ทีหลัง'}
               </p>
             </>

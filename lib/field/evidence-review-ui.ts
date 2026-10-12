@@ -9,6 +9,21 @@ import { FIELD_REJECT_EVIDENCE_CAPABILITY } from '@/lib/field/permissions'
  * หน้าจอห้าม if สถานะเอง: ปุ่มตีกลับมาจาก {@link canRejectFieldEvidence} (UX เท่านั้น — API ตรวจซ้ำ)
  */
 
+/**
+ * ข้อความ "แก้ไขได้อะไรบ้าง" ของโหมดแก้ไขหลักฐาน (`needs_revision` — `41` §7.6 · mytester3 V3-02 / D-IN3-01)
+ * · เช็คอิน + ผลการติดตามล็อก · สื่อหลักฐานแก้ได้ · จุดเริ่มเดินทางปรับได้ (ไม่ใช่หลักฐาน — แสดงเฉพาะทีมที่คิดค่าน้ำมันตามระยะทาง)
+ * `showsTravelOrigin` — ฟอร์มพนักงานรู้โหมดค่าน้ำมันของทีม (`true`/`false`) · ฝั่งผู้อนุมัติไม่รู้ ⇒ `null` (บอกเงื่อนไขในข้อความ)
+ */
+export function revisionEditableHint(showsTravelOrigin: boolean | null): string {
+  const editable =
+    showsTravelOrigin === false
+      ? 'รูป/วิดีโอ/เสียง/รูปสินค้า'
+      : showsTravelOrigin === true
+        ? 'รูป/วิดีโอ/เสียง/รูปสินค้า และจุดเริ่มเดินทาง'
+        : 'รูป/วิดีโอ/เสียง/รูปสินค้า และจุดเริ่มเดินทาง (ทีมที่คิดค่าน้ำมันตามระยะทาง)'
+  return `แก้ไขได้เฉพาะ${editable} — เช็คอินและผลการติดตามล็อกไว้ตามรอบเดิม`
+}
+
 /** ตีกลับได้จากสถานะปิดงานเท่านั้น (`41` §8 `reject_evidence` · state `closed_success`/`closed_fail` → `needs_revision`) */
 export function canRejectFieldEvidence(
   evidence: Pick<CaseFieldEvidenceDto, 'assignmentStatus' | 'evidenceStatus'> | null,

@@ -46,7 +46,7 @@ import {
   caseStatusBadgeGroup,
   caseStatusLabel,
 } from '@/lib/cases/status-display'
-import { canRejectFieldEvidence } from '@/lib/field/evidence-review-ui'
+import { canRejectFieldEvidence, revisionEditableHint } from '@/lib/field/evidence-review-ui'
 import { closeFailReasonText } from '@/lib/field/fail-reasons'
 import { FIELD_REJECT_EVIDENCE_CAPABILITY } from '@/lib/field/permissions'
 import type { FieldActionResultDto } from '@/lib/field/types'
@@ -518,7 +518,7 @@ export function CaseDetailModal({
         maxLength={1000}
         open={rejectEvidenceOpen}
         title={`ตีกลับหลักฐานปิดงาน — ${detail?.caseRef ?? ''}`}
-        description="เคสจะถูกส่งกลับให้พนักงานแก้ไขหลักฐานในหน้าติดตามภาคสนาม — เช็คอินและผลการติดตามล็อกไว้ตามเดิม แก้ได้เฉพาะรูป/วิดีโอ/เสียง/รูปสินค้า"
+        description={`เคสจะถูกส่งกลับให้พนักงานแก้ไขหลักฐานในหน้าติดตามภาคสนาม — ${revisionEditableHint(null)}`}
         confirmLabel="ยืนยันตีกลับ"
         loading={rejectingEvidence}
         reason={rejectEvidenceReason}
