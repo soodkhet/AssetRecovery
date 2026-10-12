@@ -57,6 +57,7 @@ import type {
 import { cycleCoversCompany, resolveDueDate } from '@/lib/settings/cycles'
 import { loadActiveCycleForScope, resolveCompanyBillingCycle } from '@/lib/settings/queries/cycles'
 import { FinanceCompanyError } from '@/lib/finance-companies/errors'
+import { fmtSatang } from '@/lib/format/money'
 import { SettingsError } from '@/lib/settings/errors'
 import { getFinancePolicy } from '@/lib/settings/queries/finance-policy'
 import { toDateOnlyIso, toIso } from '@/lib/settings/queries/shared'
@@ -949,7 +950,7 @@ export async function applyBillingReceipt(input: {
         },
         reason:
           bankFeeChanged && bankFeeSatang > 0
-            ? `รับชำระจากรายการเดินบัญชี ${input.sourceRef} · ตัดส่วนต่างเป็นค่าธรรมเนียมธนาคาร ${(bankFeeSatang / 100).toFixed(2)} บาท (ไม่เกินเพดาน)`
+            ? `รับชำระจากรายการเดินบัญชี ${input.sourceRef} · ตัดส่วนต่างเป็นค่าธรรมเนียมธนาคาร ${fmtSatang(bankFeeSatang)} บาท (ไม่เกินเพดาน)`
             : `รับชำระจากรายการเดินบัญชี ${input.sourceRef}`,
         ipAddress: null,
         userAgent: null,
