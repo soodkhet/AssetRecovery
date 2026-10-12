@@ -3,6 +3,7 @@ import {
   allocateDocumentedRevenue,
   allocateRevenueAfterCreditNotes,
   applyCreditNotes,
+  uninvoicedReductionByRevenue,
   uninvoicedReductionRevenueNotes,
   ZERO_AMOUNTS,
 } from '@/lib/portal/documented-amounts'
@@ -140,5 +141,25 @@ describe('uninvoicedReductionRevenueNotes — mytester3 V3-01 ส่วนที
     expect(map.get('spc05')).toBe(480_218)
     expect(map.get('spc06')).toBe(45_127)
     expect([...map.values()].reduce((sum, value) => sum + value, 0)).toBe(525_345)
+  })
+})
+
+describe('uninvoicedReductionByRevenue — รีวิว mytester4 VAT ของส่วนที่ลดต่อเคสจาก R_vat ของรอบ', () => {
+  it('สองเคสในรอบ ⇒ Σ VAT = R_vat ทุกสตางค์ (คิดทีละเคสได้ 700 + 6,724 = 7,424 ขาด 0.01)', () => {
+    const shares = uninvoicedReductionByRevenue({ beforeVatSatang: 106_064, vatSatang: 7_425 }, [
+      { amountSatang: 10_000, revenueId: 'a', creditNoteWaiveReason: UNINVOICED_REDUCTION_WAIVE_REASON },
+      { amountSatang: 96_064, revenueId: 'b', creditNoteWaiveReason: UNINVOICED_REDUCTION_WAIVE_REASON },
+    ])
+    expect(shares.get('a')).toEqual({ beforeVatSatang: 10_000, vatSatang: 700 })
+    expect(shares.get('b')).toEqual({ beforeVatSatang: 96_064, vatSatang: 6_725 })
+  })
+
+  it('R เกินผลรวมรายการ ⇒ ก้อนไม่ผูก (คีย์ null) ได้ VAT ส่วนที่เหลือ · R = 0 ⇒ ว่าง', () => {
+    const shares = uninvoicedReductionByRevenue({ beforeVatSatang: 20_000, vatSatang: 1_400 }, [
+      { amountSatang: 5_000, revenueId: 'a', creditNoteWaiveReason: null },
+    ])
+    expect(shares.get('a')).toEqual({ beforeVatSatang: 5_000, vatSatang: 350 })
+    expect(shares.get(null)).toEqual({ beforeVatSatang: 15_000, vatSatang: 1_050 })
+    expect(uninvoicedReductionByRevenue({ beforeVatSatang: 0, vatSatang: 0 }, []).size).toBe(0)
   })
 })

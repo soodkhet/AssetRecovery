@@ -1,6 +1,7 @@
 import { netInvoiceAmounts } from '@/lib/credit-notes/credit-note'
 import { arOutstandingSatang } from '@/lib/finance/ar-calc'
 import { pctOfSatang } from '@/lib/finance/satang'
+import { allocateLargestRemainder } from '@/lib/finance/wht-calc'
 import type {
   AdjustmentStatus,
   AdjustmentType,
@@ -189,13 +190,23 @@ export interface PortalCaseReductionAdjustment {
  * - (mytester4 G4-01) มีใบลดหนี้แล้วแต่ใบลดหนี้น้อยกว่ายอด Adjustment (ลดคร่อมส่วนที่ออกใบแล้วกับส่วนที่ยังไม่ออกใบ) และรอบไม่เหลือ
  *   ส่วนที่ต้องออกใบลดหนี้ ⇒ นับส่วนต่าง (ยอด Adjustment − ใบลดหนี้ ก่อน VAT) · ใบลดหนี้เองหักตามมติ I2-01 อยู่แล้ว
  * ไม่นับ: ยัง "รอใบลดหนี้" จริง (หักเมื่อออกใบลดหนี้ตามมติ I2-01) · ปิดป้าย "จัดการนอกระบบ" (ไม่มีเอกสารในระบบ)
- * · VAT = อัตราของรายได้เคส (รายได้ไม่มี VAT ⇒ 0)
+ * · VAT (รายได้ไม่มี VAT ⇒ 0) — รีวิว mytester4: ส่ง `batchReduction` ⇒ ใช้ VAT จากการกระจาย R_vat ของรอบ
+ *   (`uninvoicedReductionByRevenue()` — เส้นทางเดียวกับกราฟรายได้) ⇒ Σ ทุกเคส = R_vat ของรอบ ไม่คลาด 0.01:
+ *   ส่วนก่อน VAT ของเคสเท่าส่วนที่กราฟผูกกับรายได้นี้ ⇒ VAT ของส่วนนั้น · ไม่เท่า (เช่นลดคร่อมสองส่วน G4-01) ⇒ สัดส่วนของ R_vat
+ *   · ไม่ส่ง ⇒ อัตราของรายได้เคส (พฤติกรรมเดิม)
  */
 export function portalCaseUninvoicedReductionSatang(input: {
   adjustments: readonly PortalCaseReductionAdjustment[]
   creditNoteAllowanceBeforeVatSatang: number | null | undefined
   vatRatePct: number
   revenueHasVat: boolean
+  batchReduction?: {
+    /** R ของรอบ (`uninvoicedReduction` — ก่อน VAT / VAT) */
+    beforeVatSatang: number
+    vatSatang: number
+    /** ส่วนของ R ที่ผูกกับรายได้เคสนี้ (ไม่มี = ไม่ผูก) */
+    revenueShare?: { beforeVatSatang: number; vatSatang: number }
+  }
 }): number {
   const notRequired = !creditNoteStillRequired(input.creditNoteAllowanceBeforeVatSatang)
   const beforeVat = input.adjustments
@@ -212,7 +223,13 @@ export function portalCaseUninvoicedReductionSatang(input: {
       return sum + Math.max(0, row.amountSatang - row.creditNoteBeforeVatSatang)
     }, 0)
   if (beforeVat <= 0) return 0
-  return beforeVat + (input.revenueHasVat ? pctOfSatang(beforeVat, input.vatRatePct) : 0)
+  if (!input.revenueHasVat) return beforeVat
+  const batch = input.batchReduction
+  if (batch === undefined || batch.beforeVatSatang <= 0) return beforeVat + pctOfSatang(beforeVat, input.vatRatePct)
+  if (batch.revenueShare !== undefined && batch.revenueShare.beforeVatSatang === beforeVat) {
+    return beforeVat + batch.revenueShare.vatSatang
+  }
+  return beforeVat + (allocateLargestRemainder(batch.vatSatang, [beforeVat, Math.max(0, batch.beforeVatSatang - beforeVat)])[0] ?? 0)
 }
 
 /** ใบลดหนี้ที่ออกแล้วของเคส (มติ PO 12/10/2569 I2-01) — ยอดรวม VAT ตามเอกสาร */

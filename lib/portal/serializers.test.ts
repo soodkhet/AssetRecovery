@@ -18,6 +18,7 @@ import {
   PORTAL_DECLINED_GENERIC_REASON,
   type PortalCaseDetailSource,
 } from '@/lib/portal/serializers'
+import { uninvoicedReductionByRevenue } from '@/lib/portal/documented-amounts'
 
 /** ฟิลด์ภายในที่ห้ามหลุดออกพอร์ทัล — คีย์ + ค่า sentinel ที่ต้องไม่ปรากฏใน output */
 const FORBIDDEN: Record<string, string | number> = {
@@ -391,6 +392,31 @@ describe('portal serializers — เนื้อหา', () => {
       ...over,
     })
     const waived = { creditNoteWaivedAt: new Date('2026-10-12T03:00:00Z'), creditNoteWaiveReason: 'ส่วนที่ลดยังไม่ได้ออกใบกำกับภาษี — ไม่ต้องออกใบลดหนี้' }
+
+    it('รีวิว mytester4 — BL-2569-003: VAT ของส่วนที่ลดมาจาก R_vat ของรอบ 74.25 (ไม่คิดใหม่ทีละเคส = 74.24)', () => {
+      const batchR = { beforeVatSatang: 106_064, vatSatang: 7_425 }
+      const input = {
+        adjustments: [adj({ ...waived, amountSatang: 106_064 })],
+        creditNoteAllowanceBeforeVatSatang: null,
+        vatRatePct: 7,
+        revenueHasVat: true,
+      }
+      expect(portalCaseUninvoicedReductionSatang(input)).toBe(106_064 + 7_424)
+      const share = uninvoicedReductionByRevenue(batchR, [
+        { amountSatang: 106_064, revenueId: 'rev-1', creditNoteWaiveReason: waived.creditNoteWaiveReason },
+      ]).get('rev-1')
+      expect(share).toEqual({ beforeVatSatang: 106_064, vatSatang: 7_425 })
+      expect(portalCaseUninvoicedReductionSatang({ ...input, batchReduction: { ...batchR, revenueShare: share } })).toBe(113_489)
+      // ส่วนของเคสไม่ตรงส่วนที่ผูก (เช่นลดคร่อมสองส่วน) ⇒ สัดส่วนของ R_vat · รายได้ไม่มี VAT ⇒ ไม่บวก VAT
+      expect(
+        portalCaseUninvoicedReductionSatang({
+          ...input,
+          adjustments: [adj({ ...waived, amountSatang: 53_032 })],
+          batchReduction: { ...batchR, revenueShare: share },
+        }),
+      ).toBe(53_032 + 3_713)
+      expect(portalCaseUninvoicedReductionSatang({ ...input, revenueHasVat: false, batchReduction: batchR })).toBe(106_064)
+    })
 
     it('ปิดอัตโนมัติ "ไม่ต้องออกใบลดหนี้" ⇒ หัก 1,000 + VAT 7% = 1,070 (FT-06: 7,490 → 6,420)', () => {
       const reduction = portalCaseUninvoicedReductionSatang({

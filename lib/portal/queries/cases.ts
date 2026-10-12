@@ -1,6 +1,10 @@
 import { z } from 'zod'
 import type { AssignmentStatus, Prisma } from '@/lib/generated/prisma/client'
-import { documentedAmountsForBatches } from '@/lib/portal/documented-amounts'
+import {
+  documentedAmountsForBatches,
+  reductionAdjustmentsByBatch,
+  uninvoicedReductionByRevenue,
+} from '@/lib/portal/documented-amounts'
 import type { PortalContext } from '@/lib/portal/guard'
 import {
   portalCaseUninvoicedReductionSatang,
@@ -177,6 +181,7 @@ export async function findPortalCaseDetail(ctx: PortalContext, id: string): Prom
       revenues: {
         where: { deletedAt: null },
         select: {
+          id: true,
           totalSatang: true,
           vatSatang: true,
           vatRatePctUsed: true,
@@ -219,6 +224,7 @@ export async function findPortalCaseDetail(ctx: PortalContext, id: string): Prom
 }
 
 interface PortalCaseRevenueRow {
+  id: string
   totalSatang: number
   vatSatang: number
   vatRatePctUsed: { toNumber(): number }
@@ -254,17 +260,31 @@ async function portalCaseRevenueSource(
       row.status === 'approved' &&
       (!row.hasActiveCreditNote || row.amountSatang > (row.creditNoteBeforeVatSatang ?? 0)),
   )
-  const allowance =
-    candidate && revenue.billingBatchId !== null
-      ? (await documentedAmountsForBatches(ctx.user.organizationId, [revenue.billingBatchId])).get(revenue.billingBatchId)
-          ?.uninvoicedReduction.creditNoteAllowanceBeforeVatSatang
-      : undefined
+  const batchId = revenue.billingBatchId
+  const [documented, reductionsByBatch] =
+    candidate && batchId !== null
+      ? await Promise.all([
+          documentedAmountsForBatches(ctx.user.organizationId, [batchId]),
+          reductionAdjustmentsByBatch(ctx.user.organizationId, [batchId]),
+        ])
+      : [undefined, undefined]
+  const reduction = batchId === null ? undefined : documented?.get(batchId)?.uninvoicedReduction
+  // รีวิว mytester4 — VAT ของส่วนที่ลดมาจากการกระจาย R_vat ของรอบ (เส้นทางเดียวกับกราฟรายได้) ไม่คิดใหม่ทีละเคส
+  const batchReduction =
+    reduction === undefined || batchId === null
+      ? undefined
+      : {
+          beforeVatSatang: reduction.beforeVatSatang,
+          vatSatang: reduction.vatSatang,
+          revenueShare: uninvoicedReductionByRevenue(reduction, reductionsByBatch?.get(batchId) ?? []).get(revenue.id),
+        }
   const uninvoicedReductionSatang = candidate
     ? portalCaseUninvoicedReductionSatang({
         adjustments,
-        creditNoteAllowanceBeforeVatSatang: allowance,
+        creditNoteAllowanceBeforeVatSatang: reduction?.creditNoteAllowanceBeforeVatSatang,
         vatRatePct: revenue.vatRatePctUsed.toNumber(),
         revenueHasVat: revenue.vatSatang > 0,
+        batchReduction,
       })
     : 0
   const creditNotes = revenue.adjustments
