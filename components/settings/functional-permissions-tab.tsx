@@ -163,7 +163,7 @@ export function FunctionalPermissionsTab() {
       </div>
 
       {sections.length > 0 && (
-        <div className="mb-4 flex w-fit gap-1 rounded-lg bg-slate-100 p-1">
+        <div className="mb-4 flex w-fit max-w-full flex-wrap gap-1 rounded-lg bg-slate-100 p-1">
           {sections.map((section) => (
             <button
               key={section.id}
