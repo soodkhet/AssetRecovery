@@ -47,6 +47,7 @@ import {
   ignoredHeaders,
   importErrorFieldLabel,
   importFieldLabel,
+  importResultToastDescription,
   missingRequiredFields,
 } from '@/lib/cases/import-wizard'
 import type { CaseImportResultDto } from '@/lib/cases/types'
@@ -147,10 +148,7 @@ export function CaseImportWizard({
         showToast({
           tone: response.data.failedCount === 0 ? 'success' : 'warning',
           title: `นำเข้าเคสแล้ว ${response.data.createdCount} รายการ`,
-          description:
-            response.data.failedCount === 0
-              ? 'ทุกแถวผ่านการตรวจสอบ'
-              : `มี ${response.data.failedCount} แถวที่นำเข้าไม่ได้ — ดูรายละเอียดในตาราง`,
+          description: importResultToastDescription(response.data),
         })
         onImported()
       }

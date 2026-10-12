@@ -8,6 +8,7 @@ import {
   emptyContact,
   identityFieldOf,
   isBlankContact,
+  keepSaveImeiWarnings,
   mapCaseErrorField,
   readDuplicateCase,
   zodFieldErrors,
@@ -227,5 +228,25 @@ describe('เลขที่สัญญาซ้ำ → ลิงก์เค�
     expect(
       readDuplicateCase({ code: 'CASE_REF_DUPLICATE', payload: { existingCase: { caseRef: 'SF-1' } } }),
     ).toBeNull()
+  })
+})
+
+describe('keepSaveImeiWarnings — mytester3 B3-01 บันทึกพร้อมไฟล์แนบยังเห็นคำเตือน IMEI ซ้ำ', () => {
+  const afterUpload = { id: 'c1', activeAssetImeiWarning: null, activeCaseImeiWarning: null } as unknown as CaseDetailDto
+
+  it('ผลผูกไฟล์ไม่มีคำเตือน ⇒ ใช้คำเตือนจากผลบันทึก', () => {
+    const kept = keepSaveImeiWarnings(
+      { activeAssetImeiWarning: 'เครื่องยังไม่ส่งมอบ', activeCaseImeiWarning: 'IMEI นี้ตรงกับเคส SPC-1' },
+      afterUpload,
+    )
+    expect(kept.id).toBe('c1')
+    expect(kept.activeAssetImeiWarning).toBe('เครื่องยังไม่ส่งมอบ')
+    expect(kept.activeCaseImeiWarning).toBe('IMEI นี้ตรงกับเคส SPC-1')
+  })
+
+  it('ผลบันทึกไม่ชน ⇒ ไม่มีคำเตือน', () => {
+    const kept = keepSaveImeiWarnings({ activeAssetImeiWarning: null, activeCaseImeiWarning: null }, afterUpload)
+    expect(kept.activeAssetImeiWarning).toBeNull()
+    expect(kept.activeCaseImeiWarning).toBeNull()
   })
 })

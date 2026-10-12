@@ -260,3 +260,18 @@ export function readDuplicateCase(error: { code?: string; payload?: Record<strin
 export function isCaseFormDirty(form: CaseFormState, initial: CaseFormState, stagedFileCount: number): boolean {
   return stagedFileCount > 0 || JSON.stringify(form) !== JSON.stringify(initial)
 }
+
+/**
+ * mytester3 B3-01 — คำเตือน IMEI ซ้ำ (เครื่องที่ยังไม่ส่งมอบ U129 · เคสอื่นที่ยังดำเนินการอยู่ M1) คิดตอน**บันทึก**เคส
+ * (create/update) · ผลของการผูกไฟล์แนบทีละไฟล์ไม่คิดคำเตือนซ้ำ ⇒ คงคำเตือนจากผลบันทึกไว้กับ DTO ล่าสุดหลังแนบไฟล์
+ */
+export function keepSaveImeiWarnings(
+  saved: Pick<CaseDetailDto, 'activeAssetImeiWarning' | 'activeCaseImeiWarning'>,
+  latest: CaseDetailDto,
+): CaseDetailDto {
+  return {
+    ...latest,
+    activeAssetImeiWarning: latest.activeAssetImeiWarning ?? saved.activeAssetImeiWarning,
+    activeCaseImeiWarning: latest.activeCaseImeiWarning ?? saved.activeCaseImeiWarning,
+  }
+}

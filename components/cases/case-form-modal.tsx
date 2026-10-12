@@ -31,6 +31,7 @@ import {
   isCaseFormDirty,
   contactsPayload,
   identityFieldOf,
+  keepSaveImeiWarnings,
   mapCaseErrorField,
   readDuplicateCase,
   zodFieldErrors,
@@ -366,7 +367,8 @@ export function CaseFormModal({
         description: `${failed.join(' · ')} — เปิดเคสแล้วแนบใหม่ได้`,
       })
     }
-    return latest
+    // ผลผูกไฟล์ไม่คิดคำเตือน IMEI ซ้ำ — คงคำเตือนจากผลบันทึกไว้ ไม่งั้นบันทึกพร้อมไฟล์แนบไม่เห็นคำเตือน (B3-01)
+    return keepSaveImeiWarnings(saved, latest)
   }
 
   return (
