@@ -223,6 +223,16 @@ export function allowedTargetKind(amountSatang: number): MatchTargetKind {
 }
 
 /**
+ * mytester4 LR4-05 — ยอดเต็มของเอกสาร (ยอดตามเอกสารหลังใบลด/เพิ่มหนี้/ส่วนลด — `documentedAmountsForBatches()`) ใช้เป็น "ยอดตรง"
+ * ได้เฉพาะเมื่อยังไม่มียอดค้างแยก (ยังไม่รับเงิน) · รอบที่รับบางส่วนแล้ว (`remainingAmountSatang` ≠ null) ⇒ เทียบยอดค้างเท่านั้น
+ * (เดิมเงินเข้า ฿1,000 ตรงยอดเต็มของรอบที่ค้าง ฿50.01 ⇒ ขึ้น "ยอดตรง" เลือกแล้วรับเกิน)
+ */
+function fullAmountApplies(candidate: Pick<MatchCandidate, 'amountSatang' | 'remainingAmountSatang'>): boolean {
+  const remaining = candidate.remainingAmountSatang ?? null
+  return remaining === null || remaining === candidate.amountSatang
+}
+
+/**
  * ยอดจับคู่ตรงเป๊ะไหม — ใช้ตัดสินว่า `match_note` บังคับหรือไม่ (`35` §6.3)
  * A1: บิลที่ลูกค้าหัก WHT ก่อนโอน (`total − wht`) ถือว่า "ตรง" เช่นกัน
  */
@@ -233,9 +243,10 @@ export function isExactMatchAmount(
   const absolute = Math.abs(transactionAmountSatang)
   const remaining = candidate.remainingAmountSatang ?? null
   const remainingAlt = candidate.remainingAltAmountSatang ?? null
+  const fullApplies = fullAmountApplies(candidate)
   return (
-    absolute === candidate.amountSatang ||
-    (candidate.altAmountSatang !== null && absolute === candidate.altAmountSatang) ||
+    (fullApplies && absolute === candidate.amountSatang) ||
+    (fullApplies && candidate.altAmountSatang !== null && absolute === candidate.altAmountSatang) ||
     (remaining !== null && absolute === remaining) ||
     (remainingAlt !== null && absolute === remainingAlt)
   )
@@ -329,7 +340,8 @@ function optionAmountText(
   const alt = candidate.altAmountSatang
   const remaining = candidate.remainingAmountSatang ?? null
   const remainingAlt = candidate.remainingAltAmountSatang ?? null
-  if (absolute === candidate.amountSatang) return `${candidate.label} · ${full} (ยอดตรง)`
+  // mytester4 LR4-05 — รอบที่รับเงินบางส่วนแล้ว (มียอดค้าง) ⇒ "ยอดตรง" เทียบยอดค้างเท่านั้น ไม่ใช่ยอดเต็มบิล
+  if (fullAmountApplies(candidate) && absolute === candidate.amountSatang) return `${candidate.label} · ${full} (ยอดตรง)`
   if (remaining !== null && absolute === remaining) {
     return `${candidate.label} · ${fmtSatangSymbol(remaining)} (ยอดตรงกับยอดค้างที่เหลือ · ยอดเต็ม ${full})`
   }

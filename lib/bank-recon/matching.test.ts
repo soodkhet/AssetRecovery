@@ -482,3 +482,26 @@ describe('mytester G-13 — จับคู่กับรอบวางบิ�
     expect(billingMatchUnavailableMessage('sent', 'BL-2569-001')).toBeNull()
   })
 })
+
+describe('mytester4 LR4-05 — ป้าย "ยอดตรง" ของรอบที่รับเงินบางส่วนแล้วเทียบยอดค้าง', () => {
+  // BL-2569-010: ยอดตามเอกสาร 1,000 · รับแล้ว 949.99 ⇒ ค้าง 50.01
+  const partial = { label: 'BL-2569-010', amountSatang: 100_000, altAmountSatang: null, remainingAmountSatang: 5_001, remainingAltAmountSatang: null }
+
+  it('เงินเข้า ฿1,000 = ยอดเต็มบิล แต่ค้าง ฿50.01 ⇒ ไม่ขึ้น "ยอดตรง" · นำด้วยยอดค้าง · ต้องมีหมายเหตุ', () => {
+    const text = matchCandidateOptionText(100_000, partial)
+    expect(text).not.toContain('(ยอดตรง)')
+    expect(text).toBe('BL-2569-010 · ค้าง ฿50.01 · ยอดเต็ม ฿1,000.00')
+    expect(isExactMatchAmount(100_000, partial)).toBe(false)
+  })
+
+  it('เงินเข้าเท่ายอดค้าง ⇒ ยอดตรงกับยอดค้างที่เหลือ', () => {
+    expect(matchCandidateOptionText(5_001, partial)).toBe('BL-2569-010 · ฿50.01 (ยอดตรงกับยอดค้างที่เหลือ · ยอดเต็ม ฿1,000.00)')
+    expect(isExactMatchAmount(5_001, partial)).toBe(true)
+  })
+
+  it('ยังไม่รับเงิน (ไม่มียอดค้างแยก) ⇒ ยอดเต็มตามเอกสารยังเป็นยอดตรง', () => {
+    const unpaid = { ...partial, remainingAmountSatang: null }
+    expect(matchCandidateOptionText(100_000, unpaid)).toBe('BL-2569-010 · ฿1,000.00 (ยอดตรง)')
+    expect(isExactMatchAmount(100_000, unpaid)).toBe(true)
+  })
+})
