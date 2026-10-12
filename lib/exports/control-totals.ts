@@ -25,6 +25,7 @@ import {
 import { sumSatang } from '@/lib/finance/satang'
 import { isPayerBorneWhtCondition, payoutItemTaxSplit } from '@/lib/finance/wht-calc'
 import { fmtDateTime } from '@/lib/format/datetime'
+import type { TaxInvoiceCoverageResult } from '@/lib/sales/tax-invoice-coverage'
 
 /**
  * `00_Control_Totals.csv` + ตารางยอดสรุปบนหน้าปก (มติ PO 06/10/2569 U94 ข้อ 4) — **pure ล้วน ไม่มี I/O**
@@ -76,6 +77,11 @@ export interface ControlTotalsInput {
   companyDocuments: readonly CompanyDocumentExportRow[]
   /** มติ PO U144 — ส่วนต่างที่ตัดเป็นค่าธรรมเนียมธนาคารในงวด */
   bankFeeWriteOffs: readonly BankFeeWriteOffExportRow[]
+  /**
+   * mytester3 H3-02 — ใบกำกับครอบเงินที่รับไหม (`loadTaxInvoiceCoverage()` — รอบวางบิลที่รับชำระครบซึ่งมีเงินรับในงวด)
+   * · ไม่ส่ง = ไม่มีบรรทัดกระทบ
+   */
+  taxInvoiceCoverage?: TaxInvoiceCoverageResult
 }
 
 function sum(values: readonly number[]): number {
@@ -102,6 +108,13 @@ export const CONTROL_SUMMARY_ITEMS = {
   unbilled_revenue: 'รายได้ค้างรับ (ยอดก่อน VAT — ภาพ ณ เวลาสร้างชุด)',
   suspense_outstanding: 'เงินรับรอตรวจสอบคงค้าง (ภาพ ณ เวลาสร้างชุด)',
   advance_balance: 'เงินทดรองคงเหลือสิ้นงวด',
+  // mytester3 H3-02 — กระทบใบกำกับกับเงินที่รับ (รอบวางบิลที่รับชำระครบซึ่งมีเงินรับในงวด)
+  tax_invoice_coverage_documents:
+    'กระทบใบกำกับกับเงินรับ: ใบเสร็จรับเงิน/ใบกำกับภาษี − ใบลดหนี้ + ใบเพิ่มหนี้ ของรอบวางบิลที่รับชำระครบ (มีเงินรับในงวด)',
+  tax_invoice_coverage_settled:
+    'กระทบใบกำกับกับเงินรับ: เงินรับ + ภาษีลูกค้าหัก + ค่าธรรมเนียมที่ตัด − ส่วนเกินที่ไม่ออกเอกสาร ของรอบเดียวกัน',
+  tax_invoice_coverage_difference:
+    'กระทบใบกำกับกับเงินรับ: ผลต่าง (ยอดรับชำระ − เอกสาร) ต้องเป็น 0 · จำนวนแถว = รอบที่ใบกำกับไม่ครอบยอด',
 } as const
 
 export type ControlSummaryItem = keyof typeof CONTROL_SUMMARY_ITEMS
@@ -218,6 +231,17 @@ export function buildControlTotals(input: ControlTotalsInput): ControlTotalLine[
   const open = r.suspense.filter((row) => row.matchStatus === 'suspense')
   summary('11', 'suspense_outstanding', open.length, sum(open.map((row) => Math.abs(row.amountSatang))))
   summary('16', 'advance_balance', r.advanceBalances.length, sum(r.advanceBalances.map((row) => row.closingSatang)))
+  const coverage = r.taxInvoiceCoverage
+  if (coverage !== undefined) {
+    summary('12', 'tax_invoice_coverage_documents', coverage.checkedCount, coverage.documentsSatang)
+    summary(
+      '12',
+      'tax_invoice_coverage_settled',
+      coverage.checkedCount,
+      coverage.settledSatang - coverage.overpaymentSatang,
+    )
+    summary('12', 'tax_invoice_coverage_difference', coverage.mismatches.length, coverage.differenceSatang)
+  }
 
   return lines
 }

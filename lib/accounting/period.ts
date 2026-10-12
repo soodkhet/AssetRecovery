@@ -8,6 +8,7 @@ import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
 import type { AccountingPeriodStatus, PayoutBatchStatus } from '@/lib/generated/prisma/enums'
 import { PAYOUT_STATUS_LABEL_SHORT } from '@/lib/payout/payout-ui'
 import { isDirectEditRejected, periodLockPolicyFor } from '@/lib/settings/period-lock'
+import { taxInvoiceCoverageWarning, type TaxInvoiceCoverageResult } from '@/lib/sales/tax-invoice-coverage'
 
 /**
  * กติกาของรอบบัญชี (ไฟล์ 30) — **pure ล้วน ไม่มี I/O** ใช้ร่วม FE/BE
@@ -391,6 +392,11 @@ export interface ReadinessInput {
   organizationProfileIssues?: readonly string[]
   /** staging E-058 (มติ PO 10/10/2569) — บัญชีค่าใช้จ่ายของงวดที่ยังไม่ map ศูนย์ต้นทุน · **เตือน ไม่บล็อก** */
   unmappedCostCenter?: { count: number; amountSatang: number }
+  /**
+   * mytester3 H3-02 — ใบเสร็จรับเงิน/ใบกำกับภาษีไม่ครอบยอดของรอบที่รับชำระครบ (`loadTaxInvoiceCoverage()`)
+   * · **เตือน ไม่บล็อก** (แนวเดียวกับ U95)
+   */
+  taxInvoiceCoverage?: TaxInvoiceCoverageResult
 }
 
 export interface ReadinessResult {
@@ -549,6 +555,8 @@ export function evaluateReadiness(input: ReadinessInput): ReadinessResult {
   if (profileWarning !== null) warnings.push(profileWarning)
   const costCenterWarning = unmappedCostCenterWarning(input.unmappedCostCenter)
   if (costCenterWarning !== null) warnings.push(costCenterWarning)
+  const coverageWarning = taxInvoiceCoverageWarning(input.taxInvoiceCoverage)
+  if (coverageWarning !== null) warnings.push(coverageWarning)
 
   return {
     ready: checks.every((check) => check.passed),

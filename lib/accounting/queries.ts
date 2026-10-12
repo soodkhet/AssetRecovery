@@ -68,6 +68,7 @@ import { assertOrgWideReadable } from '@/lib/auth/scope'
 import { fmtDate } from '@/lib/format/datetime'
 import { ACCRUED_EXPENSE_STATUSES } from '@/lib/exports/pack'
 import { payoutTransferSatang } from '@/lib/finance/advance-offset-calc'
+import { loadTaxInvoiceCoverage } from '@/lib/sales/tax-invoice-coverage-queries'
 
 /**
  * รอบบัญชี (ไฟล์ 30) + ข้อยกเว้น (ไฟล์ 34) — ชั้น DB (`27` §6.13 · §6.16)
@@ -517,6 +518,7 @@ async function readinessOf(organizationId: string, row: PeriodRow, now: Date): P
     organizationProfileIssues,
     openPayoutBatches,
     unmappedCostCenter,
+    taxInvoiceCoverage,
   ] = await Promise.all([
     prisma.exception.findMany({
       // mytester H-05 — รวม `authorized` ด้วยเพื่อบอกจำนวนที่ผ่านเพราะผู้บริหารอนุมัติยกเว้น (กัน "หายเงียบ" — `34` §6.3)
@@ -566,6 +568,11 @@ async function readinessOf(organizationId: string, row: PeriodRow, now: Date): P
       _count: { _all: true },
       _sum: { grossSatang: true },
     }),
+    // mytester3 H3-02 — ใบกำกับไม่ครอบยอดของรอบที่รับชำระครบ (เงินรับลงวันที่ในงวด) ⇒ เตือนอย่างเดียว
+    loadTaxInvoiceCoverage(organizationId, {
+      start: new Date(Date.UTC(yearCe, row.month - 1, 1)),
+      end: periodEnd,
+    }),
   ])
 
   return evaluateReadiness({
@@ -587,6 +594,7 @@ async function readinessOf(organizationId: string, row: PeriodRow, now: Date): P
     organizationProfileIssues,
     openPayoutBatches,
     unmappedCostCenter: { count: unmappedCostCenter._count._all, amountSatang: unmappedCostCenter._sum.grossSatang ?? 0 },
+    taxInvoiceCoverage,
     receiptsAwaitingTaxInvoice: {
       count: awaitingReceiptInvoice._count._all,
       amountSatang:
