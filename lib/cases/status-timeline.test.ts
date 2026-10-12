@@ -63,6 +63,25 @@ describe('buildCaseStatusTimeline (staging E-004)', () => {
     expect(timeline.find((entry) => entry.toStatus === 'approved')?.note).toBeNull()
   })
 
+  it('mytester4 B4-01 — รับเคสพร้อมเปลี่ยนทีม ⇒ แสดงเหตุผลการเปลี่ยนทีม (ไม่ใช่ข้อความ snapshot ค่าบริการ)', () => {
+    const approveRow = (teamChangeReason: string | null): CaseStatusAuditRow =>
+      row({
+        action: 'approve',
+        beforeStatus: 'pending_review',
+        afterStatus: 'approved',
+        transition: 'accept',
+        reason: 'เปลี่ยนทีมจากที่ระบบเสนอ: ลูกหนี้อยู่วังทองหลาง · snapshot ค่าบริการอัตโนมัติตอนอนุมัติเคส',
+        teamChangeReason,
+        createdAt: new Date('2026-10-04T03:00:00Z'),
+      })
+    const [changed] = buildCaseStatusTimeline([approveRow(' ลูกหนี้อยู่วังทองหลาง ')])
+    expect(changed?.note).toBe('เปลี่ยนทีมจากที่ระบบเสนอ — ลูกหนี้อยู่วังทองหลาง')
+    // ไม่ได้เปลี่ยนทีม ⇒ ไม่มีหมายเหตุ
+    expect(buildCaseStatusTimeline([approveRow(null)])[0]?.note).toBeNull()
+    // พอร์ทัลบริษัทไฟแนนซ์ไม่เห็นบันทึกภายในนี้
+    expect(redactCaseStatusTimelineForCompany([changed!])[0]?.note).toBeNull()
+  })
+
   it('พอร์ทัลบริษัทไฟแนนซ์ไม่เห็นชื่อพนักงานและบันทึกภายใน', () => {
     const redacted = redactCaseStatusTimelineForCompany(buildCaseStatusTimeline(rows))
     expect(redacted.every((entry) => entry.actorName === null && entry.note === null)).toBe(true)

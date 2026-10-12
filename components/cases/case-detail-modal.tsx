@@ -629,7 +629,11 @@ function ProjectedRevenueBox({ detail }: { detail: CaseDetailDto }) {
             ? 'ระบบคำนวณให้เมื่อส่งตรวจสอบ (ใช้เทมเพลตค่าบริการของบริษัทไฟแนนซ์และมูลหนี้)'
             : 'ต้องมีเทมเพลตค่าบริการของบริษัทไฟแนนซ์และมูลหนี้ก่อน'
           : `คำนวณจาก${detail.projectedRevenueSourceLabel ?? 'เทมเพลตค่าบริการของบริษัทไฟแนนซ์'}`}{' '}
-        · เป็นประมาณการก่อนรับเคส ไม่ใช่รายได้ที่ยืนยันแล้ว (รายได้จริงเกิดเมื่อรายการเบิกอนุมัติและคลังยืนยันส่งมอบ)
+        {/* mytester4 ข้อสังเกตช่วง B — รับเคสแล้วค่าบริการถูก snapshot ไว้ที่เคส (`10` §9.2) ⇒ ข้อความต้องตรงสถานะ */}
+        {detail.serviceFeeTemplateId === null
+          ? '· เป็นประมาณการก่อนรับเคส'
+          : '· รับเคสแล้ว ค่าบริการของเคสถูกบันทึกไว้ ณ ตอนรับเคส — ยอดนี้คำนวณไว้ก่อนรับเคส'}{' '}
+        ไม่ใช่รายได้ที่ยืนยันแล้ว (รายได้จริงเกิดเมื่อรายการเบิกอนุมัติและคลังยืนยันส่งมอบ)
       </p>
     </div>
   )
@@ -761,7 +765,8 @@ function DocumentSection({
                     <li key={file.id}>
                       <button
                         type="button"
-                        className="focus-ring w-full rounded px-1 py-0.5 text-left text-xs text-sky-700 underline hover:bg-sky-50"
+                        // mytester4 C4-01 — เป้าแตะบนมือถือ/จอสัมผัส ≥44px (เดสก์ท็อปที่ใช้เมาส์คงความกระชับเดิม)
+                        className="focus-ring w-full rounded px-1 py-0.5 text-left text-xs text-sky-700 underline hover:bg-sky-50 max-sm:min-h-11 pointer-coarse:min-h-11"
                         onClick={() => onView(file)}
                       >
                         {isImageMime(file.mimeType) ? '🖼' : '📄'} {file.originalName}

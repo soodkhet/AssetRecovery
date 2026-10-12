@@ -4,7 +4,7 @@ import ts from 'typescript'
 import { describe, expect, it } from 'vitest'
 
 /**
- * Rule 05 — ข้อความที่ผู้ใช้เห็นต้องเป็นภาษาไทย ไม่มีรหัส/ศัพท์ระบบ (mytester รอบ 2: A2-01 · B2-02 · G2-01 · J2-02 · LR-01 · รอบ 3: A3-04 · J3-01 · LR3-05 · V3-03)
+ * Rule 05 — ข้อความที่ผู้ใช้เห็นต้องเป็นภาษาไทย ไม่มีรหัส/ศัพท์ระบบ (mytester รอบ 2: A2-01 · B2-02 · G2-01 · J2-02 · LR-01 · รอบ 3: A3-04 · J3-01 · LR3-05 · V3-03 · รอบ 4: A4-01)
  *
  * สแกน **string literal + ข้อความ JSX** ด้วย TypeScript AST (comment ไม่นับ) ของ `app/` `components/` `lib/`
  * แล้วห้ามมีวลีที่เคยหลุดขึ้นจอ — กันไม่ให้กลับมาอีก · code identifier/คอมเมนต์ใช้ศัพท์อังกฤษได้ตามเดิม
@@ -33,6 +33,9 @@ const BANNED: readonly { phrase: RegExp; issue: string; inThaiText?: boolean }[]
   },
   // mytester3 ตรวจ staging V3-03 — หน้าสิทธิ์ (คำอธิบาย/tooltip/ข้อความแจ้งข้อผิดพลาด/ชื่อหมวด)
   { phrase: /Seed Role|Functional Matrix/i, issue: 'V3-03', inThaiText: true },
+  // mytester4 A4-01 — ป้ายสถานะบทบาทในตาราง + ข้อความเมื่อมอบสิทธิ์ที่ล็อกไว้
+  { phrase: /^🔒 Seed$|^Custom$/, issue: 'A4-01' },
+  { phrase: /✅ only/, issue: 'A4-01', inThaiText: true },
   { phrase: /รอบ (collecting|locked)|\(collecting → sent\)|ที่ locked|mark filed|map Cost Center \(manual\)|resolve\)/, issue: 'A2-01' },
 ]
 

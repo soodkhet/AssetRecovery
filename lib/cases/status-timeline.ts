@@ -8,6 +8,8 @@ import { caseStatusLabel } from '@/lib/cases/status-display'
  * - เรียงเก่า → ใหม่ · แถว `create` = "สร้างเคส" · แถวที่สถานะไม่เปลี่ยนถูกตัดทิ้ง
  * - หมายเหตุแสดงเฉพาะ action ที่ผู้ใช้ต้องกรอกเหตุผล (`reasonRequired` — ไม่รับเคส/ขอข้อมูลเพิ่ม/รีไซเคิล)
  *   เหตุผลที่ระบบเขียนเอง (เช่น snapshot ค่าบริการตอนรับเคส) ไม่แสดง
+ * - mytester4 B4-01 — รับเคสพร้อมเปลี่ยนทีมจากที่ระบบเสนอ (`38` §13 บังคับเหตุผล) ⇒ แสดงเหตุผลการเปลี่ยนทีม
+ *   จาก `after_data.teamChangeReason` (ไม่ใช่ช่อง reason ของ audit ที่ปนข้อความ snapshot ค่าบริการ)
  */
 
 export interface CaseStatusAuditRow {
@@ -17,8 +19,18 @@ export interface CaseStatusAuditRow {
   /** `after_data.action` — ชื่อ transition ของ state machine */
   transition: string | null
   reason: string | null
+  /** `after_data.teamChangeReason` — เหตุผลเปลี่ยนทีมตอนรับเคส · ไม่มี = `null`/ไม่ระบุ */
+  teamChangeReason?: string | null
   actorName: string | null
   createdAt: Date
+}
+
+/** ข้อความนำหน้าเหตุผลการเปลี่ยนทีมในประวัติเคส (mytester4 B4-01) */
+export const TEAM_CHANGE_NOTE_PREFIX = 'เปลี่ยนทีมจากที่ระบบเสนอ'
+
+function teamChangeNoteOf(row: CaseStatusAuditRow): string | null {
+  const reason = row.teamChangeReason?.trim() ?? ''
+  return reason === '' ? null : `${TEAM_CHANGE_NOTE_PREFIX} — ${reason}`
 }
 
 export interface CaseStatusTimelineEntry {
@@ -51,7 +63,7 @@ export function buildCaseStatusTimeline(rows: readonly CaseStatusAuditRow[]): Ca
       }
       if (row.afterStatus === null || row.afterStatus === row.beforeStatus) return []
       const rule = row.transition !== null && isCaseStatusAction(row.transition) ? CASE_STATUS_RULES[row.transition] : null
-      const note = rule?.reasonRequired === true ? (row.reason?.trim() || null) : null
+      const note = rule?.reasonRequired === true ? (row.reason?.trim() || null) : teamChangeNoteOf(row)
       return [
         {
           at: row.createdAt.toISOString(),

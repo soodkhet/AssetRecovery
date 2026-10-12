@@ -221,9 +221,9 @@ export function RolesManager() {
                     <Td>
                       {/* สีจาก mapper กลาง — ไม่ใส่คลาสสีเอง (preship R2-037) */}
                       {role.isSeed ? (
-                        <StatusBadge group="info" label="🔒 Seed" />
+                        <StatusBadge group="info" label="🔒 พื้นฐาน" />
                       ) : (
-                        <StatusBadge group="neutral" label="Custom" />
+                        <StatusBadge group="neutral" label="สร้างเอง" />
                       )}
                     </Td>
                     <Td align="right">

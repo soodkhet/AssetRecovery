@@ -554,3 +554,56 @@ describe('สรุปรอบจ่าย: แยกเงินทดรอ�
     expect(withHotel!.whtLabel).toContain('(ฐานภาษี 8,500.00)')
   })
 })
+
+describe('mytester4 F4-01/F4-02 — ฐานยกมาจากรอบก่อนในเดือน · หมายเหตุ 50 ทวิ เฉพาะเมื่อมีใบ', () => {
+  // ฐานรอบนี้ 3,500 + ยกมา 100 (snapshot) ⇒ หัก 3% ของ 3,600 = 108 (ยอดหักเป็น snapshot ไม่คิดใหม่)
+  const withCarried = item({
+    grossSatang: 350_000,
+    whtSatang: 10_800,
+    netSatang: 339_200,
+    transferSatang: 339_200,
+    whtCarriedBaseSatang: 10_000,
+  })
+
+  it('F4-01 ใบสำคัญจ่าย — ป้าย WHT แสดงฐานรอบนี้ + ฐานยกมา = ฐานบนใบ 50 ทวิ', () => {
+    const [voucher] = buildPaymentVoucherDocs(batch([withCarried]), ISSUER)
+    expect(voucher?.whtLabel).toBe('หัก ภาษี ณ ที่จ่าย 3% (ฐานภาษีรอบนี้ 3,500.00 + ยกมา 100.00 = 3,600.00)')
+    expect(voucher?.whtDeductText).toBe('(108.00)')
+  })
+
+  it('F4-01 สลิป — ป้าย WHT ต่อท้ายฐานยกมา · ไม่มีฐานยกมา = ป้ายเดิม', () => {
+    const [slip] = buildPayslipDocs(batch([withCarried]), ISSUER)
+    expect(slip?.whtLabel).toBe('หักภาษี ณ ที่จ่าย (3%) (ฐานภาษีรอบนี้ 3,500.00 + ยกมา 100.00 = 3,600.00)')
+    expect(slip?.whtText).toBe('(108.00)')
+    expect(buildPayslipDocs(batch([item()]), ISSUER)[0]?.whtLabel).toBe('หักภาษี ณ ที่จ่าย (3%)')
+  })
+
+  it('F4-02 ไม่มีภาษีถูกหัก (ต่ำกว่าเกณฑ์ / มีแต่เงินทดรอง) ⇒ ไม่บอกว่ามีใบ 50 ทวิ ออกแยก', () => {
+    const belowThreshold = item({ grossSatang: 10_000, whtSatang: 0, netSatang: 10_000, transferSatang: 10_000 })
+    const advanceOnly = item({
+      source: 'advance',
+      sourceId: 'adv-1',
+      caseRef: null,
+      whtPctSnapshot: null,
+      whtSatang: 0,
+      grossSatang: 400_000,
+      netSatang: 400_000,
+      transferSatang: 400_000,
+      whtIncomeCategory: null,
+    })
+    for (const rows of [[belowThreshold], [advanceOnly]]) {
+      const [slip] = buildPayslipDocs(batch(rows), ISSUER)
+      const [voucher] = buildPaymentVoucherDocs(batch(rows), ISSUER)
+      expect(slip?.note).not.toContain('50 ทวิ')
+      expect(slip?.note).toContain('เอกสารนี้ออกโดยระบบ')
+      expect(voucher?.footnote).toBe('')
+    }
+  })
+
+  it('F4-02 มีภาษีถูกหัก หรือเงินได้ 40(2) อัตรา 0% (ออกใบยอดภาษี 0) ⇒ ยังพิมพ์ว่า 50 ทวิ ออกแยกต่างหาก', () => {
+    expect(buildPayslipDocs(batch([item()]), ISSUER)[0]?.note).toContain('(50 ทวิ) ออกแยกต่างหาก')
+    expect(buildPaymentVoucherDocs(batch([item()]), ISSUER)[0]?.footnote).toContain('(50 ทวิ) ออกแยกต่างหาก')
+    const zeroRate402 = item({ whtIncomeCategory: 'sec_40_2', whtPctSnapshot: 0, whtSatang: 0, netSatang: 850_000, transferSatang: 850_000 })
+    expect(buildPaymentVoucherDocs(batch([zeroRate402]), ISSUER)[0]?.footnote).toContain('50 ทวิ')
+  })
+})
