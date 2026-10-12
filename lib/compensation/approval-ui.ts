@@ -79,7 +79,7 @@ export const EXECUTIVE_PENDING_LABEL = 'รอผู้บริหารอน�
 export function claimStatusLabel(item: Pick<CompensationApprovalDto, 'status' | 'pendingStepRole'>): string {
   if (
     item.status === 'pending_finance_approval' &&
-    item.pendingStepRole !== null &&
+    typeof item.pendingStepRole === 'string' &&
     approvalRoleColumn(item.pendingStepRole) === 'executive'
   ) {
     return EXECUTIVE_PENDING_LABEL
