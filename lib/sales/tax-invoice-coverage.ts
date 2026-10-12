@@ -49,6 +49,11 @@ export interface TaxInvoiceCoverageBatch {
    * ต่างจากใบแจ้งหนี้ได้โดยชอบ ⇒ เทียบเฉพาะ**ยอดก่อน VAT** (มูลค่าบริการต้องออกใบครบ) ข้าม VAT
    */
   vatRateDiffers?: boolean
+  /**
+   * มติผู้ใช้ 12/10/2569 (รีวิว R3 #1) — ส่วนที่ลดในมูลค่าที่ยังไม่ออกใบ (ไม่ต้องมีใบลดหนี้ — `uninvoicedReductionOf()`)
+   * ⇒ หักจากยอดสุทธิของรอบ · ไม่ส่ง = 0
+   */
+  uninvoicedReduction?: CoverageAmounts
 }
 
 /**
@@ -65,10 +70,13 @@ export function receiptAwaitsTaxInvoice(input: {
   invoicedBeforeVatSatang: number
   /** ยอดก่อน VAT ตามใบแจ้งหนี้ (`sales_records`) — ไม่มีรายการขาย = `null` */
   billedBeforeVatSatang: number | null
+  /** มติผู้ใช้ 12/10/2569 (รีวิว R3 #1) — ส่วนที่ลดก่อนออกใบ (ก่อน VAT) ไม่ต้องออกใบ · ไม่ส่ง = 0 */
+  uninvoicedReductionBeforeVatSatang?: number
 }): boolean {
   if (input.hasActiveInvoice || input.coveredByLegacyInvoice) return false
   const fullyInvoiced =
-    input.billedBeforeVatSatang !== null && input.invoicedBeforeVatSatang >= input.billedBeforeVatSatang
+    input.billedBeforeVatSatang !== null &&
+    input.invoicedBeforeVatSatang >= input.billedBeforeVatSatang - (input.uninvoicedReductionBeforeVatSatang ?? 0)
   return !(input.batchFullyPaid && fullyInvoiced)
 }
 
@@ -102,12 +110,14 @@ export function evaluateTaxInvoiceCoverage(batches: readonly TaxInvoiceCoverageB
   const checked = batches.filter((batch) => batch.fullyPaid && !batch.hasReceiptsAwaitingInvoice)
   const rows = checked.map((batch) => {
     const notesTotal = batch.debitNotes.totalSatang - batch.creditNotes.totalSatang
-    const expected = batch.invoiced.totalSatang + notesTotal
+    const reduction = batch.uninvoicedReduction ?? { beforeVatSatang: 0, vatSatang: 0, totalSatang: 0 }
+    const expected = batch.invoiced.totalSatang - reduction.totalSatang + notesTotal
     const documents = batch.taxInvoices.totalSatang + notesTotal
     const settled = batch.receivedSatang + batch.customerWhtSatang + batch.bankFeeSatang
     if (batch.vatRateDiffers === true) {
       // รีวิว mytester3 #4 — อัตราต่างกัน ⇒ เทียบมูลค่าก่อน VAT (ใบลด/เพิ่มหนี้หักล้างกันทั้งสองฝั่ง) ข้าม VAT/ยอดรวม
-      const beforeVatDifference = (batch.invoiced.beforeVatSatang ?? 0) - (batch.taxInvoices.beforeVatSatang ?? 0)
+      const beforeVatDifference =
+        (batch.invoiced.beforeVatSatang ?? 0) - (reduction.beforeVatSatang ?? 0) - (batch.taxInvoices.beforeVatSatang ?? 0)
       // ครอบครบ ⇒ ยอดรวมของใบ (อัตราใหม่) คือยอดที่ถูกต้องของรอบ
       const target = beforeVatDifference === 0 ? documents : expected
       return {
@@ -122,7 +132,7 @@ export function evaluateTaxInvoiceCoverage(batches: readonly TaxInvoiceCoverageB
       }
     }
     // ใบลด/เพิ่มหนี้หักล้างกันทั้งสองฝั่ง ⇒ ผลต่าง VAT = VAT ใบแจ้งหนี้ − Σ VAT ใบกำกับ
-    const vatDifference = batch.invoiced.vatSatang - batch.taxInvoices.vatSatang
+    const vatDifference = batch.invoiced.vatSatang - reduction.vatSatang - batch.taxInvoices.vatSatang
     return {
       batchNumber: batch.batchNumber,
       expected,

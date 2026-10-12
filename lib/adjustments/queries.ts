@@ -38,13 +38,15 @@ import { FinanceError } from '@/lib/finance/errors'
 import type { Prisma } from '@/lib/generated/prisma/client'
 import type { AccountingPeriodStatus, AdjustmentStatus, ExpenseStatus } from '@/lib/generated/prisma/enums'
 import { notifyAdjustmentAwaitingApproval } from '@/lib/notifications/approval-queue'
-import { documentedOutstandingByBatch } from '@/lib/portal/documented-amounts'
+import { documentedAmountsForBatches, documentedOutstandingByBatch } from '@/lib/portal/documented-amounts'
 import { createRecoveryForApprovedAdjustment, recoveriesByAdjustment } from '@/lib/payout/recoveries'
 import { prisma } from '@/lib/prisma'
 import { invalidateOrganizationReportCache } from '@/lib/reports/cache'
 import { isRevenueError } from '@/lib/revenue/errors'
 import { assertRevenueAmountEditable } from '@/lib/revenue/queries'
+import { syncBillingStatusWithDocuments } from '@/lib/revenue/billing-status-sync'
 import { parseBillingPeriodLabel } from '@/lib/revenue/revenue'
+import { decreaseFitsUninvoiced, UNINVOICED_REDUCTION_WAIVE_REASON } from '@/lib/sales/uninvoiced-reduction'
 import { isDirectEditBlocked } from '@/lib/settings/period-lock'
 import { EXPENSE_STATUS_LABEL, EXPENSE_TYPE_LABEL } from '@/lib/field/expense-ui'
 import { fmtDate, toInputDate } from '@/lib/format/datetime'
@@ -653,10 +655,29 @@ export async function approveAdjustment(
     // ครบระดับแล้วเท่านั้นจึงเปลี่ยนสถานะ — ยามซ้ำของ 3.1 กันกรณีตารางนโยบายเปลี่ยนภายหลัง
     if (complete) assertApprovalLevelSufficient({ periodStatus, approverRoles: roles })
 
+    // มติผู้ใช้ 12/10/2569 (รีวิว R3 #1) — ลดยอดของรอบวางบิล: ล็อกแถวรอบ (คิวเดียวกับออกใบเสร็จฯ/บันทึกใบลดหนี้)
+    // แล้วอ่านมูลค่าที่ยังไม่ออกใบ**ก่อน**นับรายการนี้ ⇒ ลดอยู่ในส่วนนั้นทั้งหมด = ไม่ต้องออกใบลดหนี้
+    const decreaseBatchId = complete ? decreaseBillingBatchIdOf(row) : null
+    let fitsUninvoiced = false
+    if (decreaseBatchId !== null) {
+      await tx.$queryRaw`SELECT id FROM billing_batches WHERE id = ${decreaseBatchId}::uuid FOR UPDATE`
+      const before = (await documentedAmountsForBatches(user.organizationId, [decreaseBatchId], tx)).get(decreaseBatchId)
+      fitsUninvoiced = before !== undefined && decreaseFitsUninvoiced(row.amountSatang, before.uninvoicedReduction)
+    }
+
     if (complete) {
       const claimed = await tx.adjustment.updateMany({
         where: { id: adjustmentId, status: 'pending_approval' },
-        data: { status: 'approved', approvedBy: user.id, approvedAt: now, updatedBy: user.id },
+        data: {
+          status: 'approved',
+          approvedBy: user.id,
+          approvedAt: now,
+          updatedBy: user.id,
+          // ปิดป้าย "รอใบลดหนี้" แบบไม่ต้องออกใบลดหนี้ (คอลัมน์ชุดเดียวกับ E-016 — สามช่องพร้อมกัน)
+          ...(fitsUninvoiced
+            ? { creditNoteWaivedAt: now, creditNoteWaivedBy: user.id, creditNoteWaiveReason: UNINVOICED_REDUCTION_WAIVE_REASON }
+            : {}),
+        },
       })
       if (claimed.count === 0) {
         throw new AdjustmentError('ADJUSTMENT_INVALID_STATUS', { detail: 'รายการนี้ถูกดำเนินการไปแล้วโดยผู้ใช้อื่น' })
@@ -692,6 +713,43 @@ export async function approveAdjustment(
       },
       tx,
     )
+
+    if (decreaseBatchId !== null) {
+      if (fitsUninvoiced) {
+        await emitAudit(
+          {
+            organizationId: user.organizationId,
+            actorId: user.id,
+            actorRole: user.roleName,
+            action: 'update',
+            targetType: TARGET,
+            targetId: adjustmentId,
+            before: { credit_note_waived_at: null },
+            after: {
+              credit_note_waived_at: now.toISOString(),
+              credit_note_required: false,
+              billing_batch_id: decreaseBatchId,
+              amount_satang: row.amountSatang,
+            },
+            reason: UNINVOICED_REDUCTION_WAIVE_REASON,
+            ipAddress: context.meta.ipAddress,
+            userAgent: context.meta.userAgent,
+            diffOnly: false,
+          },
+          tx,
+        )
+      }
+      // ส่วนที่ลดก่อนออกใบหักยอดตามเอกสารทันที ⇒ สถานะรอบตามยอดใหม่ (เช่น รับ 900 ของบิล 1,000 แล้วลด 100 ⇒ รับครบ)
+      await syncBillingStatusWithDocuments(tx, {
+        organizationId: user.organizationId,
+        billingBatchId: decreaseBatchId,
+        actorId: user.id,
+        actorRole: user.roleName,
+        sourceRef: 'รายการปรับปรุงลดยอด',
+        ipAddress: context.meta.ipAddress,
+        userAgent: context.meta.userAgent,
+      })
+    }
 
     // staging E-014 — ลดยอดรายการเบิกที่จ่ายไปแล้ว ⇒ เกิด "ยอดเรียกคืนจากผู้รับ" หักในรอบจ่ายถัดไป
     if (complete) {

@@ -2,7 +2,14 @@ import { sumCreditNotesByInvoice } from '@/lib/credit-notes/totals'
 import { arOutstandingSatang, type BillingBatchAmounts } from '@/lib/finance/ar-calc'
 import { allocateLargestRemainder, type CustomerWhtNoteAmounts } from '@/lib/finance/wht-calc'
 import type { CreditNoteType } from '@/lib/generated/prisma/enums'
+import { endOfBangkokDay } from '@/lib/format/datetime'
 import { prisma } from '@/lib/prisma'
+import {
+  creditNoteStillRequired,
+  NO_UNINVOICED_REDUCTION,
+  uninvoicedReductionOf,
+  type UninvoicedReduction,
+} from '@/lib/sales/uninvoiced-reduction'
 
 /**
  * **ยอดตามเอกสารที่ออกให้ลูกค้าจริง** — จุดเดียวที่พอร์ทัลใช้หายอดเงินของรอบวางบิล/ใบกำกับ
@@ -19,6 +26,11 @@ import { prisma } from '@/lib/prisma'
  * ### ใบเพิ่มหนี้ (fixer X4 · มติ PO 05/10/2569 U19 · ม.86/9)
  * ใบเพิ่มหนี้ active **บวก**ยอดตามเอกสารทุกจุดเดียวกับที่ใบลดหนี้หัก (วางบิล/AR/dashboard/กราฟ) ·
  * Adjustment เพิ่มยอดที่ยังไม่มีใบเพิ่มหนี้ไม่สะท้อนในพอร์ทัล (แนวเดียวกับใบลดหนี้)
+ *
+ * ### ลดยอดส่วนที่ยังไม่ออกใบกำกับ (มติผู้ใช้ 12/10/2569 · รีวิว R3 #1 · `22` §6.8.3)
+ * รอบที่ออกใบเสร็จรับเงิน/ใบกำกับภาษีเมื่อรับชำระ: Adjustment ลดยอดที่อนุมัติแล้วส่วนที่อยู่ในมูลค่าที่ยังไม่ออกใบ
+ * ไม่ต้องมีใบลดหนี้ ⇒ **หักจากยอดตามเอกสาร** ทันที (`uninvoicedReduction` — ใบแจ้งหนี้ที่ปรับแล้ว ยังไม่ใช่เอกสารภาษี)
+ * · ส่วนที่ลดลงไปในยอดที่ออกใบแล้วยังรอใบลดหนี้ตามเดิม
  *
  * ### ใบลดหนี้ (fixer X2/X3)
  * `loadCreditNoteTotals()` รวมใบลดหนี้ **active** ของใบกำกับทุกใบของรอบ (รวมใบกำกับที่ยกเลิกแล้ว — ใบลดหนี้
@@ -45,22 +57,31 @@ export interface DocumentedBillingAmounts {
   creditNotes: DocumentAmounts
   /** ผลรวมใบเพิ่มหนี้ active ของรอบ (ไม่มี ⇒ 0 — U19) */
   debitNotes: DocumentAmounts
-  /** ยอดตามเอกสาร = ใบกำกับ − ใบลดหนี้ + ใบเพิ่มหนี้ (ยอดที่พอร์ทัลแสดง/นับ) */
+  /**
+   * มติผู้ใช้ 12/10/2569 (รีวิว R3 #1) — ส่วนที่ลดในมูลค่าที่ยังไม่ออกใบกำกับ (ไม่ต้องมีใบลดหนี้) + ใบลดหนี้ที่ยังบันทึกได้
+   * · รอบใบกำกับแบบเดิม/ไม่มีรายการขาย ⇒ 0
+   */
+  uninvoicedReduction: UninvoicedReduction
+  /** ยอดตามเอกสาร = ใบกำกับ − ใบลดหนี้ + ใบเพิ่มหนี้ − ส่วนที่ลดก่อนออกใบ (ยอดที่พอร์ทัลแสดง/นับ) */
   documented: DocumentAmounts
 }
 
 export type DocumentedBillingRef = { billingBatchId: string } | { taxInvoiceId: string }
 
-/** pure — `invoiced − creditNotes + debitNotes` ทีละช่อง (ไม่ส่งใบเพิ่มหนี้ = 0) */
+/**
+ * pure — `invoiced − creditNotes + debitNotes − uninvoicedReduction` ทีละช่อง (ไม่ส่งใบเพิ่มหนี้/ส่วนที่ลดก่อนออกใบ = 0)
+ */
 export function applyCreditNotes(
   invoiced: DocumentAmounts,
   creditNotes: DocumentAmounts,
   debitNotes: DocumentAmounts = ZERO_AMOUNTS,
+  uninvoicedReduction: DocumentAmounts = ZERO_AMOUNTS,
 ): DocumentAmounts {
   return {
-    beforeVatSatang: invoiced.beforeVatSatang - creditNotes.beforeVatSatang + debitNotes.beforeVatSatang,
-    vatSatang: invoiced.vatSatang - creditNotes.vatSatang + debitNotes.vatSatang,
-    totalSatang: invoiced.totalSatang - creditNotes.totalSatang + debitNotes.totalSatang,
+    beforeVatSatang:
+      invoiced.beforeVatSatang - creditNotes.beforeVatSatang + debitNotes.beforeVatSatang - uninvoicedReduction.beforeVatSatang,
+    vatSatang: invoiced.vatSatang - creditNotes.vatSatang + debitNotes.vatSatang - uninvoicedReduction.vatSatang,
+    totalSatang: invoiced.totalSatang - creditNotes.totalSatang + debitNotes.totalSatang - uninvoicedReduction.totalSatang,
   }
 }
 
@@ -74,7 +95,7 @@ interface NoteTotalsByBatch {
  * · รอบที่ไม่มีเอกสารชนิดนั้นไม่มีคีย์ · ⚠️ ไม่ตรวจสิทธิ์/บริษัท — ผู้เรียกกรองรอบตาม scope มาแล้ว
  */
 /** client ที่อ่านยอดตามเอกสารได้ทั้ง `prisma` และ `tx` (มติ O75 — อ่านในธุรกรรมเดียวกับการบันทึกเอกสาร) */
-export type DocumentedReadClient = Pick<typeof prisma, 'billingBatch' | 'taxInvoice' | 'creditNote'>
+export type DocumentedReadClient = Pick<typeof prisma, 'billingBatch' | 'taxInvoice' | 'creditNote' | 'adjustment'>
 
 async function loadCreditNoteTotals(
   organizationId: string,
@@ -119,12 +140,75 @@ async function loadCreditNoteTotals(
 /** mytester3 G3-02 — ใบลด/เพิ่มหนี้ของรอบในรูปที่ `estimateCustomerWhtForBilling()` รับ (`22` §6.16) */
 export function customerWhtNotesOf(amounts: DocumentedBillingAmounts | undefined): CustomerWhtNoteAmounts | undefined {
   if (amounts === undefined) return undefined
+  // มติผู้ใช้ 12/10/2569 (รีวิว R3 #1) — ส่วนที่ลดก่อนออกใบลดฐานภาษีที่ลูกค้าหักเหมือนใบลดหนี้
   return {
-    creditBeforeVatSatang: amounts.creditNotes.beforeVatSatang,
-    creditTotalSatang: amounts.creditNotes.totalSatang,
+    creditBeforeVatSatang: amounts.creditNotes.beforeVatSatang + amounts.uninvoicedReduction.beforeVatSatang,
+    creditTotalSatang: amounts.creditNotes.totalSatang + amounts.uninvoicedReduction.totalSatang,
     debitBeforeVatSatang: amounts.debitNotes.beforeVatSatang,
     debitTotalSatang: amounts.debitNotes.totalSatang,
   }
+}
+
+interface ReductionInputs {
+  /** Σ ก่อน VAT ของใบกำกับ active (ณ `asOf`) */
+  invoicedBeforeVatSatang: number
+  legacyInvoice: boolean
+  /** Σ Adjustment ลดยอด `approved` (ระดับรอบ + ระดับรายได้ในรอบ) */
+  decreaseSatang: number
+}
+
+/**
+ * มติผู้ใช้ 12/10/2569 (รีวิว R3 #1) — ข้อมูลต่อรอบสำหรับ `uninvoicedReductionOf()` (2 query ไม่ว่ากี่รอบ — กัน N+1)
+ * · `asOf` ⇒ ใบกำกับลงวันไม่หลังวันนั้น (active หรือยกเลิกหลังวันนั้น) · Adjustment อนุมัติไม่หลังสิ้นวันนั้น
+ */
+async function loadReductionInputs(
+  organizationId: string,
+  billingBatchIds: readonly string[],
+  client: DocumentedReadClient,
+  asOf?: Date,
+): Promise<Map<string, ReductionInputs>> {
+  const result = new Map<string, ReductionInputs>()
+  if (billingBatchIds.length === 0) return result
+  const ids = [...billingBatchIds]
+  const endOfDay = asOf === undefined ? undefined : endOfBangkokDay(asOf)
+  const [adjustments, invoices] = await Promise.all([
+    client.adjustment.findMany({
+      where: {
+        organizationId,
+        status: 'approved',
+        adjustmentType: 'decrease',
+        OR: [{ billingBatchId: { in: ids } }, { revenue: { billingBatchId: { in: ids } } }],
+        ...(endOfDay === undefined ? {} : { approvedAt: { lte: endOfDay } }),
+      },
+      select: { amountSatang: true, billingBatchId: true, revenue: { select: { billingBatchId: true } } },
+    }),
+    client.taxInvoice.findMany({
+      where: {
+        organizationId,
+        salesRecord: { billingBatchId: { in: ids } },
+        ...(asOf === undefined || endOfDay === undefined
+          ? { status: 'active' as const }
+          : { invoiceDate: { lte: asOf }, OR: [{ status: 'active' as const }, { cancelledAt: { gt: endOfDay } }] }),
+      },
+      select: { docKind: true, amountBeforeVatSatang: true, salesRecord: { select: { billingBatchId: true } } },
+    }),
+  ])
+  const entry = (batchId: string): ReductionInputs => {
+    const current = result.get(batchId) ?? { invoicedBeforeVatSatang: 0, legacyInvoice: false, decreaseSatang: 0 }
+    result.set(batchId, current)
+    return current
+  }
+  for (const invoice of invoices) {
+    const current = entry(invoice.salesRecord.billingBatchId)
+    current.invoicedBeforeVatSatang += invoice.amountBeforeVatSatang
+    if (invoice.docKind === 'tax_invoice') current.legacyInvoice = true
+  }
+  for (const row of adjustments) {
+    const batchId = row.billingBatchId ?? row.revenue?.billingBatchId ?? null
+    if (batchId === null || !ids.includes(batchId)) continue
+    entry(batchId).decreaseSatang += row.amountSatang
+  }
+  return result
 }
 
 /** ยอดตามเอกสารของหลายรอบวางบิลในครั้งเดียว (ไม่พบ/ถูกลบ ⇒ ไม่มีคีย์ใน Map) */
@@ -157,11 +241,12 @@ export async function documentedAmountsForBatches(
             },
           },
         },
-        revenues: { where: { deletedAt: null }, select: { grossSatang: true, vatSatang: true } },
+        revenues: { where: { deletedAt: null }, select: { grossSatang: true, vatSatang: true, vatRatePctUsed: true } },
       },
     }),
     loadCreditNoteTotals(organizationId, ids, client, asOf),
   ])
+  const reductionInputs = await loadReductionInputs(organizationId, ids, client, asOf)
 
   for (const batch of batches) {
     const sales = batch.salesRecord
@@ -175,13 +260,28 @@ export async function documentedAmountsForBatches(
           }
     const credit = notes.credit.get(batch.id) ?? ZERO_AMOUNTS
     const debit = notes.debit.get(batch.id) ?? ZERO_AMOUNTS
+    const loaded = reductionInputs.get(batch.id) ?? { invoicedBeforeVatSatang: 0, legacyInvoice: false, decreaseSatang: 0 }
+    // มติผู้ใช้ 12/10/2569 (รีวิว R3 #1) — เฉพาะรอบที่ส่งแล้ว (มีรายการขาย)
+    const uninvoicedReduction =
+      sales === null
+        ? NO_UNINVOICED_REDUCTION
+        : uninvoicedReductionOf({
+            billedBeforeVatSatang: sales.totalBeforeVatSatang,
+            billedVatSatang: sales.vatSatang,
+            billedVatRatesPct: batch.revenues.map((row) => row.vatRatePctUsed.toNumber()),
+            invoicedBeforeVatSatang: loaded.invoicedBeforeVatSatang,
+            creditNoteBeforeVatSatang: credit.beforeVatSatang,
+            decreaseSatang: loaded.decreaseSatang,
+            legacyInvoice: loaded.legacyInvoice,
+          })
     result.set(batch.id, {
       billingBatchId: batch.id,
       taxInvoice: sales?.taxInvoices[0] ?? null,
       invoiced,
       creditNotes: credit,
       debitNotes: debit,
-      documented: applyCreditNotes(invoiced, credit, debit),
+      uninvoicedReduction,
+      documented: applyCreditNotes(invoiced, credit, debit, uninvoicedReduction),
     })
   }
   return result
@@ -421,11 +521,21 @@ export async function adjustmentsAwaitingNotesByBatch(
       creditNoteWaivedAt: null,
       OR: [{ billingBatchId: { in: ids } }, { revenue: { billingBatchId: { in: ids } } }],
     },
-    select: { billingBatchId: true, revenue: { select: { billingBatchId: true } } },
+    select: { adjustmentType: true, billingBatchId: true, revenue: { select: { billingBatchId: true } } },
   })
+  // มติผู้ใช้ 12/10/2569 (รีวิว R3 #1) — ลดยอดที่อยู่ในส่วนที่ยังไม่ออกใบกำกับไม่ต้องมีใบลดหนี้ ⇒ ไม่นับเป็นรายการรอเอกสาร
+  const documented = rows.some((row) => row.adjustmentType === 'decrease')
+    ? await documentedAmountsForBatches(organizationId, ids)
+    : new Map<string, DocumentedBillingAmounts>()
   for (const row of rows) {
     const batchId = row.billingBatchId ?? row.revenue?.billingBatchId ?? null
     if (batchId === null || !ids.includes(batchId)) continue
+    if (
+      row.adjustmentType === 'decrease' &&
+      !creditNoteStillRequired(documented.get(batchId)?.uninvoicedReduction.creditNoteAllowanceBeforeVatSatang)
+    ) {
+      continue
+    }
     result.set(batchId, (result.get(batchId) ?? 0) + 1)
   }
   return result

@@ -12,6 +12,7 @@ import {
   assertIssueDateNotBeforeInvoice,
   assertWithinBillingOutstanding,
   assertWithinInvoiceBalance,
+  assertWithinUninvoicedAllowance,
   AWAITING_NOTE_LABEL,
   awaitingNoteType,
   canWaiveAwaitingCreditNote,
@@ -21,6 +22,7 @@ import {
   resolveCreditNoteAmounts,
   resolveCreditNoteVatRate,
 } from '@/lib/credit-notes/credit-note'
+import { creditNoteStillRequired } from '@/lib/sales/uninvoiced-reduction'
 import type { CreditNoteCancelInput, CreditNoteCreateInput, CreditNoteListQuery } from '@/lib/credit-notes/schemas'
 import type {
   AwaitingCreditNoteDto,
@@ -33,7 +35,7 @@ import { Prisma } from '@/lib/generated/prisma/client'
 import type { CreditNoteStatus, CreditNoteType } from '@/lib/generated/prisma/enums'
 import { formatBranch } from '@/lib/format/branch'
 import { fmtSatangSymbol } from '@/lib/format/money'
-import { documentedOutstandingByBatch } from '@/lib/portal/documented-amounts'
+import { documentedAmountsForBatches, documentedOutstandingByBatch } from '@/lib/portal/documented-amounts'
 import { prisma } from '@/lib/prisma'
 import { syncBillingStatusWithDocuments } from '@/lib/revenue/billing-status-sync'
 import { SalesError } from '@/lib/sales/errors'
@@ -318,7 +320,10 @@ export async function listAdjustmentsAwaitingCreditNote(user: SessionUser): Prom
     select: { id: true, invoiceNumber: true, salesRecord: { select: { billingBatchId: true } } },
   })
   const invoiceByBatch = new Map(invoices.map((invoice) => [invoice.salesRecord.billingBatchId, invoice]))
-  const outstandingByBatch = await billOutstandingByBatch(user.organizationId, batchIds)
+  const [outstandingByBatch, documentedByBatch] = await Promise.all([
+    billOutstandingByBatch(user.organizationId, batchIds),
+    documentedAmountsForBatches(user.organizationId, batchIds),
+  ])
 
   const awaiting: AwaitingCreditNoteDto[] = []
   for (const row of adjustments) {
@@ -332,6 +337,13 @@ export async function listAdjustmentsAwaitingCreditNote(user: SessionUser): Prom
       hasActiveCreditNote: row.creditNotes.length > 0,
     })
     if (noteType === null) continue
+    // มติผู้ใช้ 12/10/2569 (รีวิว R3 #1) — ลดอยู่ในส่วนที่ยังไม่ออกใบกำกับ (ไม่มีส่วนที่ต้องลดหนี้เหลือ) ⇒ ไม่รอใบลดหนี้
+    if (
+      noteType === 'credit' &&
+      !creditNoteStillRequired(documentedByBatch.get(batchId)?.uninvoicedReduction.creditNoteAllowanceBeforeVatSatang)
+    ) {
+      continue
+    }
     awaiting.push({
       adjustmentId: row.id,
       noteType,
@@ -502,6 +514,9 @@ async function assertCreditWithinOutstanding(
       bankFeeWrittenOffSatang: true,
     },
   })
+  // มติผู้ใช้ 12/10/2569 (รีวิว R3 #1) — ส่วนที่ลดยังไม่ได้ออกใบกำกับไม่ต้องออกใบลดหนี้ ⇒ ลดหนี้ได้เฉพาะส่วนที่ออกใบแล้วเกินมูลค่าใหม่
+  const documented = (await documentedAmountsForBatches(organizationId, [batch.id], tx)).get(batch.id)
+  assertWithinUninvoicedAllowance(documented?.uninvoicedReduction.creditNoteAllowanceBeforeVatSatang ?? null, amounts)
   const outstanding = await documentedOutstandingByBatch(organizationId, [batch], tx)
   assertWithinBillingOutstanding(outstanding.get(batch.id) ?? 0, amounts)
 }

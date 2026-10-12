@@ -101,6 +101,11 @@ export interface ReceiptInvoiceInput {
    * · ไม่มีการตัด = `0` (ค่าเริ่มต้น — พฤติกรรมเดิม)
    */
   bankFeeWrittenOffSatang?: number
+  /**
+   * มติผู้ใช้ 12/10/2569 (รีวิว R3 #1) — ส่วนที่ลดในมูลค่าที่ยังไม่ออกใบ (`uninvoicedReductionOf()`) ⇒ หักจากยอดคงเหลือ
+   * ที่ออกใบได้ (ก่อน VAT + VAT) · ไม่ส่ง = ไม่มี (พฤติกรรมเดิม)
+   */
+  uninvoicedReduction?: { beforeVatSatang: number; vatSatang: number }
 }
 
 export interface ReceiptInvoiceAmounts {
@@ -128,9 +133,19 @@ export function receiptInvoiceAmounts(input: ReceiptInvoiceInput): ReceiptInvoic
   if (!Number.isInteger(bankFee) || bankFee < 0) {
     throw new RangeError(`ส่วนต่างค่าธรรมเนียมธนาคารต้องเป็นจำนวนเต็มสตางค์ไม่ติดลบ (ได้ ${bankFee})`)
   }
+  const reduction = input.uninvoicedReduction ?? { beforeVatSatang: 0, vatSatang: 0 }
+  if (
+    !Number.isInteger(reduction.beforeVatSatang) ||
+    reduction.beforeVatSatang < 0 ||
+    !Number.isInteger(reduction.vatSatang) ||
+    reduction.vatSatang < 0
+  ) {
+    throw new RangeError(`ส่วนที่ลดก่อนออกใบต้องเป็นจำนวนเต็มสตางค์ไม่ติดลบ (ได้ ${JSON.stringify(reduction)})`)
+  }
   const priorBefore = prior.reduce((sum, row) => sum + row.amountBeforeVatSatang, 0)
   const priorVat = prior.reduce((sum, row) => sum + row.vatSatang, 0)
-  const remainingBefore = basis.billedBeforeVatSatang - priorBefore
+  // มติผู้ใช้ 12/10/2569 (รีวิว R3 #1) — ส่วนที่ลดก่อนออกใบไม่ต้องออกใบ (และไม่ต้องมีใบลดหนี้)
+  const remainingBefore = basis.billedBeforeVatSatang - priorBefore - reduction.beforeVatSatang
 
   if (!Number.isInteger(paidSatang) || paidSatang <= 0 || remainingBefore <= 0) {
     throw new SalesError('TAX_INVOICE_NOTHING_TO_INVOICE', {
@@ -143,7 +158,7 @@ export function receiptInvoiceAmounts(input: ReceiptInvoiceInput): ReceiptInvoic
     basis.billedVatRatesPct.every((rate) => sameRate(rate, vatRatePct)) &&
     prior.every((row) => row.vatRatePct !== null && sameRate(row.vatRatePct, vatRatePct))
   const remainingVat = rateUnchanged
-    ? Math.max(0, basis.billedVatSatang - priorVat)
+    ? Math.max(0, basis.billedVatSatang - reduction.vatSatang - priorVat)
     : pctOfSatang(remainingBefore, vatRatePct)
   const remainingTotal = remainingBefore + remainingVat
   // มติ 12/10/2569 G3-01 — เครดิตจากใบลดหนี้ (เงินที่ลูกค้าชำระไว้แล้ว) นับเป็นการรับชำระก่อนค่าธรรมเนียมที่ตัด
@@ -297,6 +312,11 @@ export function receiptSettlementOf(input: {
   bankFeeWrittenOffSatang?: number
   invoices: readonly ReceiptLedgerInvoice[]
   notes?: readonly ReceiptLedgerNote[]
+  /**
+   * มติผู้ใช้ 12/10/2569 (รีวิว R3 #1) — ส่วนที่ลดในมูลค่าที่ยังไม่ออกใบ (รวม VAT) ณ เวลาออกใบนี้ ⇒ หักจากยอดใบแจ้งหนี้
+   * ทั้งการหาใบปิดยอดและยอดคงค้าง · ไม่ส่ง = 0
+   */
+  uninvoicedReductionTotalSatang?: number
 }): ReceiptSettlement | null {
   const active = input.invoices
     .filter((invoice) => invoice.status === 'active')
@@ -305,6 +325,7 @@ export function receiptSettlementOf(input: {
   const index = active.findIndex((invoice) => invoice.id === input.invoiceId)
   if (index === -1) return null
   const batchFee = input.bankFeeWrittenOffSatang ?? 0
+  const billedTotal = input.billedTotalSatang - (input.uninvoicedReductionTotalSatang ?? 0)
 
   // ใบลดหนี้ที่นับเป็นเครดิตได้ = อ้างใบเสร็จฯ (ใบที่ผูกเงินรับ) — ตรงกับ `prior` ตอนออกใบ
   const receiptInvoiceIds = new Set(
@@ -325,7 +346,7 @@ export function receiptSettlementOf(input: {
   let creditAppliedSatang = 0
   for (const invoice of active.slice(0, index + 1)) {
     invoicedSoFar += invoice.totalSatang
-    const isClosing = !closed && invoicedSoFar >= input.billedTotalSatang
+    const isClosing = !closed && invoicedSoFar >= billedTotal
     if (isClosing) closed = true
     const received = invoice.receivedSatang ?? invoice.totalSatang
     const gap = Math.max(0, invoice.totalSatang - received)
@@ -342,7 +363,7 @@ export function receiptSettlementOf(input: {
   }
 
   const asOf = active[index]?.createdAt.getTime() ?? 0
-  let documented = input.billedTotalSatang
+  let documented = billedTotal
   for (const note of input.notes ?? []) {
     if (note.status !== 'active' || note.createdAt.getTime() > asOf) continue
     documented += note.noteType === 'debit' ? note.totalSatang : -note.totalSatang
@@ -368,6 +389,7 @@ export function receiptInstallmentOf(input: {
   bankFeeWrittenOffSatang?: number
   invoices: readonly ReceiptLedgerInvoice[]
   notes?: readonly ReceiptLedgerNote[]
+  uninvoicedReductionTotalSatang?: number
 }): { sequence: number; outstandingSatang: number } | null {
   const settlement = receiptSettlementOf(input)
   if (settlement === null) return null

@@ -11,7 +11,7 @@ import type {
   TaxInvoiceStatus,
   VatMode,
 } from '@/lib/generated/prisma/enums'
-import { documentedOutstandingByBatch } from '@/lib/portal/documented-amounts'
+import { documentedAmountsForBatches, documentedOutstandingByBatch } from '@/lib/portal/documented-amounts'
 import { parseSellerProfileSnapshot, sellerProfileOf, sellerProfileSnapshotJson } from '@/lib/organization/profile'
 import { loadDocumentTemplateSnapshot } from '@/lib/settings/queries/tax-doc-templates'
 import { documentTemplateSnapshotJson, parseDocumentTemplateSnapshot } from '@/lib/settings/tax-doc-template'
@@ -570,6 +570,10 @@ async function planReceiptInvoice(
         where: { id: receipt.billingBatchId },
         select: { bankFeeWrittenOffSatang: true },
       })
+      // มติผู้ใช้ 12/10/2569 (รีวิว R3 #1) — Adjustment ลดยอดส่วนที่ยังไม่ออกใบ ⇒ ไม่ออกใบส่วนนั้น (อ่านหลังล็อกรอบ)
+      const documented = (await documentedAmountsForBatches(organizationId, [receipt.billingBatchId], tx)).get(
+        receipt.billingBatchId,
+      )
       const computed = receiptInvoiceAmounts({
         basis: {
           billedBeforeVatSatang: sales.totalBeforeVatSatang,
@@ -590,6 +594,7 @@ async function planReceiptInvoice(
         // ภาษีที่ลูกค้าหัก ณ ที่จ่ายนับเป็นการรับชำระ (U95)
         paidSatang: receipt.amountSatang + receipt.whtWithheldByCustomerSatang,
         bankFeeWrittenOffSatang: batchFee?.bankFeeWrittenOffSatang ?? 0,
+        uninvoicedReduction: documented?.uninvoicedReduction,
         vatRatePct,
       })
       assertVatApplicable({ vatModes: vat.modes, vatRatePct, vatSatang: computed.vatSatang })
@@ -916,13 +921,25 @@ function activeNotesQuery(invoiceId: string) {
 }
 
 
+/**
+ * มติผู้ใช้ 12/10/2569 (รีวิว R3 #1) — ส่วนที่ลดในมูลค่าที่ยังไม่ออกใบ (รวม VAT) ของรอบ ณ วันที่ใบ ⇒ ข้อความ
+ * "ครั้งที่ / ยอดคงค้าง" บนใบคิดจากยอดหลังลด · คิดจาก Adjustment ที่อนุมัติไม่หลังวันที่ใบ ⇒ พิมพ์ซ้ำได้ตัวเลขเดิม
+ */
+async function reductionTotalAsOf(organizationId: string, billingBatchId: string, invoiceDate: Date): Promise<number> {
+  const documented = await documentedAmountsForBatches(organizationId, [billingBatchId], prisma, invoiceDate)
+  return documented.get(billingBatchId)?.uninvoicedReduction.totalSatang ?? 0
+}
+
 /** ข้อมูลดิบของเอกสารสำหรับ PDF (`28` §6.2) — ประกอบเป็นข้อความที่ `buildTaxInvoiceDoc()` */
 export async function getTaxInvoiceDocSource(user: SessionUser, invoiceId: string): Promise<TaxInvoiceDocSource> {
   const { invoice, sales } = await findTaxInvoice(user, invoiceId)
-  const notes = await prisma.creditNote.findMany({
-    where: { taxInvoice: { salesRecordId: sales.id } },
-    select: LEDGER_NOTE_SELECT,
-  })
+  const [notes, uninvoicedReductionTotalSatang] = await Promise.all([
+    prisma.creditNote.findMany({
+      where: { taxInvoice: { salesRecordId: sales.id } },
+      select: LEDGER_NOTE_SELECT,
+    }),
+    reductionTotalAsOf(user.organizationId, sales.billingBatchId, invoice.invoiceDate),
+  ])
   return docSourceOf(invoice, {
     periodLabel: sales.period.periodLabel,
     billingBatchNumber: sales.billingBatch.batchNumber,
@@ -930,6 +947,7 @@ export async function getTaxInvoiceDocSource(user: SessionUser, invoiceId: strin
     bankFeeWrittenOffSatang: sales.billingBatch.bankFeeWrittenOffSatang,
     siblings: sales.taxInvoices,
     notes,
+    uninvoicedReductionTotalSatang,
   })
 }
 
@@ -978,6 +996,8 @@ function docSourceOf(
     bankFeeWrittenOffSatang: number
     siblings: readonly SiblingInvoice[]
     notes: readonly ReceiptLedgerNote[]
+    /** มติผู้ใช้ 12/10/2569 (รีวิว R3 #1) — ส่วนที่ลดก่อนออกใบ (รวม VAT) ณ วันที่ใบ ({@link reductionTotalAsOf}) */
+    uninvoicedReductionTotalSatang: number
   },
 ): TaxInvoiceDocSource {
   const receipt = invoice.cashReceipt
@@ -987,6 +1007,7 @@ function docSourceOf(
     bankFeeWrittenOffSatang: context.bankFeeWrittenOffSatang,
     invoices: ledgerInvoicesOf(context.siblings),
     notes: context.notes,
+    uninvoicedReductionTotalSatang: context.uninvoicedReductionTotalSatang,
   }
   // มติ 12/10/2569 G3-01 — ส่วนที่ยอดใบเกินเงินรับ = เครดิตใบลดหนี้ และ/หรือ ค่าธรรมเนียมที่ตัด (เฉพาะใบปิดยอด — U169)
   const settlement = receiptSettlementOf(ledger)
@@ -1072,6 +1093,7 @@ export async function taxInvoicesForPack(
       salesRecord: {
         select: {
           totalSatang: true,
+          billingBatchId: true,
           period: { select: { periodLabel: true } },
           billingBatch: { select: { period: true, batchNumber: true, bankFeeWrittenOffSatang: true } },
           taxInvoices: {
@@ -1091,6 +1113,14 @@ export async function taxInvoicesForPack(
       },
     },
   })
+
+  // มติผู้ใช้ 12/10/2569 (รีวิว R3 #1) — ส่วนที่ลดก่อนออกใบ ณ วันที่ใบ (ต่อรอบ × วันที่ — ไม่ซ้ำ query)
+  const reductionByKey = new Map<string, number>()
+  for (const row of rows) {
+    const key = `${row.salesRecord.billingBatchId}|${row.invoiceDate.toISOString()}`
+    if (reductionByKey.has(key)) continue
+    reductionByKey.set(key, await reductionTotalAsOf(organizationId, row.salesRecord.billingBatchId, row.invoiceDate))
+  }
 
   return rows.map((row) => {
     const { salesRecord: sales, replacedBy, ...invoice } = row
@@ -1113,6 +1143,8 @@ export async function taxInvoicesForPack(
         bankFeeWrittenOffSatang: sales.billingBatch.bankFeeWrittenOffSatang,
         siblings: sales.taxInvoices,
         notes: sales.taxInvoices.flatMap((sibling) => sibling.creditNotes),
+        uninvoicedReductionTotalSatang:
+          reductionByKey.get(`${sales.billingBatchId}|${row.invoiceDate.toISOString()}`) ?? 0,
       }),
       companyName: row.buyerName,
       billingRef: sales.billingBatch.period,

@@ -254,6 +254,30 @@ export function assertWithinBillingOutstanding(billingOutstandingSatang: number,
   })
 }
 
+/**
+ * มติผู้ใช้ 12/10/2569 (รีวิว R3 #1 · `22` §6.8.3) — รอบที่ออกใบเสร็จรับเงิน/ใบกำกับภาษีเมื่อรับชำระและยังมีมูลค่าที่ยังไม่ออกใบ:
+ * ใบลดหนี้ลดได้เฉพาะ**ส่วนที่ออกใบกำกับแล้วเกินมูลค่าใหม่** (`creditNoteAllowanceBeforeVatSatang` ของ `uninvoicedReductionOf()`)
+ * · ส่วนที่ลดยังไม่ได้ออกใบกำกับ ไม่ต้องออกใบลดหนี้ · `null` = กติกานี้ไม่จำกัด (ใบกำกับแบบเดิม/ออกใบครบรอบแล้ว)
+ * · code เดียวกับเพดานยอดค้าง (`CREDIT_NOTE_EXCEEDS_OUTSTANDING` — `24` §6.8) ข้อความบอกเหตุผล + ยอดที่ลดได้
+ */
+export function assertWithinUninvoicedAllowance(allowanceBeforeVatSatang: number | null, next: CreditNoteAmounts): void {
+  if (allowanceBeforeVatSatang === null || next.amountBeforeVatSatang <= allowanceBeforeVatSatang) return
+  const available = Math.max(0, allowanceBeforeVatSatang)
+  throw new SalesError('CREDIT_NOTE_EXCEEDS_OUTSTANDING', {
+    detail: `ขอลด ${next.amountBeforeVatSatang} (ก่อน VAT) ส่วนที่ออกใบแล้วเกินมูลค่าใหม่ ${available}`,
+    context: {
+      creditNoteAllowanceBeforeVatSatang: available,
+      requestedBeforeVatSatang: next.amountBeforeVatSatang,
+    },
+    message:
+      available === 0
+        ? 'ส่วนที่ลดยังไม่ได้ออกใบกำกับภาษี ไม่ต้องออกใบลดหนี้ — ยอดที่ลดผ่านรายการปรับปรุง (ลดยอด) ของรอบนี้ ' +
+          'หักจากยอดเรียกเก็บให้แล้ว และใบเสร็จรับเงิน/ใบกำกับภาษีครั้งถัดไปจะออกตามยอดหลังลด'
+        : `ใบลดหนี้ลดได้เฉพาะส่วนที่ลดลงไปในยอดที่ออกใบกำกับภาษีแล้ว ไม่เกิน ${fmtSatangSymbol(available)} (ก่อนภาษี) — ` +
+          'ส่วนที่ลดยังไม่ได้ออกใบกำกับภาษี ไม่ต้องออกใบลดหนี้',
+  })
+}
+
 // ── เงื่อนไขอื่น ────────────────────────────────────────────────────────────
 
 /** ใบกำกับที่ยกเลิกแล้วอ้างถึงไม่ได้ (ต้องอ้างใบที่ใช้งานอยู่) */

@@ -88,9 +88,11 @@ export async function loadTaxInvoiceCoverage(
             batchFullyPaid: batch.status === 'paid',
             invoicedBeforeVatSatang: invoicedBeforeVat,
             billedBeforeVatSatang: batch.salesRecord?.totalBeforeVatSatang ?? null,
+            uninvoicedReductionBeforeVatSatang: amounts.uninvoicedReduction.beforeVatSatang,
           }),
         ),
         vatRateDiffers,
+        uninvoicedReduction: amounts.uninvoicedReduction,
       },
     ]
   })
@@ -111,6 +113,7 @@ export async function loadReceiptsAwaitingTaxInvoice(
     select: {
       amountSatang: true,
       whtWithheldByCustomerSatang: true,
+      billingBatchId: true,
       billingBatch: {
         select: {
           status: true,
@@ -124,9 +127,14 @@ export async function loadReceiptsAwaitingTaxInvoice(
       },
     },
   })
+  // มติผู้ใช้ 12/10/2569 (รีวิว R3 #1) — ส่วนที่ลดก่อนออกใบไม่ต้องออกใบ ⇒ รอบที่ออกครบยอดหลังลดแล้วไม่นับ
+  const documented = await documentedAmountsForBatches(organizationId, [
+    ...new Set(receipts.map((receipt) => receipt.billingBatchId)),
+  ])
   const awaiting = receipts.filter((receipt) => {
     const invoices = receipt.billingBatch.salesRecord?.taxInvoices ?? []
     return receiptAwaitsTaxInvoice({
+      uninvoicedReductionBeforeVatSatang: documented.get(receipt.billingBatchId)?.uninvoicedReduction.beforeVatSatang ?? 0,
       hasActiveInvoice: false,
       coveredByLegacyInvoice: invoices.some((invoice) => invoice.docKind === 'tax_invoice'),
       batchFullyPaid: receipt.billingBatch.status === 'paid',
