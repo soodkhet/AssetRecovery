@@ -5,7 +5,9 @@ import {
   receiptInvoiceAmounts,
   receiptInvoiceDescriptionOf,
   receiptInstallmentOf,
+  receiptSettlementOf,
   replacementNoteOf,
+  unappliedCreditNoteSatang,
   TAX_INVOICE_DOC_KIND_TITLE,
 } from '@/lib/sales/receipt-invoice'
 
@@ -35,6 +37,7 @@ describe('receiptInvoiceAmounts — ยอดบนใบเสร็จรั�
       coversRemainder: true,
       excessSatang: 0,
       bankFeeSatang: 0,
+      creditAppliedSatang: 0,
     })
   })
 
@@ -96,6 +99,7 @@ describe('receiptInvoiceAmounts — ยอดบนใบเสร็จรั�
         coversRemainder: true,
         excessSatang: 0,
         bankFeeSatang: 4_000,
+        creditAppliedSatang: 0,
       })
       expect(receiptInvoiceDescriptionOf({ periodLabel: 'ตุลาคม 2569', billingBatchNumber: 'BL-2569-011', coversRemainder: result.coversRemainder })).not.toContain('บางส่วน')
     })
@@ -255,5 +259,234 @@ describe('receiptInstallmentOf — ลำดับรับชำระบาง
       sequence: 2,
       outstandingSatang: 0,
     })
+  })
+})
+
+describe('มติ 12/10/2569 G3-01 — ใบลดหนี้ระหว่างรับชำระบางส่วน: ใบถัดไปนับเครดิตจากใบลดหนี้', () => {
+  /** ผลรวมสุทธิของรอบ: Σ ใบกำกับ − Σ ใบลดหนี้ + Σ ใบเพิ่มหนี้ */
+  const sum = (rows: readonly { totalBeforeVatSatang: number; vatSatang: number; totalSatang: number }[]) =>
+    rows.reduce(
+      (acc, row) => ({
+        before: acc.before + row.totalBeforeVatSatang,
+        vat: acc.vat + row.vatSatang,
+        total: acc.total + row.totalSatang,
+      }),
+      { before: 0, vat: 0, total: 0 },
+    )
+  const priorOf = (
+    invoice: { totalBeforeVatSatang: number; vatSatang: number; totalSatang: number },
+    receivedSatang: number,
+    creditNoteTotalSatang = 0,
+  ) => ({
+    amountBeforeVatSatang: invoice.totalBeforeVatSatang,
+    vatSatang: invoice.vatSatang,
+    totalSatang: invoice.totalSatang,
+    vatRatePct: 7,
+    receivedSatang,
+    creditNoteTotalSatang,
+  })
+
+  // NDP (รวม VAT) — BL-2569-002: 2,871.54 + VAT 201.01 = 3,072.55
+  const ndp = { billedBeforeVatSatang: 287_154, billedVatSatang: 20_101, billedVatRatesPct: [7] }
+  // MTJ (ไม่รวม VAT) — 10,000.00 + VAT 700.00 = 10,700.00
+  const mtj = { billedBeforeVatSatang: 1_000_000, billedVatSatang: 70_000, billedVatRatesPct: [7] }
+
+  it('ไม่มีใบลดหนี้ ⇒ เครดิต 0 · พฤติกรรมเดิมทุกสตางค์', () => {
+    const first = receiptInvoiceAmounts({ basis: ndp, prior: [], paidSatang: 200_000, vatRatePct: 7 })
+    expect(first).toMatchObject({ totalSatang: 200_000, vatSatang: 13_084, creditAppliedSatang: 0, coversRemainder: false })
+    expect(unappliedCreditNoteSatang([priorOf(first, 200_000)])).toBe(0)
+    const last = receiptInvoiceAmounts({ basis: ndp, prior: [priorOf(first, 200_000)], paidSatang: 107_255, vatRatePct: 7 })
+    expect(last).toMatchObject({ totalSatang: 107_255, coversRemainder: true, creditAppliedSatang: 0, bankFeeSatang: 0 })
+  })
+
+  it('BL-2569-002 — ใบลดหนี้ 200 ก่อนรับครั้งสุดท้าย (รับ 786.40 + ลูกค้าหัก 86.15) ⇒ ใบปิดยอด 1,002.38 + 70.17 = 1,072.55', () => {
+    const first = receiptInvoiceAmounts({ basis: ndp, prior: [], paidSatang: 200_000, vatRatePct: 7 })
+    expect(first).toMatchObject({ totalBeforeVatSatang: 186_916, vatSatang: 13_084 })
+    const cn = { totalBeforeVatSatang: 18_692, vatSatang: 1_308, totalSatang: 20_000 }
+
+    const last = receiptInvoiceAmounts({
+      basis: ndp,
+      prior: [priorOf(first, 200_000, cn.totalSatang)],
+      paidSatang: 78_640 + 8_615,
+      vatRatePct: 7,
+    })
+    expect(last).toEqual({
+      totalBeforeVatSatang: 100_238,
+      vatSatang: 7_017,
+      totalSatang: 107_255,
+      vatRatePct: 7,
+      coversRemainder: true,
+      excessSatang: 0,
+      bankFeeSatang: 0,
+      creditAppliedSatang: 20_000,
+    })
+    // รอบรับชำระครบ ⇒ Σ ใบกำกับ − ใบลดหนี้ = ยอดสุทธิของรอบ (3,072.55 − 200) ทุกช่อง
+    const invoices = sum([first, last])
+    expect(invoices.total - cn.totalSatang).toBe(307_255 - 20_000)
+    expect(invoices.before - cn.totalBeforeVatSatang).toBe(287_154 - 18_692)
+    expect(invoices.vat - cn.vatSatang).toBe(20_101 - 1_308)
+  })
+
+  it('รับหลายครั้งหลังใบลดหนี้ (ไม่รวม VAT) ⇒ ใบแรกหลังลดหนี้รวมเครดิตครั้งเดียว · ใบถัดไปไม่นับซ้ำ', () => {
+    const first = receiptInvoiceAmounts({ basis: mtj, prior: [], paidSatang: 500_000, vatRatePct: 7 })
+    const cn = { totalBeforeVatSatang: 100_000, vatSatang: 7_000, totalSatang: 107_000 }
+    const second = receiptInvoiceAmounts({
+      basis: mtj,
+      prior: [priorOf(first, 500_000, cn.totalSatang)],
+      paidSatang: 200_000,
+      vatRatePct: 7,
+    })
+    expect(second).toMatchObject({ totalSatang: 307_000, vatSatang: 20_084, coversRemainder: false, creditAppliedSatang: 107_000 })
+    const prior2 = [priorOf(first, 500_000, cn.totalSatang), priorOf(second, 200_000)]
+    expect(unappliedCreditNoteSatang(prior2)).toBe(0)
+
+    // ลูกค้าหัก ณ ที่จ่าย 3% ของฐานก่อน VAT ที่เหลือ: เงินโอน 2,551.10 + ภาษีที่ถูกหัก 78.90 = 2,630.00
+    const third = receiptInvoiceAmounts({ basis: mtj, prior: prior2, paidSatang: 255_110 + 7_890, vatRatePct: 7 })
+    expect(third).toMatchObject({ totalSatang: 263_000, coversRemainder: true, creditAppliedSatang: 0, excessSatang: 0 })
+    const invoices = sum([first, second, third])
+    expect(invoices.total).toBe(1_070_000)
+    expect(invoices.vat - cn.vatSatang).toBe(70_000 - 7_000)
+  })
+
+  it('ใบลดหนี้หลายใบ (อ้างคนละใบ) ⇒ เครดิตรวมกัน · ใบที่ไม่ผูกเงินรับ (ใบกำกับแบบเดิม) ไม่นับเป็นเครดิต', () => {
+    const a = receiptInvoiceAmounts({ basis: mtj, prior: [], paidSatang: 300_000, vatRatePct: 7 })
+    const b = receiptInvoiceAmounts({ basis: mtj, prior: [priorOf(a, 300_000)], paidSatang: 300_000, vatRatePct: 7 })
+    const prior = [priorOf(a, 300_000, 10_700), priorOf(b, 300_000, 21_400)]
+    expect(unappliedCreditNoteSatang(prior)).toBe(32_100)
+    expect(unappliedCreditNoteSatang([{ ...priorOf(a, 300_000, 10_700), receivedSatang: null }])).toBe(0)
+
+    const last = receiptInvoiceAmounts({ basis: mtj, prior, paidSatang: 470_000 - 32_100, vatRatePct: 7 })
+    expect(last).toMatchObject({ totalSatang: 470_000, coversRemainder: true, creditAppliedSatang: 32_100 })
+    expect(sum([a, b, last]).total - 32_100).toBe(1_070_000 - 32_100)
+  })
+
+  it('เครดิต + ค่าธรรมเนียมที่ตัดในใบปิดยอด ⇒ เครดิตนับก่อน ส่วนที่เหลือเป็นค่าธรรมเนียม · เครดิตเกินยอดคงเหลือไม่ออกเกิน', () => {
+    const first = receiptInvoiceAmounts({ basis: mtj, prior: [], paidSatang: 500_000, vatRatePct: 7 })
+    const last = receiptInvoiceAmounts({
+      basis: mtj,
+      prior: [priorOf(first, 500_000, 107_000)],
+      paidSatang: 570_000 - 107_000 - 2_000,
+      bankFeeWrittenOffSatang: 2_000,
+      vatRatePct: 7,
+    })
+    expect(last).toMatchObject({ totalSatang: 570_000, coversRemainder: true, creditAppliedSatang: 107_000, bankFeeSatang: 2_000 })
+
+    const capped = receiptInvoiceAmounts({
+      basis: mtj,
+      prior: [priorOf(first, 500_000, 107_000)],
+      paidSatang: 500_000,
+      vatRatePct: 7,
+    })
+    expect(capped).toMatchObject({ totalSatang: 570_000, creditAppliedSatang: 70_000, excessSatang: 0, bankFeeSatang: 0 })
+  })
+
+  it('ใบลดหนี้หลังรอบรับชำระครบแล้ว ⇒ ไม่มีมูลค่าให้ออกใบเพิ่ม (TAX_INVOICE_NOTHING_TO_INVOICE)', () => {
+    const full = receiptInvoiceAmounts({ basis: mtj, prior: [], paidSatang: 1_070_000, vatRatePct: 7 })
+    expect(
+      codeOf(() =>
+        receiptInvoiceAmounts({ basis: mtj, prior: [priorOf(full, 1_070_000, 10_700)], paidSatang: 100, vatRatePct: 7 }),
+      ),
+    ).toBe('TAX_INVOICE_NOTHING_TO_INVOICE')
+  })
+
+  it('ใบเพิ่มหนี้ (เอกสารภาษีในตัว) ⇒ เงินที่ชำระส่วนเพิ่มหนี้ไม่ออกใบซ้ำ: ใบปิดยอดเท่ายอดคงเหลือ ส่วนเพิ่มหนี้เป็นส่วนเกิน', () => {
+    const first = receiptInvoiceAmounts({ basis: mtj, prior: [], paidSatang: 500_000, vatRatePct: 7 })
+    const dn = { totalBeforeVatSatang: 2_000, vatSatang: 140, totalSatang: 2_140 } // BL-2569-005 แบบ DN 21.40
+    // ใบเพิ่มหนี้ไม่ใช่เครดิต — prior ไม่นับยอดใบเพิ่มหนี้
+    const last = receiptInvoiceAmounts({ basis: mtj, prior: [priorOf(first, 500_000)], paidSatang: 570_000 + dn.totalSatang, vatRatePct: 7 })
+    expect(last).toMatchObject({ totalSatang: 570_000, coversRemainder: true, excessSatang: 2_140, creditAppliedSatang: 0 })
+    // รอบครบ ⇒ Σ ใบกำกับ + ใบเพิ่มหนี้ = ยอดสุทธิของรอบ
+    expect(sum([first, last]).total + dn.totalSatang).toBe(1_070_000 + 2_140)
+    expect(sum([first, last]).vat + dn.vatSatang).toBe(70_000 + 140)
+
+    // จ่ายส่วนเพิ่มหนี้แยกหลังใบปิดยอด ⇒ ไม่มียอดให้ออกใบ (ใบเพิ่มหนี้คือเอกสารภาษีของส่วนนั้น)
+    const closed = [priorOf(first, 500_000), priorOf(last, 570_000)]
+    expect(codeOf(() => receiptInvoiceAmounts({ basis: mtj, prior: closed, paidSatang: 2_140, vatRatePct: 7 }))).toBe(
+      'TAX_INVOICE_NOTHING_TO_INVOICE',
+    )
+  })
+})
+
+describe('receiptSettlementOf — ยอดค้างจริงหลังใบลดหนี้/ใบเพิ่มหนี้ (มติ 12/10/2569 G3-01)', () => {
+  const at = (minute: number): Date => new Date(Date.UTC(2026, 9, 12, 3, minute))
+  const cn = (total: number, minute: number) => ({
+    noteType: 'credit' as const,
+    status: 'active' as const,
+    totalSatang: total,
+    createdAt: at(minute),
+  })
+
+  it('BL-2569-002 — ใบปิดยอดพิมพ์ "ครั้งที่ 2 (ครบยอด)" ไม่มียอดค้าง · แถวหักเครดิต 200 · ใบแรกพิมพ์ซ้ำได้ยอดค้างเดิม', () => {
+    const input = {
+      billedTotalSatang: 307_255,
+      invoices: [
+        { id: 'iv1', status: 'active' as const, totalSatang: 200_000, createdAt: at(1), receivedSatang: 200_000 },
+        { id: 'iv3', status: 'active' as const, totalSatang: 107_255, createdAt: at(3), receivedSatang: 87_255 },
+      ],
+      notes: [cn(20_000, 2), { ...cn(5_000, 2), status: 'cancelled' as const }],
+    }
+    expect(receiptSettlementOf({ ...input, invoiceId: 'iv3' })).toEqual({
+      sequence: 2,
+      outstandingSatang: 0,
+      bankFeeSatang: 0,
+      creditAppliedSatang: 20_000,
+    })
+    expect(receiptInstallmentOf({ ...input, invoiceId: 'iv3' })).toEqual({ sequence: 2, outstandingSatang: 0 })
+    // ใบลดหนี้บันทึกหลังใบแรก ⇒ ใบแรกยังพิมพ์ยอดค้าง ณ ตอนออก
+    expect(receiptInstallmentOf({ ...input, invoiceId: 'iv1' })).toEqual({ sequence: 1, outstandingSatang: 107_255 })
+  })
+
+  it('ข้อมูลเดิมบน staging (ใบสุดท้ายออกเท่าเงินรับ 872.55) ⇒ ยอดค้างจริง 0 · ไม่มีแถวหักเครดิต', () => {
+    const settlement = receiptSettlementOf({
+      invoiceId: 'iv3',
+      billedTotalSatang: 307_255,
+      invoices: [
+        { id: 'iv1', status: 'active', totalSatang: 200_000, createdAt: at(1), receivedSatang: 200_000 },
+        { id: 'iv3', status: 'active', totalSatang: 87_255, createdAt: at(3), receivedSatang: 87_255 },
+      ],
+      notes: [cn(20_000, 2)],
+    })
+    expect(settlement).toMatchObject({ sequence: 2, outstandingSatang: 0, creditAppliedSatang: 0 })
+  })
+
+  it('รับบางส่วนหลังใบลดหนี้ ⇒ ยอดค้าง = ยอดตามเอกสาร − ที่รับ · ใบเพิ่มหนี้เพิ่มยอดค้าง', () => {
+    const invoices = [
+      { id: 'a', status: 'active' as const, totalSatang: 500_000, createdAt: at(1), receivedSatang: 500_000 },
+      { id: 'b', status: 'active' as const, totalSatang: 307_000, createdAt: at(3), receivedSatang: 200_000 },
+    ]
+    expect(receiptSettlementOf({ invoiceId: 'b', billedTotalSatang: 1_070_000, invoices, notes: [cn(107_000, 2)] })).toEqual({
+      sequence: 2,
+      outstandingSatang: 263_000,
+      bankFeeSatang: 0,
+      creditAppliedSatang: 107_000,
+    })
+    const dn = { noteType: 'debit' as const, status: 'active' as const, totalSatang: 2_140, createdAt: at(2) }
+    expect(
+      receiptInstallmentOf({ invoiceId: 'a', billedTotalSatang: 1_070_000, invoices: invoices.slice(0, 1), notes: [{ ...dn, createdAt: at(0) }] }),
+    ).toEqual({ sequence: 1, outstandingSatang: 572_140 })
+    // ใบปิดยอดที่รับส่วนเพิ่มหนี้ด้วย ⇒ ไม่มียอดค้าง
+    const closing = [
+      invoices[0]!,
+      { id: 'c', status: 'active' as const, totalSatang: 570_000, createdAt: at(3), receivedSatang: 572_140 },
+    ]
+    expect(receiptInstallmentOf({ invoiceId: 'c', billedTotalSatang: 1_070_000, invoices: closing, notes: [dn] })).toEqual({
+      sequence: 2,
+      outstandingSatang: 0,
+    })
+  })
+
+  it('ใบปิดยอดที่มีทั้งเครดิตและค่าธรรมเนียมที่ตัด ⇒ แยกแถวถูก · ใบรับบางส่วนไม่รับค่าธรรมเนียม', () => {
+    const invoices = [
+      { id: 'a', status: 'active' as const, totalSatang: 500_000, createdAt: at(1), receivedSatang: 500_000 },
+      { id: 'b', status: 'active' as const, totalSatang: 570_000, createdAt: at(3), receivedSatang: 461_000 },
+    ]
+    const input = { billedTotalSatang: 1_070_000, bankFeeWrittenOffSatang: 2_000, invoices, notes: [cn(107_000, 2)] }
+    expect(receiptSettlementOf({ ...input, invoiceId: 'b' })).toEqual({
+      sequence: 2,
+      outstandingSatang: 0,
+      bankFeeSatang: 2_000,
+      creditAppliedSatang: 107_000,
+    })
+    expect(receiptSettlementOf({ ...input, invoiceId: 'a' })).toMatchObject({ bankFeeSatang: 0, creditAppliedSatang: 0 })
   })
 })

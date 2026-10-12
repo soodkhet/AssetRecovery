@@ -21,6 +21,10 @@ import { SalesError } from '@/lib/sales/errors'
  *   **เต็มยอดคงเหลือ** (VAT จากมูลค่าบริการเต็ม — ม.79) · ค่าธรรมเนียมเป็นค่าใช้จ่ายของเราแยกต่างหาก ไม่ใช่ส่วนลด
  *   ⇒ นับส่วนต่างที่ตัดเป็น "ชำระแล้ว" **เฉพาะเมื่อ** เงินรับใบนี้ + ส่วนต่าง ≥ ยอดคงเหลือ (ใบรับบางส่วนก่อนหน้า
  *   ไม่ดูดส่วนต่างไปใช้ — ใบเดียวที่ปิดยอดเป็นผู้รับส่วนต่างเสมอ ไม่ว่าออกใบตามลำดับใด)
+ * - **มติ 12/10/2569 G3-01** — ใบลดหนี้ที่ลดใบเสร็จฯ (ลูกค้าชำระเต็มไปแล้ว) ⇒ ยอดที่ลดคือเงินที่ชำระไว้แล้วและถูกนำมาชำระ
+ *   ยอดคงเหลือของรอบ ⇒ ใบถัดไป = ยอดที่รับ + เครดิตที่ยังไม่ถูกนำไปออกใบ ({@link unappliedCreditNoteSatang}) ไม่เกินยอดคงเหลือ
+ *   ⇒ รอบรับชำระครบ: Σ ใบกำกับ − Σ ใบลดหนี้ + Σ ใบเพิ่มหนี้ = ยอดตามเอกสารของรอบ ทุกสตางค์
+ *   · ใบเพิ่มหนี้เป็นเอกสารภาษีในตัว (ม.86/9) ⇒ เงินที่ชำระส่วนเพิ่มหนี้ไม่ออกใบซ้ำ (ใบปิดยอดออกเท่ายอดคงเหลือ ส่วนที่เกิน = `excessSatang`)
  */
 
 export const RECEIPT_TAX_INVOICE_TITLE = 'ใบเสร็จรับเงิน/ใบกำกับภาษี'
@@ -52,6 +56,37 @@ export interface PriorInvoiceAmounts {
   vatSatang: number
   /** `null` = ใบเดิมหลายอัตรา */
   vatRatePct: number | null
+  /** มติ 12/10/2569 G3-01 — ยอดรวมบนใบ (ไม่ส่ง = ก่อน VAT + VAT) */
+  totalSatang?: number
+  /**
+   * มติ 12/10/2569 G3-01 — ยอดที่รับชำระของเงินรับที่ใบนี้ออกให้ (เงินโอน + ภาษีที่ลูกค้าหัก)
+   * · ใบกำกับแบบเดิม/ไม่ผูกเงินรับ = `null`/ไม่ส่ง (ใบลดหนี้ที่อ้างใบนั้นไม่นับเป็นเครดิต)
+   */
+  receivedSatang?: number | null
+  /** มติ 12/10/2569 G3-01 — ผลรวมยอดรวมของ**ใบลดหนี้** active ที่อ้างใบนี้ (ไม่รวมใบเพิ่มหนี้) */
+  creditNoteTotalSatang?: number
+}
+
+/**
+ * มติ 12/10/2569 G3-01 — เครดิตจากใบลดหนี้ที่ยังไม่ถูกนำไปออกใบกำกับ
+ *
+ * ใบเสร็จรับเงิน/ใบกำกับภาษีออกเมื่อรับเงิน ⇒ ใบที่ถูกลดหนี้คือใบที่ลูกค้า**ชำระเต็มไปแล้ว** ·
+ * ยอดที่ลดจึงเป็นเงินที่ลูกค้าจ่ายไว้แล้วและถูกนำมาชำระยอดคงเหลือของรอบ (เป็นการรับชำระสำหรับมูลค่าที่ยังไม่ออกใบ)
+ * - เครดิตทั้งหมด = Σ ใบลดหนี้ active ที่อ้างใบเสร็จฯ (`receivedSatang ≠ null`)
+ * - ใช้ไปแล้ว     = Σ max(0, ยอดใบ − ยอดที่รับของใบนั้น) ของใบเสร็จฯ ก่อนหน้า (ใบที่รวมเครดิต/ส่วนต่างไว้)
+ * - คงเหลือ       = max(0, เครดิตทั้งหมด − ใช้ไปแล้ว)
+ * (ใบที่ปิดยอดซึ่งรวมค่าธรรมเนียมไว้ด้วยนับเป็น "ใช้ไปแล้ว" ได้ — หลังใบปิดยอดไม่มีมูลค่าให้ออกใบอีก ⇒ ไม่กระทบผล)
+ */
+export function unappliedCreditNoteSatang(prior: readonly PriorInvoiceAmounts[]): number {
+  let credit = 0
+  let applied = 0
+  for (const row of prior) {
+    if (row.receivedSatang === undefined || row.receivedSatang === null) continue
+    credit += row.creditNoteTotalSatang ?? 0
+    const total = row.totalSatang ?? row.amountBeforeVatSatang + row.vatSatang
+    applied += Math.max(0, total - row.receivedSatang)
+  }
+  return Math.max(0, credit - applied)
 }
 
 export interface ReceiptInvoiceInput {
@@ -79,6 +114,8 @@ export interface ReceiptInvoiceAmounts {
   excessSatang: number
   /** มติ PO U169 — ส่วนต่างค่าธรรมเนียมธนาคารที่ใบนี้รวมไว้ในยอดเต็ม (ใบรับบางส่วน = `0`) */
   bankFeeSatang: number
+  /** มติ 12/10/2569 G3-01 — เครดิตจากใบลดหนี้ที่ใบนี้รวมไว้ในยอด (ไม่มี = `0`) */
+  creditAppliedSatang: number
 }
 
 function sameRate(a: number, b: number): boolean {
@@ -109,8 +146,11 @@ export function receiptInvoiceAmounts(input: ReceiptInvoiceInput): ReceiptInvoic
     ? Math.max(0, basis.billedVatSatang - priorVat)
     : pctOfSatang(remainingBefore, vatRatePct)
   const remainingTotal = remainingBefore + remainingVat
+  // มติ 12/10/2569 G3-01 — เครดิตจากใบลดหนี้ (เงินที่ลูกค้าชำระไว้แล้ว) นับเป็นการรับชำระก่อนค่าธรรมเนียมที่ตัด
+  const credit = unappliedCreditNoteSatang(prior)
 
-  if (paidSatang + bankFee >= remainingTotal) {
+  if (paidSatang + credit + bankFee >= remainingTotal) {
+    const creditApplied = Math.min(credit, Math.max(0, remainingTotal - paidSatang))
     return {
       totalBeforeVatSatang: remainingBefore,
       vatSatang: remainingVat,
@@ -118,19 +158,23 @@ export function receiptInvoiceAmounts(input: ReceiptInvoiceInput): ReceiptInvoic
       vatRatePct,
       coversRemainder: true,
       excessSatang: Math.max(0, paidSatang - remainingTotal),
-      bankFeeSatang: Math.max(0, remainingTotal - paidSatang),
+      bankFeeSatang: Math.max(0, remainingTotal - paidSatang - creditApplied),
+      creditAppliedSatang: creditApplied,
     }
   }
 
-  const vatSatang = vatIncludedInSatang(paidSatang, vatRatePct)
+  // รับบางส่วน — ยอดที่รับ + เครดิตคงเหลือ (< ยอดคงเหลือ) ถือเป็นยอดรวม VAT
+  const invoiceTotal = paidSatang + credit
+  const vatSatang = vatIncludedInSatang(invoiceTotal, vatRatePct)
   return {
-    totalBeforeVatSatang: paidSatang - vatSatang,
+    totalBeforeVatSatang: invoiceTotal - vatSatang,
     vatSatang,
-    totalSatang: paidSatang,
+    totalSatang: invoiceTotal,
     vatRatePct,
     coversRemainder: false,
     excessSatang: 0,
     bankFeeSatang: 0,
+    creditAppliedSatang: credit,
   }
 }
 
@@ -200,25 +244,109 @@ export function receiptInvoiceDescriptionOf(input: {
   return input.coversRemainder ? base : `${base} — รับชำระบางส่วน`
 }
 
+export interface ReceiptLedgerInvoice {
+  id: string
+  status: 'active' | 'cancelled'
+  totalSatang: number
+  createdAt: Date
+  /**
+   * มติ 12/10/2569 G3-01 — ยอดที่รับของเงินรับที่ใบนี้ออกให้ (เงินโอน + ภาษีที่ลูกค้าหัก)
+   * · ไม่ส่ง/`null` (ใบกำกับแบบเดิม) ⇒ ถือยอดบนใบเป็นยอดที่ชำระ (พฤติกรรมเดิม)
+   */
+  receivedSatang?: number | null
+}
+
+/** ใบลดหนี้/ใบเพิ่มหนี้ของรอบ (อ้างใบกำกับใดก็ได้ในรอบเดียวกัน) */
+export interface ReceiptLedgerNote {
+  noteType: 'credit' | 'debit'
+  status: 'active' | 'cancelled'
+  totalSatang: number
+  createdAt: Date
+}
+
+export interface ReceiptSettlement {
+  /** ครั้งที่รับชำระ (ลำดับใบ active ตามเวลาที่ออก) */
+  sequence: number
+  /** ยอดค้างจริงของรอบหลังใบนี้ = ยอดตามเอกสาร (ใบแจ้งหนี้ − ใบลดหนี้ + ใบเพิ่มหนี้ ณ เวลาออกใบ) − ที่รับถึงใบนี้ */
+  outstandingSatang: number
+  /** มติ PO U169 — ค่าธรรมเนียมที่ตัดซึ่งใบนี้รวมไว้ (เฉพาะใบที่ปิดยอดของรอบ) */
+  bankFeeSatang: number
+  /** มติ 12/10/2569 G3-01 — เครดิตจากใบลดหนี้ที่ใบนี้รวมไว้ = ยอดใบ − ยอดที่รับ − ค่าธรรมเนียม */
+  creditAppliedSatang: number
+}
+
 /**
- * ลำดับการรับชำระของใบในรอบวางบิลเดียวกัน (มติ PO U100 — ข้อความ "รับชำระบางส่วนครั้งที่ …")
- * — นับเฉพาะใบ `active` ของรายการขายเดียวกัน เรียงตามเวลาที่ออก · ยอดคงค้าง = ยอดตามใบแจ้งหนี้ − ผลรวมใบถึงใบนี้ (ไม่ติดลบ)
- * · ใบนี้ไม่ active / ไม่พบ ⇒ `null` · ใบเดียวรับครบยอด ⇒ `null` (ไม่ต้องพิมพ์ข้อความ)
+ * การชำระที่ใบนี้รับรู้ (มติ 12/10/2569 G3-01) — **pure** · ใช้ประกอบข้อความ "ครั้งที่ / ยอดคงค้าง" และแถวหักบนใบ
+ * - ใบ active เรียงตามเวลาที่ออก · ใบที่ผลรวมยอดถึงยอดใบแจ้งหนี้เป็นใบแรก = ใบปิดยอด (รับค่าธรรมเนียมที่ตัด)
+ * - ส่วนต่าง = max(0, ยอดใบ − ยอดที่รับ) ⇒ ค่าธรรมเนียม = ใบปิดยอด ? min(ค่าธรรมเนียมที่ตัด, ส่วนต่าง) : 0 ·
+ *   เครดิตใบลดหนี้ = ส่วนต่าง − ค่าธรรมเนียม
+ * - ยอดค้าง = max(0, ใบแจ้งหนี้ − Σ ใบลดหนี้ + Σ ใบเพิ่มหนี้ (active · บันทึกไม่หลังเวลาออกใบนี้)
+ *   − Σ (ยอดที่รับ + ค่าธรรมเนียม) ของใบถึงใบนี้) ⇒ พิมพ์ซ้ำภายหลังได้ตัวเลขเดิม
+ * · ใบนี้ไม่ active / ไม่พบ ⇒ `null`
  */
-export function receiptInstallmentOf(input: {
+export function receiptSettlementOf(input: {
   invoiceId: string
   billedTotalSatang: number
-  invoices: ReadonlyArray<{ id: string; status: 'active' | 'cancelled'; totalSatang: number; createdAt: Date }>
-}): { sequence: number; outstandingSatang: number } | null {
+  bankFeeWrittenOffSatang?: number
+  invoices: readonly ReceiptLedgerInvoice[]
+  notes?: readonly ReceiptLedgerNote[]
+}): ReceiptSettlement | null {
   const active = input.invoices
     .filter((invoice) => invoice.status === 'active')
     .slice()
     .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id))
   const index = active.findIndex((invoice) => invoice.id === input.invoiceId)
   if (index === -1) return null
-  const invoicedSoFar = active.slice(0, index + 1).reduce((sum, invoice) => sum + invoice.totalSatang, 0)
-  const outstandingSatang = Math.max(0, input.billedTotalSatang - invoicedSoFar)
-  const sequence = index + 1
+  const batchFee = input.bankFeeWrittenOffSatang ?? 0
+
+  let invoicedSoFar = 0
+  let closed = false
+  let receivedSoFar = 0
+  let bankFeeSatang = 0
+  let creditAppliedSatang = 0
+  for (const invoice of active.slice(0, index + 1)) {
+    invoicedSoFar += invoice.totalSatang
+    const isClosing = !closed && invoicedSoFar >= input.billedTotalSatang
+    if (isClosing) closed = true
+    const received = invoice.receivedSatang ?? invoice.totalSatang
+    const gap = Math.max(0, invoice.totalSatang - received)
+    const fee = isClosing ? Math.min(batchFee, gap) : 0
+    receivedSoFar += received + fee
+    bankFeeSatang = fee
+    creditAppliedSatang = gap - fee
+  }
+
+  const asOf = active[index]?.createdAt.getTime() ?? 0
+  let documented = input.billedTotalSatang
+  for (const note of input.notes ?? []) {
+    if (note.status !== 'active' || note.createdAt.getTime() > asOf) continue
+    documented += note.noteType === 'debit' ? note.totalSatang : -note.totalSatang
+  }
+
+  return {
+    sequence: index + 1,
+    outstandingSatang: Math.max(0, documented - receivedSoFar),
+    bankFeeSatang,
+    creditAppliedSatang,
+  }
+}
+
+/**
+ * ลำดับการรับชำระของใบในรอบวางบิลเดียวกัน (มติ PO U100 — ข้อความ "รับชำระบางส่วนครั้งที่ …")
+ * — นับเฉพาะใบ `active` ของรายการขายเดียวกัน เรียงตามเวลาที่ออก · ยอดคงค้าง = ยอดค้างจริงหลังใบลดหนี้/ใบเพิ่มหนี้
+ *   ({@link receiptSettlementOf} — มติ 12/10/2569 G3-01 · เดิมคิดจากผลรวมใบ ⇒ รอบที่มีใบลดหนี้พิมพ์ยอดค้างเกินจริง)
+ * · ใบนี้ไม่ active / ไม่พบ ⇒ `null` · ใบเดียวรับครบยอด ⇒ `null` (ไม่ต้องพิมพ์ข้อความ)
+ */
+export function receiptInstallmentOf(input: {
+  invoiceId: string
+  billedTotalSatang: number
+  bankFeeWrittenOffSatang?: number
+  invoices: readonly ReceiptLedgerInvoice[]
+  notes?: readonly ReceiptLedgerNote[]
+}): { sequence: number; outstandingSatang: number } | null {
+  const settlement = receiptSettlementOf(input)
+  if (settlement === null) return null
+  const { sequence, outstandingSatang } = settlement
   if (sequence === 1 && outstandingSatang === 0) return null
   return { sequence, outstandingSatang }
 }

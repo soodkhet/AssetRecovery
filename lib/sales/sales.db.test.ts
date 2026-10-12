@@ -479,6 +479,52 @@ suite('มติ PO U95 — รับเงิน ⇒ ใบเสร็จร�
     )
   })
 
+  it('มติ 12/10/2569 G3-01 — ใบลดหนี้ระหว่างรับบางส่วน ⇒ ใบปิดยอดรวมเครดิต 1,072.55 · พิมพ์ครบยอด ไม่มียอดค้าง · ใบเพิ่มหนี้ไม่ออกซ้ำ', async () => {
+    await setNumbering({ seq: 50 })
+    // แบบ BL-2569-002: 2,871.54 + VAT 201.01 = 3,072.55
+    const batch = await seedBilling({ status: 'sent', grossSatang: 287_154, vatSatang: 20_101 })
+    const first = await sales.issueTaxInvoice(ctx, { cashReceiptId: await seedReceipt(batch.id, { amountSatang: 200_000 }) })
+    expect(first).toMatchObject({ totalBeforeVatSatang: 186_916, vatSatang: 13_084, totalSatang: 200_000 })
+
+    const note = async (type: 'credit' | 'debit', beforeVat: number, vat: number): Promise<void> => {
+      await db().$executeRawUnsafe(`
+        INSERT INTO credit_notes (organization_id, tax_invoice_id, note_type, credit_note_number, issue_date,
+                                  amount_before_vat_satang, vat_satang, total_satang, vat_rate_pct_used, reason, created_by,
+                                  buyer_branch_code)
+        SELECT '${ORG_ID}', id, '${type}', 'G301-${type}-' || substr(md5(random()::text), 1, 8), '${TODAY.toISOString().slice(0, 10)}',
+               ${beforeVat}, ${vat}, ${beforeVat + vat}, 7.00, $$ปรับยอดเคสทดสอบ$$, '${ACCOUNTING_ID}', buyer_branch_code
+          FROM tax_invoices WHERE id = '${first.id}'
+      `)
+    }
+    await note('credit', 18_692, 1_308) // CN 200.00 อ้างใบแรก (ลูกค้าชำระเต็มไปแล้ว)
+
+    const last = await sales.issueTaxInvoice(ctx, {
+      cashReceiptId: await seedReceipt(batch.id, { amountSatang: 78_640, whtSatang: 8_615 }),
+    })
+    expect(last).toMatchObject({ totalBeforeVatSatang: 100_238, vatSatang: 7_017, totalSatang: 107_255 })
+    // Σ ใบกำกับ − ใบลดหนี้ = ยอดสุทธิของรอบทุกสตางค์
+    expect(first.totalSatang + last.totalSatang - 20_000).toBe(307_255 - 20_000)
+    expect(first.vatSatang + last.vatSatang - 1_308).toBe(20_101 - 1_308)
+
+    const doc = buildTaxInvoiceDoc(await sales.getTaxInvoiceDocSource(accountant, last.id))
+    expect(doc.description).not.toContain('บางส่วน')
+    expect(doc.installmentNote).toContain('รับชำระครั้งที่ 2 (ครบยอด)')
+    expect(doc.outstandingText).toBeNull()
+    expect(doc.customerWhtText).toBe('(86.15)')
+    expect(doc.creditNoteCreditText).toBe('(200.00)')
+    expect(doc.bankFeeText).toBeNull()
+    expect(doc.receivedText).toBe('786.40')
+    // ใบแรกพิมพ์ซ้ำ ⇒ ยอดค้าง ณ ตอนออก (ใบลดหนี้บันทึกทีหลัง)
+    expect(buildTaxInvoiceDoc(await sales.getTaxInvoiceDocSource(accountant, first.id)).outstandingText).toBe('1,072.55')
+
+    // ใบเพิ่มหนี้ (เอกสารภาษีในตัว) ⇒ เงินที่ชำระส่วนเพิ่มหนี้ไม่มีมูลค่าให้ออกใบซ้ำ
+    await note('debit', 2_000, 140)
+    await expectCode(
+      async () => sales.issueTaxInvoice(ctx, { cashReceiptId: await seedReceipt(batch.id, { amountSatang: 2_140 }) }),
+      'TAX_INVOICE_NOTHING_TO_INVOICE',
+    )
+  })
+
   it('มติ PO U169 — บิลปิดด้วยการตัดส่วนต่าง (U163 ภาษีลูกค้าหัก + ค่าโอน) ⇒ ใบเต็มยอดบิล รับชำระครบ · VAT เต็ม · PDF ไม่มียอดค้าง', async () => {
     await setNumbering({ seq: 60 })
     // แบบ BL-2569-011: ก่อน VAT 1,750.03 + VAT 122.50 = 1,872.53 · เงินเข้า 1,800.00 · ลูกค้าหัก 52.50 · ค่าธรรมเนียม 20.03

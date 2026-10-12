@@ -24,6 +24,9 @@ import {
   receiptInvoiceAmounts,
   receiptInvoiceDescriptionOf,
   receiptInstallmentOf,
+  receiptSettlementOf,
+  type ReceiptLedgerInvoice,
+  type ReceiptLedgerNote,
   replacementNoteOf,
   TAX_INVOICE_DOC_KIND_TITLE,
 } from '@/lib/sales/receipt-invoice'
@@ -548,7 +551,16 @@ async function planReceiptInvoice(
       }
       const prior = await tx.taxInvoice.findMany({
         where: { salesRecordId: sales.id, status: 'active' },
-        select: { amountBeforeVatSatang: true, vatSatang: true, vatRatePctUsed: true },
+        select: {
+          amountBeforeVatSatang: true,
+          vatSatang: true,
+          totalSatang: true,
+          vatRatePctUsed: true,
+          docKind: true,
+          // มติ 12/10/2569 G3-01 — เครดิตจากใบลดหนี้ที่ลดใบเสร็จฯ (ลูกค้าชำระเต็มไปแล้ว) นับเป็นการรับชำระของใบถัดไป
+          cashReceipt: { select: { amountSatang: true, whtWithheldByCustomerSatang: true } },
+          creditNotes: { where: { status: 'active', noteType: 'credit' }, select: { totalSatang: true } },
+        },
       })
       // มติ PO U169 — บิลที่ปิดด้วยการตัดส่วนต่างเป็นค่าธรรมเนียมธนาคาร (U144/U163) ⇒ ใบที่ปิดยอดออกเต็มยอดบิล
       const batchFee = await tx.billingBatch.findUnique({
@@ -565,6 +577,12 @@ async function planReceiptInvoice(
           amountBeforeVatSatang: row.amountBeforeVatSatang,
           vatSatang: row.vatSatang,
           vatRatePct: row.vatRatePctUsed === null ? null : row.vatRatePctUsed.toNumber(),
+          totalSatang: row.totalSatang,
+          receivedSatang:
+            row.docKind === 'receipt_tax_invoice' && row.cashReceipt !== null
+              ? row.cashReceipt.amountSatang + row.cashReceipt.whtWithheldByCustomerSatang
+              : null,
+          creditNoteTotalSatang: row.creditNotes.reduce((sum, note) => sum + note.totalSatang, 0),
         })),
         // ภาษีที่ลูกค้าหัก ณ ที่จ่ายนับเป็นการรับชำระ (U95)
         paidSatang: receipt.amountSatang + receipt.whtWithheldByCustomerSatang,
@@ -898,20 +916,49 @@ function activeNotesQuery(invoiceId: string) {
 /** ข้อมูลดิบของเอกสารสำหรับ PDF (`28` §6.2) — ประกอบเป็นข้อความที่ `buildTaxInvoiceDoc()` */
 export async function getTaxInvoiceDocSource(user: SessionUser, invoiceId: string): Promise<TaxInvoiceDocSource> {
   const { invoice, sales } = await findTaxInvoice(user, invoiceId)
+  const notes = await prisma.creditNote.findMany({
+    where: { taxInvoice: { salesRecordId: sales.id } },
+    select: LEDGER_NOTE_SELECT,
+  })
   return docSourceOf(invoice, {
     periodLabel: sales.period.periodLabel,
     billingBatchNumber: sales.billingBatch.batchNumber,
     billedTotalSatang: sales.totalSatang,
+    bankFeeWrittenOffSatang: sales.billingBatch.bankFeeWrittenOffSatang,
     siblings: sales.taxInvoices,
+    notes,
   })
 }
 
-/** ใบในรายการขายเดียวกัน — ใช้คิดลำดับการรับชำระบางส่วน (`receiptInstallmentOf()`) */
+/** ใบลดหนี้/ใบเพิ่มหนี้ของรอบ — คิดยอดค้างจริงบนใบ (`receiptSettlementOf()` — มติ 12/10/2569 G3-01) */
+const LEDGER_NOTE_SELECT = {
+  noteType: true,
+  status: true,
+  totalSatang: true,
+  createdAt: true,
+} satisfies Prisma.CreditNoteSelect
+
+/** ใบในรายการขายเดียวกัน — ใช้คิดลำดับการรับชำระ/ยอดค้าง (`receiptSettlementOf()`) */
 interface SiblingInvoice {
   id: string
   status: TaxInvoiceRow['status']
+  docKind: TaxInvoiceDocKind
   totalSatang: number
   createdAt: Date
+  cashReceipt: { amountSatang: number; whtWithheldByCustomerSatang: number } | null
+}
+
+function ledgerInvoicesOf(siblings: readonly SiblingInvoice[]): ReceiptLedgerInvoice[] {
+  return siblings.map((row) => ({
+    id: row.id,
+    status: row.status,
+    totalSatang: row.totalSatang,
+    createdAt: row.createdAt,
+    receivedSatang:
+      row.docKind === 'receipt_tax_invoice' && row.cashReceipt !== null
+        ? row.cashReceipt.amountSatang + row.cashReceipt.whtWithheldByCustomerSatang
+        : null,
+  }))
 }
 
 /**
@@ -924,10 +971,21 @@ function docSourceOf(
     periodLabel: string
     billingBatchNumber: string
     billedTotalSatang: number
+    bankFeeWrittenOffSatang: number
     siblings: readonly SiblingInvoice[]
+    notes: readonly ReceiptLedgerNote[]
   },
 ): TaxInvoiceDocSource {
   const receipt = invoice.cashReceipt
+  const ledger = {
+    invoiceId: invoice.id,
+    billedTotalSatang: context.billedTotalSatang,
+    bankFeeWrittenOffSatang: context.bankFeeWrittenOffSatang,
+    invoices: ledgerInvoicesOf(context.siblings),
+    notes: context.notes,
+  }
+  // มติ 12/10/2569 G3-01 — ส่วนที่ยอดใบเกินเงินรับ = เครดิตใบลดหนี้ และ/หรือ ค่าธรรมเนียมที่ตัด (เฉพาะใบปิดยอด — U169)
+  const settlement = receiptSettlementOf(ledger)
   return {
     docKind: invoice.docKind,
     invoiceNumber: invoice.invoiceNumber,
@@ -960,8 +1018,9 @@ function docSourceOf(
         : {
             cashSatang: receipt.amountSatang,
             customerWhtSatang: receipt.whtWithheldByCustomerSatang,
-            // มติ PO U169 — ใบที่ออกเต็มยอดของบิลที่ตัดส่วนต่าง: ส่วนที่เกินเงินรับ = ค่าธรรมเนียมที่เรารับภาระ
-            bankFeeSatang: Math.max(0, invoice.totalSatang - receipt.amountSatang - receipt.whtWithheldByCustomerSatang),
+            // มติ PO U169 — ใบที่ออกเต็มยอดของบิลที่ตัดส่วนต่าง: ส่วนต่างที่ตัด = ค่าธรรมเนียมที่เรารับภาระ
+            bankFeeSatang: settlement?.bankFeeSatang ?? 0,
+            creditNoteCreditSatang: settlement?.creditAppliedSatang ?? 0,
             receivedDate: receipt.receivedDate,
             bankAccount:
               receipt.bankTransaction === null
@@ -972,11 +1031,7 @@ function docSourceOf(
                     accountName: null,
                   },
           },
-    installment: receiptInstallmentOf({
-      invoiceId: invoice.id,
-      billedTotalSatang: context.billedTotalSatang,
-      invoices: context.siblings,
-    }),
+    installment: receiptInstallmentOf(ledger),
   }
 }
 
@@ -1014,10 +1069,19 @@ export async function taxInvoicesForPack(
         select: {
           totalSatang: true,
           period: { select: { periodLabel: true } },
-          billingBatch: { select: { period: true, batchNumber: true } },
+          billingBatch: { select: { period: true, batchNumber: true, bankFeeWrittenOffSatang: true } },
           taxInvoices: {
             orderBy: { createdAt: 'asc' },
-            select: { id: true, invoiceNumber: true, createdAt: true, status: true, docKind: true, totalSatang: true },
+            select: {
+              id: true,
+              invoiceNumber: true,
+              createdAt: true,
+              status: true,
+              docKind: true,
+              totalSatang: true,
+              cashReceipt: { select: { amountSatang: true, whtWithheldByCustomerSatang: true } },
+              creditNotes: { select: LEDGER_NOTE_SELECT },
+            },
           },
         },
       },
@@ -1042,7 +1106,9 @@ export async function taxInvoicesForPack(
         periodLabel: sales.period.periodLabel,
         billingBatchNumber: sales.billingBatch.batchNumber,
         billedTotalSatang: sales.totalSatang,
+        bankFeeWrittenOffSatang: sales.billingBatch.bankFeeWrittenOffSatang,
         siblings: sales.taxInvoices,
+        notes: sales.taxInvoices.flatMap((sibling) => sibling.creditNotes),
       }),
       companyName: row.buyerName,
       billingRef: sales.billingBatch.period,

@@ -94,6 +94,10 @@ function TaxInvoiceCopy({
         {doc.bankFeeText === null ? null : (
           <SummaryRow columns={COLUMNS} tone="deduct" label={doc.bankFeeLabel} value={doc.bankFeeText} />
         )}
+        {/* มติ 12/10/2569 G3-01 — ใบที่รวมเครดิตจากใบลดหนี้ (ลูกค้าชำระไว้แล้ว) ไว้ในยอด */}
+        {doc.creditNoteCreditText === null ? null : (
+          <SummaryRow columns={COLUMNS} tone="deduct" label={doc.creditNoteCreditLabel} value={doc.creditNoteCreditText} />
+        )}
         {doc.receivedText === null ? null : (
           <SummaryRow columns={COLUMNS} tone="sub" label="ยอดรับชำระจริง" value={doc.receivedText} />
         )}

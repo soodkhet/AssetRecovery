@@ -266,6 +266,10 @@ export interface TaxInvoiceReceiptInfo {
    * (= ยอดรวมบนใบ − เงินโอน − ภาษีลูกค้าหัก) · ไม่มี = `0`/ไม่ระบุ
    */
   bankFeeSatang?: number
+  /**
+   * มติ 12/10/2569 G3-01 — เครดิตจากใบลดหนี้ (เงินที่ลูกค้าชำระไว้แล้วกับใบก่อนหน้า) ที่ใบนี้รวมไว้ในยอด · ไม่มี = `0`/ไม่ระบุ
+   */
+  creditNoteCreditSatang?: number
   receivedDate: Date
   bankAccount: DocBankAccount | null
 }
@@ -307,6 +311,9 @@ export interface TaxInvoiceDoc {
   /** มติ PO U169 — แถวหักค่าธรรมเนียมการโอนที่เรารับภาระ (ไม่มี = `null`) */
   bankFeeLabel: string
   bankFeeText: string | null
+  /** มติ 12/10/2569 G3-01 — แถวหักเครดิตจากใบลดหนี้ที่ชำระไว้แล้ว (ไม่มี = `null`) */
+  creditNoteCreditLabel: string
+  creditNoteCreditText: string | null
   /** ยอดเงินโอนเข้าจริง (ใบแบบเดิม = `null`) */
   receivedText: string | null
   paymentChannelText: string | null
@@ -396,6 +403,11 @@ export function buildTaxInvoiceDoc(source: TaxInvoiceDocSource): TaxInvoiceDoc {
     bankFeeLabel: 'หัก ค่าธรรมเนียมการโอน (ผู้รับเงินเป็นผู้รับภาระ)',
     bankFeeText:
       receipt === null || (receipt.bankFeeSatang ?? 0) <= 0 ? null : `(${fmtSatang(receipt.bankFeeSatang ?? 0)})`,
+    creditNoteCreditLabel: 'หัก ยอดชำระไว้แล้วตามใบลดหนี้ (นำมาชำระยอดคงเหลือ)',
+    creditNoteCreditText:
+      receipt === null || (receipt.creditNoteCreditSatang ?? 0) <= 0
+        ? null
+        : `(${fmtSatang(receipt.creditNoteCreditSatang ?? 0)})`,
     receivedText: receipt === null ? null : fmtSatang(receipt.cashSatang),
     paymentChannelText: receipt === null ? null : paymentChannelOf(receipt),
     installmentNote: installment === null ? null : installmentNoteOf(installment, source.billingBatchNumber),
