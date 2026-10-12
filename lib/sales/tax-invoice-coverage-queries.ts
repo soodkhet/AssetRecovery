@@ -2,6 +2,7 @@ import { documentedAmountsForBatches } from '@/lib/portal/documented-amounts'
 import { prisma } from '@/lib/prisma'
 import {
   evaluateTaxInvoiceCoverage,
+  receiptAwaitsTaxInvoice,
   type TaxInvoiceCoverageBatch,
   type TaxInvoiceCoverageResult,
 } from '@/lib/sales/tax-invoice-coverage'
@@ -31,9 +32,14 @@ export async function loadTaxInvoiceCoverage(
       bankFeeWrittenOffSatang: true,
       salesRecord: {
         select: {
-          taxInvoices: { where: { status: 'active' }, select: { docKind: true, vatSatang: true, totalSatang: true } },
+          totalBeforeVatSatang: true,
+          taxInvoices: {
+            where: { status: 'active' },
+            select: { docKind: true, amountBeforeVatSatang: true, vatSatang: true, totalSatang: true, vatRatePctUsed: true },
+          },
         },
       },
+      revenues: { where: { deletedAt: null }, select: { vatRatePctUsed: true } },
       cashReceipts: { select: { taxInvoices: { where: { status: 'active' }, select: { id: true } } } },
     },
   })
@@ -49,13 +55,25 @@ export async function loadTaxInvoiceCoverage(
     const invoices = batch.salesRecord?.taxInvoices ?? []
     // ใบกำกับแบบเดิม (ออกตอนวางบิล) ครอบทั้งรอบแล้ว ⇒ เงินรับไม่ต้องมีใบของตัวเอง (กติกาเดียวกับคำเตือน U95)
     const legacy = invoices.some((invoice) => invoice.docKind === 'tax_invoice')
+    const invoicedBeforeVat = invoices.reduce((sum, invoice) => sum + invoice.amountBeforeVatSatang, 0)
+    // รีวิว mytester3 #4 — ใบที่อัตรา ณ วันรับเงินต่างจากอัตราในใบแจ้งหนี้ (U96 #9)
+    const billedRates = batch.revenues.map((revenue) => revenue.vatRatePctUsed.toNumber())
+    const vatRateDiffers = invoices.some((invoice) => {
+      const rate = invoice.vatRatePctUsed
+      return rate !== null && billedRates.some((billed) => Math.round(billed * 100) !== Math.round(rate.toNumber() * 100))
+    })
     return [
       {
         batchNumber: batch.batchNumber,
-        invoiced: { vatSatang: amounts.invoiced.vatSatang, totalSatang: amounts.invoiced.totalSatang },
+        invoiced: {
+          beforeVatSatang: amounts.invoiced.beforeVatSatang,
+          vatSatang: amounts.invoiced.vatSatang,
+          totalSatang: amounts.invoiced.totalSatang,
+        },
         creditNotes: { vatSatang: amounts.creditNotes.vatSatang, totalSatang: amounts.creditNotes.totalSatang },
         debitNotes: { vatSatang: amounts.debitNotes.vatSatang, totalSatang: amounts.debitNotes.totalSatang },
         taxInvoices: {
+          beforeVatSatang: invoicedBeforeVat,
           vatSatang: invoices.reduce((sum, invoice) => sum + invoice.vatSatang, 0),
           totalSatang: invoices.reduce((sum, invoice) => sum + invoice.totalSatang, 0),
         },
@@ -63,9 +81,61 @@ export async function loadTaxInvoiceCoverage(
         customerWhtSatang: batch.whtWithheldByCustomerSatang,
         bankFeeSatang: batch.bankFeeWrittenOffSatang,
         fullyPaid: batch.status === 'paid',
-        hasReceiptsAwaitingInvoice: !legacy && batch.cashReceipts.some((receipt) => receipt.taxInvoices.length === 0),
+        hasReceiptsAwaitingInvoice: batch.cashReceipts.some((receipt) =>
+          receiptAwaitsTaxInvoice({
+            hasActiveInvoice: receipt.taxInvoices.length > 0,
+            coveredByLegacyInvoice: legacy,
+            batchFullyPaid: batch.status === 'paid',
+            invoicedBeforeVatSatang: invoicedBeforeVat,
+            billedBeforeVatSatang: batch.salesRecord?.totalBeforeVatSatang ?? null,
+          }),
+        ),
+        vatRateDiffers,
       },
     ]
   })
   return evaluateTaxInvoiceCoverage(rows)
+}
+
+/**
+ * มติ PO U95 #6 — เงินรับ (ลงวันที่ก่อน `before`) ที่ยังรอออกใบเสร็จรับเงิน/ใบกำกับภาษี · คำเตือนตรวจความพร้อมปิดงวด
+ * · กติกาเดียวกับข้อข้ามของ {@link loadTaxInvoiceCoverage} ({@link receiptAwaitsTaxInvoice} — รีวิว mytester3 #5:
+ *   เงินรับหลังใบปิดยอดของรอบที่รับครบ ออกใบไม่ได้โดยออกแบบ ⇒ ไม่นับ) · ⚠️ ไม่ตรวจสิทธิ์ (ผู้เรียกตรวจแล้ว)
+ */
+export async function loadReceiptsAwaitingTaxInvoice(
+  organizationId: string,
+  before: Date,
+): Promise<{ count: number; amountSatang: number }> {
+  const receipts = await prisma.cashReceipt.findMany({
+    where: { organizationId, receivedDate: { lt: before }, taxInvoices: { none: { status: 'active' } } },
+    select: {
+      amountSatang: true,
+      whtWithheldByCustomerSatang: true,
+      billingBatch: {
+        select: {
+          status: true,
+          salesRecord: {
+            select: {
+              totalBeforeVatSatang: true,
+              taxInvoices: { where: { status: 'active' }, select: { docKind: true, amountBeforeVatSatang: true } },
+            },
+          },
+        },
+      },
+    },
+  })
+  const awaiting = receipts.filter((receipt) => {
+    const invoices = receipt.billingBatch.salesRecord?.taxInvoices ?? []
+    return receiptAwaitsTaxInvoice({
+      hasActiveInvoice: false,
+      coveredByLegacyInvoice: invoices.some((invoice) => invoice.docKind === 'tax_invoice'),
+      batchFullyPaid: receipt.billingBatch.status === 'paid',
+      invoicedBeforeVatSatang: invoices.reduce((sum, invoice) => sum + invoice.amountBeforeVatSatang, 0),
+      billedBeforeVatSatang: receipt.billingBatch.salesRecord?.totalBeforeVatSatang ?? null,
+    })
+  })
+  return {
+    count: awaiting.length,
+    amountSatang: awaiting.reduce((sum, receipt) => sum + receipt.amountSatang + receipt.whtWithheldByCustomerSatang, 0),
+  }
 }

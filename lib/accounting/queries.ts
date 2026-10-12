@@ -68,7 +68,7 @@ import { assertOrgWideReadable } from '@/lib/auth/scope'
 import { fmtDate } from '@/lib/format/datetime'
 import { ACCRUED_EXPENSE_STATUSES } from '@/lib/exports/pack'
 import { payoutTransferSatang } from '@/lib/finance/advance-offset-calc'
-import { loadTaxInvoiceCoverage } from '@/lib/sales/tax-invoice-coverage-queries'
+import { loadReceiptsAwaitingTaxInvoice, loadTaxInvoiceCoverage } from '@/lib/sales/tax-invoice-coverage-queries'
 
 /**
  * รอบบัญชี (ไฟล์ 30) + ข้อยกเว้น (ไฟล์ 34) — ชั้น DB (`27` §6.13 · §6.16)
@@ -542,22 +542,8 @@ async function readinessOf(organizationId: string, row: PeriodRow, now: Date): P
     // มติ PO U87 / BUG-160 — เตือนอย่างเดียว ไม่บล็อก
     unbilledRevenueSummary(organizationId, periodEnd),
     draftBillingBatchSummary(organizationId, periodEnd),
-    // มติ PO U95 #6 — เงินรับที่ยังไม่ออกใบเสร็จรับเงิน/ใบกำกับภาษี (รอบที่ออกใบกำกับแบบเดิมแล้วไม่นับ)
-    prisma.cashReceipt.aggregate({
-      where: {
-        organizationId,
-        receivedDate: { lt: periodEnd },
-        taxInvoices: { none: { status: 'active' } },
-        billingBatch: {
-          OR: [
-            { salesRecord: null },
-            { salesRecord: { taxInvoices: { none: { status: 'active', docKind: 'tax_invoice' } } } },
-          ],
-        },
-      },
-      _count: { _all: true },
-      _sum: { amountSatang: true, whtWithheldByCustomerSatang: true },
-    }),
+    // มติ PO U95 #6 — เงินรับที่ยังไม่ออกใบเสร็จรับเงิน/ใบกำกับภาษี (รอบที่ออกใบกำกับแบบเดิมแล้ว/ออกครบแล้วไม่นับ)
+    loadReceiptsAwaitingTaxInvoice(organizationId, periodEnd),
     // มติ PO U99 — ข้อมูลองค์กรยังเป็นค่าตัวอย่าง ⇒ เตือน (เอกสารในงวดพิมพ์ค่านั้นไปแล้ว)
     getOrganizationProfileIssues(organizationId),
     // มติ PO U112 — รอบจ่ายของงวดที่ยังไม่จ่ายสำเร็จ/ยกเลิก ⇒ บล็อก
@@ -595,11 +581,7 @@ async function readinessOf(organizationId: string, row: PeriodRow, now: Date): P
     openPayoutBatches,
     unmappedCostCenter: { count: unmappedCostCenter._count._all, amountSatang: unmappedCostCenter._sum.grossSatang ?? 0 },
     taxInvoiceCoverage,
-    receiptsAwaitingTaxInvoice: {
-      count: awaitingReceiptInvoice._count._all,
-      amountSatang:
-        (awaitingReceiptInvoice._sum.amountSatang ?? 0) + (awaitingReceiptInvoice._sum.whtWithheldByCustomerSatang ?? 0),
-    },
+    receiptsAwaitingTaxInvoice: awaitingReceiptInvoice,
   })
 }
 

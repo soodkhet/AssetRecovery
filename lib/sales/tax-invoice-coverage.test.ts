@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   evaluateTaxInvoiceCoverage,
+  receiptAwaitsTaxInvoice,
   taxInvoiceCoverageWarning,
   type TaxInvoiceCoverageBatch,
 } from '@/lib/sales/tax-invoice-coverage'
@@ -106,5 +107,68 @@ describe('evaluateTaxInvoiceCoverage', () => {
     const warning = taxInvoiceCoverageWarning(evaluateTaxInvoiceCoverage(many))
     expect(warning).toContain('7 รอบ')
     expect(warning).toContain('และอีก 2 รอบ')
+  })
+})
+
+describe('รีวิว mytester3 #4 — ใบอัตรา VAT ต่างจากใบแจ้งหนี้ (U96 #9)', () => {
+  // ใบแจ้งหนี้ 1,000 + VAT 7% = 1,070 · รับเงินหลังอัตราเปลี่ยนเป็น 10% ⇒ ใบปิดยอด 1,000 + 100 = 1,100 (ลูกค้าจ่าย 1,100)
+  const mixed = (taxInvoices: TaxInvoiceCoverageBatch['taxInvoices'], receivedSatang: number) =>
+    batch({
+      invoiced: { beforeVatSatang: 100_000, vatSatang: 7_000, totalSatang: 107_000 },
+      creditNotes: ZERO,
+      taxInvoices,
+      receivedSatang,
+      customerWhtSatang: 0,
+      vatRateDiffers: true,
+    })
+
+  it('มูลค่าก่อน VAT ออกใบครบ ⇒ ไม่เตือน แม้ VAT/ยอดรวมต่างจากใบแจ้งหนี้ · ผลรวมงวดลงตัว', () => {
+    const result = evaluateTaxInvoiceCoverage([mixed({ beforeVatSatang: 100_000, vatSatang: 10_000, totalSatang: 110_000 }, 110_000)])
+    expect(result.mismatches).toEqual([])
+    expect(result.differenceSatang).toBe(0)
+    expect(taxInvoiceCoverageWarning(result)).toBeNull()
+  })
+
+  it('มูลค่าก่อน VAT ขาด ⇒ เตือนด้วยผลต่างก่อน VAT (ไม่เทียบ VAT)', () => {
+    // ลูกค้าจ่าย 1,070 ตามใบแจ้งหนี้ ⇒ ใบรับบางส่วน 972.73 + 97.27
+    const result = evaluateTaxInvoiceCoverage([mixed({ beforeVatSatang: 97_273, vatSatang: 9_727, totalSatang: 107_000 }, 107_000)])
+    expect(result.mismatches).toEqual([
+      expect.objectContaining({ batchNumber: 'BL-2569-002', differenceSatang: 2_727, vatDifferenceSatang: 0 }),
+    ])
+  })
+
+  it('อัตราเดียวกัน (ไม่ส่งธง) ⇒ ยังเทียบ VAT ตามเดิม', () => {
+    const result = evaluateTaxInvoiceCoverage([batch({ taxInvoices: { vatSatang: 20_100, totalSatang: 307_255 } })])
+    expect(result.mismatches).toEqual([expect.objectContaining({ differenceSatang: 0, vatDifferenceSatang: 1 })])
+  })
+})
+
+describe('รีวิว mytester3 #5 — receiptAwaitsTaxInvoice', () => {
+  const base = {
+    hasActiveInvoice: false,
+    coveredByLegacyInvoice: false,
+    batchFullyPaid: true,
+    invoicedBeforeVatSatang: 100_000,
+    billedBeforeVatSatang: 100_000,
+  }
+
+  it('เงินรับส่วนเพิ่มหนี้หลังใบปิดยอดของรอบที่รับครบ ⇒ ไม่รอออกใบ (ออกใบไม่ได้โดยออกแบบ)', () => {
+    expect(receiptAwaitsTaxInvoice(base)).toBe(false)
+  })
+
+  it('ยังออกใบไม่ครบ / รอบยังไม่รับครบ ⇒ รอออกใบ', () => {
+    expect(receiptAwaitsTaxInvoice({ ...base, invoicedBeforeVatSatang: 60_000 })).toBe(true)
+    expect(receiptAwaitsTaxInvoice({ ...base, batchFullyPaid: false })).toBe(true)
+    expect(receiptAwaitsTaxInvoice({ ...base, billedBeforeVatSatang: null })).toBe(true)
+  })
+
+  it('มีใบแล้ว / ใบกำกับแบบเดิมครอบ ⇒ ไม่รอ', () => {
+    expect(receiptAwaitsTaxInvoice({ ...base, invoicedBeforeVatSatang: 0, hasActiveInvoice: true })).toBe(false)
+    expect(receiptAwaitsTaxInvoice({ ...base, invoicedBeforeVatSatang: 0, coveredByLegacyInvoice: true })).toBe(false)
+  })
+
+  it('รอบรับครบที่ข้ามเพราะเงินรับส่วนเพิ่มหนี้ ⇒ กลับมาตรวจได้ (hasReceiptsAwaitingInvoice = false)', () => {
+    const result = evaluateTaxInvoiceCoverage([batch({ hasReceiptsAwaitingInvoice: receiptAwaitsTaxInvoice(base) })])
+    expect(result.checkedCount).toBe(1)
   })
 })

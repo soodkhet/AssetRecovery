@@ -592,6 +592,28 @@ suite('มติ PO U95 — รับเงิน ⇒ ใบเสร็จร�
     expect(last.totalSatang).toBe(64_200)
   })
 
+  it('รีวิว mytester3 #5 — เงินรับส่วนเพิ่มหนี้หลังใบปิดยอดของรอบที่รับครบ ⇒ ไม่นับ "รอออกใบ" (คำเตือน U95) · รอบที่ยังออกไม่ครบยังนับ', async () => {
+    const { loadReceiptsAwaitingTaxInvoice } = await import('@/lib/sales/tax-invoice-coverage-queries')
+    const tomorrow = new Date(TODAY.getTime() + 86_400_000)
+    await setNumbering({ seq: 62 })
+    const batch = await seedBilling({ status: 'sent', grossSatang: 100_000, vatSatang: 7_000 })
+    await sales.issueTaxInvoice(ctx, { cashReceiptId: await seedReceipt(batch.id, { amountSatang: 107_000 }) })
+    await db().$executeRawUnsafe(`UPDATE billing_batches SET status = 'paid', received_satang = 107000 WHERE id = '${batch.id}'`)
+    const before = await loadReceiptsAwaitingTaxInvoice(ORG_ID, tomorrow)
+
+    // ชำระส่วนเพิ่มหนี้ภายหลัง — ออกใบไม่ได้โดยออกแบบ ⇒ ไม่ค้างเป็นคำเตือน
+    await seedReceipt(batch.id, { amountSatang: 2_140 })
+    expect(await loadReceiptsAwaitingTaxInvoice(ORG_ID, tomorrow)).toEqual(before)
+
+    // รอบที่ยังออกใบไม่ครบมูลค่า ⇒ ยังนับ
+    const partial = await seedBilling({ status: 'sent', grossSatang: 100_000, vatSatang: 7_000 })
+    await seedReceipt(partial.id, { amountSatang: 50_000 })
+    expect(await loadReceiptsAwaitingTaxInvoice(ORG_ID, tomorrow)).toEqual({
+      count: before.count + 1,
+      amountSatang: before.amountSatang + 50_000,
+    })
+  })
+
   it('มติ PO U169 — บิลปิดด้วยการตัดส่วนต่าง (U163 ภาษีลูกค้าหัก + ค่าโอน) ⇒ ใบเต็มยอดบิล รับชำระครบ · VAT เต็ม · PDF ไม่มียอดค้าง', async () => {
     await setNumbering({ seq: 60 })
     // แบบ BL-2569-011: ก่อน VAT 1,750.03 + VAT 122.50 = 1,872.53 · เงินเข้า 1,800.00 · ลูกค้าหัก 52.50 · ค่าธรรมเนียม 20.03

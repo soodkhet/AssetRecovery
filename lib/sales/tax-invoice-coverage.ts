@@ -15,12 +15,15 @@ import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
  * (รับเกินยอด = ส่วนเกิน ไม่ออกเอกสาร — `22` §6.8.2) ⇒ ผลต่าง = Σ ส่วนที่ใบกำกับขาด/เกินของแต่ละรอบ
  *
  * - รอบที่ยังมีเงินรับรอออกใบ (คำเตือน U95 เดิม) ไม่นำมาตรวจ — ไม่เตือนซ้ำ
+ * - รอบที่มีใบอัตรา VAT ต่างจากใบแจ้งหนี้ (U96 #9) ⇒ เทียบเฉพาะยอดก่อน VAT (รีวิว mytester3 #4)
  * - ระดับ = **คำเตือน ไม่บล็อก** (แนวเดียวกับ U95 "รับเงินแล้วแต่ยังไม่ออกใบ" · ไม่มี error code บล็อกใน `24`)
  */
 
 export interface CoverageAmounts {
   vatSatang: number
   totalSatang: number
+  /** ยอดก่อน VAT — ใช้เทียบเมื่ออัตรา VAT ของใบต่างจากใบแจ้งหนี้ (`vatRateDiffers`) */
+  beforeVatSatang?: number
 }
 
 export interface TaxInvoiceCoverageBatch {
@@ -39,8 +42,34 @@ export interface TaxInvoiceCoverageBatch {
   bankFeeSatang: number
   /** รอบรับชำระครบ (`paid`) — รอบที่ยังไม่ครบไม่ตรวจ */
   fullyPaid: boolean
-  /** ยังมีเงินรับของรอบที่รอออกใบ (คำเตือน U95) ⇒ ข้าม */
+  /** ยังมีเงินรับของรอบที่รอออกใบ (คำเตือน U95 — {@link receiptAwaitsTaxInvoice}) ⇒ ข้าม */
   hasReceiptsAwaitingInvoice: boolean
+  /**
+   * รีวิว mytester3 #4 — มีใบกำกับของรอบที่อัตรา VAT ต่างจากใบแจ้งหนี้ (U96 #9 อัตรา ณ วันรับเงิน) ⇒ VAT/ยอดรวมของใบ
+   * ต่างจากใบแจ้งหนี้ได้โดยชอบ ⇒ เทียบเฉพาะ**ยอดก่อน VAT** (มูลค่าบริการต้องออกใบครบ) ข้าม VAT
+   */
+  vatRateDiffers?: boolean
+}
+
+/**
+ * เงินรับนี้ "รอออกใบเสร็จรับเงิน/ใบกำกับภาษี" ไหม (คำเตือน U95 #6 + ข้อข้ามของ {@link evaluateTaxInvoiceCoverage})
+ * - มีใบ active แล้ว / รอบออกใบกำกับแบบเดิมครอบแล้ว ⇒ ไม่รอ
+ * - รีวิว mytester3 #5 — รอบรับชำระครบ (`paid`) และ Σ ก่อน VAT ของใบ active ≥ ใบแจ้งหนี้ ⇒ ไม่มีมูลค่าให้ออกใบอีก
+ *   (เงินส่วนเพิ่มหนี้/ส่วนเกินหลังใบปิดยอด — ออกใบไม่ได้โดยออกแบบ `TAX_INVOICE_NOTHING_TO_INVOICE`) ⇒ ไม่รอ
+ */
+export function receiptAwaitsTaxInvoice(input: {
+  hasActiveInvoice: boolean
+  coveredByLegacyInvoice: boolean
+  batchFullyPaid: boolean
+  /** Σ ก่อน VAT ของใบ active ของรอบ */
+  invoicedBeforeVatSatang: number
+  /** ยอดก่อน VAT ตามใบแจ้งหนี้ (`sales_records`) — ไม่มีรายการขาย = `null` */
+  billedBeforeVatSatang: number | null
+}): boolean {
+  if (input.hasActiveInvoice || input.coveredByLegacyInvoice) return false
+  const fullyInvoiced =
+    input.billedBeforeVatSatang !== null && input.invoicedBeforeVatSatang >= input.billedBeforeVatSatang
+  return !(input.batchFullyPaid && fullyInvoiced)
 }
 
 export interface TaxInvoiceCoverageMismatch {
@@ -49,7 +78,7 @@ export interface TaxInvoiceCoverageMismatch {
   expectedSatang: number
   /** เอกสารสุทธิ (รวม VAT) */
   documentsSatang: number
-  /** ยอดสุทธิของรอบ − เอกสารสุทธิ (บวก = ใบกำกับขาด) */
+  /** ยอดสุทธิของรอบ − เอกสารสุทธิ (บวก = ใบกำกับขาด) · รอบอัตรา VAT ต่างกัน = ผลต่างยอดก่อน VAT */
   differenceSatang: number
   /** ผลต่างเฉพาะ VAT (บวก = ภาษีขายขาด) */
   vatDifferenceSatang: number
@@ -76,14 +105,33 @@ export function evaluateTaxInvoiceCoverage(batches: readonly TaxInvoiceCoverageB
     const expected = batch.invoiced.totalSatang + notesTotal
     const documents = batch.taxInvoices.totalSatang + notesTotal
     const settled = batch.receivedSatang + batch.customerWhtSatang + batch.bankFeeSatang
+    if (batch.vatRateDiffers === true) {
+      // รีวิว mytester3 #4 — อัตราต่างกัน ⇒ เทียบมูลค่าก่อน VAT (ใบลด/เพิ่มหนี้หักล้างกันทั้งสองฝั่ง) ข้าม VAT/ยอดรวม
+      const beforeVatDifference = (batch.invoiced.beforeVatSatang ?? 0) - (batch.taxInvoices.beforeVatSatang ?? 0)
+      // ครอบครบ ⇒ ยอดรวมของใบ (อัตราใหม่) คือยอดที่ถูกต้องของรอบ
+      const target = beforeVatDifference === 0 ? documents : expected
+      return {
+        batchNumber: batch.batchNumber,
+        expected: target,
+        documents,
+        settled,
+        overpayment: Math.max(0, settled - target),
+        mismatch: beforeVatDifference !== 0,
+        difference: beforeVatDifference,
+        vatDifference: 0,
+      }
+    }
+    // ใบลด/เพิ่มหนี้หักล้างกันทั้งสองฝั่ง ⇒ ผลต่าง VAT = VAT ใบแจ้งหนี้ − Σ VAT ใบกำกับ
+    const vatDifference = batch.invoiced.vatSatang - batch.taxInvoices.vatSatang
     return {
       batchNumber: batch.batchNumber,
       expected,
       documents,
       settled,
       overpayment: Math.max(0, settled - expected),
-      // ใบลด/เพิ่มหนี้หักล้างกันทั้งสองฝั่ง ⇒ ผลต่าง VAT = VAT ใบแจ้งหนี้ − Σ VAT ใบกำกับ
-      vatDifference: batch.invoiced.vatSatang - batch.taxInvoices.vatSatang,
+      mismatch: expected !== documents || vatDifference !== 0,
+      difference: expected - documents,
+      vatDifference,
     }
   })
   const documentsSatang = sumSatang(rows.map((row) => row.documents), 'เอกสารสุทธิ')
@@ -96,12 +144,12 @@ export function evaluateTaxInvoiceCoverage(batches: readonly TaxInvoiceCoverageB
     overpaymentSatang,
     differenceSatang: settledSatang - overpaymentSatang - documentsSatang,
     mismatches: rows
-      .filter((row) => row.expected !== row.documents || row.vatDifference !== 0)
+      .filter((row) => row.mismatch)
       .map((row) => ({
         batchNumber: row.batchNumber,
         expectedSatang: row.expected,
         documentsSatang: row.documents,
-        differenceSatang: row.expected - row.documents,
+        differenceSatang: row.difference,
         vatDifferenceSatang: row.vatDifference,
       })),
   }
