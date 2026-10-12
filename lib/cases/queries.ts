@@ -330,6 +330,7 @@ async function loadCaseStatusHistory(organizationId: string, caseId: string): Pr
       afterStatus: jsonString(row.afterData, 'status'),
       transition: jsonString(row.afterData, 'action'),
       reason: row.reason,
+      teamChangeReason: jsonString(row.afterData, 'teamChangeReason'),
       actorName: row.actor?.fullName ?? null,
       createdAt: row.createdAt,
     })),
