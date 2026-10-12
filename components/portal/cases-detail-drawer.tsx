@@ -10,7 +10,7 @@ import { TOUCH_TARGET_CLASS } from '@/components/ui/button'
 import { guardModalHistory } from '@/components/ui/modal-history'
 import { isTopModal, registerModal, unregisterModal } from '@/components/ui/modal-stack'
 import { fmtDate } from '@/lib/format/datetime'
-import { portalCaseDetailApiPath, portalServiceFeeRows } from '@/lib/portal/cases-view'
+import { portalCaseDetailApiPath, portalServiceFeeEmptyText, portalServiceFeeRows } from '@/lib/portal/cases-view'
 import type { PortalCaseDetailDto } from '@/lib/portal/serializers'
 import { PortalErrorState } from '@/components/portal/portal-error-state'
 
@@ -167,14 +167,22 @@ function CaseDetailBody({ detail, canViewPhotos }: { detail: PortalCaseDetailDto
 
       <Section title="ค่าบริการ">
         {feeRows === null ? (
-          <p className="text-xs text-slate-400">ค่าบริการจะถูกกำหนดเมื่อเคสได้รับการอนุมัติ</p>
+          <p className="text-xs text-slate-400">{portalServiceFeeEmptyText(detail.statusDisplay.code)}</p>
         ) : (
           <dl>
             {feeRows.map((row) => (
               <Row key={row.label} label={row.label}>
                 {row.value}
-                {row.detail !== undefined && (
-                  <span className="mt-0.5 block text-xs font-normal text-slate-500">{row.detail}</span>
+                {row.detailParts !== undefined && (
+                  // ตัดบรรทัดได้เฉพาะระหว่างท่อน — เลขที่ใบลดหนี้ไม่ถูกตัดกลาง (mytester3 I3-03)
+                  <span className="mt-0.5 block text-xs font-normal text-slate-500">
+                    {row.detailParts.map((part, index) => (
+                      <span key={`${index}-${part}`}>
+                        {index > 0 && ' · '}
+                        <span className="whitespace-nowrap">{part}</span>
+                      </span>
+                    ))}
+                  </span>
                 )}
               </Row>
             ))}

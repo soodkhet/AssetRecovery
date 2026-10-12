@@ -134,10 +134,15 @@ export type CloseCaseInput = z.infer<typeof closeCaseSchema>
  * `POST /api/field/cases/:id/resubmit-close` (`41` §8 `resubmit_close_case`)
  * ส่งได้เฉพาะ **สื่อ** — outcome/เช็คอิน/เหตุผลไม่สำเร็จล็อกตามเดิม (`41` §10.1 · UAT Q16)
  * จึงไม่มีช่อง `outcome`/`failReason` ที่นี่โดยตั้งใจ
+ *
+ * `travelOrigin` (mytester3 D-IN3-01 · `41` §7.6 โหมด `needs_revision`): จุดเริ่มเดินทางไม่ใช่หลักฐาน
+ * ปรับได้ตามปกติ — โหมดนี้ไม่มี draft ⇒ ส่งมากับการส่งกลับ แล้ว server คำนวณค่าน้ำมัน PER_KM ใหม่
+ * (ไม่ส่ง = ใช้จุดเดิม)
  */
 export const resubmitCloseSchema = z.object({
   ...evidenceMediaShape,
   note: trimmedText.max(2000).nullish(),
+  travelOrigin: travelOriginSchema.optional(),
 })
 
 export type ResubmitCloseInput = z.infer<typeof resubmitCloseSchema>

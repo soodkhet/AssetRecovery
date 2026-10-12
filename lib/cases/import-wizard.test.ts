@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { planImport } from '@/lib/cases/import'
+import type { CaseImportResultDto } from '@/lib/cases/types'
 import {
   importErrorFieldLabel,
   applyHeaderMapping,
@@ -7,6 +8,7 @@ import {
   collectHeaders,
   duplicateMappedFields,
   ignoredHeaders,
+  importResultToastDescription,
   missingRequiredFields,
 } from '@/lib/cases/import-wizard'
 
@@ -99,5 +101,29 @@ describe('importErrorFieldLabel — ป้ายไทยของ error ต่�
     expect(importErrorFieldLabel('outstandingDebtSatang')).toBe('มูลหนี้คงเหลือ (บาท)')
     expect(importErrorFieldLabel('contacts.0.phone')).toBe('ผู้ติดต่อ')
     expect(importErrorFieldLabel('somethingElse')).toBe('ข้อมูลในแถว')
+  })
+})
+
+describe('importResultToastDescription — mytester3 B3-01 แถวที่มีคำเตือนต้องบอกใน toast', () => {
+  const row = (status: 'created' | 'failed', warned: boolean) =>
+    ({ status, warnings: warned ? { assetImeiSerial: 'IMEI ซ้ำ' } : null }) as CaseImportResultDto['rows'][number]
+
+  it('ไม่มีแถวตก ไม่มีคำเตือน = ทุกแถวผ่าน', () => {
+    expect(importResultToastDescription({ failedCount: 0, rows: [row('created', false)] })).toBe('ทุกแถวผ่านการตรวจสอบ')
+  })
+
+  it('นำเข้าได้แต่มีคำเตือน ⇒ บอกจำนวนแถวที่มีคำเตือน', () => {
+    expect(
+      importResultToastDescription({ failedCount: 0, rows: [row('created', true), row('created', false)] }),
+    ).toBe('มี 1 แถวที่มีคำเตือน — ดูรายละเอียดในตาราง')
+  })
+
+  it('มีทั้งแถวตกและคำเตือน ⇒ บอกทั้งสองอย่าง (แถวตกที่มีคำเตือนไม่นับซ้ำ)', () => {
+    expect(
+      importResultToastDescription({ failedCount: 1, rows: [row('failed', true), row('created', true)] }),
+    ).toBe('มี 1 แถวที่นำเข้าไม่ได้ · มี 1 แถวที่มีคำเตือน — ดูรายละเอียดในตาราง')
+    expect(importResultToastDescription({ failedCount: 2, rows: [row('failed', false)] })).toBe(
+      'มี 2 แถวที่นำเข้าไม่ได้ — ดูรายละเอียดในตาราง',
+    )
   })
 })

@@ -1,4 +1,17 @@
 import { IMPORT_COLUMNS, resolveImportField, type ImportField } from '@/lib/cases/import'
+import type { CaseImportResultDto } from '@/lib/cases/types'
+
+/**
+ * คำอธิบายใน toast หลังนำเข้าจริง — แถวที่นำเข้าได้แต่มีคำเตือน (เช่น IMEI ซ้ำกับเคสอื่นที่ยังดำเนินการอยู่ มติ M1)
+ * ต้องบอกให้ไปดูในตาราง ไม่ใช่ "ทุกแถวผ่านการตรวจสอบ" (mytester3 B3-01)
+ */
+export function importResultToastDescription(result: Pick<CaseImportResultDto, 'failedCount' | 'rows'>): string {
+  const warned = result.rows.filter((row) => row.status === 'created' && row.warnings !== null).length
+  const warnedText = warned > 0 ? `มี ${warned} แถวที่มีคำเตือน — ดูรายละเอียดในตาราง` : null
+  if (result.failedCount === 0) return warnedText ?? 'ทุกแถวผ่านการตรวจสอบ'
+  const failedText = `มี ${result.failedCount} แถวที่นำเข้าไม่ได้`
+  return warnedText === null ? `${failedText} — ดูรายละเอียดในตาราง` : `${failedText} · ${warnedText}`
+}
 
 /**
  * ตรรกะของ Import wizard ฝั่งหน้าจอ (`38` §7.1 — เลือกไฟล์ → mapping คอลัมน์ → preview → ยืนยัน)

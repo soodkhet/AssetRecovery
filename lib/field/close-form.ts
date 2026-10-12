@@ -1,7 +1,7 @@
 import { hasEvidenceRevision, missingCloseEvidence, type EvidenceMediaSnapshot } from '@/lib/field/evidence'
 import { fieldErrorMessage, type FieldErrorCode } from '@/lib/field/errors'
 import type { CloseCaseInput, CloseDraftInput, ResubmitCloseInput, TravelOriginInput } from '@/lib/field/schemas'
-import type { FieldCaseDetailDto } from '@/lib/field/types'
+import type { FieldCaseDetailDto, FieldTravelOriginDto } from '@/lib/field/types'
 import { isCloseFailReason, type CloseFailReason } from '@/lib/field/fail-reasons'
 import type { CaseOutcome } from '@/lib/generated/prisma/enums'
 
@@ -225,9 +225,20 @@ export function closeCasePayload(form: CloseFormState): CloseCaseInput {
   return { outcome: form.outcome, ...mediaPayload(form), ...failReasonPayload(form) }
 }
 
-/** `POST /api/field/cases/:id/resubmit-close` — ไม่มี `outcome` โดยตั้งใจ (ล็อกตามรอบเดิม `41` §10.1) */
-export function resubmitClosePayload(form: CloseFormState): ResubmitCloseInput {
-  return mediaPayload(form)
+/**
+ * `POST /api/field/cases/:id/resubmit-close` — ไม่มี `outcome` โดยตั้งใจ (ล็อกตามรอบเดิม `41` §10.1)
+ * `travelOrigin` = จุดเริ่มที่ปรับในโหมดตีกลับ (โหมดนี้ไม่มี draft — ส่งมากับการส่งกลับ · mytester3 D-IN3-01)
+ */
+export function resubmitClosePayload(form: CloseFormState, travelOrigin?: TravelOriginInput): ResubmitCloseInput {
+  return { ...mediaPayload(form), ...(travelOrigin === undefined ? {} : { travelOrigin }) }
+}
+
+/**
+ * จุดเริ่มที่ปรับในโหมดตีกลับ (ยังไม่ลง server จนกด "ส่งกลับยืนยันอีกครั้ง") — แปลงเป็นรูปเดียวกับที่ server คืน
+ * เพื่อให้กล่องจุดเริ่มเดินทางแสดงจุดใหม่ทันที (mytester3 D-IN3-01)
+ */
+export function localTravelOrigin(point: TravelOriginInput, now: Date): FieldTravelOriginDto {
+  return { latitude: point.latitude, longitude: point.longitude, source: point.source, setAt: now.toISOString() }
 }
 
 // ── ตัวช่วยจัดการรายการสื่อ ─────────────────────────────────────────────────

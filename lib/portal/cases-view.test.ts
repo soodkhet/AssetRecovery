@@ -12,6 +12,7 @@ import {
   portalCasesOverflowPage,
   portalCasesPageQuery,
   portalCasesRange,
+  portalServiceFeeEmptyText,
   portalServiceFeeRows,
   wrapPhotoIndex,
 } from '@/lib/portal/cases-view'
@@ -127,7 +128,7 @@ describe('PORTAL_CASE_STATUS_OPTIONS', () => {
 describe('portalServiceFeeRows — ค่าบริการใน drawer', () => {
   const base: PortalServiceFeeDto = {
     model: 'HYBRID',
-    modelLabel: 'Hybrid (ผสม)',
+    modelLabel: 'แบบผสม',
     ratePct: 10,
     baseSatang: 50000,
     basis: 'debt_amount',
@@ -183,6 +184,8 @@ describe('portalServiceFeeRows — ค่าบริการใน drawer', ()
       label: 'ค่าบริการ (ยอดจริง)',
       value: '฿0.00 (รวม VAT แล้ว)',
       detail: 'ยอดเดิม ฿200.00 · ลดหนี้ CN-NDP-2569-0012 −฿200.00',
+      // mytester3 I3-03 — ท่อนเดียวกันสำหรับจอแคบ (ตัดบรรทัดได้เฉพาะระหว่างท่อน)
+      detailParts: ['ยอดเดิม ฿200.00', 'ลดหนี้ CN-NDP-2569-0012 −฿200.00'],
     })
     const many = portalServiceFeeRows({
       ...base,
@@ -215,10 +218,16 @@ describe('portalServiceFeeRows — ค่าบริการใน drawer', ()
     expect(portalServiceFeeRows(null)).toBeNull()
   })
 
+  it('mytester3 I3-02 — ไม่มีค่าบริการ: เคสไม่รับ = "ไม่มีค่าบริการ" · สถานะอื่นยังรออนุมัติ', () => {
+    expect(portalServiceFeeEmptyText('declined')).toBe('ไม่มีค่าบริการ (ไม่รับเคส)')
+    expect(portalServiceFeeEmptyText('under_review')).toBe('ค่าบริการจะถูกกำหนดเมื่อเคสได้รับการอนุมัติ')
+    expect(portalServiceFeeEmptyText('info_requested')).toBe('ค่าบริการจะถูกกำหนดเมื่อเคสได้รับการอนุมัติ')
+  })
+
   it('Hybrid แสดงครบ · ป้ายไทย ไม่มี enum ดิบ', () => {
     const rows = portalServiceFeeRows(base)
     expect(rows).toEqual([
-      { label: 'รูปแบบค่าบริการ', value: 'Hybrid (ผสม)' },
+      { label: 'รูปแบบค่าบริการ', value: 'แบบผสม' },
       { label: 'ค่าบริการคงที่ต่อเคส', value: '฿500.00' },
       { label: 'อัตราค่าบริการเมื่อสำเร็จ', value: '10.00% ของมูลค่าหนี้คงเหลือ' },
       { label: 'เมื่อติดตามไม่สำเร็จ', value: 'เรียกเก็บ ฿500.00' },
@@ -229,18 +238,18 @@ describe('portalServiceFeeRows — ค่าบริการใน drawer', ()
   })
 
   it('Success Fee ไม่แสดงค่าคงที่ และไม่เก็บเมื่อไม่สำเร็จ', () => {
-    const rows = portalServiceFeeRows({ ...base, model: 'SUCCESS_FEE', modelLabel: 'Success Fee (% ความสำเร็จ)', failFeeSatang: null, projectedRevenueSatang: null })
+    const rows = portalServiceFeeRows({ ...base, model: 'SUCCESS_FEE', modelLabel: 'คิดตามความสำเร็จ (%)', failFeeSatang: null, projectedRevenueSatang: null })
     expect(rows?.map((row) => row.label)).toEqual(['รูปแบบค่าบริการ', 'อัตราค่าบริการเมื่อสำเร็จ', 'เมื่อติดตามไม่สำเร็จ'])
     expect(rows?.at(-1)?.value).toBe('ไม่เรียกเก็บ')
   })
 
   it('มติ U165: Success Fee ตั้งยอดกรณีไม่สำเร็จแยกได้', () => {
-    const rows = portalServiceFeeRows({ ...base, model: 'SUCCESS_FEE', modelLabel: 'Success Fee (% ความสำเร็จ)', failFeeSatang: 30000 })
+    const rows = portalServiceFeeRows({ ...base, model: 'SUCCESS_FEE', modelLabel: 'คิดตามความสำเร็จ (%)', failFeeSatang: 30000 })
     expect(rows?.find((row) => row.label === 'เมื่อติดตามไม่สำเร็จ')?.value).toBe('เรียกเก็บ ฿300.00')
   })
 
   it('Flat ไม่แสดงอัตรา % · ไม่เก็บเมื่อไม่สำเร็จถ้าไม่ตั้งยอด', () => {
-    const rows = portalServiceFeeRows({ ...base, model: 'FLAT', modelLabel: 'Flat Rate (เหมาจ่ายรายเคส)', failFeeSatang: null })
+    const rows = portalServiceFeeRows({ ...base, model: 'FLAT', modelLabel: 'เหมาจ่ายรายเคส', failFeeSatang: null })
     expect(rows?.map((row) => row.label)).not.toContain('อัตราค่าบริการเมื่อสำเร็จ')
     expect(rows?.find((row) => row.label === 'เมื่อติดตามไม่สำเร็จ')?.value).toBe('ไม่เรียกเก็บ')
   })

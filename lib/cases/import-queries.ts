@@ -19,6 +19,11 @@ import { prisma } from '@/lib/prisma'
 import { splitAssetIdentifier } from '@/lib/cases/case'
 import { assetIdentifierWarning } from '@/lib/warehouse/imei'
 import { ACTIVE_ASSET_IMEI_WARNING_MESSAGE, findImeisWithActiveAsset } from '@/lib/warehouse/imei-duplicate'
+import {
+  activeCaseImeiWarningMessage,
+  findActiveCasesWithImeis,
+  type ImeiDuplicateCaseHit,
+} from '@/lib/cases/imei-duplicate-case'
 
 /**
  * `POST /api/cases/import` (ไฟล์ 38 §8 `import_cases` · §17.1) — ชั้น DB
@@ -39,17 +44,21 @@ function headersOf(rows: readonly Record<string, unknown>[]): string[] {
 /**
  * เตือนต่อช่องของแถว (ไม่ทำให้แถวตก) — Serial ที่ดูเหมือน IMEI พิมพ์ผิด (มติ PO U54)
  * · IMEI ตรงกับเครื่องที่ยังไม่ส่งมอบ (มติ PO U129 — `activeImeis` อ่านจาก DB ครั้งเดียวต่อไฟล์)
+ * · IMEI ตรงกับเคสอื่นที่ยังดำเนินการอยู่ (มติ M1 · mytester3 B3-01 — `activeCases` อ่านครั้งเดียวต่อไฟล์)
  */
 function rowWarnings(
   assetImeiSerial: string | null | undefined,
   activeImeis: ReadonlySet<string> = new Set(),
   deviceWarning: string | null = null,
+  activeCases: ReadonlyMap<string, readonly ImeiDuplicateCaseHit[]> = new Map(),
 ): Record<string, string> | null {
   const imei = splitAssetIdentifier(assetImeiSerial).imei
   const warning =
     imei !== null && activeImeis.has(imei) ? ACTIVE_ASSET_IMEI_WARNING_MESSAGE : assetIdentifierWarning(assetImeiSerial)
+  const caseWarning = imei === null ? null : activeCaseImeiWarningMessage(activeCases.get(imei) ?? [])
+  const imeiWarnings = [warning, caseWarning].filter((each): each is string => each !== null)
   const warnings: Record<string, string> = {}
-  if (warning !== null) warnings.assetImeiSerial = warning
+  if (imeiWarnings.length > 0) warnings.assetImeiSerial = imeiWarnings.join(' · ')
   // มติ PO U166 — เติมยี่ห้อ/รุ่นจาก IMEI ให้ / ยี่ห้อในไฟล์ไม่ตรงกับ IMEI
   if (deviceWarning !== null) warnings.assetBrandModel = deviceWarning
   return Object.keys(warnings).length === 0 ? null : warnings
@@ -98,13 +107,15 @@ export async function importCases(
 
   const plan = planImport(rawRows, input.financeCompanyId)
   const duplicateRowNumbers = findDuplicateRefsInFile(plan.rows, normalizeCaseRef)
-  const activeImeis = await findImeisWithActiveAsset(
-    organizationId,
-    plan.rows.flatMap((row) => {
-      const imei = splitAssetIdentifier(row.input.assetImeiSerial).imei
-      return imei === null ? [] : [imei]
-    }),
-  )
+  const fileImeis = plan.rows.flatMap((row) => {
+    const imei = splitAssetIdentifier(row.input.assetImeiSerial).imei
+    return imei === null ? [] : [imei]
+  })
+  // อ่านก่อนสร้างแถวแรก — เคสที่สร้างในไฟล์นี้ (ร่าง) ไม่ชนกันเอง และ preview กับนำเข้าจริงเห็นชุดเดียวกัน
+  const [activeImeis, activeCases] = await Promise.all([
+    findImeisWithActiveAsset(organizationId, fileImeis),
+    findActiveCasesWithImeis(context.actor, fileImeis, input.financeCompanyId),
+  ])
 
   // มติ PO U155 — จับคู่ข้อความ "ยี่ห้อ/รุ่น" กับแคตตาล็อก (ไม่สนตัวพิมพ์/ช่องว่าง) · ไม่เจอ = เก็บข้อความเดิม
   const matchDevice = plan.rows.some((row) => (row.input.assetBrandModel ?? '') !== '')
@@ -159,7 +170,7 @@ export async function importCases(
         errorCode: duplicate.code,
         errorMessage: 'เลขที่สัญญาซ้ำกับแถวก่อนหน้าในไฟล์เดียวกัน',
         fields: null,
-        warnings: rowWarnings(row.input.assetImeiSerial, activeImeis, device.warning),
+        warnings: rowWarnings(row.input.assetImeiSerial, activeImeis, device.warning, activeCases),
       })
       continue
     }
@@ -176,7 +187,7 @@ export async function importCases(
         errorCode: identityError.code,
         errorMessage: identityError.userMessage,
         fields: null,
-        warnings: rowWarnings(row.input.assetImeiSerial, activeImeis, device.warning),
+        warnings: rowWarnings(row.input.assetImeiSerial, activeImeis, device.warning, activeCases),
       })
       continue
     }
@@ -192,7 +203,7 @@ export async function importCases(
         errorCode: duplicate.code,
         errorMessage: duplicate.userMessage,
         fields: null,
-        warnings: rowWarnings(row.input.assetImeiSerial, activeImeis, device.warning),
+        warnings: rowWarnings(row.input.assetImeiSerial, activeImeis, device.warning, activeCases),
         ...(existingCaseId === null ? {} : { existingCaseId }),
       })
       continue
@@ -207,7 +218,7 @@ export async function importCases(
         errorCode: null,
         errorMessage: null,
         fields: null,
-        warnings: rowWarnings(row.input.assetImeiSerial, activeImeis, device.warning),
+        warnings: rowWarnings(row.input.assetImeiSerial, activeImeis, device.warning, activeCases),
       })
       continue
     }
@@ -229,7 +240,7 @@ export async function importCases(
         errorCode: null,
         errorMessage: null,
         fields: null,
-        warnings: rowWarnings(row.input.assetImeiSerial, activeImeis, device.warning),
+        warnings: rowWarnings(row.input.assetImeiSerial, activeImeis, device.warning, activeCases),
       })
     } catch (error) {
       // error ของโมดูล (ref ซ้ำ/บริษัทถูกระงับ/เลขบัตรผิด) = แถวนั้นตก · error อื่นถือเป็นความผิดพลาดจริง
@@ -243,7 +254,7 @@ export async function importCases(
         errorCode: error.code,
         errorMessage: error.userMessage,
         fields: null,
-        warnings: rowWarnings(row.input.assetImeiSerial, activeImeis, device.warning),
+        warnings: rowWarnings(row.input.assetImeiSerial, activeImeis, device.warning, activeCases),
         ...(existingCaseId === undefined ? {} : { existingCaseId }),
       })
     }

@@ -75,3 +75,41 @@ export async function activeCaseImeiWarning(
   if (imei === null) return null
   return activeCaseImeiWarningMessage(await findActiveCasesWithImei(viewer, imei, input))
 }
+
+/**
+ * นำเข้าไฟล์ (mytester3 B3-01) — เคสที่ยังดำเนินการอยู่ของ IMEI ทั้งไฟล์ในการค้นครั้งเดียว · คืน map IMEI → เคสที่ชน
+ * เคสที่เพิ่งนำเข้าในไฟล์เดียวกันเป็นร่าง ⇒ ไม่ถูกนับ (นิยามเดียวกับ {@link findActiveCasesWithImei})
+ */
+export async function findActiveCasesWithImeis(
+  viewer: SessionUser,
+  imeis: readonly string[],
+  financeCompanyId: string,
+): Promise<Map<string, ImeiDuplicateCaseHit[]>> {
+  const unique = [...new Set(imeis)]
+  const result = new Map<string, ImeiDuplicateCaseHit[]>()
+  if (unique.length === 0) return result
+  const companySide = isCompanySideViewer(viewer)
+  const rows = await prisma.case.findMany({
+    where: {
+      organizationId: viewer.organizationId,
+      imei: { in: unique },
+      deletedAt: null,
+      status: { in: [...ACTIVE_CASE_IMEI_STATUSES] },
+      ...(companySide ? { companyId: financeCompanyId } : {}),
+    },
+    select: { imei: true, caseRef: true, trackingRound: true, companyId: true, company: { select: { name: true } } },
+    orderBy: [{ createdAt: 'asc' }],
+  })
+  for (const row of rows) {
+    if (row.imei === null) continue
+    const hits = result.get(row.imei) ?? []
+    hits.push({
+      caseRef: row.caseRef,
+      trackingRound: row.trackingRound,
+      companyName: row.company.name,
+      sameCompany: row.companyId === financeCompanyId,
+    })
+    result.set(row.imei, hits)
+  }
+  return result
+}

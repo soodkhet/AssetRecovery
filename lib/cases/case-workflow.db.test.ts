@@ -1166,6 +1166,22 @@ suite('Phase 2.3 — state machine + snapshot + recycle (DB จริง)', () =
       expect(mine.activeCaseImeiWarning).toContain('M1-OTHER-01 (ไฟแนนซ์อื่น M1)')
       expect(mine.activeCaseImeiWarning).not.toContain('M1-MINE-01')
 
+      // mytester3 B3-01 — นำเข้าไฟล์ก็เป็นการบันทึก: preview + นำเข้าจริงเตือนเคส active ที่ชน (ไม่ใช่แค่เครื่องในคลัง)
+      const { importCases } = await import('@/lib/cases/import-queries')
+      const suffix = Date.now().toString(36).toUpperCase()
+      const importRows = [
+        { 'เลขที่สัญญา': `M1-IMP-${suffix}`, 'IMEI / Serial': '35-6938035-641111' },
+        { 'เลขที่สัญญา': `M1-IMP2-${suffix}`, 'IMEI / Serial': '356938035642222' },
+      ]
+      for (const dryRun of [true, false]) {
+        const imported = await importCases({ financeCompanyId: COMPANY_ID, dryRun, rows: importRows }, { actor, meta })
+        expect(imported.rows.map((row) => row.status)).toEqual(['created', 'created'])
+        expect(imported.rows[0]?.warnings?.assetImeiSerial).toContain('M1-OTHER-01 (ไฟแนนซ์อื่น M1)')
+        // ร่างของบริษัทตัวเองไม่นับ
+        expect(imported.rows[0]?.warnings?.assetImeiSerial).not.toContain('M1-MINE')
+        expect(imported.rows[1]?.warnings).toBeNull()
+      }
+
       // ผู้ใช้ฝั่งบริษัทไฟแนนซ์ (scope company) ไม่เห็นเคสของบริษัทอื่น
       const companyViewer: SessionUser = {
         ...actor,
