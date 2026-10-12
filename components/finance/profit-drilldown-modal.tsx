@@ -67,7 +67,7 @@ export function ProfitDrilldownModal({
       onClose={onClose}
       size="lg"
       title={`เจาะลึก: ${target?.label ?? ''}`}
-      description={detail === null ? undefined : `${detail.periodLabel} · ผลจริงที่เกิดขึ้นแล้ว (actual)`}
+      description={detail === null ? undefined : `${detail.periodLabel} · ผลจริงที่เกิดขึ้นแล้ว`}
       footer={
         <Button variant="secondary" onClick={onClose}>
           ปิดหน้าต่าง

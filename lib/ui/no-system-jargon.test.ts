@@ -36,6 +36,8 @@ const BANNED: readonly { phrase: RegExp; issue: string; inThaiText?: boolean }[]
   // mytester4 A4-01 — ป้ายสถานะบทบาทในตาราง + ข้อความเมื่อมอบสิทธิ์ที่ล็อกไว้
   { phrase: /^🔒 Seed$|^Custom$/, issue: 'A4-01' },
   { phrase: /✅ only/, issue: 'A4-01', inThaiText: true },
+  // mytester4 J4-01 — enum สถานะในวงเล็บท้ายคำอธิบายภาษาไทย
+  { phrase: /\((completed|actual)\)/, issue: 'J4-01', inThaiText: true },
   { phrase: /รอบ (collecting|locked)|\(collecting → sent\)|ที่ locked|mark filed|map Cost Center \(manual\)|resolve\)/, issue: 'A2-01' },
 ]
 

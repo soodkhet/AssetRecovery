@@ -52,7 +52,7 @@ export function ProfitTab() {
         <div>
           <h2 className="text-base font-semibold text-slate-900">รายงานกำไรขั้นต้น (Gross Profit)</h2>
           <p className="mt-0.5 text-xs text-slate-500">
-            ผลจริงที่เกิดขึ้นแล้ว (actual) ไม่ใช่ประมาณการ — เคสที่ปิดไม่สำเร็จแต่มีต้นทุน กด Margin ลงจริง
+            ผลจริงที่เกิดขึ้นแล้ว ไม่ใช่ประมาณการ — เคสที่ปิดไม่สำเร็จแต่มีต้นทุน กด Margin ลงจริง
           </p>
         </div>
 
