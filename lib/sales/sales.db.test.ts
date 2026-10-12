@@ -525,6 +525,32 @@ suite('มติ PO U95 — รับเงิน ⇒ ใบเสร็จร�
     )
   })
 
+  it('รีวิว mytester3 #3/#7 — รับ 428 → ลดหนี้ 107 อ้างใบแรก → รับ 588.50 ตัดค่าธรรมเนียม 53.50 ⇒ ใบปิดยอด 642 · PDF เครดิต 53.50 ค่าธรรมเนียม 0', async () => {
+    await setNumbering({ seq: 55 })
+    const batch = await seedBilling({ status: 'sent', grossSatang: 100_000, vatSatang: 7_000 })
+    const first = await sales.issueTaxInvoice(ctx, { cashReceiptId: await seedReceipt(batch.id, { amountSatang: 42_800 }) })
+    expect(first.totalSatang).toBe(42_800)
+    await db().$executeRawUnsafe(`
+      INSERT INTO credit_notes (organization_id, tax_invoice_id, note_type, credit_note_number, issue_date,
+                                amount_before_vat_satang, vat_satang, total_satang, vat_rate_pct_used, reason, created_by,
+                                buyer_branch_code)
+      SELECT '${ORG_ID}', id, 'credit', 'RV3-' || substr(md5(random()::text), 1, 8), '${TODAY.toISOString().slice(0, 10)}',
+             10000, 700, 10700, 7.00, $$ปรับยอดเคสทดสอบ$$, '${ACCOUNTING_ID}', buyer_branch_code
+        FROM tax_invoices WHERE id = '${first.id}'
+    `)
+    const receiptId = await seedReceipt(batch.id, { amountSatang: 58_850 })
+    await db().$executeRawUnsafe(`
+      UPDATE billing_batches SET bank_fee_written_off_satang = 5350, bank_fee_written_off_date = '${TODAY.toISOString().slice(0, 10)}'
+       WHERE id = '${batch.id}'
+    `)
+    const last = await sales.issueTaxInvoice(ctx, { cashReceiptId: receiptId })
+    expect(last.totalSatang).toBe(64_200)
+    const doc = buildTaxInvoiceDoc(await sales.getTaxInvoiceDocSource(accountant, last.id))
+    expect(doc.creditNoteCreditText).toBe('(53.50)')
+    expect(doc.bankFeeText).toBeNull()
+    expect(doc.outstandingText).toBeNull()
+  })
+
   it('มติ PO U169 — บิลปิดด้วยการตัดส่วนต่าง (U163 ภาษีลูกค้าหัก + ค่าโอน) ⇒ ใบเต็มยอดบิล รับชำระครบ · VAT เต็ม · PDF ไม่มียอดค้าง', async () => {
     await setNumbering({ seq: 60 })
     // แบบ BL-2569-011: ก่อน VAT 1,750.03 + VAT 122.50 = 1,872.53 · เงินเข้า 1,800.00 · ลูกค้าหัก 52.50 · ค่าธรรมเนียม 20.03

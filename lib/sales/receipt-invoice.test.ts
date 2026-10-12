@@ -489,4 +489,59 @@ describe('receiptSettlementOf — ยอดค้างจริงหลัง�
     })
     expect(receiptSettlementOf({ ...input, invoiceId: 'a' })).toMatchObject({ bankFeeSatang: 0, creditAppliedSatang: 0 })
   })
+
+  it('รีวิว mytester3 #3 — รับ 428 → รับ 588.50 ตัดค่าธรรมเนียม 53.50 → ลดหนี้ 107 อ้างใบแรก ⇒ ใบปิดยอด: เครดิต 53.50 ค่าธรรมเนียม 0 (ลำดับเดียวกับตอนออก)', () => {
+    const mtj = { billedBeforeVatSatang: 100_000, billedVatSatang: 7_000, billedVatRatesPct: [7] }
+    const first = receiptInvoiceAmounts({ basis: mtj, prior: [], paidSatang: 42_800, vatRatePct: 7 })
+    expect(first).toMatchObject({ totalSatang: 42_800, coversRemainder: false })
+    // ออกใบปิดยอดหลังบันทึกใบลดหนี้ 107 ที่อ้างใบแรก (ลูกค้าชำระใบแรกเต็มแล้ว)
+    const closing = receiptInvoiceAmounts({
+      basis: mtj,
+      prior: [
+        {
+          amountBeforeVatSatang: first.totalBeforeVatSatang,
+          vatSatang: first.vatSatang,
+          vatRatePct: 7,
+          totalSatang: first.totalSatang,
+          receivedSatang: 42_800,
+          creditNoteTotalSatang: 10_700,
+        },
+      ],
+      paidSatang: 58_850,
+      bankFeeWrittenOffSatang: 5_350,
+      vatRatePct: 7,
+    })
+    expect(closing).toMatchObject({ totalSatang: 64_200, coversRemainder: true, creditAppliedSatang: 5_350, bankFeeSatang: 0 })
+
+    const ledger = {
+      billedTotalSatang: 107_000,
+      bankFeeWrittenOffSatang: 5_350,
+      invoices: [
+        { id: 'a', status: 'active' as const, totalSatang: 42_800, createdAt: at(1), receivedSatang: 42_800 },
+        { id: 'b', status: 'active' as const, totalSatang: closing.totalSatang, createdAt: at(3), receivedSatang: 58_850 },
+      ],
+      notes: [{ ...cn(10_700, 2), taxInvoiceId: 'a' }],
+    }
+    expect(receiptSettlementOf({ ...ledger, invoiceId: 'b' })).toMatchObject({
+      sequence: 2,
+      bankFeeSatang: closing.bankFeeSatang,
+      creditAppliedSatang: closing.creditAppliedSatang,
+    })
+  })
+
+  it('ใบลดหนี้ที่อ้างใบกำกับแบบเดิม (ไม่ผูกเงินรับ) / บันทึกหลังใบปิดยอด ไม่นับเป็นเครดิตของใบปิดยอด', () => {
+    const invoices = [
+      { id: 'old', status: 'active' as const, totalSatang: 50_000, createdAt: at(1), receivedSatang: null },
+      { id: 'b', status: 'active' as const, totalSatang: 57_000, createdAt: at(3), receivedSatang: 55_000 },
+    ]
+    const input = { billedTotalSatang: 107_000, bankFeeWrittenOffSatang: 2_000, invoices }
+    expect(receiptSettlementOf({ ...input, invoiceId: 'b', notes: [{ ...cn(5_000, 2), taxInvoiceId: 'old' }] })).toMatchObject({
+      bankFeeSatang: 2_000,
+      creditAppliedSatang: 0,
+    })
+    expect(receiptSettlementOf({ ...input, invoiceId: 'b', notes: [{ ...cn(5_000, 4), taxInvoiceId: 'b' }] })).toMatchObject({
+      bankFeeSatang: 2_000,
+      creditAppliedSatang: 0,
+    })
+  })
 })

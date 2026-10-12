@@ -262,6 +262,11 @@ export interface ReceiptLedgerNote {
   status: 'active' | 'cancelled'
   totalSatang: number
   createdAt: Date
+  /**
+   * ใบกำกับที่ใบลด/เพิ่มหนี้นี้อ้าง — ใช้แยกเครดิตที่นับได้ตอนออกใบ (เฉพาะใบลดหนี้ที่อ้างใบเสร็จฯ — {@link unappliedCreditNoteSatang})
+   * · ไม่ส่ง ⇒ ถือว่านับเป็นเครดิตได้
+   */
+  taxInvoiceId?: string
 }
 
 export interface ReceiptSettlement {
@@ -278,8 +283,10 @@ export interface ReceiptSettlement {
 /**
  * การชำระที่ใบนี้รับรู้ (มติ 12/10/2569 G3-01) — **pure** · ใช้ประกอบข้อความ "ครั้งที่ / ยอดคงค้าง" และแถวหักบนใบ
  * - ใบ active เรียงตามเวลาที่ออก · ใบที่ผลรวมยอดถึงยอดใบแจ้งหนี้เป็นใบแรก = ใบปิดยอด (รับค่าธรรมเนียมที่ตัด)
- * - ส่วนต่าง = max(0, ยอดใบ − ยอดที่รับ) ⇒ ค่าธรรมเนียม = ใบปิดยอด ? min(ค่าธรรมเนียมที่ตัด, ส่วนต่าง) : 0 ·
- *   เครดิตใบลดหนี้ = ส่วนต่าง − ค่าธรรมเนียม
+ * - ส่วนต่าง = max(0, ยอดใบ − ยอดที่รับ) · **ลำดับเดียวกับตอนออกใบ** ({@link receiptInvoiceAmounts} — เครดิตก่อน
+ *   ค่าธรรมเนียม · `22` §6.8.2): เครดิตที่มี ณ ตอนออก = Σ ใบลดหนี้ active ที่อ้างใบเสร็จฯ บันทึกไม่หลังใบนี้ − ส่วนต่าง
+ *   ของใบเสร็จฯ ก่อนหน้า ⇒ ใบปิดยอด: เครดิต = min(เครดิตที่มี, ส่วนต่าง) · ค่าธรรมเนียม = min(ค่าธรรมเนียมที่ตัด,
+ *   ส่วนต่าง − เครดิต) · ใบรับบางส่วน: ค่าธรรมเนียม 0 · ส่วนต่างที่เหลือนับเป็นเครดิต (รีวิว mytester3 #3)
  * - ยอดค้าง = max(0, ใบแจ้งหนี้ − Σ ใบลดหนี้ + Σ ใบเพิ่มหนี้ (active · บันทึกไม่หลังเวลาออกใบนี้)
  *   − Σ (ยอดที่รับ + ค่าธรรมเนียม) ของใบถึงใบนี้) ⇒ พิมพ์ซ้ำภายหลังได้ตัวเลขเดิม
  * · ใบนี้ไม่ active / ไม่พบ ⇒ `null`
@@ -299,9 +306,21 @@ export function receiptSettlementOf(input: {
   if (index === -1) return null
   const batchFee = input.bankFeeWrittenOffSatang ?? 0
 
+  // ใบลดหนี้ที่นับเป็นเครดิตได้ = อ้างใบเสร็จฯ (ใบที่ผูกเงินรับ) — ตรงกับ `prior` ตอนออกใบ
+  const receiptInvoiceIds = new Set(
+    active.filter((invoice) => invoice.receivedSatang !== undefined && invoice.receivedSatang !== null).map((invoice) => invoice.id),
+  )
+  const creditNotes = (input.notes ?? []).filter(
+    (note) =>
+      note.noteType === 'credit' &&
+      note.status === 'active' &&
+      (note.taxInvoiceId === undefined || receiptInvoiceIds.has(note.taxInvoiceId)),
+  )
+
   let invoicedSoFar = 0
   let closed = false
   let receivedSoFar = 0
+  let creditUsed = 0
   let bankFeeSatang = 0
   let creditAppliedSatang = 0
   for (const invoice of active.slice(0, index + 1)) {
@@ -310,7 +329,13 @@ export function receiptSettlementOf(input: {
     if (isClosing) closed = true
     const received = invoice.receivedSatang ?? invoice.totalSatang
     const gap = Math.max(0, invoice.totalSatang - received)
-    const fee = isClosing ? Math.min(batchFee, gap) : 0
+    const issuedAt = invoice.createdAt.getTime()
+    const creditTotal = creditNotes
+      .filter((note) => note.createdAt.getTime() <= issuedAt)
+      .reduce((sum, note) => sum + note.totalSatang, 0)
+    const creditFirst = Math.min(Math.max(0, creditTotal - creditUsed), gap)
+    const fee = isClosing ? Math.min(batchFee, gap - creditFirst) : 0
+    if (receiptInvoiceIds.has(invoice.id)) creditUsed += gap
     receivedSoFar += received + fee
     bankFeeSatang = fee
     creditAppliedSatang = gap - fee

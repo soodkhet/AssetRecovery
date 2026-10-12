@@ -932,6 +932,7 @@ export async function getTaxInvoiceDocSource(user: SessionUser, invoiceId: strin
 
 /** ใบลดหนี้/ใบเพิ่มหนี้ของรอบ — คิดยอดค้างจริงบนใบ (`receiptSettlementOf()` — มติ 12/10/2569 G3-01) */
 const LEDGER_NOTE_SELECT = {
+  taxInvoiceId: true,
   noteType: true,
   status: true,
   totalSatang: true,
