@@ -36,7 +36,7 @@ export const FUNCTIONAL_GROUP_ORDER: readonly FunctionalGroup[] = ['ops', 'finan
 
 /** capability ที่อยู่นอก matrix ของ `13` §6.10 (งานนอกสายการเงิน/บัญชี — `02` §12) */
 export const OTHER_GROUP_ID = 'other'
-export const OTHER_GROUP_LABEL = 'อื่นๆ (นอก Functional Matrix)'
+export const OTHER_GROUP_LABEL = 'อื่นๆ (นอกตารางสิทธิ์หลัก)'
 
 /**
  * capability ของพอร์ทัลบริษัทไฟแนนซ์ (`module = 'portal'` และอยู่นอก matrix) — แยกเป็นหมวดของตัวเอง

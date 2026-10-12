@@ -34,11 +34,11 @@ const HTTP_STATUS: Record<RoleErrorCode, number> = {
 
 const MESSAGES: Record<RoleErrorCode, { title: string; message: string }> = {
   SEED_ROLE_DELETE: {
-    title: 'ลบ Seed Role ไม่ได้',
+    title: 'ลบบทบาทพื้นฐานของระบบไม่ได้',
     message: 'บทบาทพื้นฐานของระบบ 15 ตัวลบไม่ได้ทุกกรณี',
   },
   SEED_ROLE_RENAME: {
-    title: 'เปลี่ยนชื่อ Seed Role ไม่ได้',
+    title: 'เปลี่ยนชื่อบทบาทพื้นฐานของระบบไม่ได้',
     message: 'ชื่อบทบาทพื้นฐานถูกอ้างอิงทั้งระบบ จึงเปลี่ยนไม่ได้',
   },
   ROLE_NOT_EDITABLE: {

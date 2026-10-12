@@ -160,7 +160,7 @@ export function RolesManager() {
     <>
       <PageHeader
         title="สิทธิ์การใช้งาน (Roles & Permissions)"
-        description="บทบาทพื้นฐาน 15 ตัว — Seed Role ลบ/เปลี่ยนชื่อไม่ได้"
+        description="บทบาทพื้นฐานของระบบ 15 ตัว — ลบ/เปลี่ยนชื่อไม่ได้"
         action={
           <Can action="manage" resource={MANAGE_RESOURCE}>
             <Button onClick={() => setCreateOpen(true)}>+ สร้างบทบาท</Button>
@@ -237,7 +237,7 @@ export function RolesManager() {
                             disabled={role.isSeed || role.userCount > 0}
                             title={
                               role.isSeed
-                                ? 'Seed Role ลบไม่ได้'
+                                ? 'บทบาทพื้นฐานของระบบลบไม่ได้'
                                 : role.userCount > 0
                                   ? 'ยังมีผู้ใช้ผูกอยู่กับบทบาทนี้'
                                   : undefined
@@ -272,7 +272,7 @@ export function RolesManager() {
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         title="สร้างบทบาทใหม่"
-        description="บทบาทที่สร้างเองปรับสิทธิ์ได้ และไม่ใช่ Seed Role"
+        description="บทบาทที่สร้างเองปรับสิทธิ์ได้ และไม่ใช่บทบาทพื้นฐานของระบบ"
         footer={
           <>
             <Button variant="secondary" onClick={() => setCreateOpen(false)} disabled={creating}>
