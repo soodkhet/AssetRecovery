@@ -160,7 +160,7 @@ export function buildRevenueReconciliation(input: RevenueReconciliationInput): R
   lines.push(
     { key: 'creditNotes', label: 'หัก ใบลดหนี้', sign: '-', amountSatang: creditNotesSatang },
     { key: 'debitNotes', label: 'บวก ใบเพิ่มหนี้', sign: '+', amountSatang: debitNotesSatang },
-    { key: 'awaitingCredit', label: 'หัก Adjustment ลดยอดที่รอใบลดหนี้', sign: '-', amountSatang: awaitingCreditSatang },
+    { key: 'awaitingCredit', label: 'หัก Adjustment ลดยอดที่ไม่มีใบลดหนี้ (รอออก หรือไม่ต้องออก)', sign: '-', amountSatang: awaitingCreditSatang },
     { key: 'awaitingDebit', label: 'บวก Adjustment เพิ่มยอดที่รอใบเพิ่มหนี้', sign: '+', amountSatang: awaitingDebitSatang },
   )
   // บรรทัดของรายได้ที่ยังไม่ออกใบกำกับแสดงเฉพาะเมื่อมียอด — ปกติเป็นรายได้รอวางบิล
