@@ -538,6 +538,9 @@ async function planReceiptInvoice(
     defaultDate: receipt.receivedDate,
     replaces,
     amounts: async (tx) => {
+      // รีวิว mytester3 #7 — ล็อกแถวรอบวางบิล (ล็อกเดียวกับฝั่งบันทึก/ยกเลิกใบลดหนี้ · รับเงิน — U171) ก่อนอ่าน
+      // ใบลดหนี้/ใบก่อนหน้า ⇒ ใบลดหนี้ที่บันทึกพร้อมกันต่อคิว ไม่หลุดจากเครดิตที่ใบนี้คิด
+      await tx.$queryRaw`SELECT id FROM billing_batches WHERE id = ${receipt.billingBatchId}::uuid FOR UPDATE`
       // ตรวจซ้ำหลังล็อก — คำขอที่ต่อคิวมาหลังอีกคนออกใบของเงินรับนี้ไปแล้วต้องได้ code ที่ตรงความจริง
       const raced = await tx.taxInvoice.findFirst({
         where: { cashReceiptId, status: 'active' },

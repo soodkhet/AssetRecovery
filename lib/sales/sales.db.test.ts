@@ -551,6 +551,47 @@ suite('มติ PO U95 — รับเงิน ⇒ ใบเสร็จร�
     expect(doc.outstandingText).toBeNull()
   })
 
+  it('รีวิว mytester3 #7 — ใบลดหนี้ที่กำลังบันทึก (ล็อกรอบวางบิล) ⇒ ออกใบปิดยอดต่อคิว แล้วรวมเครดิตนั้น', async () => {
+    await setNumbering({ seq: 58 })
+    const batch = await seedBilling({ status: 'sent', grossSatang: 100_000, vatSatang: 7_000 })
+    const first = await sales.issueTaxInvoice(ctx, { cashReceiptId: await seedReceipt(batch.id, { amountSatang: 42_800 }) })
+    const receiptId = await seedReceipt(batch.id, { amountSatang: 53_500 })
+
+    let releaseNote: () => void = () => undefined
+    const noteHeld = new Promise<void>((resolve) => {
+      releaseNote = resolve
+    })
+    let locked: () => void = () => undefined
+    const lockTaken = new Promise<void>((resolve) => {
+      locked = resolve
+    })
+    // จำลองฝั่งบันทึกใบลดหนี้: ล็อกแถวรอบ → insert → ค้างไว้ก่อน commit
+    const noteTx = db().$transaction(
+      async (tx) => {
+        await tx.$queryRawUnsafe(`SELECT id FROM billing_batches WHERE id = '${batch.id}'::uuid FOR UPDATE`)
+        await tx.$executeRawUnsafe(`
+          INSERT INTO credit_notes (organization_id, tax_invoice_id, note_type, credit_note_number, issue_date,
+                                    amount_before_vat_satang, vat_satang, total_satang, vat_rate_pct_used, reason, created_by,
+                                    buyer_branch_code)
+          SELECT '${ORG_ID}', id, 'credit', 'RV7-' || substr(md5(random()::text), 1, 8), '${TODAY.toISOString().slice(0, 10)}',
+                 10000, 700, 10700, 7.00, $$ปรับยอดเคสทดสอบ$$, '${ACCOUNTING_ID}', buyer_branch_code
+            FROM tax_invoices WHERE id = '${first.id}'
+        `)
+        locked()
+        await noteHeld
+      },
+      { timeout: 20_000 },
+    )
+    await lockTaken
+    const issuing = sales.issueTaxInvoice(ctx, { cashReceiptId: receiptId })
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    releaseNote()
+    await noteTx
+    const last = await issuing
+    // 535 + เครดิต 107 = ยอดคงเหลือ 642 ⇒ ใบปิดยอด (ไม่ล็อก ⇒ อ่านก่อนใบลดหนี้ commit ได้ 535 "รับชำระบางส่วน")
+    expect(last.totalSatang).toBe(64_200)
+  })
+
   it('มติ PO U169 — บิลปิดด้วยการตัดส่วนต่าง (U163 ภาษีลูกค้าหัก + ค่าโอน) ⇒ ใบเต็มยอดบิล รับชำระครบ · VAT เต็ม · PDF ไม่มียอดค้าง', async () => {
     await setNumbering({ seq: 60 })
     // แบบ BL-2569-011: ก่อน VAT 1,750.03 + VAT 122.50 = 1,872.53 · เงินเข้า 1,800.00 · ลูกค้าหัก 52.50 · ค่าธรรมเนียม 20.03
