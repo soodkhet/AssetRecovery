@@ -80,6 +80,16 @@ export function receiptAwaitsTaxInvoice(input: {
   return !(input.batchFullyPaid && fullyInvoiced)
 }
 
+/**
+ * mytester4 G4-03 — การ์ด "ยังไม่ออกใบเสร็จรับเงิน/ใบกำกับภาษี" ของแท็บเงินรับ: นับเฉพาะเงินรับที่ยังไม่มีใบ ไม่ถูกใบแบบเดิมครอบ
+ * และยังมีมูลค่าให้ออก (`taxInvoiceNotRequired = false` — จาก {@link receiptAwaitsTaxInvoice}) ⇒ ตรงกับคำเตือนปิดงวด
+ */
+export function countReceiptsAwaitingTaxInvoice(
+  items: readonly { taxInvoice: unknown; coveredByLegacyInvoice: boolean; taxInvoiceNotRequired: boolean }[],
+): number {
+  return items.filter((item) => item.taxInvoice === null && !item.coveredByLegacyInvoice && !item.taxInvoiceNotRequired).length
+}
+
 export interface TaxInvoiceCoverageMismatch {
   batchNumber: string
   /** ยอดสุทธิของรอบ (รวม VAT) */

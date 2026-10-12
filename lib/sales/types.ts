@@ -156,6 +156,11 @@ export interface CashReceiptDto {
   cancelledTaxInvoices: TaxInvoiceSummaryDto[]
   /** รอบนี้ออกใบกำกับภาษีแบบเดิม (ตอนวางบิล) ไว้แล้ว ⇒ ไม่ต้องออกใบเสร็จรับเงิน/ใบกำกับภาษีอีก */
   coveredByLegacyInvoice: boolean
+  /**
+   * mytester4 G4-03 — ยังไม่มีใบ แต่รอบรับชำระครบและออกเอกสารครบมูลค่าแล้ว (เงินส่วนใบเพิ่มหนี้/ส่วนเกิน — ใบเพิ่มหนี้เป็นเอกสาร
+   * ภาษีในตัว) ⇒ "ไม่ต้องออก" · ไม่นับในการ์ดยังไม่ออกใบ (`receiptAwaitsTaxInvoice()` กติกาเดียวกับคำเตือนปิดงวด)
+   */
+  taxInvoiceNotRequired: boolean
 }
 
 export interface CashReceiptListDto {

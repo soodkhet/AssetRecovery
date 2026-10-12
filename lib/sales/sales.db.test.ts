@@ -795,12 +795,20 @@ suite('มติ PO U95 — รับเงิน ⇒ ใบเสร็จร�
     const before = await loadReceiptsAwaitingTaxInvoice(ORG_ID, tomorrow)
 
     // ชำระส่วนเพิ่มหนี้ภายหลัง — ออกใบไม่ได้โดยออกแบบ ⇒ ไม่ค้างเป็นคำเตือน
-    await seedReceipt(batch.id, { amountSatang: 2_140 })
+    const listedBefore = await sales.listCashReceipts(accountant, {})
+    const dnReceiptId = await seedReceipt(batch.id, { amountSatang: 2_140 })
     expect(await loadReceiptsAwaitingTaxInvoice(ORG_ID, tomorrow)).toEqual(before)
+    // mytester4 G4-03 — แท็บเงินรับ: แถว "ไม่ต้องออก" + การ์ดยังไม่ออกใบไม่นับ (กติกาเดียวกับคำเตือนปิดงวด)
+    const listedAfter = await sales.listCashReceipts(accountant, {})
+    expect(listedAfter.items.find((item) => item.id === dnReceiptId)).toMatchObject({ taxInvoice: null, taxInvoiceNotRequired: true })
+    expect(listedAfter.awaitingTaxInvoiceCount).toBe(listedBefore.awaitingTaxInvoiceCount)
 
     // รอบที่ยังออกใบไม่ครบมูลค่า ⇒ ยังนับ
     const partial = await seedBilling({ status: 'sent', grossSatang: 100_000, vatSatang: 7_000 })
-    await seedReceipt(partial.id, { amountSatang: 50_000 })
+    const partialReceiptId = await seedReceipt(partial.id, { amountSatang: 50_000 })
+    const listedPartial = await sales.listCashReceipts(accountant, {})
+    expect(listedPartial.items.find((item) => item.id === partialReceiptId)?.taxInvoiceNotRequired).toBe(false)
+    expect(listedPartial.awaitingTaxInvoiceCount).toBe(listedAfter.awaitingTaxInvoiceCount + 1)
     expect(await loadReceiptsAwaitingTaxInvoice(ORG_ID, tomorrow)).toEqual({
       count: before.count + 1,
       amountSatang: before.amountSatang + 50_000,

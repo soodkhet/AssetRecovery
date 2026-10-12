@@ -149,6 +149,14 @@ export function ReceiptsTab() {
                       </div>
                     ) : row.coveredByLegacyInvoice ? (
                       <span className="text-xs text-slate-500">ออกใบกำกับภาษีตอนวางบิลแล้ว (แบบเดิม)</span>
+                    ) : row.taxInvoiceNotRequired ? (
+                      // mytester4 G4-03 — ชำระส่วนใบเพิ่มหนี้/ส่วนเกินหลังออกเอกสารครบยอดของรอบ
+                      <div className="space-y-1">
+                        <StatusBadge group="neutral" label="ไม่ต้องออก" />
+                        <div className="text-[10px] text-slate-400">
+                          ออกเอกสารครบยอดของรอบแล้ว — ส่วนนี้ชำระตามใบเพิ่มหนี้ (เอกสารภาษีในตัว) หรือเป็นส่วนที่รับเกิน
+                        </div>
+                      </div>
                     ) : (
                       <div className="space-y-1">
                         <StatusBadge group="pending" label="ยังไม่ออก" />

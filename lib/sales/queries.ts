@@ -12,6 +12,7 @@ import type {
   VatMode,
 } from '@/lib/generated/prisma/enums'
 import { documentedAmountsForBatches, documentedOutstandingByBatch } from '@/lib/portal/documented-amounts'
+import { countReceiptsAwaitingTaxInvoice, receiptAwaitsTaxInvoice } from '@/lib/sales/tax-invoice-coverage'
 import { parseSellerProfileSnapshot, sellerProfileOf, sellerProfileSnapshotJson } from '@/lib/organization/profile'
 import { loadDocumentTemplateSnapshot } from '@/lib/settings/queries/tax-doc-templates'
 import { documentTemplateSnapshotJson, parseDocumentTemplateSnapshot } from '@/lib/settings/tax-doc-template'
@@ -1242,7 +1243,11 @@ export async function listCashReceipts(user: SessionUser, query: CashReceiptList
           bankFeeWrittenOffSatang: true,
           company: { select: { name: true } },
           salesRecord: {
-            select: { taxInvoices: { where: { status: 'active', docKind: 'tax_invoice' }, select: { id: true } } },
+            select: {
+              totalBeforeVatSatang: true,
+              // mytester4 G4-03 — ใบ active ทุกชนิด (แบบเดิม ⇒ ครอบแล้ว · รวมก่อน VAT ⇒ ออกครบมูลค่าหรือยัง)
+              taxInvoices: { where: { status: 'active' }, select: { docKind: true, amountBeforeVatSatang: true } },
+            },
           },
         },
       },
@@ -1251,15 +1256,18 @@ export async function listCashReceipts(user: SessionUser, query: CashReceiptList
     },
   })
 
-  const [periodClosed, outstandingByBatch] = await Promise.all([
+  const [periodClosed, outstandingByBatch, documentedByBatch] = await Promise.all([
     loadPeriodClosedLookup(user.organizationId),
     documentedOutstandingByBatch(
       user.organizationId,
       rows.map((row) => row.billingBatch),
     ),
+    documentedAmountsForBatches(user.organizationId, [...new Set(rows.map((row) => row.billingBatchId))]),
   ])
   const items: CashReceiptDto[] = rows.map((row) => {
     const active = row.taxInvoices.find((invoice) => invoice.status === 'active') ?? null
+    const batchInvoices = row.billingBatch.salesRecord?.taxInvoices ?? []
+    const coveredByLegacyInvoice = batchInvoices.some((invoice) => invoice.docKind === 'tax_invoice')
     return {
       id: row.id,
       receivedDate: row.receivedDate.toISOString(),
@@ -1280,7 +1288,19 @@ export async function listCashReceipts(user: SessionUser, query: CashReceiptList
       cancelledTaxInvoices: row.taxInvoices
         .filter((invoice) => invoice.status === 'cancelled')
         .map((invoice) => toInvoiceSummary(invoice, periodClosed)),
-      coveredByLegacyInvoice: (row.billingBatch.salesRecord?.taxInvoices.length ?? 0) > 0,
+      coveredByLegacyInvoice,
+      // mytester4 G4-03 — เงินส่วนใบเพิ่มหนี้/ส่วนเกินหลังออกครบมูลค่า ⇒ ไม่ต้องออก (กติกาเดียวกับคำเตือนปิดงวด)
+      taxInvoiceNotRequired:
+        active === null &&
+        !coveredByLegacyInvoice &&
+        !receiptAwaitsTaxInvoice({
+          hasActiveInvoice: false,
+          coveredByLegacyInvoice,
+          batchFullyPaid: row.billingBatch.status === 'paid',
+          invoicedBeforeVatSatang: batchInvoices.reduce((sum, invoice) => sum + invoice.amountBeforeVatSatang, 0),
+          billedBeforeVatSatang: row.billingBatch.salesRecord?.totalBeforeVatSatang ?? null,
+          uninvoicedReductionBeforeVatSatang: documentedByBatch.get(row.billingBatchId)?.uninvoicedReduction.beforeVatSatang ?? 0,
+        }),
     }
   })
 
@@ -1288,6 +1308,6 @@ export async function listCashReceipts(user: SessionUser, query: CashReceiptList
     items,
     totalSatang: items.reduce((sum, item) => sum + item.amountSatang, 0),
     totalWhtWithheldByCustomerSatang: items.reduce((sum, item) => sum + item.whtWithheldByCustomerSatang, 0),
-    awaitingTaxInvoiceCount: items.filter((item) => item.taxInvoice === null && !item.coveredByLegacyInvoice).length,
+    awaitingTaxInvoiceCount: countReceiptsAwaitingTaxInvoice(items),
   }
 }

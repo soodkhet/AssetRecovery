@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  countReceiptsAwaitingTaxInvoice,
   evaluateTaxInvoiceCoverage,
   receiptAwaitsTaxInvoice,
   taxInvoiceCoverageWarning,
@@ -170,5 +171,26 @@ describe('รีวิว mytester3 #5 — receiptAwaitsTaxInvoice', () => {
   it('รอบรับครบที่ข้ามเพราะเงินรับส่วนเพิ่มหนี้ ⇒ กลับมาตรวจได้ (hasReceiptsAwaitingInvoice = false)', () => {
     const result = evaluateTaxInvoiceCoverage([batch({ hasReceiptsAwaitingInvoice: receiptAwaitsTaxInvoice(base) })])
     expect(result.checkedCount).toBe(1)
+  })
+})
+
+describe('mytester4 G4-03 — การ์ด "ยังไม่ออกใบ" ไม่นับเงินรับที่ไม่ต้องออก (ชำระส่วนใบเพิ่มหนี้)', () => {
+  const item = (over: Partial<{ taxInvoice: unknown; coveredByLegacyInvoice: boolean; taxInvoiceNotRequired: boolean }> = {}) => ({
+    taxInvoice: null,
+    coveredByLegacyInvoice: false,
+    taxInvoiceNotRequired: false,
+    ...over,
+  })
+
+  it('MTJ 20.80 ชำระ DN หลังใบปิดยอด ⇒ ไม่นับ · ยังต้องออก ⇒ นับ · มีใบ/แบบเดิม ⇒ ไม่นับ', () => {
+    expect(countReceiptsAwaitingTaxInvoice([item({ taxInvoiceNotRequired: true })])).toBe(0)
+    expect(
+      countReceiptsAwaitingTaxInvoice([
+        item(),
+        item({ taxInvoiceNotRequired: true }),
+        item({ taxInvoice: { id: 'x' } }),
+        item({ coveredByLegacyInvoice: true }),
+      ]),
+    ).toBe(1)
   })
 })
