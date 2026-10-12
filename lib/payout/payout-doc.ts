@@ -4,6 +4,7 @@ import { summarizePayoutBatch, type PayoutBatchTotals } from '@/lib/finance/payo
 import { payoutTransferSatang } from '@/lib/finance/advance-offset-calc'
 import { payoutItemTaxSplit, sumPayoutTaxSplit, type PayoutTaxSplit } from '@/lib/finance/wht-calc'
 import { advanceOffsetLineLabel } from '@/lib/advances/advance'
+import { usesPerPayeeWhtRate } from '@/lib/settings/wht-policy'
 import type { PayoutBatchStatus } from '@/lib/generated/prisma/enums'
 import { bahtInWords } from '@/lib/payout/baht-text'
 import { PayoutError } from '@/lib/payout/errors'
@@ -454,6 +455,7 @@ export interface PaymentVoucherDoc {
   /** "โอนเข้าบัญชี …" */
   paymentChannelText: string
   signers: readonly string[]
+  /** หมายเหตุท้ายใบ — ว่าง = ไม่มีใบ 50 ทวิ จากรอบนี้ (mytester4 F4-02) */
   footnote: string
   bankLine: string
   description: string
@@ -504,7 +506,7 @@ export function buildPaymentVoucherDocs(
     payerTaxLine: payerTaxLineOf(group),
     paymentChannelText: `โอนเข้าบัญชี ${payeeBankLine(group)}`,
     signers: ['ผู้จัดทำ', 'ผู้อนุมัติ', 'ผู้รับเงิน'],
-    footnote: 'หนังสือรับรองการหักภาษี ณ ที่จ่าย (50 ทวิ) ออกแยกต่างหาก',
+    footnote: hasWhtCertificate(group) ? WHT_CERTIFICATE_SEPARATE_NOTE : '',
     bankLine: payeeBankLine(group),
     description: `${describeVoucherItems(group.items)} รอบ ${batch.name}`,
     batchName: batch.name,
@@ -535,17 +537,48 @@ function payeeBankLine(group: PayoutPayeeGroup): string {
 /**
  * ป้ายแถวหัก ณ ที่จ่าย — อัตรา snapshot + **ฐานภาษีตามที่ระบบคิดจริง** เมื่อมีรายการนอกฐาน (ค่าตั้ง U3 เช่น
  * ค่าที่พักตามใบเสร็จนามบริษัท) · ยอดหักเป็น snapshot ของรายการ (ไม่คิดใหม่บนเอกสาร — Rule 01)
+ * · mytester4 F4-01 — มีฐานยกมาจากรอบก่อนในเดือน (snapshot `whtCarriedBaseSatang` · เกณฑ์สะสมต่อเดือน) ⇒
+ *   แสดง "ฐานภาษีรอบนี้ X + ยกมา Y = Z" ให้กระทบกับเงินได้บนใบ 50 ทวิ ได้
  */
 function whtLineLabel(group: PayoutPayeeGroup): string {
   const rate = group.whtPctSnapshot === null || group.whtWithheldSatang === 0 ? '' : ` ${fmtRatePct(group.whtPctSnapshot)}`
-  const baseSatang = group.items
-    .filter((item) => item.source === 'expense' && item.whtBaseIncluded)
-    .reduce((sum, item) => sum + payoutItemTaxSplit(item).compensationSatang, 0)
-  const base =
-    // รีวิว F2-02 — เทียบกับค่าตอบแทน (ไม่รวมเงินทดรองจ่าย) — เดิมเทียบยอดรวมบรรทัด ⇒ มีเงินทดรองก็โชว์ฐานภาษีทั้งที่ทุกรายการอยู่ในฐาน
-    group.whtWithheldSatang > 0 && baseSatang !== compensationOf(group) ? ` (ฐานภาษี ${fmtSatang(baseSatang)})` : ''
-  return `หัก ภาษี ณ ที่จ่าย${rate}${base}`
+  return `หัก ภาษี ณ ที่จ่าย${rate}${whtBaseSuffix(group)}`
 }
+
+/** ฐานภาษีของรายการในรอบนี้ (ค่าตอบแทนของรายการในฐาน) + ฐานยกมาจากรอบก่อนในเดือน (snapshot) */
+function whtBaseOf(group: PayoutPayeeGroup): { baseSatang: number; carriedSatang: number } {
+  const inBase = group.items.filter((item) => item.source === 'expense' && item.whtBaseIncluded)
+  return {
+    baseSatang: inBase.reduce((sum, item) => sum + payoutItemTaxSplit(item).compensationSatang, 0),
+    carriedSatang: group.items.reduce((sum, item) => sum + (item.whtCarriedBaseSatang ?? 0), 0),
+  }
+}
+
+/** ส่วนต่อท้ายป้าย WHT (มีวงเล็บนำหน้าด้วยช่องว่าง) · ไม่มีการหักจากผู้รับ = ว่าง */
+function whtBaseSuffix(group: PayoutPayeeGroup): string {
+  if (group.whtWithheldSatang === 0) return ''
+  const { baseSatang, carriedSatang } = whtBaseOf(group)
+  if (carriedSatang > 0) {
+    return ` (ฐานภาษีรอบนี้ ${fmtSatang(baseSatang)} + ยกมา ${fmtSatang(carriedSatang)} = ${fmtSatang(baseSatang + carriedSatang)})`
+  }
+  // รีวิว F2-02 — เทียบกับค่าตอบแทน (ไม่รวมเงินทดรองจ่าย) — เดิมเทียบยอดรวมบรรทัด ⇒ มีเงินทดรองก็โชว์ฐานภาษีทั้งที่ทุกรายการอยู่ในฐาน
+  return baseSatang !== compensationOf(group) ? ` (ฐานภาษี ${fmtSatang(baseSatang)})` : ''
+}
+
+/**
+ * mytester4 F4-02 — ผู้รับคนนี้มีใบ 50 ทวิ จากรอบนี้หรือไม่ (เงื่อนไขเดียวกับ `shouldIssueCertificate()` = มีภาษีจริง
+ * รวมภาษีที่บริษัทออกให้) · ข้อยกเว้นเงินได้ 40(1)/40(2) อัตรา 0% ที่ออกใบยอดภาษี 0 (`shouldIssueZeroRate402Certificate`)
+ * ⇒ ถือว่ามีใบเมื่อมีเงินได้ในฐานของหมวดนั้น · ต่ำกว่าเกณฑ์ 40(8) / มีแต่เงินทดรอง ⇒ ไม่มีใบ ไม่ต้องบอกว่า "ออกแยกต่างหาก"
+ */
+function hasWhtCertificate(group: PayoutPayeeGroup): boolean {
+  if (group.items.some((item) => item.whtSatang > 0)) return true
+  return group.items.some(
+    (item) =>
+      item.source === 'expense' && item.whtBaseIncluded && item.grossSatang > 0 && usesPerPayeeWhtRate(item.whtIncomeCategory),
+  )
+}
+
+const WHT_CERTIFICATE_SEPARATE_NOTE = 'หนังสือรับรองการหักภาษี ณ ที่จ่าย (50 ทวิ) ออกแยกต่างหาก'
 
 /** บรรทัดเงินทดรองจ่ายบนใบสำคัญจ่าย/สลิป — ไม่ใช่เงินได้ แยกจาก "รวมค่าตอบแทนก่อนหักภาษี" (mytester2 F2-02) */
 export interface AdvancePaidLine {
@@ -695,16 +728,25 @@ export function buildPayslipDocs(
     whtLabel:
       group.whtPctSnapshot === null || group.whtWithheldSatang === 0
         ? 'หักภาษี ณ ที่จ่าย'
-        : `หักภาษี ณ ที่จ่าย (${fmtRatePct(group.whtPctSnapshot)})`,
+        : `หักภาษี ณ ที่จ่าย (${fmtRatePct(group.whtPctSnapshot)})${payslipCarriedSuffix(group)}`,
     whtText: group.whtWithheldSatang === 0 ? fmtSatang(0) : `(${fmtSatang(group.whtWithheldSatang)})`,
     payerTaxLine: payerTaxLineOf(group),
     offsetLines: group.offsetLines.map((line) => ({ label: line.label, amountText: `(${fmtSatang(line.amountSatang)})` })),
     netText: fmtSatang(group.transferSatang),
-    note:
-      'เอกสารนี้ออกโดยระบบ ไม่ต้องลงลายมือชื่อ · หนังสือรับรองการหักภาษี ณ ที่จ่าย (50 ทวิ) ออกแยกต่างหาก · ' +
+    note: [
+      'เอกสารนี้ออกโดยระบบ ไม่ต้องลงลายมือชื่อ',
+      hasWhtCertificate(group) ? WHT_CERTIFICATE_SEPARATE_NOTE : null,
       'หากรายการไม่ถูกต้องโปรดติดต่อฝ่ายการเงิน',
+    ]
+      .filter((part): part is string => part !== null)
+      .join(' · '),
     }
   })
+}
+
+/** สลิป — ต่อท้ายป้าย WHT ด้วยฐานยกมาเฉพาะเมื่อมี (mytester4 F4-01) · ไม่มีฐานยกมา = ป้ายเดิม */
+function payslipCarriedSuffix(group: PayoutPayeeGroup): string {
+  return whtBaseOf(group).carriedSatang > 0 ? whtBaseSuffix(group) : ''
 }
 
 /**

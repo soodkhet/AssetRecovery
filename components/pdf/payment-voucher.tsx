@@ -99,7 +99,7 @@ export function PaymentVoucherPage({ doc, letterhead }: { doc: PaymentVoucherDoc
         <AmountInWordsRow words={doc.netInWords} />
       </DocTable>
 
-      <NoteText>{doc.footnote}</NoteText>
+      {doc.footnote === '' ? null : <NoteText>{doc.footnote}</NoteText>}
       <Signatures roles={doc.signers} />
     </DocPage>
   )
