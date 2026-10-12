@@ -30,11 +30,11 @@ import {
   type PortalStatusDisplay,
 } from '@/lib/portal/status-map'
 import { ROW_KEY, type ReportData, type ReportRow } from '@/lib/reports/payload'
-import { hasDebitNoteOutstanding } from '@/lib/revenue/revenue-ui'
+import { hasDebitNoteOutstanding, REVENUE_FEE_MODEL_LABEL } from '@/lib/revenue/revenue-ui'
 import { TAX_INVOICE_DOC_KIND_TITLE } from '@/lib/sales/receipt-invoice'
 import { intakePhotoAngleLabel } from '@/lib/warehouse/intake-photos'
 import { INVOICE_DELIVERY_FORMAT_LABEL } from '@/lib/sales/sales'
-import { SERVICE_FEE_BASIS_LABEL, SERVICE_FEE_MODEL_LABEL } from '@/lib/service-fee/template'
+import { SERVICE_FEE_BASIS_LABEL } from '@/lib/service-fee/template'
 import { documentDeviceText } from '@/lib/warehouse/handover-doc'
 import { ASSET_CONDITION_LABEL, HANDOVER_TYPE_LABEL } from '@/lib/warehouse/warehouse-ui'
 
@@ -218,7 +218,8 @@ function serializeServiceFee(row: PortalCaseServiceFeeSource, closedFail: boolea
   const basis = row.serviceFeeBasisSnapshot
   return {
     model: row.serviceFeeModelSnapshot,
-    modelLabel: SERVICE_FEE_MODEL_LABEL[row.serviceFeeModelSnapshot],
+    // mytester3 G3-03 — ป้ายไทยล้วนชุดเดียวกับหลังบ้าน (ป้ายสองภาษาเป็นของหน้าตั้งค่าเท่านั้น)
+    modelLabel: REVENUE_FEE_MODEL_LABEL[row.serviceFeeModelSnapshot],
     ratePct: decimalToNumber(row.serviceFeeRatePct),
     baseSatang: row.serviceFeeBaseSatang,
     basis,
@@ -629,7 +630,7 @@ export function serializePortalCompanyProfile(row: PortalCompanyProfileSource): 
     serviceFeeTemplate:
       template === null
         ? null
-        : { name: template.templateName, model: template.model, modelLabel: SERVICE_FEE_MODEL_LABEL[template.model] },
+        : { name: template.templateName, model: template.model, modelLabel: REVENUE_FEE_MODEL_LABEL[template.model] },
   }
 }
 

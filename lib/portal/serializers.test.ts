@@ -295,6 +295,26 @@ describe('portal serializers — เนื้อหา', () => {
     expect(serializePortalCaseDetail(caseRow('pending_review', { serviceFeeModelSnapshot: null })).serviceFee).toBeNull()
   })
 
+  it('mytester3 G3-03 — ป้ายรูปแบบค่าบริการในพอร์ทัลเป็นไทยล้วน (รายละเอียดเคส + ข้อมูลบริษัท)', () => {
+    const expected = { SUCCESS_FEE: 'คิดตามความสำเร็จ (%)', FLAT: 'เหมาจ่ายรายเคส', HYBRID: 'แบบผสม' } as const
+    for (const model of ['SUCCESS_FEE', 'FLAT', 'HYBRID'] as const) {
+      const fee = serializePortalCaseDetail(caseRow('active', { serviceFeeModelSnapshot: model })).serviceFee
+      expect(fee?.modelLabel).toBe(expected[model])
+      const profile = serializePortalCompanyProfile({
+        name: 'บริษัท ก',
+        taxId: '0105551234567',
+        branchCode: '00000',
+        address: 'กรุงเทพ',
+        contactName: null,
+        contactPhone: null,
+        signerName: null,
+        serviceFeeTemplate: { templateName: 'มาตรฐาน', model },
+      } as Parameters<typeof serializePortalCompanyProfile>[0])
+      expect(profile.serviceFeeTemplate?.modelLabel).toBe(expected[model])
+      expect(`${fee?.modelLabel ?? ''}${profile.serviceFeeTemplate?.modelLabel ?? ''}`).not.toMatch(/[A-Za-z]/)
+    }
+  })
+
   it('มติชั่วคราว M9 — closedFail ตามสถานะ "ติดตามไม่สำเร็จ" · รายได้จริงรวม VAT + ป้าย', () => {
     const failed = serializePortalCaseDetail(caseRow('closed_fail', { assignmentStatus: 'closed_fail' })).serviceFee
     expect(failed).toMatchObject({ closedFail: true, actualRevenueSatang: null, actualRevenueVatLabel: null })

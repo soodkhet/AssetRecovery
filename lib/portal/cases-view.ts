@@ -126,6 +126,19 @@ export interface PortalServiceFeeRow {
   value: string
   /** บรรทัดย่อยใต้ตัวเลข (เช่นยอดเดิม + ใบลดหนี้) — ไม่มี = ไม่แสดง */
   detail?: string
+  /**
+   * ส่วนของ `detail` ทีละท่อน (คั่นด้วย " · ") — จอแคบตัดบรรทัดได้เฉพาะระหว่างท่อน ไม่ตัดกลางเลขเอกสาร
+   * (mytester3 I3-03 — "CN-NDP-2569-" / "0012")
+   */
+  detailParts?: string[]
+}
+
+/**
+ * ข้อความแทนแถวค่าบริการเมื่อยังไม่มี snapshot — เคส "ไม่รับเคส" ปิดถาวรแล้ว ไม่ได้รออนุมัติ ⇒ ไม่มีค่าบริการ
+ * (mytester3 I3-02)
+ */
+export function portalServiceFeeEmptyText(code: PortalCaseStatusCode): string {
+  return code === 'declined' ? 'ไม่มีค่าบริการ (ไม่รับเคส)' : 'ค่าบริการจะถูกกำหนดเมื่อเคสได้รับการอนุมัติ'
 }
 
 /**
@@ -151,8 +164,11 @@ export function portalServiceFeeRows(fee: PortalServiceFeeDto | null): PortalSer
     const actualVat = fee.actualRevenueVatLabel === null ? '' : ` (${fee.actualRevenueVatLabel})`
     const actualRow: PortalServiceFeeRow = { label: 'ค่าบริการ (ยอดจริง)', value: `${fmtSatangSymbol(fee.actualRevenueSatang)}${actualVat}` }
     // มติ PO 12/10/2569 I2-01 — ยอดจริงหักใบลดหนี้ที่ออกแล้ว ⇒ บอกยอดเดิม + เลขใบลดหนี้ทุกใบ
-    const detail = actualRevenueCreditNoteDetail(fee)
-    if (detail !== null) actualRow.detail = detail
+    const parts = actualRevenueCreditNoteDetail(fee)
+    if (parts !== null) {
+      actualRow.detail = parts.join(' · ')
+      actualRow.detailParts = parts
+    }
     rows.push(actualRow)
   } else if (fee.closedFail) {
     // มติชั่วคราว M9 — เคสไม่สำเร็จ ⇒ ประมาณการ = ค่าบริการกรณีไม่สำเร็จ (ไม่มี = ไม่เรียกเก็บ)
@@ -167,12 +183,12 @@ export function portalServiceFeeRows(fee: PortalServiceFeeDto | null): PortalSer
 }
 
 /** "ยอดเดิม ฿200.00 · ลดหนี้ CN-… −฿200.00" — ไม่มีใบลดหนี้ ⇒ `null` (มติ PO 12/10/2569 I2-01) */
-function actualRevenueCreditNoteDetail(fee: PortalServiceFeeDto): string | null {
+function actualRevenueCreditNoteDetail(fee: PortalServiceFeeDto): string[] | null {
   if (fee.actualRevenueCreditNotes.length === 0 || fee.actualRevenueOriginalSatang === null) return null
   const notes = fee.actualRevenueCreditNotes.map(
     (note) => `ลดหนี้ ${note.creditNoteNumber} −${fmtSatangSymbol(note.totalSatang)}`,
   )
-  return [`ยอดเดิม ${fmtSatangSymbol(fee.actualRevenueOriginalSatang)}`, ...notes].join(' · ')
+  return [`ยอดเดิม ${fmtSatangSymbol(fee.actualRevenueOriginalSatang)}`, ...notes]
 }
 
 /** มติ U165 — ยอดกรณีไม่สำเร็จแยกจากกรณีสำเร็จ ใช้ได้ทุกโมเดล */
