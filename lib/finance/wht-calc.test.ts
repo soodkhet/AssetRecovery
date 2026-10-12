@@ -6,6 +6,7 @@ import {
   calculateWhtForPayee,
   documentedBillingAmounts,
   estimateCustomerWhtForBilling,
+  expectedCustomerWhtSatang,
   isPayerBorneWhtCondition,
   payoutItemTaxSplit,
   sumPayoutTaxSplit,
@@ -13,6 +14,7 @@ import {
   whtGrossUp,
   whtTaxForCondition,
 } from '@/lib/finance/wht-calc'
+import { remainingAfterCustomerWhtSatang, resolveCustomerWhtForReceipt } from '@/lib/finance/ar-calc'
 import { DEFAULT_WHT_MIN_THRESHOLD_SATANG } from '@/lib/settings/tax-profile'
 import { isSettingsError } from '@/lib/settings/errors'
 
@@ -594,5 +596,45 @@ describe('รายการนอกฐาน WHT / ไม่มีอัตร
     expect(result.totalBaseSatang).toBe(200_000)
     expect(result.lines.map((line) => line.whtSatang)).toEqual([6_000, 0])
     expect(result.lines.map((line) => line.rateMissing)).toEqual([false, true])
+  })
+})
+
+describe('mytester4 G4-02 — ลูกค้าหัก ณ ที่จ่ายส่วนใบเพิ่มหนี้หลังบันทึกภาษีครั้งแรกแล้ว', () => {
+  // BL-2569-001 MTJ: 6,000 + VAT 420 · รับ 6,240 + ลูกค้าหัก 180 · ใบเพิ่มหนี้ 20 + 1.40 ⇒ ลูกค้าโอน 20.80 (หัก 0.60)
+  const DN = { creditBeforeVatSatang: 0, creditTotalSatang: 0, debitBeforeVatSatang: 2_000, debitTotalSatang: 2_140 }
+
+  it('ภาษีคาดหักทั้งรอบ = 180 + 0.60 = 180.60 (ฐาน 6,020 × 3%) · ยอดคาดรับ 6,260.80', () => {
+    expect(expectedCustomerWhtSatang({ recordedWhtSatang: 18_000, whtPct: 3, documentedBeforeVatSatang: 602_000, notes: DN })).toEqual({
+      whtSatang: 18_060,
+      isEstimate: true,
+    })
+    expect(
+      estimateCustomerWhtForBilling({ amountBeforeVatSatang: 600_000, totalSatang: 642_000, recordedWhtSatang: 18_000, whtPct: 3, notes: DN }),
+    ).toEqual({ whtSatang: 18_060, isEstimate: true, expectedReceiptSatang: 626_080 })
+  })
+
+  it('จับคู่ 20.80 ⇒ ยอดค้างหลังหัก = 20.80 (ยอดตรง) · ภาษีของใบนี้ 0.60 ไม่ใช่ค่าธรรมเนียม', () => {
+    expect(remainingAfterCustomerWhtSatang({ remainingSatang: 2_140, expectedWhtSatang: 18_060, priorWhtSatang: 18_000 })).toBe(2_080)
+    expect(
+      resolveCustomerWhtForReceipt({
+        totalSatang: 644_140,
+        expectedWhtSatang: 18_060,
+        priorReceivedSatang: 624_000,
+        priorWhtSatang: 18_000,
+        receiptSatang: 2_080,
+        toleranceSatang: 5_000,
+      }),
+    ).toBe(60)
+  })
+
+  it('ยอดจริงครอบส่วนใบเพิ่มหนี้แล้ว (ออกก่อนรับเงิน) / ไม่มีใบเพิ่มหนี้ / หักน้อยกว่าอัตรา ⇒ ไม่บวกซ้ำ', () => {
+    expect(expectedCustomerWhtSatang({ recordedWhtSatang: 18_060, whtPct: 3, documentedBeforeVatSatang: 602_000, notes: DN }).whtSatang).toBe(18_060)
+    expect(expectedCustomerWhtSatang({ recordedWhtSatang: 17_500, whtPct: 3, documentedBeforeVatSatang: 600_000 })).toEqual({
+      whtSatang: 17_500,
+      isEstimate: false,
+    })
+    // หักต่างจากอัตรา + มีใบเพิ่มหนี้ ⇒ บวกเฉพาะภาษีของส่วนใบเพิ่มหนี้
+    expect(expectedCustomerWhtSatang({ recordedWhtSatang: 15_000, whtPct: 3, documentedBeforeVatSatang: 602_000, notes: DN }).whtSatang).toBe(15_060)
+    expect(expectedCustomerWhtSatang({ recordedWhtSatang: 18_000, whtPct: null, documentedBeforeVatSatang: 602_000, notes: DN }).whtSatang).toBe(18_000)
   })
 })

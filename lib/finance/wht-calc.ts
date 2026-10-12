@@ -622,11 +622,31 @@ export function estimateCustomerWhtForBilling(input: {
   assertNonNegativeSatang(input.totalSatang, 'ยอดเรียกเก็บของรอบวางบิล')
   assertNonNegativeSatang(input.recordedWhtSatang, 'ภาษีที่ลูกค้าหักที่บันทึกแล้ว')
   const documented = documentedBillingAmounts(input)
-  const isEstimate = input.recordedWhtSatang === 0
-  const whtSatang = isEstimate
-    ? calculateCustomerWithheldWht({ amountBeforeVatSatang: documented.beforeVatSatang, whtPct: input.whtPct })
-    : input.recordedWhtSatang
+  const { whtSatang, isEstimate } = expectedCustomerWhtSatang({ ...input, documentedBeforeVatSatang: documented.beforeVatSatang })
   return { whtSatang, isEstimate, expectedReceiptSatang: Math.max(0, documented.totalSatang - whtSatang) }
+}
+
+/**
+ * ภาษีที่คาดว่าลูกค้าหักทั้งรอบ (`22` §6.16) — ตัวเดียวใช้ทั้งแถวรอบวางบิลและยอดทางเลือกของการจับคู่ (A1 altAmount / U163)
+ * - ยังไม่บันทึก ⇒ ประมาณจากฐานก่อน VAT ตามเอกสาร
+ * - บันทึกแล้ว ⇒ ยอดจริง **+ ภาษีของส่วนใบเพิ่มหนี้ที่ยอดจริงยังไม่ครอบ** (mytester4 G4-02 — มติ G3-02 ลูกค้าหักจากมูลค่าตามเอกสาร):
+ *   `min(round(ฐานใบเพิ่มหนี้ × อัตรา), max(0, ประมาณ − ยอดจริง))` — ใบเพิ่มหนี้ออกหลังลูกค้าหักครั้งแรก ⇒ ส่วนเพิ่มคาดว่าจะถูกหักตอนจ่าย
+ *   ส่วน DN (เดิมยอดจริงอย่างเดียว ⇒ 0.60 ถูกตัดเป็นค่าธรรมเนียมโอน) · ยอดจริงครอบแล้ว/หักต่างจากอัตรา (ไม่มีใบเพิ่มหนี้) ⇒ ยอดจริงตามเดิม
+ */
+export function expectedCustomerWhtSatang(input: {
+  recordedWhtSatang: number
+  whtPct: number | null
+  /** ฐานก่อน VAT ตามเอกสาร (`documentedBillingAmounts().beforeVatSatang`) */
+  documentedBeforeVatSatang: number
+  notes?: CustomerWhtNoteAmounts
+}): { whtSatang: number; isEstimate: boolean } {
+  assertNonNegativeSatang(input.recordedWhtSatang, 'ภาษีที่ลูกค้าหักที่บันทึกแล้ว')
+  const estimate = calculateCustomerWithheldWht({ amountBeforeVatSatang: input.documentedBeforeVatSatang, whtPct: input.whtPct })
+  if (input.recordedWhtSatang === 0) return { whtSatang: estimate, isEstimate: true }
+  const debitBeforeVat = input.notes?.debitBeforeVatSatang ?? 0
+  const debitWht = debitBeforeVat > 0 ? calculateCustomerWithheldWht({ amountBeforeVatSatang: debitBeforeVat, whtPct: input.whtPct }) : 0
+  const pending = Math.min(debitWht, Math.max(0, estimate - input.recordedWhtSatang))
+  return { whtSatang: input.recordedWhtSatang + pending, isEstimate: pending > 0 }
 }
 
 /** ผลรวมใบลดหนี้/ใบเพิ่มหนี้ active ของรอบวางบิล (ก่อน VAT และรวม VAT) — mytester3 G3-02 */

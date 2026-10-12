@@ -55,7 +55,7 @@ import type {
 import { emitAudit } from '@/lib/audit/audit'
 import { SalesError } from '@/lib/sales/errors'
 import type { SessionUser } from '@/lib/auth/types'
-import { calculateCustomerWithheldWht, documentedBillingAmounts, type CustomerWhtNoteAmounts } from '@/lib/finance/wht-calc'
+import { documentedBillingAmounts, expectedCustomerWhtSatang, type CustomerWhtNoteAmounts } from '@/lib/finance/wht-calc'
 import { Prisma } from '@/lib/generated/prisma/client'
 import type {
   BankFileEncoding,
@@ -269,17 +269,17 @@ function altAmountForBilling(row: {
   /** mytester3 G3-02 — ใบลด/เพิ่มหนี้ของรอบ ⇒ ฐานภาษี = ยอดก่อน VAT ตามเอกสาร (`22` §6.16) */
   notes: CustomerWhtNoteAmounts | undefined
 }): number | null {
-  const withheldSatang =
-    row.whtWithheldByCustomerSatang > 0
-      ? row.whtWithheldByCustomerSatang
-      : calculateCustomerWithheldWht({
-          amountBeforeVatSatang: documentedBillingAmounts({
-            amountBeforeVatSatang: row.revenues.reduce((sum, revenue) => sum + revenue.grossSatang, 0),
-            totalSatang: row.totalSatang,
-            ...(row.notes === undefined ? {} : { notes: row.notes }),
-          }).beforeVatSatang,
-          whtPct: row.company.whtWithheldByCustomerPct === null ? null : Number(row.company.whtWithheldByCustomerPct),
-        })
+  // mytester4 G4-02 — บันทึกภาษีแล้วยังรวมภาษีของส่วนใบเพิ่มหนี้ที่ยังไม่ถูกหัก (สูตรเดียวกับแถวรอบวางบิล)
+  const { whtSatang: withheldSatang } = expectedCustomerWhtSatang({
+    recordedWhtSatang: row.whtWithheldByCustomerSatang,
+    whtPct: row.company.whtWithheldByCustomerPct === null ? null : Number(row.company.whtWithheldByCustomerPct),
+    documentedBeforeVatSatang: documentedBillingAmounts({
+      amountBeforeVatSatang: row.revenues.reduce((sum, revenue) => sum + revenue.grossSatang, 0),
+      totalSatang: row.totalSatang,
+      ...(row.notes === undefined ? {} : { notes: row.notes }),
+    }).beforeVatSatang,
+    ...(row.notes === undefined ? {} : { notes: row.notes }),
+  })
   return withheldSatang > 0 ? row.totalSatang - withheldSatang : null
 }
 
