@@ -37,6 +37,8 @@ import {
   groupAuditRefs,
   AUDIT_LIST_REF_DISPLAY_LIMIT,
   auditListFieldRefType,
+  auditFieldRefType,
+  isAuditRefField,
 } from '@/lib/audit/target-refs'
 
 /** known H-06 — เป้าหมาย/ค่าอ้างอิงในบันทึกการใช้งานเป็นชื่อที่อ่านได้ (ส่วน pure) */
@@ -312,6 +314,38 @@ describe('ทดสอบซ้ำ local LR6-01 — target_id แบบ polymorp
     expect(auditListFieldRefType('foo_ids')).toBeNull()
     expect(auditListFieldRefType('case_id')).toBeNull()
     expect(auditListFieldRefType('Ids')).toBeNull()
+  })
+
+  it('staging SV5-02 — รายการ id ที่มีคำขยายต่อท้าย + ฟิลด์ผู้ทำ (*By/*_by) เป็นผู้ใช้', () => {
+    expect(auditListFieldRefType('assetIdsHandedOver')).toBe('assets')
+    expect(auditListFieldRefType('expenseIdsUnlocked')).toBe('expenses')
+    expect(auditListFieldRefType('revenueIdsCreated')).toBe('revenues')
+    expect(auditListFieldRefType('revenueIdsReleased')).toBe('revenues')
+    expect(auditListFieldRefType('revenue_ids_created')).toBe('revenues')
+    expect(auditListFieldRefType('revenue_ids_released')).toBe('revenues')
+    expect(auditListFieldRefType('foo_ids_created')).toBeNull()
+    expect(auditListFieldRefType('requirePayeeIdDocument')).toBeNull()
+
+    for (const field of ['uploadedBy', 'cancelledBy', 'managerApprovedBy', 'creditNoteWaivedBy', 'resolved_by', 'authorized_by']) {
+      expect(auditFieldRefType(field)).toBe('users')
+      expect(isAuditRefField(field)).toBe(true)
+    }
+    for (const field of ['orderBy', 'groupBy', 'replacedBy', 'supersededBy', 'blockedBy', 'By', 'by', 'reason']) {
+      expect(auditFieldRefType(field)).toBeNull()
+    }
+
+    const refs = auditValueRefs({
+      assetIdsHandedOver: [ids[0], ids[1]],
+      revenue_ids_created: [ids[2]],
+      uploadedBy: ids[3],
+      orderBy: ids[4],
+    })
+    expect(refs).toEqual([
+      { type: 'assets', id: ids[0] },
+      { type: 'assets', id: ids[1] },
+      { type: 'revenues', id: ids[2] },
+      { type: 'users', id: ids[3] },
+    ])
   })
 
   it('auditValueRefs: รายการ id (เฉพาะที่แสดง) + target_id ตาม target_type ข้างกัน', () => {

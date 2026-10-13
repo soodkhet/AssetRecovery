@@ -263,8 +263,36 @@ export function auditRefTypeOf(targetType: string): AuditRefType | null {
   return REF_TYPE_SET.has(targetType) ? (targetType as AuditRefType) : null
 }
 
+/**
+ * ฟิลด์ลงท้าย `By`/`_by` ที่**ไม่ใช่**ผู้ใช้ — ตัวเลือกการค้น (`orderBy`/`groupBy`) หรือความสัมพันธ์ไปเอกสารอื่น
+ * (`replacedBy`/`supersededBy` ชี้ใบที่มาแทน · `blockedBy` = เหตุที่บล็อก)
+ */
+const NON_ACTOR_BY_FIELDS: ReadonlySet<string> = new Set([
+  'orderBy',
+  'order_by',
+  'groupBy',
+  'group_by',
+  'sortBy',
+  'sort_by',
+  'blockedBy',
+  'blocked_by',
+  'replacedBy',
+  'replaced_by',
+  'supersededBy',
+  'superseded_by',
+])
+
+/**
+ * staging SV5-02 — ฟิลด์ "ผู้ทำ" (`uploadedBy`/`cancelled_by`/`managerApprovedBy` ฯลฯ) เก็บ id ผู้ใช้ ⇒ แปลงเป็นชื่อผู้ใช้
+ * ทุกตัว ไม่ต้องไล่เพิ่มทีละชื่อในแผนที่ (ค่าที่ไม่ใช่ UUID ไม่ถูกค้นชื่ออยู่แล้ว)
+ */
+function actorFieldRefType(field: string): AuditRefType | null {
+  if (NON_ACTOR_BY_FIELDS.has(field)) return null
+  return /^[a-z][A-Za-z0-9]*[a-z0-9]By$/.test(field) || /^[a-z][a-z0-9_]*[a-z0-9]_by$/.test(field) ? 'users' : null
+}
+
 export function auditFieldRefType(field: string): AuditRefType | null {
-  return FIELD_REF_TYPE[field] ?? null
+  return FIELD_REF_TYPE[field] ?? actorFieldRefType(field)
 }
 
 /** เป้าหมายของแถว (ชนิดที่รู้จัก + id เป็น UUID) — ไม่รู้จัก = `null` (แสดง id ย่อเหมือนเดิม) */
@@ -280,9 +308,13 @@ export function auditTargetRef(row: { targetType: string; targetId: string | nul
  * ถ้าชื่อเต็มไม่รู้จัก ลองตัดคำนำหน้าทีละคำ (`approval_flow_role_id` → `role_id` · `managedTeamId` → `teamId`)
  */
 export function auditListFieldRefType(field: string): AuditRefType | null {
+  // staging SV5-02 — ชื่อที่มีคำขยายต่อท้ายรายการ (`assetIdsHandedOver`/`revenue_ids_created`) ⇒ ตัดคำขยายทิ้งก่อน
+  const snakeSuffixed = /^([a-z][a-z0-9_]*?)_ids_[a-z0-9_]+$/.exec(field)
+  const camelSuffixed = /^([a-z][A-Za-z0-9]*?[a-z0-9])Ids[A-Z][A-Za-z0-9]*$/.exec(field)
+  const base = snakeSuffixed !== null ? `${snakeSuffixed[1]}_ids` : camelSuffixed !== null ? `${camelSuffixed[1]}Ids` : field
   let singular: string
-  if (field.endsWith('_ids')) singular = field.slice(0, -1)
-  else if (/[a-z]Ids$/.test(field)) singular = field.slice(0, -1)
+  if (base.endsWith('_ids')) singular = base.slice(0, -1)
+  else if (/[a-z0-9]Ids$/.test(base)) singular = base.slice(0, -1)
   else return null
   const direct = auditFieldRefType(singular)
   if (direct !== null) return direct
