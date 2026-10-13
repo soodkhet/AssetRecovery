@@ -248,6 +248,9 @@ const FIELD_REF_TYPE: Readonly<Record<string, AuditRefType>> = {
   // ทดสอบซ้ำ local LR6-01 — ผู้จัดการทีม (ใช้กับรายการ `manager_ids` ด้วย)
   manager_id: 'users',
   managerId: 'users',
+  // ตรวจซ้ำ staging SV5-R-02 — ผู้สั่งงานใน payload ของงานเบื้องหลัง
+  actor_id: 'users',
+  actorId: 'users',
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -353,11 +356,32 @@ export function isAuditRefField(field: string): boolean {
   return auditFieldRefType(field) !== null || auditListFieldRefType(field) !== null || isAuditPolymorphicRefField(field)
 }
 
-/** ค่าอ้างอิงใน before/after ระดับบนสุด (ฟิลด์ที่รู้จัก + ค่าเป็น UUID · รายการ id · id แบบ polymorphic) */
+/**
+ * ตรวจซ้ำ staging SV5-R-02 — ความลึกสูงสุดที่ไล่ค่าซ้อน (object/array ของ object เช่น `revenueByCase[].caseId` ·
+ * `payload.actorId`) · ระดับบนสุด = 0 · ลึกกว่านี้แสดงค่าดิบ
+ */
+export const AUDIT_NESTED_REF_MAX_DEPTH = 4
+
+/** จำนวน object สูงสุดต่อ array ที่ไล่หา id (กันค้นชื่อมากเกินในรายการยาว) */
+export const AUDIT_NESTED_REF_ITEM_LIMIT = 50
+
+/** ค่านี้เป็น object ธรรมดา (ไม่ใช่ array/null) */
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+/**
+ * ค่าอ้างอิงใน before/after (ฟิลด์ที่รู้จัก + ค่าเป็น UUID · รายการ id · id แบบ polymorphic) — ใช้กติกาชื่อฟิลด์เดียวกัน
+ * ทุกระดับ และไล่ object/array ของ object ที่ซ้อนอยู่ลึกไม่เกิน {@link AUDIT_NESTED_REF_MAX_DEPTH} (SV5-R-02)
+ */
 export function auditValueRefs(data: unknown): AuditRef[] {
-  if (data === null || typeof data !== 'object' || Array.isArray(data)) return []
-  const record = data as Record<string, unknown>
+  if (!isPlainRecord(data)) return []
   const refs: AuditRef[] = []
+  collectRecordRefs(data, 0, refs)
+  return refs
+}
+
+function collectRecordRefs(record: Record<string, unknown>, depth: number, refs: AuditRef[]): void {
   for (const [field, value] of Object.entries(record)) {
     const type = auditFieldRefType(field)
     if (type !== null && typeof value === 'string' && UUID.test(value)) {
@@ -369,7 +393,9 @@ export function auditValueRefs(data: unknown): AuditRef[] {
       for (const item of value.slice(0, AUDIT_LIST_REF_DISPLAY_LIMIT)) {
         if (typeof item === 'string' && UUID.test(item)) refs.push({ type: listType, id: item })
       }
+      continue
     }
+    collectNestedRefs(value, depth + 1, refs)
   }
   for (const { idField, typeField } of POLYMORPHIC_REF_FIELDS) {
     const id = record[idField]
@@ -378,7 +404,52 @@ export function auditValueRefs(data: unknown): AuditRef[] {
     const type = auditRefTypeOf(targetType)
     if (type !== null) refs.push({ type, id })
   }
-  return refs
+}
+
+function collectNestedRefs(value: unknown, depth: number, refs: AuditRef[]): void {
+  if (depth > AUDIT_NESTED_REF_MAX_DEPTH) return
+  if (isPlainRecord(value)) {
+    collectRecordRefs(value, depth, refs)
+    return
+  }
+  if (!Array.isArray(value)) return
+  for (const item of value.slice(0, AUDIT_NESTED_REF_ITEM_LIMIT)) {
+    if (isPlainRecord(item)) collectRecordRefs(item, depth, refs)
+  }
+}
+
+/**
+ * ค่าซ้อน (object/array) ที่แทน id ด้วยชื่อแล้ว — ใช้ตอนแสดงผลเท่านั้น (ข้อมูล audit ไม่ถูกแก้)
+ * กติกาเดียวกับ {@link auditValueRefs}: ฟิลด์ id เดี่ยว · รายการ id · `target_id` ที่ server ใส่ป้ายให้ · id ที่หาชื่อไม่พบคงเดิม
+ * `depth` = ระดับของ `value` (ค่าของฟิลด์ระดับบนสุด = 1)
+ */
+export function auditReplaceNestedRefs(
+  value: unknown,
+  refLabels: Readonly<Record<string, string>>,
+  depth = 1,
+): unknown {
+  if (depth > AUDIT_NESTED_REF_MAX_DEPTH) return value
+  if (Array.isArray(value)) {
+    return value.map((item, index) =>
+      index < AUDIT_NESTED_REF_ITEM_LIMIT && isPlainRecord(item) ? auditReplaceNestedRefs(item, refLabels, depth) : item,
+    )
+  }
+  if (!isPlainRecord(value)) return value
+  const out: Record<string, unknown> = {}
+  for (const [field, fieldValue] of Object.entries(value)) {
+    if (typeof fieldValue === 'string' && UUID.test(fieldValue) && isAuditRefField(field)) {
+      out[field] = refLabels[fieldValue.toLowerCase()] ?? fieldValue
+    } else if (Array.isArray(fieldValue) && auditListFieldRefType(field) !== null) {
+      out[field] = fieldValue.map((item) =>
+        typeof item === 'string' && UUID.test(item) ? (refLabels[item.toLowerCase()] ?? item) : item,
+      )
+    } else if (fieldValue !== null && typeof fieldValue === 'object') {
+      out[field] = auditReplaceNestedRefs(fieldValue, refLabels, depth + 1)
+    } else {
+      out[field] = fieldValue
+    }
+  }
+  return out
 }
 
 /** รวม id ต่อชนิด (ไม่ซ้ำ) — ใช้ค้นทีละชนิดครั้งเดียว */

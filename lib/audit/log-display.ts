@@ -1,5 +1,10 @@
 import { fmtDate, fmtDateTime } from '@/lib/format/datetime'
-import { AUDIT_LIST_REF_DISPLAY_LIMIT, auditListFieldRefType, isAuditRefField } from '@/lib/audit/target-refs'
+import {
+  AUDIT_LIST_REF_DISPLAY_LIMIT,
+  auditListFieldRefType,
+  auditReplaceNestedRefs,
+  isAuditRefField,
+} from '@/lib/audit/target-refs'
 import { fmtSatangSymbol } from '@/lib/format/money'
 import type { AuditAction } from '@/lib/generated/prisma/enums'
 import type { AuditLoginFailure } from '@/lib/audit/log-types'
@@ -380,5 +385,7 @@ export function auditValueDisplay(
     const label = EXCEPTION_VALUE_LABEL[field]?.[value]
     if (label !== undefined) return label
   }
+  // ตรวจซ้ำ staging SV5-R-02 — id ในค่าซ้อน (`revenueByCase[].caseId` · `payload.actorId`) ⇒ ชื่อ (แปลงตอนแสดงเท่านั้น)
+  if (value !== null && typeof value === 'object') return JSON.stringify(auditReplaceNestedRefs(value, refLabels))
   return auditValueText(value, field)
 }

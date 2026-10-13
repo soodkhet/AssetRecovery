@@ -39,6 +39,8 @@ import {
   auditListFieldRefType,
   auditFieldRefType,
   isAuditRefField,
+  AUDIT_NESTED_REF_MAX_DEPTH,
+  auditReplaceNestedRefs,
 } from '@/lib/audit/target-refs'
 
 /** known H-06 — เป้าหมาย/ค่าอ้างอิงในบันทึกการใช้งานเป็นชื่อที่อ่านได้ (ส่วน pure) */
@@ -378,5 +380,58 @@ describe('ทดสอบซ้ำ local LR6-01 — target_id แบบ polymorp
     expect(auditRefLabel([ids[0]], 'tags', labels)).toBeNull()
     expect(auditValueDisplay(ids[1], 'target_id', 'adjustments', { [ids[1] ?? '']: 'BL-2569-001' })).toBe('BL-2569-001')
     expect(auditValueDisplay(ids[1], 'target_id', 'adjustments', {})).toBe(ids[1])
+  })
+})
+
+describe('ตรวจซ้ำ staging SV5-R-02 — id ในค่าซ้อน (object/array ของ object)', () => {
+  const USER = '0a1b2c3d-0000-4000-8000-0000000000a1'
+
+  it('auditValueRefs ไล่ array ของ object และ object ซ้อน ด้วยกติกาชื่อฟิลด์เดิม', () => {
+    const refs = auditValueRefs({
+      revenueByCase: [
+        { caseId: CASE, reason: 'expense_not_approved', result: 'skipped' },
+        { caseId: PERIOD, result: 'created' },
+      ],
+      payload: { actorId: USER, options: { lotId: LOT } },
+    })
+    expect(refs).toEqual([
+      { type: 'cases', id: CASE },
+      { type: 'cases', id: PERIOD },
+      { type: 'users', id: USER },
+      { type: 'handover_lots', id: LOT },
+    ])
+  })
+
+  it('จำกัดความลึก — ลึกเกินเพดานไม่ค้นชื่อ', () => {
+    let deep: Record<string, unknown> = { caseId: CASE }
+    for (let level = 0; level <= AUDIT_NESTED_REF_MAX_DEPTH; level += 1) deep = { nested: deep }
+    expect(auditValueRefs(deep)).toEqual([])
+    let ok: Record<string, unknown> = { caseId: CASE }
+    for (let level = 0; level < AUDIT_NESTED_REF_MAX_DEPTH; level += 1) ok = { nested: ok }
+    expect(auditValueRefs(ok)).toEqual([{ type: 'cases', id: CASE }])
+  })
+
+  it('actorId/actor_id = ผู้ใช้', () => {
+    expect(auditFieldRefType('actorId')).toBe('users')
+    expect(auditFieldRefType('actor_id')).toBe('users')
+  })
+
+  it('auditReplaceNestedRefs แทน id ที่รู้ชื่อ · id ที่ไม่รู้จัก/ฟิลด์ที่ไม่ใช่ id คงเดิม · ไม่แก้ค่าต้นฉบับ', () => {
+    const labels = { [CASE.toLowerCase()]: 'CS-2569-0001', [USER.toLowerCase()]: 'สมชาย ใจดี' }
+    const source = {
+      rows: [{ caseId: CASE, note: CASE }, { caseId: PERIOD }],
+      payload: { actorId: USER, caseIds: [CASE, PERIOD] },
+    }
+    expect(auditReplaceNestedRefs(source.rows, labels)).toEqual([{ caseId: 'CS-2569-0001', note: CASE }, { caseId: PERIOD }])
+    expect(auditReplaceNestedRefs(source.payload, labels)).toEqual({ actorId: 'สมชาย ใจดี', caseIds: ['CS-2569-0001', PERIOD] })
+    expect(source.rows[0]?.caseId).toBe(CASE)
+  })
+
+  it('auditValueDisplay แสดงค่าซ้อนเป็น JSON ที่แทนชื่อแล้ว', () => {
+    const labels = { [CASE.toLowerCase()]: 'CS-2569-0001' }
+    expect(auditValueDisplay([{ caseId: CASE, result: 'skipped' }], 'revenueByCase', 'handover_lots', labels)).toBe(
+      '[{"caseId":"CS-2569-0001","result":"skipped"}]',
+    )
+    expect(auditValueDisplay({ a: 1 }, 'payload', 'jobs', {})).toBe('{"a":1}')
   })
 })
