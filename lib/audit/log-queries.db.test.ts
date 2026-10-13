@@ -296,3 +296,84 @@ suite('known H-06 — เป้าหมาย/รอบบัญชีเป็
     expect(cross?.refLabels).toEqual({})
   })
 })
+
+suite('ทดสอบซ้ำ local LR5-01 — ชุดส่งบัญชี / แบรนด์ / รายการเดินบัญชี / รายการรับเงิน เป็นชื่อที่อ่านได้', () => {
+  const ORG = '00000000-0000-4000-8000-0000000053a0'
+  const ROLE = '00000000-0000-4000-8000-0000000053a1'
+  const USER = '00000000-0000-4000-8000-0000000053a2'
+  const PERIOD = '00000000-0000-4000-8000-0000000053a3'
+  const COMPANY = '00000000-0000-4000-8000-0000000053a4'
+  const BATCH = '00000000-0000-4000-8000-0000000053a5'
+  const ACCOUNT = '00000000-0000-4000-8000-0000000053a6'
+  const BANK_TX = '00000000-0000-4000-8000-0000000053a7'
+  const RECEIPT = '00000000-0000-4000-8000-0000000053a8'
+  const EXPORT = '00000000-0000-4000-8000-0000000053a9'
+  const BRAND = '00000000-0000-4000-8000-0000000053aa'
+  const LOG_EXPORT = '00000000-0000-4000-8000-0000000053b1'
+  const LOG_BRAND = '00000000-0000-4000-8000-0000000053b2'
+  const LOG_RECEIPT = '00000000-0000-4000-8000-0000000053b3'
+  const LOG_BANK_TX = '00000000-0000-4000-8000-0000000053b4'
+  const lr5User = sessionUser({ id: USER, organizationId: ORG, roleId: ROLE })
+
+  beforeAll(async () => {
+    if (!url) return
+    const tx = db()
+    await tx.$executeRawUnsafe(`
+      INSERT INTO organizations (id, name, tax_id, address) VALUES ('${ORG}', 'LR5Test', '9999999995300', 'ที่อยู่ LR5')
+      ON CONFLICT (id) DO NOTHING`)
+    await tx.$executeRawUnsafe(`
+      INSERT INTO roles (id, organization_id, name, role_group, is_seed)
+      VALUES ('${ROLE}', '${ORG}', 'บริหาร LR5', 'system', false) ON CONFLICT (id) DO NOTHING`)
+    await tx.$executeRawUnsafe(`
+      INSERT INTO users (id, organization_id, role_id, email, full_name, status)
+      VALUES ('${USER}', '${ORG}', '${ROLE}', 'lr5@test.local', 'ผู้บริหาร LR5', 'active') ON CONFLICT (id) DO NOTHING`)
+    await tx.$executeRawUnsafe(`
+      INSERT INTO accounting_periods (id, organization_id, period_label, year_be, month, created_by)
+      VALUES ('${PERIOD}', '${ORG}', 'ตุลาคม 2569', 2569, 10, '${USER}') ON CONFLICT (id) DO NOTHING`)
+    await tx.$executeRawUnsafe(`
+      INSERT INTO finance_companies (id, organization_id, name, short_name, tax_id, created_by)
+      VALUES ('${COMPANY}', '${ORG}', 'ไฟแนนซ์ LR5', 'LR5', '9999999995301', '${USER}') ON CONFLICT (id) DO NOTHING`)
+    await tx.$executeRawUnsafe(`
+      INSERT INTO billing_batches (id, organization_id, company_id, period, due_date, created_by, batch_number)
+      VALUES ('${BATCH}', '${ORG}', '${COMPANY}', '2569-10', '2026-10-31', '${USER}', 'BL-2569-010') ON CONFLICT (id) DO NOTHING`)
+    await tx.$executeRawUnsafe(`
+      INSERT INTO bank_accounts (id, organization_id, bank_name, account_name, account_number, created_by)
+      VALUES ('${ACCOUNT}', '${ORG}', 'กสิกรไทย', 'บัญชี LR5', '1234567890', '${USER}') ON CONFLICT (id) DO NOTHING`)
+    await tx.$executeRawUnsafe(`
+      INSERT INTO bank_transactions (id, organization_id, period_id, bank_account_id, transaction_date, description, amount_satang, created_by)
+      VALUES ('${BANK_TX}', '${ORG}', '${PERIOD}', '${ACCOUNT}', '2026-10-08', 'โอนเข้า LR5', 107000, '${USER}') ON CONFLICT (id) DO NOTHING`)
+    await tx.$executeRawUnsafe(`
+      INSERT INTO cash_receipts (id, organization_id, period_id, billing_batch_id, bank_transaction_id, amount_satang, received_date, created_by)
+      VALUES ('${RECEIPT}', '${ORG}', '${PERIOD}', '${BATCH}', '${BANK_TX}', 107000, '2026-10-08', '${USER}') ON CONFLICT (id) DO NOTHING`)
+    await tx.$executeRawUnsafe(`
+      INSERT INTO export_records (id, organization_id, period_id, version, file_hash, generated_by)
+      VALUES ('${EXPORT}', '${ORG}', '${PERIOD}', 3, 'hash-lr5', '${USER}') ON CONFLICT (id) DO NOTHING`)
+    await tx.$executeRawUnsafe(`
+      INSERT INTO device_brands (id, organization_id, name, name_key, source)
+      VALUES ('${BRAND}', '${ORG}', 'aLR5', 'alr5', 'manual') ON CONFLICT (id) DO NOTHING`)
+    await tx.$executeRawUnsafe(`
+      INSERT INTO audit_logs (id, organization_id, actor_id, actor_role, action, target_type, target_id, before_data, after_data, reason, created_at) VALUES
+        ('${LOG_EXPORT}', '${ORG}', '${USER}', 'บริหาร LR5', 'export', 'export_records', '${EXPORT}', NULL, '{"version":3}', NULL, '2026-10-13T03:00:00Z'),
+        ('${LOG_BRAND}', '${ORG}', '${USER}', 'บริหาร LR5', 'update', 'device_brands', '${BRAND}', '{"manual_status":null}', '{"manual_status":"hidden"}', NULL, '2026-10-13T04:00:00Z'),
+        ('${LOG_RECEIPT}', '${ORG}', '${USER}', 'บริหาร LR5', 'create', 'cash_receipts', '${RECEIPT}', NULL,
+         '{"bank_transaction_id":"${BANK_TX}","amount_satang":107000}', 'จับคู่อัตโนมัติ', '2026-10-13T05:00:00Z'),
+        ('${LOG_BANK_TX}', '${ORG}', '${USER}', 'บริหาร LR5', 'update', 'bank_transactions', '${BANK_TX}', '{"match_status":"unmatched"}', '{"match_status":"matched"}', 'จับคู่', '2026-10-13T06:00:00Z')
+      ON CONFLICT (id) DO NOTHING`)
+  })
+
+  it('รายการ: เป้าหมายเป็นชื่อชุดส่งบัญชี/แบรนด์/รายการรับเงิน/รายการเดินบัญชี', async () => {
+    const list = await logs.listAuditLogs(lr5User, baseQuery)
+    const byId = new Map(list.items.map((item) => [item.id, item]))
+    expect(byId.get(LOG_EXPORT)?.targetRef).toBe('ชุดส่งบัญชี ตุลาคม 2569 v1.2')
+    expect(byId.get(LOG_BRAND)?.targetRef).toBe('aLR5')
+    expect(byId.get(LOG_RECEIPT)?.targetRef).toBe('รับเงิน BL-2569-010 · ฿1,070.00')
+    expect(byId.get(LOG_BANK_TX)?.targetRef).toBe('08/10/2569 · ฿1,070.00 · กสิกรไทย')
+  })
+
+  it('รายละเอียด: bank_transaction_id ในค่าหลังมีป้าย · องค์กรอื่นไม่เห็นชื่อ', async () => {
+    const detail = await logs.getAuditLog(lr5User, LOG_RECEIPT)
+    expect(detail?.refLabels[BANK_TX]).toBe('08/10/2569 · ฿1,070.00 · กสิกรไทย')
+    const foreign = await logs.getAuditLog(sessionUser({ id: EXEC_ID }), LOG_RECEIPT)
+    expect(foreign).toBeNull()
+  })
+})

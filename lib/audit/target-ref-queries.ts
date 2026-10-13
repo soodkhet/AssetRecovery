@@ -1,4 +1,15 @@
-import { caseRefLabel, groupAuditRefs, type AuditRef, type AuditRefType } from '@/lib/audit/target-refs'
+import {
+  bankTransactionRefLabel,
+  caseRefLabel,
+  cashReceiptRefLabel,
+  exportRecordRefLabel,
+  groupAuditRefs,
+  type AuditRef,
+  type AuditRefType,
+} from '@/lib/audit/target-refs'
+import { exportVersionLabel } from '@/lib/exports/pack'
+import { fmtDate } from '@/lib/format/datetime'
+import { fmtSatangSymbol } from '@/lib/format/money'
 import { prisma } from '@/lib/prisma'
 
 /**
@@ -108,6 +119,38 @@ const RESOLVERS: Readonly<Record<AuditRefType, Resolver>> = {
         select: { id: true, name: true, version: true },
       })
     ).map((row) => ({ id: row.id, label: `${row.name} (ฉบับที่ ${row.version})` })),
+  export_records: async (organizationId, ids) =>
+    (
+      await prisma.exportRecord.findMany({
+        where: { organizationId, id: { in: ids } },
+        select: { id: true, version: true, period: { select: { periodLabel: true } } },
+      })
+    ).map((row) => ({ id: row.id, label: exportRecordRefLabel(row.period.periodLabel, exportVersionLabel(row.version)) })),
+  device_brands: async (organizationId, ids) =>
+    (
+      await prisma.deviceBrand.findMany({ where: { organizationId, id: { in: ids } }, select: { id: true, name: true } })
+    ).map((row) => ({ id: row.id, label: row.name })),
+  bank_transactions: async (organizationId, ids) =>
+    (
+      await prisma.bankTransaction.findMany({
+        where: { organizationId, id: { in: ids } },
+        select: { id: true, transactionDate: true, amountSatang: true, bankAccount: { select: { bankName: true } } },
+      })
+    ).map((row) => ({
+      id: row.id,
+      label: bankTransactionRefLabel(
+        fmtDate(row.transactionDate),
+        fmtSatangSymbol(row.amountSatang),
+        row.bankAccount.bankName,
+      ),
+    })),
+  cash_receipts: async (organizationId, ids) =>
+    (
+      await prisma.cashReceipt.findMany({
+        where: { organizationId, id: { in: ids } },
+        select: { id: true, amountSatang: true, billingBatch: { select: { batchNumber: true } } },
+      })
+    ).map((row) => ({ id: row.id, label: cashReceiptRefLabel(row.billingBatch.batchNumber, fmtSatangSymbol(row.amountSatang)) })),
 }
 
 export async function resolveAuditRefLabels(organizationId: string, refs: readonly AuditRef[]): Promise<Map<string, string>> {

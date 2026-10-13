@@ -23,6 +23,11 @@ export const AUDIT_REF_TYPES = [
   'teams',
   'finance_companies',
   'compensation_plans',
+  // ทดสอบซ้ำ local LR5-01 — ชุดส่งบัญชี · แบรนด์ Model Phone · รายการเดินบัญชี · รายการรับเงิน
+  'export_records',
+  'device_brands',
+  'bank_transactions',
+  'cash_receipts',
 ] as const
 
 export type AuditRefType = (typeof AUDIT_REF_TYPES)[number]
@@ -57,6 +62,14 @@ const FIELD_REF_TYPE: Readonly<Record<string, AuditRefType>> = {
   taxInvoiceId: 'tax_invoices',
   advance_id: 'advances',
   advanceId: 'advances',
+  bank_transaction_id: 'bank_transactions',
+  bankTransactionId: 'bank_transactions',
+  cash_receipt_id: 'cash_receipts',
+  cashReceiptId: 'cash_receipts',
+  brand_id: 'device_brands',
+  brandId: 'device_brands',
+  export_record_id: 'export_records',
+  exportRecordId: 'export_records',
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -103,6 +116,21 @@ export function groupAuditRefs(refs: readonly AuditRef[]): Map<AuditRefType, str
     grouped.set(ref.type, set)
   }
   return new Map([...grouped].map(([type, ids]) => [type, [...ids]]))
+}
+
+/** ป้ายของชุดส่งบัญชี — "ชุดส่งบัญชี ตุลาคม 2569 v1.2" (`versionLabel` จาก `exportVersionLabel()`) */
+export function exportRecordRefLabel(periodLabel: string, versionLabel: string): string {
+  return `ชุดส่งบัญชี ${periodLabel} ${versionLabel}`
+}
+
+/** ป้ายของรายการเดินบัญชี — วันที่ · ยอด · ธนาคาร (ค่าที่จัดรูปแบบแล้ว) */
+export function bankTransactionRefLabel(dateText: string, amountText: string, bankName: string): string {
+  return `${dateText} · ${amountText} · ${bankName}`
+}
+
+/** ป้ายของรายการรับเงิน — เลขรอบวางบิล · ยอด */
+export function cashReceiptRefLabel(batchNumber: string, amountText: string): string {
+  return `รับเงิน ${batchNumber} · ${amountText}`
 }
 
 /** ป้ายของเคส — รอบติดตามที่ 2 ขึ้นไปบอกรอบ */

@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { auditRefLabel, auditValueDisplay } from '@/lib/audit/log-display'
-import { auditTargetRef, auditValueRefs, caseRefLabel, groupAuditRefs } from '@/lib/audit/target-refs'
+import {
+  auditTargetRef,
+  auditValueRefs,
+  bankTransactionRefLabel,
+  caseRefLabel,
+  cashReceiptRefLabel,
+  exportRecordRefLabel,
+  groupAuditRefs,
+} from '@/lib/audit/target-refs'
 
 /** known H-06 — เป้าหมาย/ค่าอ้างอิงในบันทึกการใช้งานเป็นชื่อที่อ่านได้ (ส่วน pure) */
 
@@ -49,5 +57,26 @@ describe('ป้ายที่แสดง', () => {
     expect(auditValueDisplay(PERIOD, 'note', 'exceptions', labels)).toBe(PERIOD)
     expect(auditValueDisplay('open', 'status', 'exceptions', labels)).toBe('เปิดอยู่')
     expect(auditRefLabel(PERIOD, 'note', labels)).toBeNull()
+  })
+})
+
+describe('ทดสอบซ้ำ local LR5-01 — ชุดส่งบัญชี / แบรนด์ / รายการเดินบัญชี / รายการรับเงิน', () => {
+  it('ชนิดเป้าหมายใหม่ถูกรู้จัก', () => {
+    for (const type of ['export_records', 'device_brands', 'bank_transactions', 'cash_receipts'] as const) {
+      expect(auditTargetRef({ targetType: type, targetId: CASE })).toEqual({ type, id: CASE })
+    }
+  })
+  it('ฟิลด์อ้างอิง bank_transaction_id / cashReceiptId / brandId / exportRecordId', () => {
+    const refs = auditValueRefs({ bank_transaction_id: CASE, cashReceiptId: LOT, brandId: PERIOD, exportRecordId: CASE })
+    const grouped = groupAuditRefs(refs)
+    expect(grouped.get('bank_transactions')).toEqual([CASE])
+    expect(grouped.get('cash_receipts')).toEqual([LOT])
+    expect(grouped.get('device_brands')).toEqual([PERIOD])
+    expect(grouped.get('export_records')).toEqual([CASE])
+  })
+  it('รูปแบบป้าย', () => {
+    expect(exportRecordRefLabel('ตุลาคม 2569', 'v1.2')).toBe('ชุดส่งบัญชี ตุลาคม 2569 v1.2')
+    expect(bankTransactionRefLabel('08/10/2569', '฿1,070.00', 'กสิกรไทย')).toBe('08/10/2569 · ฿1,070.00 · กสิกรไทย')
+    expect(cashReceiptRefLabel('BL-2569-010', '฿1,070.00')).toBe('รับเงิน BL-2569-010 · ฿1,070.00')
   })
 })
