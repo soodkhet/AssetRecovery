@@ -192,6 +192,26 @@ describe('migrations — constraint ที่ Prisma ไม่รองรับ
     },
   )
 
+  /**
+   * known Q7/M2 (รีวิวโค้ด 13/10/2569): ค่าเริ่มต้น "บังคับแนบใบเสร็จค่าที่พัก" = ไม่บังคับ (คงใบรับรองแทนตามมติ U103)
+   * — คำสั่งสุดท้ายที่ตั้ง DEFAULT ของคอลัมน์ต้องเป็น false และ schema.prisma ต้องตรงกัน
+   */
+  it('compensation_plans.hotel_receipt_required ค่าเริ่มต้นสุดท้าย = false (migration + schema ตรงกัน)', () => {
+    const defaults = readdirSync(migrationsDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort()
+      .flatMap((dir) =>
+        readFileSync(new URL(`${dir}/migration.sql`, migrationsDir), 'utf8')
+          .replace(/--[^\n]*/g, '')
+          .split(/[;,\n]/)
+          .map((part) => part.replace(/\s+/g, ' ').trim())
+          .filter((part) => part.includes('"hotel_receipt_required"') && /DEFAULT/.test(part)),
+      )
+    expect(defaults.at(-1) ?? '').toMatch(/DEFAULT false$/)
+    expect(schema).toMatch(/hotelReceiptRequired\s+Boolean @default\(false\)/)
+  })
+
   it('advances.return_satang ต้องเป็น generated column (ห้ามให้ app เขียนค่าเอง)', () => {
     expect(sql).toMatch(/"return_satang" INTEGER GENERATED ALWAYS AS \(GREATEST\(0, COALESCE/)
   })

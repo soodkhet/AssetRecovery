@@ -69,7 +69,7 @@ function emptyForm(): FormState {
     commission: '0.00',
     noSuccessFee: '0.00',
     hotelMaxPerNight: '',
-    hotelReceiptRequired: true,
+    hotelReceiptRequired: false,
     whtPct: '3',
     effectiveFrom: toInputDate(new Date()),
     reason: '',

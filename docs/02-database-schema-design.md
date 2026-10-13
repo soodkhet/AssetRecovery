@@ -99,6 +99,7 @@
 | v4.72 | 12/10/2569 | **มติผู้ใช้ 12/10/2569 I3-01 (mytester3)** — migration `20261012100000_case_client_reject_reason`: `cases` + `client_reject_reason TEXT` (nullable · additive ไม่แตะข้อมูลเดิม) = เหตุผลไม่รับเคสที่แจ้งบริษัทไฟแนนซ์ (บังคับตอน reject · ช่องเดียวที่พอร์ทัลแสดง) · `review_note` ของเคส `rejected` เปลี่ยนความหมายเป็น**หมายเหตุภายใน** (ไม่บังคับ · พนักงานเห็นเท่านั้น) — `need_info` ใช้ `review_note` เป็นข้อความถึงบริษัทตามเดิม · เคสที่ปฏิเสธก่อน migration (`client_reject_reason` NULL) ⇒ พอร์ทัลแสดงข้อความกลาง ไม่ใช้ `review_note` เดิม |
 | v4.73 | 12/10/2569 | **มติผู้ใช้ 12/10/2569 B3-02 (mytester3 — ลบเคสร่าง)** — migration `20261012110000_case_ref_unique_partial`: `UNIQUE(organization_id, company_id, case_ref, tracking_round)` และ `uniq_cases_company_case_ref` เปลี่ยนเป็น **partial `WHERE deleted_at IS NULL` ทั้งคู่** (แทนมติ v4.0 ที่ให้เคสที่ลบยังจองเลข — ตอนนั้นยังไม่มีทางลบเคส) ⇒ เคสร่างที่ลบแล้ว (soft delete) ไม่จองเลขที่สัญญา · index ใหม่หลวมกว่าเดิม ไม่กระทบข้อมูลเดิม · recycle ยังเพิ่ม `tracking_round` บนแถวเดิม · Prisma ประกาศ unique แบบ partial ไม่ได้ ⇒ ถอด `@@unique` ออกจาก schema.prisma (index อยู่ใน raw SQL) |
 | v4.74 | 13/10/2569 | **mytester DO-07 (มติ 13/10/2569 — Claude ตัดสินแทน PO)** — migration `20261013100000_advance_case_ref`: `advances` + `case_id UUID REFERENCES cases(id) ON DELETE SET NULL` (nullable · additive) + index `idx_advances_org_case(organization_id, case_id)` — ช่อง "อ้างอิงเคส (ไม่บังคับ)" ของฟอร์มขอเงินทดรอง (`15` §7.2 เดิมเขียน `case_ref` free text) · เลือกได้เฉพาะเคสที่ผู้รับเงินมีงานค้าง (`case_assignments` สถานะ active — ตรวจที่ service · ไม่ใช่ = `CASE_NOT_FOUND`) · ข้อมูลอ้างอิงเท่านั้น: ไม่กระทบยอด/สถานะ/เกตรายได้ของเคส · คำขอเบิกส่วนเกินตอนเคลียร์ยังไม่ผูก `expenses.case_id` (เลขเคสอยู่ในหมายเหตุ) · เงินทดรองเดิม = NULL |
+| v4.75 | 13/10/2569 | **known Q7/M2 (รีวิวโค้ด — Claude ตัดสินแทน PO)** — migration `20261013110000_hotel_receipt_required_default_false`: `compensation_plans.hotel_receipt_required` ค่าเริ่มต้นเปลี่ยน `true` → **`false`** (ไม่บังคับ — คงพฤติกรรมใบรับรองแทนใบเสร็จตามมติ PO U103 · องค์กรเปิดเองเป็นรายแผน) · เปลี่ยนเฉพาะ DEFAULT ของแถวใหม่ ไม่แก้แถวเดิม (แผนเดิมคงค่าที่ตั้งไว้) · ฟอร์มสร้างแผนใหม่ค่าเริ่มต้นไม่ติ๊ก |
 
 ขอบเขตเอกสารนี้: Full Production Database Schema — ทุก table, column, type, FK, index, unique constraint, enum, migration order และ seed data สรุปจาก spec ไฟล์ทั้งหมดไว้ในที่เดียว ใช้เป็น source of truth เดียวก่อนเขียน Prisma schema
 
@@ -680,7 +681,7 @@ CREATE TABLE compensation_plans (
   no_success_fee_satang INTEGER      NOT NULL DEFAULT 0,
   -- Hotel
   hotel_max_per_night_satang INTEGER,
-  hotel_receipt_required     BOOLEAN  NOT NULL DEFAULT true,
+  hotel_receipt_required     BOOLEAN  NOT NULL DEFAULT false,  -- v4.75 known Q7/M2 ค่าเริ่มต้นไม่บังคับ (ใบรับรองแทนใช้ได้)
   -- WHT
   wht_pct               NUMERIC(5,2) NOT NULL DEFAULT 3.00, -- % (fallback ถ้า payee ไม่มี tax profile)
   -- Versioning
