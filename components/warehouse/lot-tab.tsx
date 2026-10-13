@@ -25,6 +25,7 @@ import { cn } from '@/components/ui/cn'
 import { AssetDetailModal } from '@/components/warehouse/asset-detail-modal'
 import { AttachDocModal } from '@/components/warehouse/attach-doc-modal'
 import { DeliveredLotGroups } from '@/components/warehouse/delivered-lot-groups'
+import { DeleteEmptyLotModal } from '@/components/warehouse/delete-empty-lot-modal'
 import { RemoveFromLotModal } from '@/components/warehouse/remove-from-lot-modal'
 import { ViewAttachedDocModal } from '@/components/warehouse/view-attached-doc-modal'
 import { apiPath } from '@/lib/api/contract'
@@ -123,6 +124,8 @@ export function LotTab({
 
   /** มติชั่วคราว M5 — เครื่องที่กำลังจะนำออกจากล็อต (`null` = ปิด modal) */
   const [removeAsset, setRemoveAsset] = useState<AssetListItemDto | null>(null)
+  /** known Q9 — ล็อตว่างที่กำลังจะลบ (`null` = ปิด modal) */
+  const [deleteLot, setDeleteLot] = useState<LotDetailDto | null>(null)
 
   const canConfirm = can('manage', WAREHOUSE_CONFIRM_LOT_CAPABILITY)
   // สิทธิ์เดียวกับจัดการล็อต — server ตรวจซ้ำ
@@ -269,6 +272,21 @@ export function LotTab({
       )}
       {docsLot !== null && <ViewAttachedDocModal open lot={docsLot} onClose={() => setDocsLot(null)} />}
       {detailAsset !== null && <AssetDetailModal open asset={detailAsset} onClose={() => setDetailAsset(null)} />}
+      {deleteLot !== null && (
+        <DeleteEmptyLotModal
+          key={deleteLot.id}
+          open
+          lot={deleteLot}
+          onClose={() => setDeleteLot(null)}
+          onDone={() => {
+            setDeleteLot(null)
+            setOpenLot(null)
+            setDetailSearch('')
+            onChanged()
+            reload()
+          }}
+        />
+      )}
       {removeAsset !== null && openLot !== null && (
         <RemoveFromLotModal
           key={removeAsset.id}
@@ -350,6 +368,11 @@ export function LotTab({
                     ใบส่งมอบ PDF
                   </a>
                 </>
+              )}
+              {emptyLot && canManageLot && (
+                <Button variant="danger" onClick={() => setDeleteLot(openLot)}>
+                  ลบล็อตว่าง
+                </Button>
               )}
               {!confirmed && !emptyLot && canConfirm && (
                 <Button variant="primary" onClick={() => setAttachLot(openLot)}>

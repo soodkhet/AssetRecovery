@@ -20,6 +20,7 @@ import {
   auditActorLabel,
   auditFieldChanges,
   auditFieldLabel,
+  auditRefLabel,
   auditTargetLabel,
   auditValueDisplay,
 } from '@/lib/audit/log-display'
@@ -65,11 +66,15 @@ export function AuditDetailModal({ id, onClose }: { id: string | null; onClose: 
             <Item label="ผู้ดำเนินการ">{auditActorLabel(detail.actorName, detail.actorRole, detail.loginFailure)}</Item>
             <Item label="เป้าหมาย">
               {auditTargetLabel(detail.targetType)}
-              {detail.targetId !== null && (
+              {detail.targetRef !== null && (
                 <>
                   {' '}
-                  <RefText className="ml-1 break-all">{detail.targetId}</RefText>
+                  <RefText className="ml-1">{detail.targetRef}</RefText>
                 </>
+              )}
+              {/* known H-06 — UUID ยังดูได้ในรายละเอียด (บรรทัดย่อย) */}
+              {detail.targetId !== null && (
+                <RefText className="mt-0.5 block text-[11px] break-all text-slate-400">{detail.targetId}</RefText>
               )}
             </Item>
             <Item label="เหตุผล">{auditRowDisplay(detail).detail}</Item>
@@ -101,11 +106,17 @@ export function AuditDetailModal({ id, onClose }: { id: string | null; onClose: 
                     <Tr key={change.field} className="align-top">
                       {/* mytester H-06 — ชื่อฟิลด์/ค่าเป็นภาษาไทยเมื่อรู้จัก */}
                       <Td className="px-3 py-2 text-xs">{auditFieldLabel(change.field)}</Td>
-                      <Td className="px-3 py-2 text-xs break-all text-slate-500">
-                        {auditValueDisplay(change.before, change.field, detail.targetType)}
+                      <Td
+                        className="px-3 py-2 text-xs break-all text-slate-500"
+                        title={refTooltip(change.before, change.field, detail.refLabels)}
+                      >
+                        {auditValueDisplay(change.before, change.field, detail.targetType, detail.refLabels)}
                       </Td>
-                      <Td className="px-3 py-2 text-xs font-medium break-all text-slate-800">
-                        {auditValueDisplay(change.after, change.field, detail.targetType)}
+                      <Td
+                        className="px-3 py-2 text-xs font-medium break-all text-slate-800"
+                        title={refTooltip(change.after, change.field, detail.refLabels)}
+                      >
+                        {auditValueDisplay(change.after, change.field, detail.targetType, detail.refLabels)}
                       </Td>
                     </Tr>
                   ))}
@@ -126,4 +137,9 @@ function Item({ label, children }: { label: string; children: React.ReactNode })
       <dd className="mt-0.5 text-sm text-slate-800">{children}</dd>
     </div>
   )
+}
+
+/** known H-06 — ค่าที่แสดงเป็นชื่อแทน id ⇒ tooltip บอก UUID เดิม */
+function refTooltip(value: unknown, field: string, refLabels: Readonly<Record<string, string>>): string | undefined {
+  return auditRefLabel(value, field, refLabels) !== null && typeof value === 'string' ? value : undefined
 }

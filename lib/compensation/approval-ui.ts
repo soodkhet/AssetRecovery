@@ -1,7 +1,7 @@
 import type { WhtRateOrigin } from '@/lib/finance/wht-calc'
 import type { ApiCallError } from '@/lib/api/types'
 import type { ApprovalHistoryEntry } from '@/lib/compensation/approval'
-import type { CompensationApprovalDto } from '@/lib/compensation/approval-types'
+import type { CompensationApprovalDto, CompensationApprovalListQuery } from '@/lib/compensation/approval-types'
 import { advanceExcessItemLabel, advanceExcessSource } from '@/lib/advances/advance'
 import { isManualClaim } from '@/lib/claims/claim'
 import { canExpenseAction } from '@/lib/field/expense-status'
@@ -77,14 +77,31 @@ export const EXECUTIVE_PENDING_LABEL = 'รอผู้บริหารอน�
  * ⇒ ป้ายบอก "รอผู้บริหารอนุมัติ" (ไม่ใช่ "รอการเงินอนุมัติ" ที่ทำให้การเงินที่อนุมัติแล้วเห็นว่ายังรอตัวเอง)
  */
 export function claimStatusLabel(item: Pick<CompensationApprovalDto, 'status' | 'pendingStepRole'>): string {
-  if (
+  if (isExecutivePendingStep(item)) return EXECUTIVE_PENDING_LABEL
+  return EXPENSE_STATUS_LABEL[item.status]
+}
+
+/** รายการที่ขั้นที่รออยู่เป็นบริหาร (enum ยังเป็น `pending_finance_approval` — `23` §6.3) */
+export function isExecutivePendingStep(item: Pick<CompensationApprovalDto, 'status' | 'pendingStepRole'>): boolean {
+  return (
     item.status === 'pending_finance_approval' &&
     typeof item.pendingStepRole === 'string' &&
     approvalRoleColumn(item.pendingStepRole) === 'executive'
-  ) {
-    return EXECUTIVE_PENDING_LABEL
-  }
-  return EXPENSE_STATUS_LABEL[item.status]
+  )
+}
+
+/**
+ * ตัวกรองคิวอนุมัติ (ใช้ร่วมหน้าจอ + API) — known "รอผู้บริหารอนุมัติ": แยกรายการที่รอขั้นบริหารออกจาก "รอขั้น 2 (การเงิน)"
+ * โดยดูขั้นที่รออยู่ ไม่ใช่สถานะใหม่ (enum ไม่เปลี่ยน)
+ */
+export function matchesClaimStatusFilter(
+  filter: CompensationApprovalListQuery['status'],
+  item: Pick<CompensationApprovalDto, 'status' | 'pendingStepRole'>,
+): boolean {
+  if (filter === 'all') return true
+  if (filter === 'pending_executive') return isExecutivePendingStep(item)
+  if (filter === 'pending_finance_approval') return item.status === filter && !isExecutivePendingStep(item)
+  return item.status === filter
 }
 
 export function approvalStepTone(status: ExpenseStatus): StatusBadgeGroup {
@@ -134,6 +151,8 @@ export const CLAIM_STATUS_FILTERS = [
   { value: 'all', label: 'ทั้งหมด' },
   { value: 'pending_approval', label: 'รอขั้น 1 (ผู้จัดการ)' },
   { value: 'pending_finance_approval', label: 'รอขั้น 2 (การเงิน)' },
+  // known — สายยอดสูงที่ผ่านการเงินแล้ว รอผู้บริหาร (ขั้นสุดท้าย)
+  { value: 'pending_executive', label: EXECUTIVE_PENDING_LABEL },
   { value: 'needs_revision', label: 'ถูกตีกลับ' },
   { value: 'approved', label: 'อนุมัติแล้ว' },
   // E-037 — รายการที่คลังยังไม่ยืนยันรับเครื่อง (อ่านอย่างเดียว ยังไม่เข้าคิวอนุมัติ)

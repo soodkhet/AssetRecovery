@@ -15,7 +15,7 @@ import type { PackCoverDoc } from '@/lib/exports/pack'
  * ⚠️ ข้อความทุกช่องประกอบมาแล้วจาก `buildPackCoverDoc()` (pure) — component นี้ห้าม format เอง (Rule 01)
  */
 
-const CHECK_COLUMNS = ['76%', '24%'] as const
+const CHECK_COLUMNS = ['64%', '36%'] as const
 const FILE_COLUMNS = ['30%', '58%', '12%'] as const
 const TOTAL_COLUMNS = ['70%', '30%'] as const
 
@@ -49,7 +49,7 @@ export function PackCover({ doc, letterhead }: { doc: PackCoverDoc; letterhead: 
           {doc.checks.map((check) => (
             <View key={check.label} style={docStyles.tableRow} wrap={false}>
               <Text style={[docStyles.td, { width: CHECK_COLUMNS[0] }]}>{check.label}</Text>
-              <Text style={[docStyles.td, { width: CHECK_COLUMNS[1] }]}>{check.passed ? 'ผ่าน' : 'ไม่ผ่าน'}</Text>
+              <Text style={[docStyles.td, { width: CHECK_COLUMNS[1] }]}>{check.statusText}</Text>
             </View>
           ))}
         </View>

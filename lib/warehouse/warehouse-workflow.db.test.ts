@@ -877,6 +877,56 @@ suite('Phase 2.13 — ยืนยันส่งมอบ = $transaction 4 ข�
     expect((await db().handoverLot.findUniqueOrThrow({ where: { id: lotId } })).status).toBe('pending_attach')
   })
 
+  it('known Q9 — ลบล็อตว่าง: เหตุผลบังคับ · ยังมีเครื่อง/ยืนยันแล้วลบไม่ได้ · soft delete · ไม่ขึ้นรายการ · audit · เลขไม่นำกลับมาใช้', async () => {
+    const { assetId, lotId } = await seedPendingLot()
+    const before = await db().handoverLot.findUniqueOrThrow({ where: { id: lotId } })
+
+    // ยังมีเครื่อง ⇒ ลบไม่ได้ (ล็อตไม่ขยับ)
+    await expectCode(() => warehouse.deleteEmptyLot(admin, lotId, { reason: 'จัดผิด' }, ctx(admin)), 'ASSET_ALREADY_IN_LOT')
+    await warehouse.removeAssetFromLot(admin, lotId, { assetId, reason: 'จัดเข้าล็อตผิดบริษัท' }, ctx(admin))
+    await expectCode(() => warehouse.deleteEmptyLot(admin, lotId, { reason: '  ' }, ctx(admin)), 'REQUIRED_MISSING')
+    expect((await db().handoverLot.findUniqueOrThrow({ where: { id: lotId } })).deletedAt).toBeNull()
+
+    const deleted = await warehouse.deleteEmptyLot(admin, lotId, { reason: 'ล็อตว่างหลังนำเครื่องออก' }, ctx(admin))
+    expect(deleted).toEqual({ id: lotId, lotNumber: before.lotNumber })
+    const row = await db().handoverLot.findUniqueOrThrow({ where: { id: lotId } })
+    expect(row.deletedAt).not.toBeNull()
+    expect(row.status).toBe('pending_attach')
+    const audit = await db().auditLog.findFirstOrThrow({
+      where: { organizationId: ORG_ID, targetId: lotId, action: 'delete' },
+      select: { targetType: true, reason: true },
+    })
+    expect(audit).toEqual({ targetType: 'handover_lots', reason: 'ล็อตว่างหลังนำเครื่องออก' })
+
+    // ไม่ขึ้นรายการ · เปิด/ลบซ้ำ = ไม่พบ
+    const listed = await warehouse.listLots(admin, lotListQuerySchema.parse({}))
+    expect(listed.items.map((item) => item.id)).not.toContain(lotId)
+    await expectCode(() => warehouse.getLot(admin, lotId), 'LOT_NOT_FOUND')
+    await expectCode(() => warehouse.deleteEmptyLot(admin, lotId, { reason: 'ซ้ำ' }, ctx(admin)), 'LOT_NOT_FOUND')
+
+    // เครื่องจัดเข้าล็อตใหม่ได้ และเลขล็อตใหม่ไม่ซ้ำเลขที่ลบ
+    const next = await warehouse.createLot(
+      admin,
+      {
+        companyId: COMPANY_A,
+        assetIds: [assetId],
+        type: 'finance_pickup',
+        scheduledAt: null,
+        contactPerson: null,
+        deliveryAddr: null,
+        trackingNo: null,
+        note: null,
+      },
+      ctx(admin),
+    )
+    expect(next.lotNumber).not.toBe(before.lotNumber)
+    expect(next.docRef).not.toBe(before.docRef)
+
+    // ล็อตที่ยืนยันแล้ว ⇒ LOT_ALREADY_CONFIRMED
+    await warehouse.confirmLot(admin, next.id, confirmInput(), ctx(admin))
+    await expectCode(() => warehouse.deleteEmptyLot(admin, next.id, { reason: 'สาย' }, ctx(admin)), 'LOT_ALREADY_CONFIRMED')
+  })
+
   it('มติชั่วคราว M5 — ล็อตที่ยืนยันแล้วนำเครื่องออกไม่ได้ = LOT_ALREADY_CONFIRMED', async () => {
     const { assetId, lotId } = await seedPendingLot()
     await warehouse.confirmLot(admin, lotId, confirmInput(), ctx(admin))

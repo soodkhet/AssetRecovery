@@ -1,6 +1,7 @@
 import { emitAudit } from '@/lib/audit/audit'
 import { isUniqueViolation } from '@/lib/api/unique-violation'
 import {
+  BRAND_LEADING_LETTER_PATTERN,
   buildCatalogMatcher,
   cleanCatalogName,
   deviceSnapshotText,
@@ -31,7 +32,7 @@ import type {
   DeviceModelOptionDto,
   DeviceModelRowDto,
 } from '@/lib/device-catalog/types'
-import type { Prisma } from '@/lib/generated/prisma/client'
+import { Prisma } from '@/lib/generated/prisma/client'
 import { prisma } from '@/lib/prisma'
 import { SettingsError } from '@/lib/settings/errors'
 
@@ -205,19 +206,60 @@ function modelListWhere(
   }
 }
 
+function escapeLikePattern(value: string): string {
+  return value.replace(/[\\%_]/g, (char) => `\\${char}`)
+}
+
+/**
+ * id ของแบรนด์หน้าปัจจุบันตามลำดับที่ผู้ใช้อ่านง่าย (known Q3/A-13) — Prisma เรียงด้วยนิพจน์ไม่ได้จึงใช้ raw SQL
+ * ลำดับ = `compareBrandListRows()` (pure): แสดงในตัวเลือกก่อน → ชื่อขึ้นต้นตัวอักษร → ชื่อขยะ แล้วตามตัวอักษรไม่สนตัวพิมพ์
+ * เงื่อนไข WHERE ต้องตรงกับ `brandListWhere()` เป๊ะ (เทสต์ DB เทียบผลสองทาง)
+ */
+async function orderedBrandPageIds(
+  organizationId: string,
+  filter: CatalogFilter,
+  query: Pick<DeviceBrandListQuery, 'visibility' | 'q' | 'page' | 'pageSize'>,
+): Promise<string[]> {
+  const keys = [...filter.brandKeys]
+  const visibleSql = Prisma.sql`(manual_status = 'active' OR (manual_status IS NULL AND name_key = ANY(${keys}::text[])))`
+  const visibilitySql =
+    query.visibility === 'visible'
+      ? visibleSql
+      : query.visibility === 'hidden'
+        ? Prisma.sql`(manual_status = 'hidden' OR (manual_status IS NULL AND NOT (name_key = ANY(${keys}::text[]))))`
+        : query.visibility === 'manual'
+          ? Prisma.sql`manual_status IS NOT NULL`
+          : Prisma.sql`TRUE`
+  const searchSql =
+    query.q === undefined || query.q === ''
+      ? Prisma.sql`TRUE`
+      : Prisma.sql`(name ILIKE ${`%${escapeLikePattern(query.q)}%`} OR name_key LIKE ${`%${escapeLikePattern(normalizeCatalogName(query.q))}%`})`
+  const rows = await prisma.$queryRaw<Array<{ id: string }>>`
+    SELECT id::text AS id FROM device_brands
+    WHERE organization_id = ${organizationId}::uuid AND deleted_at IS NULL AND ${visibilitySql} AND ${searchSql}
+    ORDER BY
+      CASE WHEN ${visibleSql} THEN 0 WHEN name ~ ${BRAND_LEADING_LETTER_PATTERN} THEN 1 ELSE 2 END,
+      lower(name) COLLATE "C", name COLLATE "C", id
+    LIMIT ${query.pageSize} OFFSET ${(query.page - 1) * query.pageSize}`
+  return rows.map((row) => row.id)
+}
+
 export async function listDeviceBrands(organizationId: string, query: DeviceBrandListQuery): Promise<DeviceBrandListDto> {
   const filter = await getCatalogFilter(organizationId)
   const where = brandListWhere(organizationId, filter, query)
-  const [rows, total] = await Promise.all([
-    prisma.deviceBrand.findMany({
-      where,
-      orderBy: { name: 'asc' },
-      skip: (query.page - 1) * query.pageSize,
-      take: query.pageSize,
-      select: { id: true, name: true, nameKey: true, manualStatus: true, source: true },
-    }),
+  const [pageIds, total] = await Promise.all([
+    orderedBrandPageIds(organizationId, filter, query),
     prisma.deviceBrand.count({ where }),
   ])
+  const found = await prisma.deviceBrand.findMany({
+    where: { organizationId, id: { in: pageIds } },
+    select: { id: true, name: true, nameKey: true, manualStatus: true, source: true },
+  })
+  const byId = new Map(found.map((row) => [row.id, row]))
+  const rows = pageIds.flatMap((id) => {
+    const row = byId.get(id)
+    return row === undefined ? [] : [row]
+  })
   const ids = rows.map((row) => row.id)
   const [allCounts, visibleCounts] =
     ids.length === 0

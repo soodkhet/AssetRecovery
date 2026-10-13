@@ -15,6 +15,7 @@ import {
   claimStatusLabel,
   bulkApproveSummary,
   isResubmittedClaim,
+  matchesClaimStatusFilter,
   expenseRowActions,
   expenseRowHighlight,
   pendingClaimTotalSatang,
@@ -209,11 +210,12 @@ describe('รายละเอียดตาราง', () => {
     expect(expenseRowHighlight('approved')).toBeNull()
   })
 
-  it('ตัวกรอง 6 ตัวตรงกับค่าที่ API รับ (รวม "รอคลัง" — E-037)', () => {
+  it('ตัวกรอง 7 ตัวตรงกับค่าที่ API รับ (รวม "รอคลัง" — E-037 · "รอผู้บริหารอนุมัติ" — known)', () => {
     expect(CLAIM_STATUS_FILTERS.map((filter) => filter.value)).toEqual([
       'all',
       'pending_approval',
       'pending_finance_approval',
+      'pending_executive',
       'needs_revision',
       'approved',
       'pending_warehouse_confirm',
@@ -347,5 +349,24 @@ describe('mytester2 F2-01 — query ของยอดสรุป "อนุม
     expect(compensationBulkPreviewQuerySchema.safeParse({ ids: '' }).success).toBe(false)
     expect(compensationBulkPreviewQuerySchema.safeParse({ ids: 'abc' }).success).toBe(false)
     expect(compensationBulkPreviewQuerySchema.safeParse({}).success).toBe(false)
+  })
+})
+
+describe('known — ตัวกรองคิว "รอผู้บริหารอนุมัติ"', () => {
+  const exec = dto({ status: 'pending_finance_approval', approvalStepCurrent: 3, approvalStepTotal: 3, pendingStepRole: 'บริหาร' })
+  const fin = dto({ status: 'pending_finance_approval', pendingStepRole: 'การเงิน' })
+  const mgr = dto({ status: 'pending_approval', pendingStepRole: 'บริหาร' })
+
+  it('รอผู้บริหาร = เฉพาะ pending_finance_approval ที่ขั้นที่รออยู่เป็นบริหาร', () => {
+    expect([exec, fin, mgr].filter((item) => matchesClaimStatusFilter('pending_executive', item))).toEqual([exec])
+  })
+  it('รอขั้น 2 (การเงิน) ไม่รวมขั้นบริหาร · ทั้งหมด = ทุกแถว · สถานะอื่นเทียบตรง', () => {
+    expect([exec, fin, mgr].filter((item) => matchesClaimStatusFilter('pending_finance_approval', item))).toEqual([fin])
+    expect([exec, fin, mgr].filter((item) => matchesClaimStatusFilter('all', item))).toHaveLength(3)
+    expect([exec, fin, mgr].filter((item) => matchesClaimStatusFilter('pending_approval', item))).toEqual([mgr])
+  })
+  it('ตัวเลือกบนหน้าจอมี "รอผู้บริหารอนุมัติ" และ API รับค่าเดียวกัน', () => {
+    expect(CLAIM_STATUS_FILTERS.map((option) => option.label)).toContain('รอผู้บริหารอนุมัติ')
+    expect(compensationListQuerySchema.parse({ status: 'pending_executive' }).status).toBe('pending_executive')
   })
 })

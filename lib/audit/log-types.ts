@@ -16,6 +16,8 @@ export interface AuditLogListItemDto {
   /** ชื่อตารางปลายทาง (snake_case ตาม `02`) */
   targetType: string
   targetId: string | null
+  /** known H-06 — ชื่อ/เลขเอกสารที่อ่านได้ของเป้าหมาย (เลขเคส/เลขล็อต/ชื่องวด ฯลฯ) · หาไม่พบ/ชนิดที่ไม่รู้จัก = `null` */
+  targetRef: string | null
   reason: string | null
   /** login/ยืนยันรหัสที่ล้มเหลว (`after.result = failed`) — แยกจาก login สำเร็จบนหน้าจอ (preship R3-016) */
   loginFailure: AuditLoginFailure | null
@@ -31,6 +33,8 @@ export interface AuditLoginFailure {
 export interface AuditLogDetailDto extends AuditLogListItemDto {
   before: unknown
   after: unknown
+  /** known H-06 — ป้ายที่อ่านได้ของ id ในค่าก่อน/หลัง (เช่น `period_id` → "ตุลาคม 2569") · key = id ตัวพิมพ์เล็ก */
+  refLabels: Record<string, string>
   ipAddress: string | null
   userAgent: string | null
 }

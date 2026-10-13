@@ -91,6 +91,42 @@ export function isBrandVisible(brand: { manualStatus: DeviceCatalogStatusCode | 
 }
 
 /**
+ * ชื่อแบรนด์ที่ขึ้นต้นด้วยตัวอักษร (ละติน/ไทย) — ไม่ตรง = ชื่อขยะจากฐาน TAC (".flairmicro", "@phone", "1-Call")
+ * ต้องตรงกับ pattern ใน `listDeviceBrands()` (raw SQL ใช้สตริงเดียวกันนี้)
+ */
+export const BRAND_LEADING_LETTER_PATTERN = '^[A-Za-zก-ฮเ-ไ]'
+const BRAND_LEADING_LETTER = new RegExp(BRAND_LEADING_LETTER_PATTERN)
+
+/**
+ * ลำดับกลุ่มของแบรนด์ในหน้า Model Phone (known Q3/A-13): 0 = แสดงในตัวเลือก (แบรนด์ที่ใช้จริง/แบรนด์หลัก)
+ * · 1 = ชื่อขึ้นต้นด้วยตัวอักษร · 2 = ชื่อขึ้นต้นด้วยสัญลักษณ์/จุด/ตัวเลข (ไปท้าย)
+ */
+export function brandListTier(
+  brand: { name: string; manualStatus: DeviceCatalogStatusCode | null; nameKey: string },
+  filter: CatalogFilter,
+): 0 | 1 | 2 {
+  if (isBrandVisible(brand, filter)) return 0
+  return BRAND_LEADING_LETTER.test(brand.name) ? 1 : 2
+}
+
+function compareCodeUnits(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0
+}
+
+/** ตัวเทียบลำดับรายการแบรนด์ — กลุ่มก่อน แล้วตามตัวอักษรแบบไม่สนตัวพิมพ์ (ตรงกับ ORDER BY ... COLLATE "C" ใน SQL) */
+export function compareBrandListRows(
+  a: { name: string; manualStatus: DeviceCatalogStatusCode | null; nameKey: string },
+  b: { name: string; manualStatus: DeviceCatalogStatusCode | null; nameKey: string },
+  filter: CatalogFilter,
+): number {
+  return (
+    brandListTier(a, filter) - brandListTier(b, filter) ||
+    compareCodeUnits(a.name.toLowerCase(), b.name.toLowerCase()) ||
+    compareCodeUnits(a.name, b.name)
+  )
+}
+
+/**
  * รุ่นผ่านตัวกรองปีไหม — ไม่ทราบปี: รุ่นที่ผู้ดูแลเพิ่มเอง = ผ่าน · รุ่นจากฐาน TAC = **ไม่ผ่าน**
  * (ฐาน TAC มีรุ่นเก่าไม่มีปีจำนวนมาก — U166) ผู้ดูแลเปิดเองรายรุ่นได้ / IMEI ที่ตรงรุ่นยังเติมให้ฟอร์มได้เสมอ
  */

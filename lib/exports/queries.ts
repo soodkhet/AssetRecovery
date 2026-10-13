@@ -1877,6 +1877,7 @@ export async function createExportPack(
       generatedAt,
       contentDigest,
       checks: readiness.checks,
+      criticalAuthorizedCount: readiness.criticalAuthorizedCount,
       controlTotals: controlTotalsForCover(controlLines),
     }),
     await currentLetterhead(actor.organizationId),

@@ -3,9 +3,11 @@ import {
   DEFAULT_FILTER_BRANDS,
   DEFAULT_RECENT_YEARS,
   buildCatalogFilter,
+  brandListTier,
   buildCatalogMatcher,
   classifyDeviceKind,
   cleanBrandList,
+  compareBrandListRows,
   deviceSnapshotText,
   extractReleaseYear,
   isBrandVisible,
@@ -171,5 +173,34 @@ describe('แผน upsert ของ job — idempotent + ไม่ทับก�
   it('ชื่อจากต้นทางเปลี่ยน (ผู้ดูแลยังไม่แก้) = อัปเดตชื่อ', () => {
     const plan = planModelUpsert([row({})], { externalId: 'ext-1', name: 'Galaxy A55 5G', releaseYear: 2024 })
     expect(plan).toMatchObject({ kind: 'update', data: { name: 'Galaxy A55 5G', nameKey: 'galaxya555g' } })
+  })
+})
+
+describe('ลำดับรายการแบรนด์ในหน้า Model Phone (known Q3/A-13)', () => {
+  const filter = buildCatalogFilter(['Apple', 'Samsung'], 3, NOW)
+  const brand = (name: string, manualStatus: 'active' | 'hidden' | null = null) => ({
+    name,
+    nameKey: normalizeCatalogName(name),
+    manualStatus,
+  })
+
+  it('แบ่งกลุ่ม: แสดงในตัวเลือก → ขึ้นต้นตัวอักษร → ขึ้นต้นสัญลักษณ์/จุด/ตัวเลข', () => {
+    expect(brandListTier(brand('Samsung'), filter)).toBe(0)
+    expect(brandListTier(brand('Nokia', 'active'), filter)).toBe(0)
+    expect(brandListTier(brand('Apple', 'hidden'), filter)).toBe(1)
+    expect(brandListTier(brand('acer'), filter)).toBe(1)
+    expect(brandListTier(brand('ไอโมบาย'), filter)).toBe(1)
+    for (const junk of ['.flairmicro', '@phone', '1-Call', '10.or', ' (x)', '-dash']) {
+      expect(brandListTier(brand(junk), filter)).toBe(2)
+    }
+  })
+
+  it('ตัวกรอง "ทั้งหมด": แบรนด์หลักขึ้นก่อน ชื่อขยะไปท้าย เรียงตามตัวอักษรไม่สนตัวพิมพ์', () => {
+    const names = ['.flairmicro', '@phone', '1-Call', '10.or', 'acer', 'Zte', 'Samsung', 'apple', 'Nokia', 'alcatel']
+    const sorted = names
+      .map((name) => brand(name))
+      .sort((a, b) => compareBrandListRows(a, b, filter))
+      .map((row) => row.name)
+    expect(sorted).toEqual(['apple', 'Samsung', 'acer', 'alcatel', 'Nokia', 'Zte', '.flairmicro', '1-Call', '10.or', '@phone'])
   })
 })

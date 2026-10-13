@@ -173,3 +173,11 @@ export function describeFuelRule(
   }
   return { mode: 'DAILY_FLAT', dailyFlatSatang: plan.fuelDailyFlatSatang ?? 0 }
 }
+
+/**
+ * ป้ายค่าตั้ง "บังคับแนบใบเสร็จค่าที่พัก" ในหน้าแผน (known Q7/M2) — ค่าตั้งมีผลจริงกับใบเบิกค่าที่พัก
+ * จึงต้องแสดงชัดเสมอ ไม่ว่าแผนจะตั้งเพดานหรือไม่
+ */
+export function hotelReceiptPolicyLabel(required: boolean): string {
+  return required ? 'บังคับแนบใบเสร็จจริง (ใช้ใบรับรองแทนไม่ได้)' : 'ไม่บังคับใบเสร็จ (ใช้ใบรับรองแทนได้)'
+}

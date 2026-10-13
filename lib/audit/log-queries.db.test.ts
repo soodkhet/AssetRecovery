@@ -238,3 +238,61 @@ suite('Company User เข้าไม่ได้แม้ถือ capability'
     }
   })
 })
+
+suite('known H-06 — เป้าหมาย/รอบบัญชีเป็นชื่อที่อ่านได้ (batch ไม่ N+1 · ไม่ข้ามองค์กร)', () => {
+  // องค์กรแยกของตัวเอง — แถว audit ลบไม่ได้ จึงไม่ปนกับจำนวนแถวที่เทสต์ข้างบนนับ
+  const H06_ORG = '00000000-0000-4000-8000-0000000052f0'
+  const H06_ROLE = '00000000-0000-4000-8000-0000000052f1'
+  const H06_USER = '00000000-0000-4000-8000-0000000052f2'
+  const H06_PERIOD = '00000000-0000-4000-8000-0000000052f3'
+  const H06_LOG_PERIOD = '00000000-0000-4000-8000-0000000052f4'
+  const H06_LOG_FIELD = '00000000-0000-4000-8000-0000000052f5'
+  const H06_LOG_CROSS = '00000000-0000-4000-8000-0000000052f6'
+  const h06User = sessionUser({ id: H06_USER, organizationId: H06_ORG, roleId: H06_ROLE })
+
+  beforeAll(async () => {
+    if (!url) return
+    const tx = db()
+    await tx.$executeRawUnsafe(`
+      INSERT INTO organizations (id, name, tax_id, address) VALUES ('${H06_ORG}', 'H06Test', '9999999995202', 'ที่อยู่ H06')
+      ON CONFLICT (id) DO NOTHING`)
+    await tx.$executeRawUnsafe(`
+      INSERT INTO roles (id, organization_id, name, role_group, is_seed)
+      VALUES ('${H06_ROLE}', '${H06_ORG}', 'บริหาร H06', 'system', false)
+      ON CONFLICT (id) DO NOTHING`)
+    await tx.$executeRawUnsafe(`
+      INSERT INTO users (id, organization_id, role_id, email, full_name, status)
+      VALUES ('${H06_USER}', '${H06_ORG}', '${H06_ROLE}', 'h06@test.local', 'ผู้บริหาร H06', 'active')
+      ON CONFLICT (id) DO NOTHING`)
+    await tx.$executeRawUnsafe(`
+      INSERT INTO accounting_periods (id, organization_id, period_label, year_be, month, created_by)
+      VALUES ('${H06_PERIOD}', '${H06_ORG}', 'ตุลาคม 2569', 2569, 10, '${H06_USER}')
+      ON CONFLICT (id) DO NOTHING`)
+    await tx.$executeRawUnsafe(`
+      INSERT INTO audit_logs (id, organization_id, actor_id, actor_role, action, target_type, target_id, before_data, after_data, reason, created_at) VALUES
+        ('${H06_LOG_PERIOD}', '${H06_ORG}', '${H06_USER}', 'บริหาร H06', 'update', 'accounting_periods', '${H06_PERIOD}',
+         '{"status":"collecting"}', '{"status":"sent"}', 'ส่งบัญชี', '2026-10-13T03:00:00Z'),
+        ('${H06_LOG_FIELD}', '${H06_ORG}', '${H06_USER}', 'บริหาร H06', 'update', 'users', '${H06_USER}',
+         '{"period_id":"${H06_PERIOD}","status":"open"}', '{"period_id":"${H06_PERIOD}","status":"authorized"}', 'อนุมัติ', '2026-10-13T04:00:00Z'),
+        ('${H06_LOG_CROSS}', '${H06_ORG}', '${H06_USER}', 'บริหาร H06', 'update', 'users', '${OTHER_USER_ID}',
+         NULL, '{"period_id":"${OTHER_USER_ID}"}', 'ข้ามองค์กร', '2026-10-13T05:00:00Z')
+      ON CONFLICT (id) DO NOTHING`)
+  })
+
+  it('รายการ: เป้าหมายเป็นชื่องวด/ชื่อผู้ใช้ · id ขององค์กรอื่นไม่ถูกแปลง (null) · targetId เดิมยังอยู่', async () => {
+    const list = await logs.listAuditLogs(h06User, baseQuery)
+    const byId = new Map(list.items.map((item) => [item.id, item]))
+    expect(byId.get(H06_LOG_PERIOD)?.targetRef).toBe('ตุลาคม 2569')
+    expect(byId.get(H06_LOG_PERIOD)?.targetId).toBe(H06_PERIOD)
+    expect(byId.get(H06_LOG_FIELD)?.targetRef).toBe('ผู้บริหาร H06')
+    expect(byId.get(H06_LOG_CROSS)?.targetRef).toBeNull()
+  })
+
+  it('รายละเอียด: period_id ในค่าก่อน/หลังมีป้าย "ตุลาคม 2569" · UUID ยังอยู่ใน before/after · ข้ามองค์กรไม่มีป้าย', async () => {
+    const detail = await logs.getAuditLog(h06User, H06_LOG_FIELD)
+    expect(detail?.refLabels[H06_PERIOD]).toBe('ตุลาคม 2569')
+    expect(detail?.after).toMatchObject({ period_id: H06_PERIOD })
+    const cross = await logs.getAuditLog(h06User, H06_LOG_CROSS)
+    expect(cross?.refLabels).toEqual({})
+  })
+})

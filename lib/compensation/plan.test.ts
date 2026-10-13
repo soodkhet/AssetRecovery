@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  hotelReceiptPolicyLabel,
   describeFuelRule,
   diffPlanValues,
   normalizePlanValues,
@@ -136,5 +137,12 @@ describe('describeFuelRule (UI — `11` §8)', () => {
       mode: 'DAILY_FLAT',
       dailyFlatSatang: 40_000,
     })
+  })
+})
+
+describe('hotelReceiptPolicyLabel (known Q7/M2 — หน้าแผนแสดงค่าตั้งใบเสร็จค่าที่พักชัดเสมอ)', () => {
+  it('เปิด/ปิด แสดงผลต่อใบรับรองแทนใบเสร็จ', () => {
+    expect(hotelReceiptPolicyLabel(true)).toBe('บังคับแนบใบเสร็จจริง (ใช้ใบรับรองแทนไม่ได้)')
+    expect(hotelReceiptPolicyLabel(false)).toBe('ไม่บังคับใบเสร็จ (ใช้ใบรับรองแทนได้)')
   })
 })

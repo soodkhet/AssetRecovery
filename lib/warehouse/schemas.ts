@@ -234,6 +234,17 @@ export const lotRemoveAssetSchema = z.object({
 
 export type LotRemoveAssetInput = z.infer<typeof lotRemoveAssetSchema>
 
+/** `DELETE /api/handover-lots/:id` — known Q9: ลบล็อตว่าง (ยังไม่ยืนยัน · ไม่มีเครื่อง) · เหตุผลบังคับ (ลง audit) */
+export const lotDeleteSchema = z.object({
+  reason: z
+    .string({ error: () => 'ต้องระบุเหตุผลที่ลบล็อต' })
+    .trim()
+    .min(1, 'ต้องระบุเหตุผลที่ลบล็อต')
+    .max(LOT_REMOVE_ASSET_REASON_MAX, `เหตุผลยาวได้ไม่เกิน ${LOT_REMOVE_ASSET_REASON_MAX} ตัวอักษร`),
+})
+
+export type LotDeleteInput = z.infer<typeof lotDeleteSchema>
+
 /**
  * `POST /api/handover-lots/:id/documents` — ผูกเอกสารที่อัปโหลดแล้วเข้าล็อต (มติ PO 03/10/2569 — UAT Q13 · หนี้ #1)
  * server ตรวจไฟล์เอง (มีจริง · อยู่ใต้ `handover-lots/<lotId>/<ชนิด>/` · ชนิดจากเนื้อไฟล์ · ขนาด) แล้วเก็บ SHA-256

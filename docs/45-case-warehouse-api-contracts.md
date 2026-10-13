@@ -30,6 +30,7 @@
 | v1.15 | 11/10/2569 | **มติชั่วคราว M5 (mytester WH-05 — Claude ตัดสินแทน PO รอยืนยัน)** — §6.5 เติม `PATCH /api/handover-lots/:id/remove-asset` นำเครื่องออกจากล็อตที่ยังไม่ยืนยัน (เหตุผลบังคับ · audit · สิทธิ์ `create_handover_lot`) · ล็อตว่างยืนยันไม่ได้ (`EMPTY_LOT`) |
 | v1.16 | 12/10/2569 | **มติผู้ใช้ 12/10/2569 I3-01 (mytester3)** — §6.1 `PATCH /api/cases/:id/status` action `reject` รับ `internalNote` (ไม่บังคับ · หมายเหตุภายใน) เพิ่มจาก `reason` (= เหตุผลที่แจ้งบริษัทไฟแนนซ์ · บังคับ) — ไม่มี endpoint ใหม่ |
 | v1.17 | 12/10/2569 | **มติผู้ใช้ 12/10/2569 B3-02 (mytester3)** — §6.1 เติม `DELETE /api/cases/:id` ลบเคสร่าง: soft delete (`deleted_at`) เฉพาะ `draft` (นอกนั้น `CASE_INVALID_STATUS_TRANSITION`) · body `{ reason }` บังคับ · สิทธิ์ `record_admin_data` + scope เดียวกับสร้างเคส · audit `delete` · unique ของเลขที่สัญญาเป็น partial ⇒ สร้างเลขเดิมใหม่ได้ · ไม่ลบไฟล์ใน Storage |
+| v1.18 | 13/10/2569 | **known Q9 (Claude ตัดสินแทน PO รอยืนยัน)** — §6.5 เติม `DELETE /api/handover-lots/:id` ลบล็อตว่าง (ยังไม่ยืนยัน · ไม่มีเครื่องเหลือ) แบบ soft delete · เหตุผลบังคับ · audit `delete` · สิทธิ์ `create_handover_lot` · ไม่เพิ่มสถานะใน `handover_lot_status` |
 
 ขอบเขตเอกสารนี้: รวม API Endpoint ทั้งหมดของโมดูล Case Workflow (รับเคส/มอบหมาย/ภาคสนาม) และ Warehouse (คลังสินค้า) เป็นรายการเดียว จัดกลุ่มตาม resource เพื่อให้ backend implement ตาม REST convention เดียวกันทั้งระบบ — คู่กันกับ `27-finance-api-contracts.md` ที่รวม endpoint ฝั่ง Finance/Accounting
 
@@ -126,6 +127,7 @@ GET    /api/handover-lots/:id                รายละเอียด lot 
 POST   /api/handover-lots                    สร้าง Lot + นัดวัน (body: companyId, assetIds[], type, scheduledAt, contactPerson, deliveryAddr, trackingNo, note) — auth: ธุรการ
 POST   /api/handover-lots/:id/documents      ผูกเอกสารที่อัปโหลดแล้วเข้าล็อต (body: document = signed_doc|delivery_proof, fileUrl, fileHash?) — server ตรวจไฟล์เอง + เก็บ SHA-256 · path ต่อเวอร์ชันไม่ทับ · ล็อต confirmed แล้วแนบไม่ได้ (มติ PO 03/10/2569 Q13) — auth: ธุรการ
 PATCH  /api/handover-lots/:id/remove-asset  นำเครื่องออกจากล็อตที่ยังไม่ยืนยัน (body: assetId, reason บังคับ) → เครื่อง in_custody · auth: ผู้ถือ create_handover_lot (มติชั่วคราว M5)
+DELETE /api/handover-lots/:id                ลบล็อตว่าง (ยังไม่ยืนยัน · ไม่มีเครื่อง) แบบ soft delete (body: reason บังคับ) · เลขล็อตไม่นำกลับมาใช้ · auth: ผู้ถือ create_handover_lot (known Q9)
 PATCH  /api/handover-lots/:id/confirm        ยืนยัน + แนบเอกสาร → trigger unlock expense + Revenue (body: deliveredAt, signedDocUrl, deliveryProofUrl) — auth: ธุรการ
 GET    /api/handover-lots/:id/pdf            ดาวน์โหลดใบส่งมอบ PDF — auth: ธุรการ+
 GET    /api/handover-lots/:id/export-excel   Export รายการเครื่องใน Lot — auth: ธุรการ+

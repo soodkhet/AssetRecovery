@@ -173,9 +173,10 @@ export function AuditLogsManager() {
                   <Td className="text-slate-600">
                     {/* ชื่อชนิดเป้าหมายกับรหัสแยกบรรทัด — เดิมต่อกันเป็น "ผู้ใช้งานa880581e" (UAT BUG-006) */}
                     <div>{auditTargetLabel(row.targetType)}</div>
+                    {/* known H-06 — ชื่อ/เลขเอกสารที่อ่านได้ · UUID ดูได้ใน tooltip */}
                     {row.targetId !== null && (
                       <RefText className="block text-[11px] text-slate-400" title={row.targetId}>
-                        {row.targetId.slice(0, 8)}
+                        {row.targetRef ?? row.targetId.slice(0, 8)}
                       </RefText>
                     )}
                   </Td>

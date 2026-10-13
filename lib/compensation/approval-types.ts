@@ -98,7 +98,16 @@ export interface CompensationApprovalDto {
 
 export const compensationListQuerySchema = z.object({
   status: z
-    .enum(['pending_warehouse_confirm', 'pending_approval', 'pending_finance_approval', 'needs_revision', 'approved', 'all'])
+    .enum([
+      'pending_warehouse_confirm',
+      'pending_approval',
+      'pending_finance_approval',
+      // known — ตัวกรอง (ไม่ใช่สถานะ): `pending_finance_approval` ที่ขั้นที่รออยู่เป็นบริหาร
+      'pending_executive',
+      'needs_revision',
+      'approved',
+      'all',
+    ])
     .default('all'),
   caseId: z.string().guid().optional(),
   payeeId: z.string().guid().optional(),

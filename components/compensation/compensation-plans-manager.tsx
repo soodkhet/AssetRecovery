@@ -21,7 +21,7 @@ import {
   useToast,
 } from '@/components/ui'
 import { callApi, jsonRequest, type ApiCallResult } from '@/lib/api/types'
-import { describeFuelRule, FUEL_MODE_LABEL } from '@/lib/compensation/plan'
+import { describeFuelRule, FUEL_MODE_LABEL, hotelReceiptPolicyLabel } from '@/lib/compensation/plan'
 import type { CompensationPlanDto, CompensationPlanListDto } from '@/lib/compensation/types'
 import { fmtDate } from '@/lib/format/datetime'
 import { fmtPercent, fmtSatang } from '@/lib/format/money'
@@ -241,9 +241,11 @@ export function CompensationPlansManager() {
                   <Stat
                     label="🏨 ที่พักสูงสุด"
                     value={
-                      plan.hotelMaxPerNightSatang === null
-                        ? 'ไม่กำหนดเพดาน'
-                        : `${fmtSatang(plan.hotelMaxPerNightSatang)} บาท/คืน${plan.hotelReceiptRequired ? ' (ใบเสร็จบังคับ)' : ''}`
+                      `${
+                        plan.hotelMaxPerNightSatang === null
+                          ? 'ไม่กำหนดเพดาน'
+                          : `${fmtSatang(plan.hotelMaxPerNightSatang)} บาท/คืน`
+                      } · ${hotelReceiptPolicyLabel(plan.hotelReceiptRequired)}`
                     }
                   />
                   <Stat

@@ -438,6 +438,13 @@ export const API_CONTRACT = {
     source: '44 §15 · 45 §6.5 (มติชั่วคราว M5)',
     summary: 'นำเครื่องออกจากล็อตที่ยังไม่ยืนยัน (เหตุผลบังคับ) → เครื่องกลับไปรอจัดล็อต',
   },
+  'lot.delete': {
+    method: 'DELETE',
+    path: '/api/handover-lots/:id',
+    module: 'warehouse',
+    source: '44 §15 · 45 §6.5 (known Q9)',
+    summary: 'ลบล็อตว่าง (ยังไม่ยืนยัน · ไม่มีเครื่อง) แบบ soft delete — เหตุผลบังคับ · เลขล็อตไม่นำกลับมาใช้',
+  },
   'lot.confirm': {
     method: 'PATCH',
     path: '/api/handover-lots/:id/confirm',
