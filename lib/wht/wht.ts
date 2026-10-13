@@ -651,7 +651,8 @@ export interface WhtCertificateDocSource {
   /** ลำดับที่ในแบบ ภ.ง.ด. ของงวด (`filingSequenceNumber()`) — `null` = คำนวณไม่ได้ (พิมพ์ "—") */
   filingSequence: number | null
   /** ใบแบบต่อผู้รับต่อรอบจ่าย — แสดงว่าเป็นยอดรวมของรอบไหนกี่รายการ (`null` = ใบต่อรายการ) */
-  coverage?: { payoutBatchName: string; itemCount: number } | null
+  /** `carriedBaseSatang` = ฐานยกมาจากรอบก่อนในเดือนที่รวมอยู่ในเงินได้ของใบ (staging E-054) · ไม่ส่ง = 0 */
+  coverage?: { payoutBatchName: string; itemCount: number; carriedBaseSatang?: number } | null
   /** ผู้มีหน้าที่หักภาษี ณ ที่จ่าย = องค์กร (snapshot) */
   payer: WhtCertificateParty
   /** ผู้ถูกหักภาษี ณ ที่จ่าย = payee (snapshot) */
@@ -742,6 +743,16 @@ function textOrNull(value: string | null): string | null {
   return trimmed === '' ? null : trimmed
 }
 
+/**
+ * หมายเหตุของใบต่อรอบ — mytester5 F5-02: มีฐานยกมาจากรอบก่อน ⇒ "(n รายการ + ฐานยกมาจากรอบก่อน x.xx)"
+ * ให้ยอดในหมายเหตุกระทบกับเงินได้บนใบ (เงินได้ = รายการของรอบนี้ + ฐานยกมา)
+ */
+export function whtCoverageNote(coverage: { payoutBatchName: string; itemCount: number; carriedBaseSatang?: number }): string {
+  const carried = coverage.carriedBaseSatang ?? 0
+  const carriedText = carried > 0 ? ` + ฐานยกมาจากรอบก่อน ${fmtSatang(carried)}` : ''
+  return `ยอดรวมทุกรายการของผู้รับในรอบจ่าย "${coverage.payoutBatchName}" (${coverage.itemCount} รายการ${carriedText})`
+}
+
 export function buildWhtCertificateDoc(source: WhtCertificateDocSource): WhtCertificateDoc {
   const isCancelled = source.status === 'cancelled'
   const paymentDateLabel = fmtDate(source.paymentDate)
@@ -767,7 +778,7 @@ export function buildWhtCertificateDoc(source: WhtCertificateDocSource): WhtCert
     coverageNote:
       source.coverage === undefined || source.coverage === null
         ? null
-        : `ยอดรวมทุกรายการของผู้รับในรอบจ่าย "${source.coverage.payoutBatchName}" (${source.coverage.itemCount} รายการ)`,
+        : whtCoverageNote(source.coverage),
     deliveryFormatLabel: WHT_DELIVERY_FORMAT_LABEL[source.deliveryFormat],
     filingFormLabel: WHT_FILING_FORM_LABEL[source.filingForm],
     filingForm: source.filingForm,

@@ -414,6 +414,9 @@ suite('เกณฑ์ ฿1,000 สะสมต่อผู้รับต่อ
     const certificates = await wht.listWhtCertificates(finance, {})
     expect(certificates.items).toHaveLength(1)
     expect(certificates.items[0]).toMatchObject({ grossSatang: 110_000, whtSatang: 3_300, filingForm: 'PND3' })
+    // mytester5 F5-02 — หมายเหตุใบต่อรอบระบุฐานยกมาให้กระทบกับเงินได้บนใบ (500 + ยกมา 600 = 1,100)
+    const secondDoc = await wht.getWhtCertificateDocSource(finance, certificates.items[0]?.id ?? '')
+    expect(secondDoc.coverage).toEqual({ payoutBatchName: second.batch.name, itemCount: 1, carriedBaseSatang: 60_000 })
 
     // รอบที่สามในเดือน — ถึงเกณฑ์แล้ว ⇒ หักตามปกติ ไม่ยกฐานซ้ำ
     await seedExpense(PAYEE_IN_ID, 'commission', 20_000)
@@ -575,7 +578,7 @@ suite('ใบ 50 ทวิ ต่อผู้รับต่อรอบ vs ต�
 
     const doc = await wht.getWhtCertificateDocSource(finance, replacement!.id)
     // mytester3 F3-02 — นับเฉพาะ 3 รายการในฐาน (ค่าที่พัก ฿600 นอกฐาน ไม่อยู่ในยอดเงินได้ ฿1,350 ของใบ)
-    expect(doc.coverage).toEqual({ payoutBatchName: batch.name, itemCount: 3 })
+    expect(doc.coverage).toEqual({ payoutBatchName: batch.name, itemCount: 3, carriedBaseSatang: 0 })
   })
 
   it('mytester2 F2-04 — หมายเหตุ "(n รายการ)" บนใบต่อรอบไม่นับแถวเงินทดรอง (ไม่ใช่เงินได้)', async () => {
@@ -594,7 +597,7 @@ suite('ใบ 50 ทวิ ต่อผู้รับต่อรอบ vs ต�
     expect(certificate).toMatchObject({ grossSatang: 135_000, whtSatang: 4050 })
     const doc = await wht.getWhtCertificateDocSource(finance, certificate!.id)
     // ไม่นับเงินทดรอง (F2-04) และไม่นับค่าที่พักนอกฐาน (mytester3 F3-02)
-    expect(doc.coverage).toEqual({ payoutBatchName: batch.name, itemCount: 3 })
+    expect(doc.coverage).toEqual({ payoutBatchName: batch.name, itemCount: 3, carriedBaseSatang: 0 })
   })
 
   it('(จ) ต่อรายการ: ใบต่อรายการที่หักภาษี — ยอดภาษีรวมเท่ากับแบบต่อรอบ', async () => {

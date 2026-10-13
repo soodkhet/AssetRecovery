@@ -1113,6 +1113,20 @@ export async function getWhtCertificateDocSource(
     certificate.issueMode === 'per_payee_batch' && certificate.payoutBatchId !== null
       ? {
           payoutBatchName: certificate.expenseRecord.payoutBatchItem.payoutBatch.name,
+          // mytester5 F5-02 — ฐานยกมาจากรอบก่อนในเดือน (staging E-054) อยู่ในเงินได้ของใบแต่ไม่ใช่รายการของรอบนี้
+          // ⇒ หมายเหตุบอกแยก ให้ยอดในหมายเหตุกระทบกับเงินได้บนใบได้
+          carriedBaseSatang:
+            (
+              await prisma.payoutBatchItem.aggregate({
+                where: {
+                  organizationId: user.organizationId,
+                  payoutBatchId: certificate.payoutBatchId,
+                  payeeId: certificate.payeeId,
+                  advanceId: null,
+                },
+                _sum: { whtCarriedBaseSatang: true },
+              })
+            )._sum.whtCarriedBaseSatang ?? 0,
           itemCount: await prisma.expenseRecord.count({
             where: {
               organizationId: user.organizationId,
