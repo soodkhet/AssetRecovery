@@ -50,6 +50,7 @@ import {
 import {
   EMPTY_LOT_BADGE_LABEL,
   LOT_STATUS_LABELS,
+  emptyLotDescription,
   isEmptyOpenLot,
   isLotConfirmed,
   type LotTab as LotTabId,
@@ -429,7 +430,7 @@ export function LotTab({
               emptyTitle={openLot.assets.length === 0 ? 'ล็อตนี้ยังไม่มีเครื่อง' : 'ไม่พบเครื่องตามคำค้น'}
               emptyDescription={
                 openLot.assets.length === 0
-                  ? 'เครื่องถูกนำออกจากล็อตหมดแล้ว — ล็อตนี้ยืนยันส่งมอบไม่ได้และไม่แสดงในพอร์ทัลลูกค้า · จะส่งมอบเครื่องให้สร้างล็อตใหม่ หรือปล่อยล็อตนี้ไว้'
+                  ? emptyLotDescription(canManageLot)
                   : (imeiSearchHint(detailSearch) ?? 'ลองล้างคำค้นเพื่อดูรายการทั้งหมดของล็อตนี้')
               }
             />

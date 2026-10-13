@@ -68,6 +68,17 @@ export function isEmptyOpenLot(lot: { status: HandoverLotStatus; assetCount: num
 
 export const EMPTY_LOT_BADGE_LABEL = 'ล็อตว่าง'
 
+/**
+ * ทดสอบซ้ำ local LR5-03 — ข้อความในรายการเครื่องของล็อตว่าง · ผู้ที่จัดการล็อตได้เห็นทางเลือก "ลบล็อตว่าง" (known Q9)
+ * ผู้ที่ไม่มีสิทธิ์ไม่เห็นปุ่มลบ ⇒ ไม่พูดถึงการลบ
+ */
+export function emptyLotDescription(canDeleteLot: boolean): string {
+  const base = 'เครื่องถูกนำออกจากล็อตหมดแล้ว — ล็อตนี้ยืนยันส่งมอบไม่ได้และไม่แสดงในพอร์ทัลลูกค้า'
+  return canDeleteLot
+    ? `${base} · กดปุ่ม "ลบล็อตว่าง" เพื่อลบล็อตนี้ แล้วสร้างล็อตใหม่เมื่อจะส่งมอบเครื่อง`
+    : `${base} · จะส่งมอบเครื่องให้สร้างล็อตใหม่ หรือแจ้งผู้ดูแลคลังให้ลบล็อตนี้`
+}
+
 /** known Q9 — ลบล็อตที่ยังมีเครื่อง ⇒ `ASSET_ALREADY_IN_LOT` (เครื่องยังผูกกับล็อตนี้ — `44` §12) พร้อมข้อความเฉพาะกรณี */
 export const LOT_DELETE_NOT_EMPTY_MESSAGES = {
   title: 'ลบล็อตนี้ไม่ได้ — ยังมีเครื่องในล็อต',

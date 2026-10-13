@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { WarehouseError } from '@/lib/warehouse/errors'
 import {
+  emptyLotDescription,
   assertLotAssetRemovable,
   assertLotConfirmDocuments,
   assertLotDeletable,
@@ -201,5 +202,15 @@ describe('assertLotDeletable (known Q9 — ลบล็อตว่าง)', () 
     expect(() => assertLotDeletable({ status: 'confirmed', assetCount: 0 })).toThrow(
       expect.objectContaining({ code: 'LOT_ALREADY_CONFIRMED' }),
     )
+  })
+})
+
+describe('emptyLotDescription (ทดสอบซ้ำ local LR5-03)', () => {
+  it('ผู้จัดการล็อตได้ ⇒ บอกว่าลบล็อตว่างได้', () => {
+    expect(emptyLotDescription(true)).toContain('ลบล็อตว่าง')
+    expect(emptyLotDescription(true)).not.toContain('ปล่อยล็อตนี้ไว้')
+  })
+  it('ไม่มีสิทธิ์ ⇒ ไม่ชี้ไปที่ปุ่มที่มองไม่เห็น', () => {
+    expect(emptyLotDescription(false)).not.toContain('"ลบล็อตว่าง"')
   })
 })
