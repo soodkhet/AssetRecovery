@@ -3,7 +3,7 @@ import type { SessionUser } from '@/lib/auth/types'
 import { auditLoginFailureOf } from '@/lib/audit/log-display'
 import type { AuditLogListQuery } from '@/lib/audit/log-schemas'
 import { resolveAuditRefLabels } from '@/lib/audit/target-ref-queries'
-import { auditTargetRef, auditValueRefs, type AuditRef } from '@/lib/audit/target-refs'
+import { auditOrgLevelTargetLabel, auditTargetRef, auditValueRefs, type AuditRef } from '@/lib/audit/target-refs'
 import type {
   AuditLogActorOptionDto,
   AuditLogDetailDto,
@@ -49,12 +49,15 @@ const detailSelect = {
 type ListRow = Prisma.AuditLogGetPayload<{ select: typeof listSelect }>
 type DetailRow = Prisma.AuditLogGetPayload<{ select: typeof detailSelect }>
 
-function targetRefOf(row: ListRow, labels: ReadonlyMap<string, string>): string | null {
+function targetRefOf(row: ListRow, labels: ReadonlyMap<string, string>, organizationId: string): string | null {
+  // mytester5 A5-01 — ค่าตั้งระดับองค์กร (target_id = id องค์กร) ⇒ ชื่อหมวดค่าตั้ง ไม่ใช่ "00000000"
+  const orgLevel = auditOrgLevelTargetLabel(row, organizationId)
+  if (orgLevel !== null) return orgLevel
   const ref = auditTargetRef(row)
   return ref === null ? null : (labels.get(ref.id.toLowerCase()) ?? null)
 }
 
-function toListItem(row: ListRow, labels: ReadonlyMap<string, string>): AuditLogListItemDto {
+function toListItem(row: ListRow, labels: ReadonlyMap<string, string>, organizationId: string): AuditLogListItemDto {
   return {
     id: row.id,
     createdAt: row.createdAt.toISOString(),
@@ -65,7 +68,7 @@ function toListItem(row: ListRow, labels: ReadonlyMap<string, string>): AuditLog
     actorRole: row.actorRole,
     targetType: row.targetType,
     targetId: row.targetId,
-    targetRef: targetRefOf(row, labels),
+    targetRef: targetRefOf(row, labels, organizationId),
     reason: row.reason,
     loginFailure: auditLoginFailureOf(row.action, row.afterData),
   }
@@ -147,7 +150,7 @@ export async function listAuditLogs(user: SessionUser, query: AuditLogListQuery)
   )
 
   return {
-    items: rows.map((row) => toListItem(row, labels)),
+    items: rows.map((row) => toListItem(row, labels, user.organizationId)),
     total,
     offset: query.offset,
     limit: query.limit,
@@ -190,7 +193,7 @@ export async function getAuditLog(user: SessionUser, id: string): Promise<AuditL
   ])
 
   return {
-    ...toListItem(row, labels),
+    ...toListItem(row, labels, user.organizationId),
     before: row.beforeData ?? null,
     after: row.afterData ?? null,
     refLabels: Object.fromEntries(labels),
