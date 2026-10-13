@@ -105,7 +105,7 @@ export function PortalViewAsBanner({ companyName, viewAs }: { companyName: strin
           </span>
         )}
         <span className="text-amber-700">ทุกการเปิดดูและดาวน์โหลดถูกบันทึกในชื่อของท่าน</span>
-        <Link href={viewAs.backHref} className="focus-ring ml-auto rounded font-semibold underline underline-offset-2">
+        <Link href={viewAs.backHref} className="focus-ring ml-auto inline-flex items-center rounded font-semibold underline underline-offset-2 max-sm:min-h-11 pointer-coarse:min-h-11">
           กลับระบบภายใน
         </Link>
       </div>
