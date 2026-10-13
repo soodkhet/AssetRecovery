@@ -377,3 +377,62 @@ suite('ทดสอบซ้ำ local LR5-01 — ชุดส่งบัญช�
     expect(foreign).toBeNull()
   })
 })
+
+suite('mytester5 A5-01 — รายการตั้งค่า + ค่าตั้งระดับองค์กรเป็นชื่อที่อ่านได้', () => {
+  const ORG = '00000000-0000-4000-8000-000000a501a0'
+  const ROLE = '00000000-0000-4000-8000-000000a501a1'
+  const USER = '00000000-0000-4000-8000-000000a501a2'
+  const TAX_PROFILE = '00000000-0000-4000-8000-000000a501a3'
+  const COST_CENTER = '00000000-0000-4000-8000-000000a501a4'
+  const HOLIDAY = '00000000-0000-4000-8000-000000a501a5'
+  const LOG_TAX = '00000000-0000-4000-8000-000000a501b1'
+  const LOG_CC = '00000000-0000-4000-8000-000000a501b2'
+  const LOG_HOLIDAY = '00000000-0000-4000-8000-000000a501b3'
+  const LOG_ORG = '00000000-0000-4000-8000-000000a501b4'
+  const LOG_SLA = '00000000-0000-4000-8000-000000a501b5'
+  const LOG_FOREIGN_ORG = '00000000-0000-4000-8000-000000a501b6'
+  const a501User = sessionUser({ id: USER, organizationId: ORG, roleId: ROLE })
+
+  beforeAll(async () => {
+    if (!url) return
+    const tx = db()
+    await tx.$executeRawUnsafe(`
+      INSERT INTO organizations (id, name, tax_id, address) VALUES ('${ORG}', 'A501Test', '9999999995010', 'ที่อยู่ A501')
+      ON CONFLICT (id) DO NOTHING`)
+    await tx.$executeRawUnsafe(`
+      INSERT INTO roles (id, organization_id, name, role_group, is_seed)
+      VALUES ('${ROLE}', '${ORG}', 'บริหาร A501', 'system', false) ON CONFLICT (id) DO NOTHING`)
+    await tx.$executeRawUnsafe(`
+      INSERT INTO users (id, organization_id, role_id, email, full_name, status)
+      VALUES ('${USER}', '${ORG}', '${ROLE}', 'a501@test.local', 'ผู้บริหาร A501', 'active') ON CONFLICT (id) DO NOTHING`)
+    await tx.$executeRawUnsafe(`
+      INSERT INTO tax_profiles (id, organization_id, name, created_by, updated_at)
+      VALUES ('${TAX_PROFILE}', '${ORG}', 'บุคคลธรรมดา ค่าจ้างทำของ 2%', '${USER}', now()) ON CONFLICT (id) DO NOTHING`)
+    await tx.$executeRawUnsafe(`
+      INSERT INTO cost_centers (id, organization_id, code, name, created_by, updated_at)
+      VALUES ('${COST_CENTER}', '${ORG}', 'CC-001', 'ทีมติดตาม Inhouse', '${USER}', now()) ON CONFLICT (id) DO NOTHING`)
+    await tx.$executeRawUnsafe(`
+      INSERT INTO public_holidays (id, organization_id, holiday_date, name, created_by, updated_at)
+      VALUES ('${HOLIDAY}', '${ORG}', '2026-10-13', 'วันคล้ายวันสวรรคต ร.9', '${USER}', now()) ON CONFLICT (id) DO NOTHING`)
+    await tx.$executeRawUnsafe(`
+      INSERT INTO audit_logs (id, organization_id, actor_id, actor_role, action, target_type, target_id, before_data, after_data, reason, created_at) VALUES
+        ('${LOG_TAX}', '${ORG}', '${USER}', 'บริหาร A501', 'create', 'tax_profiles', '${TAX_PROFILE}', NULL, '{"wht_pct":2}', 'ตั้งค่า', '2026-10-13T03:00:00Z'),
+        ('${LOG_CC}', '${ORG}', '${USER}', 'บริหาร A501', 'create', 'cost_centers', '${COST_CENTER}', NULL, '{"code":"CC-001"}', NULL, '2026-10-13T03:01:00Z'),
+        ('${LOG_HOLIDAY}', '${ORG}', '${USER}', 'บริหาร A501', 'create', 'public_holidays', '${HOLIDAY}', NULL, '{"name":"x"}', NULL, '2026-10-13T03:02:00Z'),
+        ('${LOG_ORG}', '${ORG}', '${USER}', 'บริหาร A501', 'update', 'finance_policy_settings', '${ORG}', NULL, '{"a":1}', 'แก้นโยบาย', '2026-10-13T03:03:00Z'),
+        ('${LOG_SLA}', '${ORG}', '${USER}', 'บริหาร A501', 'update', 'assignment_policy_settings', '${ORG}', NULL, '{"sla_alert_hours":24}', 'ปรับเกณฑ์ SLA', '2026-10-13T03:04:00Z'),
+        ('${LOG_FOREIGN_ORG}', '${ORG}', '${USER}', 'บริหาร A501', 'update', 'organizations', '${OTHER_ORG_ID}', NULL, '{"a":1}', NULL, '2026-10-13T03:05:00Z')
+      ON CONFLICT (id) DO NOTHING`)
+  })
+
+  it('รายการ: โปรไฟล์ภาษี/ศูนย์ต้นทุน/วันหยุดเป็นชื่อ · ค่าตั้งระดับองค์กรเป็นชื่อหมวด · id องค์กรอื่นไม่ถูกแปลง', async () => {
+    const list = await logs.listAuditLogs(a501User, baseQuery)
+    const byId = new Map(list.items.map((item) => [item.id, item]))
+    expect(byId.get(LOG_TAX)?.targetRef).toBe('บุคคลธรรมดา ค่าจ้างทำของ 2%')
+    expect(byId.get(LOG_CC)?.targetRef).toBe('CC-001 ทีมติดตาม Inhouse')
+    expect(byId.get(LOG_HOLIDAY)?.targetRef).toBe('13/10/2569 วันคล้ายวันสวรรคต ร.9')
+    expect(byId.get(LOG_ORG)?.targetRef).toBe('นโยบายการเงิน')
+    expect(byId.get(LOG_SLA)?.targetRef).toBe('นโยบายการมอบหมายงาน / SLA')
+    expect(byId.get(LOG_FOREIGN_ORG)?.targetRef).toBeNull()
+  })
+})

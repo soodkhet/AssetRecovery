@@ -58,3 +58,20 @@ export const claimCreateSchema = z.object({
 })
 
 export type ClaimCreateInput = z.infer<typeof claimCreateSchema>
+
+/**
+ * mytester5 F5-01 — query ของ `GET /api/claims/hotel-receipt-policy` (ฟอร์มสร้างรายการเบิกเอง ประเภทค่าที่พัก)
+ * ผู้รับเงินว่าง = ของตัวเอง · วันที่ว่าง = วันนี้ (เวลาไทย)
+ */
+export const hotelReceiptPolicyQuerySchema = z.object({
+  payeeId: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? null : value),
+    z.string().guid('รูปแบบรหัสไม่ถูกต้อง').nullable().default(null),
+  ),
+  expenseDate: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    dateOnlySchema('วันที่เกิดรายการ').optional(),
+  ),
+})
+
+export type HotelReceiptPolicyQuery = z.infer<typeof hotelReceiptPolicyQuerySchema>

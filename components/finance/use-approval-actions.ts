@@ -5,9 +5,8 @@ import { usePermission } from '@/components/auth/permission-provider'
 import { useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { APPROVAL_STEP_CAPABILITIES } from '@/lib/compensation/approval'
-import { approvalErrorToast } from '@/lib/compensation/approval-ui'
+import { approvalErrorToast, claimTypeLabel } from '@/lib/compensation/approval-ui'
 import type { CompensationApprovalDto } from '@/lib/compensation/approval-types'
-import { EXPENSE_TYPE_LABEL } from '@/lib/field/expense-ui'
 
 /**
  * ตรรกะที่ใช้ร่วมกันของ **แท็บ "รออนุมัติ" (`15` §8)** และ **แท็บ "ค่าตอบแทน" (`16` §8)**
@@ -111,7 +110,7 @@ export function useApprovalActions(endpoint: '/api/compensation' | '/api/claims'
         showToast({
           tone: 'success',
           title: 'อนุมัติแล้ว',
-          description: `${item.payeeName} — ${EXPENSE_TYPE_LABEL[item.expenseType]}`,
+          description: `${item.payeeName} — ${claimTypeLabel(item)}`,
         })
         await reload()
       } finally {
@@ -193,7 +192,7 @@ export function useApprovalActions(endpoint: '/api/compensation' | '/api/claims'
         showToast({
           tone: 'success',
           title: 'ปฏิเสธรายการเบิกแล้ว',
-          description: `${item.payeeName} — ${EXPENSE_TYPE_LABEL[item.expenseType]} (ส่งใหม่ไม่ได้)`,
+          description: `${item.payeeName} — ${claimTypeLabel(item)} (ส่งใหม่ไม่ได้)`,
         })
         await reload()
         return true

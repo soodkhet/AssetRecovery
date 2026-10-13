@@ -49,6 +49,12 @@ export interface CaseActivityInput {
   userNames: ReadonlyMap<string, string>
   /** พนักงานของแต่ละแถวมอบหมาย (`case_assignments.id → agent_id`) */
   assignmentAgents: ReadonlyMap<string, string>
+  /**
+   * ผู้มอบหมายของแต่ละแถว (`case_assignments.id → created_by`) — แถวที่เกิดจากคำขอเปลี่ยนผู้รับผิดชอบ
+   * `created_by` = ผู้ส่งคำขอ (UAT BUG-043 · mytester2 C2-01) ใช้เป็น "ผู้ทำ" ของการเปลี่ยนแบบยินยอม (mytester5 C5-01)
+   * ไม่ระบุ = ไม่แทนผู้ทำ
+   */
+  assignmentCreators?: ReadonlyMap<string, string>
 }
 
 function field(value: unknown, key: string): unknown {
@@ -77,7 +83,20 @@ function nameOf(input: CaseActivityInput, userId: string | null): string {
   return userId === null ? UNKNOWN_AGENT : (input.userNames.get(userId) ?? UNKNOWN_AGENT)
 }
 
-function assignmentEntry(row: CaseActivityAuditRow, input: CaseActivityInput): Omit<CaseActivityEntry, 'at' | 'actorName'> | null {
+type ActivityDraft = Omit<CaseActivityEntry, 'at' | 'actorName'> & { actorName?: string | null }
+
+/**
+ * mytester5 C5-01 — การเปลี่ยนผู้รับผิดชอบผ่านคำขอ (ยินยอม/ครบเวลา) ผู้ทำ = ผู้ส่งคำขอ
+ * (`reassignment_history.reassigned_by` — `40` v2.5) ไม่ใช่พนักงานที่กดยินยอม (actor ของ audit)
+ */
+function reassignRequesterName(row: CaseActivityAuditRow, input: CaseActivityInput): string | null {
+  const newAssignmentId = text(row.after, 'newAssignmentId')
+  const requester =
+    text(row.after, 'requestedBy') ?? (newAssignmentId === null ? null : (input.assignmentCreators?.get(newAssignmentId) ?? null))
+  return requester === null ? null : (input.userNames.get(requester) ?? null)
+}
+
+function assignmentEntry(row: CaseActivityAuditRow, input: CaseActivityInput): ActivityDraft | null {
   const status = text(row.after, 'status')
   const agentOfRow = input.assignmentAgents.get(row.targetId) ?? null
 
@@ -89,8 +108,13 @@ function assignmentEntry(row: CaseActivityAuditRow, input: CaseActivityInput): O
   if (row.action === 'update' && text(row.after, 'newAssignmentId') !== null) {
     const from = nameOf(input, text(row.before, 'agentId') ?? agentOfRow)
     const to = nameOf(input, text(row.after, 'agentId'))
-    const timeout = text(row.after, 'resolution') === 'timeout_auto' ? ' (ครบเวลารอความยินยอม)' : ''
-    return { label: `เปลี่ยนผู้รับผิดชอบ ${from} → ${to}${timeout}`, note: trimmed(row.reason), kind: 'assignment' }
+    const resolution = text(row.after, 'resolution')
+    const suffix =
+      resolution === 'timeout_auto' ? ' (ครบเวลารอความยินยอม)' : resolution === 'consented' ? ' (พนักงานยินยอม)' : ''
+    const entry: ActivityDraft = { label: `เปลี่ยนผู้รับผิดชอบ ${from} → ${to}${suffix}`, note: trimmed(row.reason), kind: 'assignment' }
+    if (resolution === null) return entry
+    const requester = reassignRequesterName(row, input)
+    return requester === null ? entry : { ...entry, actorName: requester }
   }
   if (row.action === 'reject' && status === 'needs_revision') {
     return { label: 'ตีกลับหลักฐานให้แก้ไข', note: trimmed(row.reason), kind: 'revision' }
@@ -116,7 +140,7 @@ function assignmentEntry(row: CaseActivityAuditRow, input: CaseActivityInput): O
   return null
 }
 
-function assetEntry(row: CaseActivityAuditRow): Omit<CaseActivityEntry, 'at' | 'actorName'> | null {
+function assetEntry(row: CaseActivityAuditRow): ActivityDraft | null {
   if (row.action === 'status_change' && events(row.after).includes('asset.intake')) {
     return { label: 'คลังรับเครื่องเข้าคลัง', note: null, kind: 'warehouse' }
   }
@@ -129,7 +153,8 @@ export function buildCaseActivityTimeline(input: CaseActivityInput): CaseActivit
   const fromAudits = input.audits.flatMap((row): (CaseActivityEntry & { time: number })[] => {
     const entry = row.targetType === 'assets' ? assetEntry(row) : row.targetType === 'case_assignments' ? assignmentEntry(row, input) : null
     if (entry === null) return []
-    return [{ ...entry, at: row.createdAt.toISOString(), actorName: row.actorName, time: row.createdAt.getTime() }]
+    const { actorName, ...rest } = entry
+    return [{ ...rest, at: row.createdAt.toISOString(), actorName: actorName ?? row.actorName, time: row.createdAt.getTime() }]
   })
   const fromLots = input.lots.map((lot) => ({
     at: lot.confirmedAt.toISOString(),

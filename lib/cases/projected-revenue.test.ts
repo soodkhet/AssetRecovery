@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   calculateProjectedRevenue,
+  caseProjectedRevenueSatang,
+  projectedRevenueNote,
   parseProjectedRevenueSource,
   projectedRevenueSourceText,
   type ProjectedRevenueTemplate,
@@ -159,5 +161,58 @@ describe('ข้อความที่มาประมาณการสำ�
   it('ค่าดิบรูปแบบที่อ่านไม่ออก → null (UI แสดงข้อความกลางแทน)', () => {
     expect(projectedRevenueSourceText('อะไรก็ไม่รู้', 'x')).toBeNull()
     expect(projectedRevenueSourceText('model=UNKNOWN · v1', null)).toBeNull()
+  })
+})
+
+describe('mytester5 B5-01 — เคสที่รับแล้วคิดประมาณการจาก snapshot ค่าบริการของเคส', () => {
+  const snapshot = {
+    serviceFeeModelSnapshot: 'HYBRID' as const,
+    serviceFeeBaseSatang: 50_000,
+    serviceFeeRatePct: 2.05,
+    serviceFeeBasisSnapshot: 'debt_amount' as const,
+  }
+
+  it('มี snapshot ⇒ ใช้สูตรเดิมกับค่าของ snapshot (ไม่ใช้ยอดที่เก็บไว้ก่อนรับเคส)', () => {
+    const result = caseProjectedRevenueSatang(snapshot, { debtAmountSatang: 100_100_000 }, 999)
+    expect(result).toEqual({ amountSatang: 50_000 + pctOfSatang(100_100_000, 2.05), fromSnapshot: true })
+    expect(
+      caseProjectedRevenueSatang(
+        { serviceFeeModelSnapshot: 'FLAT', serviceFeeBaseSatang: 150_000, serviceFeeRatePct: null, serviceFeeBasisSnapshot: null },
+        { debtAmountSatang: null },
+        120_000,
+      ),
+    ).toEqual({ amountSatang: 150_000, fromSnapshot: true })
+  })
+
+  it('ยังไม่รับเคส (ไม่มี snapshot) ⇒ ยอดที่บันทึกไว้เดิม', () => {
+    expect(
+      caseProjectedRevenueSatang(
+        { serviceFeeModelSnapshot: null, serviceFeeBaseSatang: null, serviceFeeRatePct: null, serviceFeeBasisSnapshot: null },
+        { debtAmountSatang: 1_000 },
+        120_000,
+      ),
+    ).toEqual({ amountSatang: 120_000, fromSnapshot: false })
+  })
+
+  it('ข้อความ: รับเคสแล้วบอกอย่างเดียวว่าคิดจากค่าบริการที่บันทึกไว้ตอนรับเคส (ไม่มี "คำนวณไว้ก่อนรับเคส")', () => {
+    const accepted = projectedRevenueNote({
+      status: 'approved',
+      projectedRevenueSource: 'model=FLAT · v1 · base=150000',
+      projectedRevenueSourceLabel: 'เทมเพลต "เหมาจ่าย" v1 · เหมาจ่ายรายเคส: ฿1,500.00',
+      serviceFeeModelSnapshot: 'FLAT',
+    })
+    expect(accepted).toContain('คำนวณจากค่าบริการที่บันทึกไว้ตอนรับเคส (เทมเพลต "เหมาจ่าย" v1')
+    expect(accepted).not.toContain('ก่อนรับเคส')
+    const pending = projectedRevenueNote({
+      status: 'pending_review',
+      projectedRevenueSource: 'model=FLAT · v1 · base=150000',
+      projectedRevenueSourceLabel: 'เทมเพลต "เหมาจ่าย" v1 · เหมาจ่ายรายเคส: ฿1,500.00',
+      serviceFeeModelSnapshot: null,
+    })
+    expect(pending).toContain('เป็นประมาณการก่อนรับเคส')
+    expect(pending).not.toContain('บันทึกไว้ตอนรับเคส')
+    expect(
+      projectedRevenueNote({ status: 'draft', projectedRevenueSource: null, projectedRevenueSourceLabel: null, serviceFeeModelSnapshot: null }),
+    ).toContain('ระบบคำนวณให้เมื่อส่งตรวจสอบ')
   })
 })

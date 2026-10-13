@@ -23,7 +23,11 @@ import {
 } from '@/lib/cases/case'
 import { normalizeCaseRef } from '@/lib/cases/case-ref'
 import { CaseError } from '@/lib/cases/errors'
-import { parseProjectedRevenueSource, projectedRevenueSourceText } from '@/lib/cases/projected-revenue'
+import {
+  caseProjectedRevenueSatang,
+  parseProjectedRevenueSource,
+  projectedRevenueSourceText,
+} from '@/lib/cases/projected-revenue'
 import { allowedActionsFrom } from '@/lib/cases/state-machine'
 import { loadCaseCloseFailReason, loadCaseFieldEvidence } from '@/lib/field/evidence-review'
 import { loadCaseResubmittedAt } from '@/lib/field/resubmission'
@@ -350,7 +354,7 @@ export const CASE_ACTIVITY_AUDIT_LIMIT = 300
  */
 async function loadCaseActivityHistory(organizationId: string, caseId: string): Promise<CaseActivityEntry[]> {
   const [assignments, assets] = await Promise.all([
-    prisma.caseAssignment.findMany({ where: { organizationId, caseId }, select: { id: true, agentId: true } }),
+    prisma.caseAssignment.findMany({ where: { organizationId, caseId }, select: { id: true, agentId: true, createdBy: true } }),
     prisma.asset.findMany({
       where: { organizationId, caseId },
       select: {
@@ -384,9 +388,14 @@ async function loadCaseActivityHistory(organizationId: string, caseId: string): 
           },
         }).then((rows) => rows.reverse())
   // ชื่อพนักงานที่อ้างใน audit (ผู้รับงาน/ผู้ถูกโอน) — รวม agent ของทุกแถวมอบหมาย
-  const userIds = new Set<string>(assignments.map((row) => row.agentId))
+  // + ผู้มอบหมายของแต่ละแถว (ผู้ส่งคำขอเปลี่ยนผู้รับผิดชอบ — mytester5 C5-01)
+  const userIds = new Set<string>(assignments.flatMap((row) => [row.agentId, row.createdBy]))
   for (const row of audits) {
-    for (const value of [jsonString(row.beforeData, 'agentId'), jsonString(row.afterData, 'agentId')]) {
+    for (const value of [
+      jsonString(row.beforeData, 'agentId'),
+      jsonString(row.afterData, 'agentId'),
+      jsonString(row.afterData, 'requestedBy'),
+    ]) {
       if (value !== null) userIds.add(value)
     }
   }
@@ -414,6 +423,7 @@ async function loadCaseActivityHistory(organizationId: string, caseId: string): 
     lots: [...lots.values()],
     userNames: new Map(users.map((user) => [user.id, user.fullName])),
     assignmentAgents: new Map(assignments.map((row) => [row.id, row.agentId])),
+    assignmentCreators: new Map(assignments.map((row) => [row.id, row.createdBy])),
   })
 }
 
@@ -498,7 +508,17 @@ export function toDetailDto(row: CaseDetailRow): CaseDetailDto {
     assetIdentifierWarning: assetIdentifierWarning(row.serialNo),
     activeAssetImeiWarning: null,
     activeCaseImeiWarning: null,
-    projectedRevenueSatang: row.projectedRevenueSatang,
+    // mytester5 B5-01 — เคสที่รับแล้วคิดจาก snapshot ค่าบริการของเคส (ไม่ใช่ยอดจากเทมเพลตก่อนรับเคส)
+    projectedRevenueSatang: caseProjectedRevenueSatang(
+      {
+        serviceFeeModelSnapshot: row.serviceFeeModelSnapshot,
+        serviceFeeBaseSatang: row.serviceFeeBaseSatang,
+        serviceFeeRatePct: row.serviceFeeRatePct === null ? null : Number(row.serviceFeeRatePct),
+        serviceFeeBasisSnapshot: row.serviceFeeBasisSnapshot,
+      },
+      { debtAmountSatang: row.debtAmountSatang },
+      row.projectedRevenueSatang,
+    ).amountSatang,
     projectedRevenueSource: row.projectedRevenueSource,
     projectedRevenueSourceLabel:
       row.projectedRevenueSource === null ? null : projectedRevenueSourceText(row.projectedRevenueSource, null),

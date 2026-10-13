@@ -114,6 +114,49 @@ describe('buildCaseActivityTimeline', () => {
     expect(entries[0]?.note).toBe('ลาป่วย')
   })
 
+  it('mytester5 C5-01 — เปลี่ยนแบบยินยอม/ครบเวลา: ผู้ทำ = ผู้ส่งคำขอ (ไม่ใช่พนักงานที่กดยินยอม) + "(พนักงานยินยอม)"', () => {
+    const base = input([
+      // แถวเก่า (ไม่มี requestedBy ใน audit) — หาผู้ขอจาก created_by ของงานใหม่
+      row({
+        action: 'update',
+        before: { agentId: 'u-1' },
+        after: { agentId: 'u-2', newAssignmentId: A2, resolution: 'consented' },
+        reason: 'ย้ายพื้นที่',
+        actorName: 'สมชาย',
+        createdAt: at('2026-10-13T09:09:00Z'),
+      }),
+      // แถวใหม่ — มี requestedBy ใน audit · ครบเวลา actor = ระบบ
+      row({
+        action: 'update',
+        targetId: A2,
+        before: { agentId: 'u-2' },
+        after: { agentId: 'u-1', newAssignmentId: 'assign-3', resolution: 'timeout_auto', requestedBy: 'mgr' },
+        actorName: null,
+        createdAt: at('2026-10-14T09:00:00Z'),
+      }),
+      // มอบเองทันที (ไม่มี resolution) — ผู้ทำ = actor เดิม
+      row({
+        action: 'update',
+        before: { agentId: 'u-1' },
+        after: { agentId: 'u-2', newAssignmentId: 'assign-4' },
+        createdAt: at('2026-10-15T09:00:00Z'),
+      }),
+    ])
+    const entries = buildCaseActivityTimeline({
+      ...base,
+      userNames: new Map([...base.userNames, ['mgr', 'ผู้จัดการ นอก']]),
+      assignmentCreators: new Map([
+        [A2, 'mgr'],
+        ['assign-4', 'u-1'],
+      ]),
+    })
+    expect(entries.map((entry) => [entry.label, entry.actorName])).toEqual([
+      ['เปลี่ยนผู้รับผิดชอบ สมชาย → สมศรี (พนักงานยินยอม)', 'ผู้จัดการ นอก'],
+      ['เปลี่ยนผู้รับผิดชอบ สมศรี → สมชาย (ครบเวลารอความยินยอม)', 'ผู้จัดการ นอก'],
+      ['เปลี่ยนผู้รับผิดชอบ สมชาย → สมศรี', 'หัวหน้าทีม'],
+    ])
+  })
+
   it('คลังไม่รับเครื่อง ⇒ มีเหตุผล · audit target อื่น/ไม่รู้จัก ⇒ ข้าม', () => {
     const entries = buildCaseActivityTimeline(
       input([

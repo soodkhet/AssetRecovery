@@ -4,8 +4,7 @@ import type { ReactNode } from 'react'
 import { StoredFileButton } from '@/components/uploads/stored-file-button'
 import { Button, InlineAlert, Modal, RefText } from '@/components/ui'
 import type { CompensationApprovalDto } from '@/lib/compensation/approval-types'
-import { claimStatusLabel } from '@/lib/compensation/approval-ui'
-import { EXPENSE_TYPE_LABEL } from '@/lib/field/expense-ui'
+import { claimCaseRef, claimRefLabel, claimStatusLabel, claimTypeLabel } from '@/lib/compensation/approval-ui'
 import { googleMapsRouteUrl } from '@/lib/field/field-ui'
 import { fmtDate, fmtDateTime } from '@/lib/format/datetime'
 import { fmtSatangSymbol } from '@/lib/format/money'
@@ -24,7 +23,7 @@ export function ExpenseDetailModal({ item, onClose }: { item: CompensationApprov
       open
       onClose={onClose}
       title="รายละเอียดรายการเบิก"
-      description={`${EXPENSE_TYPE_LABEL[item.expenseType]} · ${item.payeeName}`}
+      description={`${claimTypeLabel(item)} · ${item.payeeName}`}
       footer={
         <Button variant="secondary" onClick={onClose}>
           ปิด
@@ -33,7 +32,10 @@ export function ExpenseDetailModal({ item, onClose }: { item: CompensationApprov
     >
       <dl className="space-y-3 text-sm">
         <Row label="วันที่เกิดรายการ">{fmtDate(item.expenseDate)}</Row>
-        <Row label="อ้างอิงเคส">{item.caseRef === null ? '— ไม่ผูกเคส' : <RefText>{item.caseRef}</RefText>}</Row>
+        {/* mytester F5-03 (DO-07) — ใบเบิกส่วนเกินเงินทดรองอ้างอิงเคสของเงินทดรอง (จากหมายเหตุ) */}
+        <Row label="อ้างอิงเคส">
+          {claimCaseRef(item) === null ? claimRefLabel(item) : <RefText>{claimCaseRef(item)}</RefText>}
+        </Row>
         {/* mytester DO-08 — ค่าที่พัก: เคสที่ระบบจับคู่ตามช่วงวันพัก (ใช้ตรวจสอบเท่านั้น ไม่มีผลต่อยอด) */}
         {item.matchedCases !== undefined && (
           <Row label="เคสในช่วงวันพัก">

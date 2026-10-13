@@ -154,7 +154,7 @@ export function HotelClaimModal({
           expenseDate,
           amountSatang,
           hotelNights,
-          receiptInCompanyName,
+          receiptInCompanyName: noReceipt ? false : receiptInCompanyName,
           sharedWithUserId: sharedWithUserId === '' ? null : sharedWithUserId,
           receiptFileUrl,
           substituteReceipt: substitute === null ? null : substitute.payload,
@@ -270,7 +270,12 @@ export function HotelClaimModal({
         )}
 
         {noReceipt ? (
-          <NoReceiptLinesEditor lines={substituteLines} onChange={setSubstituteLines} defaultDate={expenseDate} />
+          <NoReceiptLinesEditor
+            lines={substituteLines}
+            onChange={setSubstituteLines}
+            defaultDate={expenseDate}
+            variant="hotel"
+          />
         ) : (
         <Field label="แนบใบเสร็จ" required>
           <button
@@ -296,7 +301,8 @@ export function HotelClaimModal({
         </Field>
         )}
 
-        <ReceiptInCompanyNameCheckbox checked={receiptInCompanyName} onChange={setReceiptInCompanyName} />
+        {/* mytester5 D-OUT5-01 — ใช้ใบรับรองแทนใบเสร็จ = ไม่มีใบเสร็จจริง ⇒ ไม่มีช่อง "ใบเสร็จออกในนามบริษัท" */}
+        {!noReceipt && <ReceiptInCompanyNameCheckbox checked={receiptInCompanyName} onChange={setReceiptInCompanyName} />}
 
         <Field label="หมายเหตุ (ถ้ามี)" error={fieldErrors.note}>
           <Textarea

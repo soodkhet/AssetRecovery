@@ -6,7 +6,7 @@ import { hasCapability, type CapabilityHolder } from '@/lib/auth/permission'
 import type { RequestMeta } from '@/lib/auth/request-meta'
 import { fmtSatang } from '@/lib/format/money'
 import { fmtDate } from '@/lib/format/datetime'
-import { hotelNightsCapText, receiptInCompanyNameText } from '@/lib/field/hotel-claim'
+import { hotelNightsCapText, hotelReceiptNameText } from '@/lib/field/hotel-claim'
 import type { SessionUser } from '@/lib/auth/types'
 import {
   appendApprovalHistory,
@@ -307,6 +307,8 @@ export function describeExpenseBasis(row: {
   hotelNights?: number
   /** ใบเสร็จค่าที่พักออกในนามบริษัท (มติ PO U96 #14) — ไม่ส่ง = ไม่แสดงป้าย */
   receiptInCompanyName?: boolean
+  /** ใบรับรองแทนใบเสร็จของรายการ — มี = ไม่มีใบเสร็จจริง ⇒ ไม่แสดงป้ายชื่อบนใบเสร็จ (mytester5 D-OUT5-01) */
+  substituteReceipts?: readonly unknown[]
   compPlan: {
     fuelRatePerKmSatang: number | null
     fuelDailyFlatSatang: number | null
@@ -345,8 +347,11 @@ export function describeExpenseBasis(row: {
     const nights = row.hotelNights ?? 1
     const maxPerNight = row.compPlan?.hotelMaxPerNightSatang ?? null
     // มติ PO U96 #14 — ผู้อนุมัติเห็นว่าใบเสร็จออกในนามบริษัทหรือไม่ (ประกอบการพิจารณาเท่านั้น)
-    const receiptLabel =
-      row.receiptInCompanyName === undefined ? '' : ` · ${receiptInCompanyNameText(row.receiptInCompanyName)}`
+    const receiptText =
+      row.receiptInCompanyName === undefined
+        ? null
+        : hotelReceiptNameText(row.receiptInCompanyName, (row.substituteReceipts?.length ?? 0) > 0)
+    const receiptLabel = receiptText === null ? '' : ` · ${receiptText}`
     if (maxPerNight !== null || nights > 1) {
       return `${satangToBaht(row.grossSatang)} บาท (${hotelNightsCapText(nights, maxPerNight)})${receiptLabel}`
     }

@@ -28,6 +28,22 @@ export const AUDIT_REF_TYPES = [
   'device_brands',
   'bank_transactions',
   'cash_receipts',
+  // mytester5 A5-01 — รายการตั้งค่า (ตั้งค่าระบบจากศูนย์แล้วบันทึกการใช้งานยังเป็น id ย่อ)
+  'tax_profiles',
+  'tax_profile_default_history',
+  'bank_accounts',
+  'billing_payout_cycles',
+  'approval_matrices',
+  'cost_centers',
+  'document_number_series',
+  'bank_file_formats',
+  'service_fee_templates',
+  'finance_company_documents',
+  'payee_profiles',
+  'public_holidays',
+  'tax_document_template_settings',
+  'device_models',
+  'jobs',
 ] as const
 
 export type AuditRefType = (typeof AUDIT_REF_TYPES)[number]
@@ -70,6 +86,27 @@ const FIELD_REF_TYPE: Readonly<Record<string, AuditRefType>> = {
   brandId: 'device_brands',
   export_record_id: 'export_records',
   exportRecordId: 'export_records',
+  // mytester5 A5-01 — id ของรายการตั้งค่าในค่าก่อน/หลัง
+  tax_profile_id: 'tax_profiles',
+  taxProfileId: 'tax_profiles',
+  inhouse_individual_tax_profile_id: 'tax_profiles',
+  inhouse_corporate_tax_profile_id: 'tax_profiles',
+  outsource_individual_tax_profile_id: 'tax_profiles',
+  outsource_corporate_tax_profile_id: 'tax_profiles',
+  bank_account_id: 'bank_accounts',
+  bankAccountId: 'bank_accounts',
+  cost_center_id: 'cost_centers',
+  costCenterId: 'cost_centers',
+  cycle_id: 'billing_payout_cycles',
+  cycleId: 'billing_payout_cycles',
+  service_fee_template_id: 'service_fee_templates',
+  serviceFeeTemplateId: 'service_fee_templates',
+  statement_format_id: 'bank_file_formats',
+  payment_file_format_id: 'bank_file_formats',
+  device_model_id: 'device_models',
+  deviceModelId: 'device_models',
+  payee_id: 'payee_profiles',
+  payeeId: 'payee_profiles',
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -131,6 +168,68 @@ export function bankTransactionRefLabel(dateText: string, amountText: string, ba
 /** ป้ายของรายการรับเงิน — เลขรอบวางบิล · ยอด */
 export function cashReceiptRefLabel(batchNumber: string, amountText: string): string {
   return `รับเงิน ${batchNumber} · ${amountText}`
+}
+
+/**
+ * mytester5 A5-01 — ค่าตั้งระดับองค์กร (1 แถวต่อองค์กร) ลง `target_id` = id ขององค์กร ⇒ ไม่มี "ชื่อรายการ"
+ * ให้แสดง (เดิมขึ้น "00000000") — ใช้ชื่อหมวดของค่าตั้งแทน
+ * เกณฑ์ SLA เก็บในตาราง `assignment_policy_settings` (`13` §6.14 — คอลัมน์ `sla_alert_hours`) จึงใช้ป้ายรวมทั้งสองหน้าจอ
+ */
+const ORG_LEVEL_TARGET_LABEL: Readonly<Record<string, string>> = {
+  organizations: 'ข้อมูลองค์กร',
+  finance_policy_settings: 'นโยบายการเงิน',
+  assignment_policy_settings: 'นโยบายการมอบหมายงาน / SLA',
+  data_retention_settings: 'ระยะเก็บเอกสารลูกหนี้',
+  device_catalog_settings: 'ค่าตั้ง Model Phone',
+}
+
+/** ป้ายของค่าตั้งระดับองค์กร — `target_id` ไม่ใช่ id ขององค์กรผู้เรียก = `null` (ใช้ตัวแปลงปกติ) */
+export function auditOrgLevelTargetLabel(
+  row: { targetType: string; targetId: string | null },
+  organizationId: string,
+): string | null {
+  if (row.targetId === null || row.targetId.toLowerCase() !== organizationId.toLowerCase()) return null
+  return ORG_LEVEL_TARGET_LABEL[row.targetType] ?? null
+}
+
+/** ป้ายของศูนย์ต้นทุน — "CC-001 ทีมติดตาม Inhouse" */
+export function costCenterRefLabel(code: string, name: string): string {
+  return `${code} ${name}`
+}
+
+/** ป้ายของรายการที่มีหลายฉบับ (เทมเพลตค่าบริการ) — "ชื่อ (ฉบับที่ n)" */
+export function versionedRefLabel(name: string, version: number): string {
+  return `${name} (ฉบับที่ ${version})`
+}
+
+/** ป้ายของวันหยุด — "13/10/2569 วันคล้ายวันสวรรคต ร.9" (`dateText` จัดรูปแบบ พ.ศ. แล้ว) */
+export function holidayRefLabel(dateText: string, name: string): string {
+  return `${dateText} ${name}`
+}
+
+/** ป้ายของบัญชีธนาคาร — ธนาคาร + เลขบัญชีที่ปิดบังแล้ว */
+export function bankAccountRefLabel(bankName: string, maskedNumber: string): string {
+  return `${bankName} ${maskedNumber}`
+}
+
+/** ป้ายของรูปแบบไฟล์ธนาคาร — "ไฟล์โอนเงิน กสิกรไทย" */
+export function bankFileFormatRefLabel(purpose: 'statement' | 'payment', bankName: string): string {
+  return `${purpose === 'statement' ? 'ไฟล์เดินบัญชี' : 'ไฟล์โอนเงิน'} ${bankName}`
+}
+
+/** ป้ายของเอกสารบริษัทไฟแนนซ์ — "หนังสือรับรองบริษัท · ไฟแนนซ์ A (ฉบับที่ 2)" */
+export function companyDocumentRefLabel(documentLabel: string, companyName: string, version: number): string {
+  return `${documentLabel} · ${companyName}${version > 1 ? ` (ฉบับที่ ${version})` : ''}`
+}
+
+/** ป้ายของประวัติค่าเริ่มต้น Tax Profile ตามประเภทผู้รับ — "ฉบับ 13/10/2569 10:00" */
+export function taxProfileDefaultRefLabel(dateTimeText: string): string {
+  return `ฉบับ ${dateTimeText}`
+}
+
+/** ป้ายของงานเบื้องหลัง — ชื่องาน · วันเวลาที่สั่ง */
+export function jobRefLabel(jobLabel: string, dateTimeText: string): string {
+  return `${jobLabel} · ${dateTimeText}`
 }
 
 /** ป้ายของเคส — รอบติดตามที่ 2 ขึ้นไปบอกรอบ */

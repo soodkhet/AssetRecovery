@@ -171,6 +171,22 @@ describe('PDF 50 ทวิ แบบต่อรอบ', () => {
   it('ใบต่อรายการไม่มีหมายเหตุ', () => {
     expect(buildWhtCertificateDoc(base).coverageNote).toBeNull()
   })
+
+  it('mytester5 F5-02 — มีฐานยกมาจากรอบก่อน ⇒ หมายเหตุระบุฐานยกมา (กระทบกับเงินได้บนใบ) · ไม่มี = เหมือนเดิม', () => {
+    const doc = buildWhtCertificateDoc({
+      ...base,
+      grossSatang: 360_000,
+      whtSatang: 10_800,
+      coverage: { payoutBatchName: 'MT5-1013 รอบจ่าย Outsource 13/10/2569', itemCount: 5, carriedBaseSatang: 10_000 },
+    })
+    expect(doc.grossText).toContain('3,600.00')
+    expect(doc.coverageNote).toBe(
+      'ยอดรวมทุกรายการของผู้รับในรอบจ่าย "MT5-1013 รอบจ่าย Outsource 13/10/2569" (5 รายการ + ฐานยกมาจากรอบก่อน 100.00)',
+    )
+    expect(
+      buildWhtCertificateDoc({ ...base, coverage: { payoutBatchName: 'X', itemCount: 2, carriedBaseSatang: 0 } }).coverageNote,
+    ).toBe('ยอดรวมทุกรายการของผู้รับในรอบจ่าย "X" (2 รายการ)')
+  })
 })
 
 describe('U33 — เงินได้ 40(1) ใช้กติกาเดียวกับ 40(2) (มติ PO 05/10/2569)', () => {

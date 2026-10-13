@@ -1,9 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import { auditRefLabel, auditValueDisplay } from '@/lib/audit/log-display'
 import {
+  AUDIT_REF_TYPES,
+  auditOrgLevelTargetLabel,
   auditTargetRef,
   auditValueRefs,
+  bankAccountRefLabel,
+  bankFileFormatRefLabel,
   bankTransactionRefLabel,
+  companyDocumentRefLabel,
+  costCenterRefLabel,
+  holidayRefLabel,
+  jobRefLabel,
+  taxProfileDefaultRefLabel,
+  versionedRefLabel,
   caseRefLabel,
   cashReceiptRefLabel,
   exportRecordRefLabel,
@@ -78,5 +88,67 @@ describe('ทดสอบซ้ำ local LR5-01 — ชุดส่งบัญ�
     expect(exportRecordRefLabel('ตุลาคม 2569', 'v1.2')).toBe('ชุดส่งบัญชี ตุลาคม 2569 v1.2')
     expect(bankTransactionRefLabel('08/10/2569', '฿1,070.00', 'กสิกรไทย')).toBe('08/10/2569 · ฿1,070.00 · กสิกรไทย')
     expect(cashReceiptRefLabel('BL-2569-010', '฿1,070.00')).toBe('รับเงิน BL-2569-010 · ฿1,070.00')
+  })
+})
+
+describe('mytester5 A5-01 — รายการตั้งค่า + ค่าตั้งระดับองค์กรเป็นชื่อที่อ่านได้', () => {
+  const ORG = '00000000-0000-4000-8000-0000000000aa'
+  const ID = '0a1b2c3d-0000-4000-8000-0000000000bb'
+
+  it('ตารางตั้งค่า 15 ชนิดเป็นเป้าหมายที่ระบบแปลงชื่อ', () => {
+    for (const type of [
+      'tax_profiles',
+      'tax_profile_default_history',
+      'bank_accounts',
+      'billing_payout_cycles',
+      'approval_matrices',
+      'cost_centers',
+      'document_number_series',
+      'bank_file_formats',
+      'service_fee_templates',
+      'finance_company_documents',
+      'payee_profiles',
+      'public_holidays',
+      'tax_document_template_settings',
+      'device_models',
+      'jobs',
+    ]) {
+      expect(AUDIT_REF_TYPES).toContain(type)
+      expect(auditTargetRef({ targetType: type, targetId: ID })).toEqual({ type, id: ID })
+    }
+  })
+
+  it('ค่าตั้งระดับองค์กร (target_id = id องค์กร) ⇒ ชื่อหมวด · SLA อยู่ในนโยบายมอบหมาย · id อื่น/ชนิดอื่น ⇒ null', () => {
+    expect(auditOrgLevelTargetLabel({ targetType: 'organizations', targetId: ORG }, ORG)).toBe('ข้อมูลองค์กร')
+    expect(auditOrgLevelTargetLabel({ targetType: 'finance_policy_settings', targetId: ORG.toUpperCase() }, ORG)).toBe(
+      'นโยบายการเงิน',
+    )
+    expect(auditOrgLevelTargetLabel({ targetType: 'assignment_policy_settings', targetId: ORG }, ORG)).toBe(
+      'นโยบายการมอบหมายงาน / SLA',
+    )
+    expect(auditOrgLevelTargetLabel({ targetType: 'organizations', targetId: ID }, ORG)).toBeNull()
+    expect(auditOrgLevelTargetLabel({ targetType: 'cases', targetId: ORG }, ORG)).toBeNull()
+    expect(auditOrgLevelTargetLabel({ targetType: 'organizations', targetId: null }, ORG)).toBeNull()
+  })
+
+  it('ค่าก่อน/หลังที่อ้างรายการตั้งค่า (tax_profile_id ฯลฯ) ถูกค้นชื่อด้วย', () => {
+    expect(auditValueRefs({ tax_profile_id: ID, inhouse_individual_tax_profile_id: ID, cost_center_id: ID })).toEqual([
+      { type: 'tax_profiles', id: ID },
+      { type: 'tax_profiles', id: ID },
+      { type: 'cost_centers', id: ID },
+    ])
+  })
+
+  it('รูปแบบป้าย', () => {
+    expect(costCenterRefLabel('CC-001', 'ทีมติดตาม Inhouse')).toBe('CC-001 ทีมติดตาม Inhouse')
+    expect(versionedRefLabel('Success Fee 5%', 2)).toBe('Success Fee 5% (ฉบับที่ 2)')
+    expect(holidayRefLabel('13/10/2569', 'วันคล้ายวันสวรรคต ร.9')).toBe('13/10/2569 วันคล้ายวันสวรรคต ร.9')
+    expect(bankAccountRefLabel('ธนาคารกสิกรไทย', 'xxxxxx7890')).toBe('ธนาคารกสิกรไทย xxxxxx7890')
+    expect(bankFileFormatRefLabel('payment', 'กสิกรไทย')).toBe('ไฟล์โอนเงิน กสิกรไทย')
+    expect(bankFileFormatRefLabel('statement', 'กสิกรไทย')).toBe('ไฟล์เดินบัญชี กสิกรไทย')
+    expect(companyDocumentRefLabel('หนังสือรับรองบริษัท', 'ไฟแนนซ์ A', 1)).toBe('หนังสือรับรองบริษัท · ไฟแนนซ์ A')
+    expect(companyDocumentRefLabel('สัญญาว่าจ้าง', 'ไฟแนนซ์ A', 2)).toBe('สัญญาว่าจ้าง · ไฟแนนซ์ A (ฉบับที่ 2)')
+    expect(taxProfileDefaultRefLabel('13/10/2569 10:00')).toBe('ฉบับ 13/10/2569 10:00')
+    expect(jobRefLabel('สร้างไฟล์โอนเงินของรอบจ่าย', '13/10/2569 10:00')).toBe('สร้างไฟล์โอนเงินของรอบจ่าย · 13/10/2569 10:00')
   })
 })

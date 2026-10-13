@@ -110,5 +110,9 @@ describe('describeExpenseBasis — ใบเสร็จค่าที่พั
         receiptInCompanyName: false,
       }),
     ).toBe('600.00 บาท · ใบเสร็จไม่ได้ออกในนามบริษัท')
+    // mytester5 D-OUT5-01 — ใช้ใบรับรองแทนใบเสร็จ ⇒ ไม่มีป้ายชื่อบนใบเสร็จ
+    expect(describeExpenseBasis({ ...row, receiptInCompanyName: false, substituteReceipts: [{ id: 'crt' }] })).toBe(
+      '600.00 บาท (1 คืน · เพดาน ฿800.00)',
+    )
   })
 })

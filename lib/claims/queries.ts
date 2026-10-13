@@ -232,27 +232,41 @@ export async function insertManualClaim(
   return { id: row.id, payeeId: row.payeeId }
 }
 
-/** known Q7/M2 — หาแผนของผู้รับเงิน (ตัวผู้บันทึกเอง หรือ user ของ payee ที่บันทึกแทน) แล้วตรวจนโยบายใบเสร็จค่าที่พัก */
-async function assertManualHotelReceiptPolicy(user: SessionUser, input: ManualClaimCreateInput): Promise<void> {
+/**
+ * known Q7/M2 · mytester5 F5-01 — แผนของทีม**ผู้รับเงิน** (ตัวผู้บันทึกเอง หรือ user ของ payee ที่บันทึกแทน)
+ * ณ วันที่เกิดรายการ บังคับแนบใบเสร็จค่าที่พักหรือไม่ — ใช้ทั้งตอนบันทึก (ปฏิเสธ) และฟอร์ม (ซ่อน "ไม่มีใบเสร็จ")
+ * ผู้รับไม่มีทีม/แผน หรือไม่พบ payee ⇒ ไม่บังคับ (ไม่พบ payee ให้ขั้นบันทึกตอบ EXPENSE_NOT_FOUND ตามเดิม)
+ */
+export async function manualHotelReceiptRequired(
+  user: SessionUser,
+  input: { payeeId: string | null; expenseDate: Date },
+): Promise<boolean> {
+  // ถามแทนผู้อื่นได้เฉพาะผู้ที่บันทึกแทนได้ — กติกาเดียวกับตอนบันทึก (ไม่ leak แผนของคนอื่น)
+  if (input.payeeId !== null && !canCreateClaimForOthers(user)) {
+    throw new AuthError('PERMISSION_DENIED', 'ดูนโยบายใบเสร็จของผู้อื่นต้องมีสิทธิ์อนุมัติขั้นการเงิน')
+  }
   let recipientUserId: string | null = user.id
   if (input.payeeId !== null) {
     const payee = await prisma.payeeProfile.findFirst({
       where: { id: input.payeeId, organizationId: user.organizationId, deletedAt: null },
       select: { userId: true },
     })
-    // ไม่พบ payee ⇒ ปล่อยให้ assertPayeeInOrganization ในทรานแซกชันตอบ EXPENSE_NOT_FOUND ตามเดิม
     recipientUserId = payee?.userId ?? null
   }
-  if (recipientUserId === null) return
+  if (recipientUserId === null) return false
   const plan = await resolveHotelCapForUser(prisma as ExpenseTxClient, {
     organizationId: user.organizationId,
     userId: recipientUserId,
     onDate: input.expenseDate,
   })
+  return plan?.hotelReceiptRequired ?? false
+}
+
+async function assertManualHotelReceiptPolicy(user: SessionUser, input: ManualClaimCreateInput): Promise<void> {
   assertHotelReceiptPolicy({
     hasReceiptFile: input.receiptFileUrl !== null,
     hasSubstituteReceipt: true,
-    receiptRequired: plan?.hotelReceiptRequired ?? false,
+    receiptRequired: await manualHotelReceiptRequired(user, input),
   })
 }
 

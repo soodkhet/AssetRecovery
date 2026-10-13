@@ -330,12 +330,15 @@ suite('ใบเบิกค่าที่พัก "ไม่มีใบเ�
         amountSatang: 11_000,
         receiptFileUrl: null,
         substituteReceipt: { lines: [line(7_000), line(4_000, 'ค่ารถจักรยานยนต์รับจ้าง')] },
+        // mytester5 D-OUT5-01 — ส่ง true มาก็ตาม ใบรับรองแทนใบเสร็จไม่มีเรื่องชื่อบนใบเสร็จ ⇒ เก็บ false
+        receiptInCompanyName: true,
         sharedWithUserId: null,
         note: null,
       },
       { actor: agent, meta },
     )
     expect(created.receiptFileUrl).toBeNull()
+    expect(created.receiptInCompanyName).toBe(false)
     expect(created.substituteReceipt).toMatchObject({ status: 'pending_signature', totalSatang: 11_000 })
     expect(created.substituteReceipt?.receiptNumber).toMatch(/^CRT-\d{4}-0001$/)
   })
@@ -406,7 +409,15 @@ suite('known Q7/M2 — เบิกค่าที่พักด้วยมื
       note: null,
       substituteReceipt: { lines: [line(grossSatang)] },
     })
+    const onDate = new Date('2026-10-06T00:00:00Z')
     try {
+      // mytester5 F5-01 — ฟอร์มถาม server ก่อนกรอก: ผลตรงกับที่การบันทึกบังคับ · ถามแทนผู้อื่นต้องบันทึกแทนได้
+      expect(await claims.manualHotelReceiptRequired(agent, { payeeId: null, expenseDate: onDate })).toBe(true)
+      expect(await claims.manualHotelReceiptRequired(finance, { payeeId: PAYEE_ID, expenseDate: onDate })).toBe(true)
+      expect(await claims.manualHotelReceiptRequired(finance, { payeeId: OTHER_PAYEE_ID, expenseDate: onDate })).toBe(false)
+      const denied = await claims.manualHotelReceiptRequired(agent, { payeeId: PAYEE_ID, expenseDate: onDate }).catch((e: unknown) => e)
+      expect(codeOf(denied)).toBe('PERMISSION_DENIED')
+
       const own = await claims.createManualClaim({ actor: agent, meta }, claim(null, 3_000)).catch((e: unknown) => e)
       expect(codeOf(own)).toBe('HOTEL_CLAIM_FIELD_REQUIRED')
       const onBehalf = await claims.createManualClaim({ actor: finance, meta }, claim(PAYEE_ID, 3_000)).catch((e: unknown) => e)
@@ -418,6 +429,7 @@ suite('known Q7/M2 — เบิกค่าที่พักด้วยมื
       expect(other.substituteReceiptNumber).toMatch(/^CRT-\d{4}-\d{4}$/)
 
       await db().$executeRawUnsafe(`UPDATE compensation_plans SET hotel_receipt_required = false WHERE id = '${planId}'`)
+      expect(await claims.manualHotelReceiptRequired(agent, { payeeId: null, expenseDate: onDate })).toBe(false)
       const allowed = await claims.createManualClaim({ actor: agent, meta }, claim(null, 3_200))
       expect(allowed.substituteReceiptNumber).toMatch(/^CRT-\d{4}-\d{4}$/)
     } finally {
