@@ -35,6 +35,7 @@ import type { ExpenseViewType } from '@/lib/field/schemas'
 import type { FieldExpenseDto, FieldExpenseListDto } from '@/lib/field/types'
 import { fmtDate } from '@/lib/format/datetime'
 import { fmtSatangSymbol } from '@/lib/format/money'
+import { noReceiptVariantOf } from '@/components/substitute-receipts/no-receipt-lines'
 import { SubstituteReceiptPanel } from '@/components/substitute-receipts/substitute-receipt-panel'
 
 /**
@@ -221,6 +222,7 @@ function NeedsRevisionBlock({
                   receipt={item.substituteReceipt}
                   canUpload
                   canCancel
+                  variant={noReceiptVariantOf(item.expenseType)}
                   onSigned={onReceiptChanged}
                   onChanged={onReceiptChanged}
                 />
@@ -419,6 +421,7 @@ export function ExpensesTab({ initialView = 'caseBound' }: { initialView?: Expen
                             canUpload
                             // มติ PO U107 — เจ้าของยกเลิก/ออกใบใหม่แทนได้ก่อนอนุมัติ
                             canCancel={item.status !== 'approved'}
+                            variant={noReceiptVariantOf(item.expenseType)}
                             onSigned={() => void load(view)}
                             onChanged={() => void load(view)}
                           />

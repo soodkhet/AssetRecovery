@@ -1,4 +1,5 @@
 import { ADJUSTMENT_TYPE_LABEL } from '@/lib/adjustments/adjustment'
+import { advanceExcessItemLabel } from '@/lib/advances/advance'
 import {
   adjustmentRefLabel,
   assignmentRefLabel,
@@ -343,6 +344,7 @@ const RESOLVERS: Readonly<Record<AuditRefType, Resolver>> = {
           id: true,
           expenseType: true,
           grossSatang: true,
+          revisionNote: true,
           case: { select: caseLabelSelect },
           payee: { select: payeeLabelSelect },
         },
@@ -350,7 +352,8 @@ const RESOLVERS: Readonly<Record<AuditRefType, Resolver>> = {
     ).map((row) => ({
       id: row.id,
       label: expenseRefLabel(
-        EXPENSE_TYPE_LABEL[row.expenseType],
+        // ตรวจซ้ำ staging SV5-R-04 — คำขอเบิกส่วนเกินเงินทดรอง ⇒ "ส่วนเกินเงินทดรอง ADV-…" (ป้ายเดียวกับคิวอนุมัติ F5-03)
+        advanceExcessItemLabel(row.revisionNote) ?? EXPENSE_TYPE_LABEL[row.expenseType],
         row.case !== null ? caseText(row.case) : payeeText(row.payee),
         fmtSatangSymbol(row.grossSatang),
       ),

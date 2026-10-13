@@ -44,6 +44,11 @@ const NO_RECEIPT_EXAMPLES = {
 
 export type NoReceiptLinesVariant = keyof typeof NO_RECEIPT_EXAMPLES
 
+/** ชนิดตัวอย่างตามประเภทใบเบิก — ค่าที่พัก ⇒ `hotel` · อื่น ๆ/เงินทดรอง ⇒ `general` (ตรวจซ้ำ staging SV5-R-04) */
+export function noReceiptVariantOf(expenseType: string | null): NoReceiptLinesVariant {
+  return expenseType === 'hotel' ? 'hotel' : 'general'
+}
+
 export function NoReceiptLinesEditor({
   lines,
   onChange,

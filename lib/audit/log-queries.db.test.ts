@@ -472,6 +472,8 @@ suite('mytester5 H5-01 — ธุรกรรม/ภาคสนามเป็�
   const LOG_DRAFT = '00000000-0000-4000-8000-000000e501b4'
   const LOG_PUSH = '00000000-0000-4000-8000-000000e501b5'
   const LOG_USER = '00000000-0000-4000-8000-000000e501b6'
+  const EXCESS_EXPENSE = '00000000-0000-4000-8000-000000e501ad'
+  const LOG_EXCESS = '00000000-0000-4000-8000-000000e501b7'
   const h501User = sessionUser({ id: USER, organizationId: ORG, roleId: ROLE })
 
   beforeAll(async () => {
@@ -506,6 +508,11 @@ suite('mytester5 H5-01 — ธุรกรรม/ภาคสนามเป็�
       VALUES ('${EXPENSE}', '${ORG}', '${CASE}', '${PAYEE}', 'fuel', 7236, '2026-10-13', 'pending_approval', '${USER}')
       ON CONFLICT (id) DO NOTHING`)
     await tx.$executeRawUnsafe(`
+      INSERT INTO expenses (id, organization_id, payee_id, expense_type, gross_satang, expense_date, status, calculation_source, revision_note, created_by)
+      VALUES ('${EXCESS_EXPENSE}', '${ORG}', '${PAYEE}', 'manual', 38075, '2026-10-13', 'pending_approval', 'manual',
+              'เบิกส่วนเกินเงินทดรองอัตโนมัติ ADV-2569-0002 (ใช้จริง ฿3,380.75 เกินที่ได้รับ ฿3,000.00)', '${USER}')
+      ON CONFLICT (id) DO NOTHING`)
+    await tx.$executeRawUnsafe(`
       INSERT INTO case_assignments (id, organization_id, case_id, agent_id, team_id, status, created_by)
       VALUES ('${ASSIGNMENT}', '${ORG}', '${CASE}', '${AGENT}', '${TEAM}', 'scheduled', '${USER}') ON CONFLICT (id) DO NOTHING`)
     await tx.$executeRawUnsafe(`
@@ -523,7 +530,8 @@ suite('mytester5 H5-01 — ธุรกรรม/ภาคสนามเป็�
         ('${LOG_ADJUSTMENT}', '${ORG}', '${USER}', 'บริหาร H501', 'create', 'adjustments', '${ADJUSTMENT}', NULL, '{"amount_satang":10000}', 'ปรับลด', '2026-10-13T03:02:00Z'),
         ('${LOG_DRAFT}', '${ORG}', '${AGENT}', 'บริหาร H501', 'update', 'close_case_drafts', '${DELETED_DRAFT}', NULL, '{"caseId":"${CASE}"}', NULL, '2026-10-13T03:03:00Z'),
         ('${LOG_PUSH}', '${ORG}', '${AGENT}', 'บริหาร H501', 'delete', 'push_subscriptions', '${AGENT}', '{"userId":"${AGENT}"}', '{"removed":1}', 'ยกเลิกแจ้งเตือน', '2026-10-13T03:04:00Z'),
-        ('${LOG_USER}', '${ORG}', '${USER}', 'บริหาร H501', 'update', 'users', '${AGENT}', NULL, '{"status":"active"}', NULL, '2026-10-13T03:05:00Z')
+        ('${LOG_USER}', '${ORG}', '${USER}', 'บริหาร H501', 'update', 'users', '${AGENT}', NULL, '{"status":"active"}', NULL, '2026-10-13T03:05:00Z'),
+        ('${LOG_EXCESS}', '${ORG}', '${USER}', 'บริหาร H501', 'approve', 'expenses', '${EXCESS_EXPENSE}', NULL, '{"status":"approved"}', NULL, '2026-10-13T03:06:00Z')
       ON CONFLICT (id) DO NOTHING`)
   })
 
@@ -536,6 +544,8 @@ suite('mytester5 H5-01 — ธุรกรรม/ภาคสนามเป็�
     expect(byId.get(LOG_DRAFT)?.targetRef).toBe('MTJ-H501-01')
     expect(byId.get(LOG_PUSH)?.targetRef).toBe('อนันต์ H501')
     expect(byId.get(LOG_USER)?.targetRef).toBe('อนันต์ H501')
+    // ตรวจซ้ำ staging SV5-R-04 — ใบเบิกส่วนเกินเงินทดรองไม่ใช่ "รายการกรอกเอง"
+    expect(byId.get(LOG_EXCESS)?.targetRef).toMatch(/^ส่วนเกินเงินทดรอง ADV-2569-0002 .*อนันต์ H501.*฿380\.75/)
   })
 
   it('รายละเอียด: payee_id / case_id / assignmentId / team_id ในค่าหลังมีป้าย · องค์กรอื่นเปิดไม่ได้', async () => {

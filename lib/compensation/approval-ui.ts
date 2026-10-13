@@ -112,6 +112,9 @@ export function approvalStepTone(status: ExpenseStatus): StatusBadgeGroup {
   return 'neutral'
 }
 
+/** `calculation_source` ของคำขอเบิกที่ผู้เบิกส่งจากหน้าภาคสนาม (เบิกที่พัก — `41` §6.6) */
+const FIELD_RECEIPT_CALCULATION_SOURCE = 'receipt'
+
 /**
  * `15` §8 — ป้ายบอกที่มาของรายการ (auto จากไฟล์ 41 หรือบันทึกเอง)
  * mytester F-08 — คำขอเบิกส่วนเกินที่ระบบสร้างตอนเคลียร์เงินทดรอง ⇒ "ส่วนเกินเงินทดรอง ADV-…" (ไม่ใช่ "บันทึกเอง")
@@ -119,6 +122,8 @@ export function approvalStepTone(status: ExpenseStatus): StatusBadgeGroup {
 export function claimSourceLabel(calculationSource: string | null, note: string | null = null): string {
   const excess = advanceExcessSource(note)
   if (excess !== null) return `↪ ส่วนเกินเงินทดรอง${excess.advanceNumber === null ? '' : ` ${excess.advanceNumber}`}`
+  // ตรวจซ้ำ staging SV5-R-04 — `receipt` = ผู้เบิกส่งเองจากหน้าภาคสนาม (เบิกที่พัก) ไม่ใช่การบันทึกในหน้าการเงิน
+  if (calculationSource === FIELD_RECEIPT_CALCULATION_SOURCE) return '📱 ผู้เบิกส่งจากภาคสนาม'
   return isManualClaim(calculationSource) ? '✏️ บันทึกเอง' : '🤖 อัตโนมัติ'
 }
 

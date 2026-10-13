@@ -184,9 +184,15 @@ describe('ที่มาของรายการ (`15` §8)', () => {
     expect(claimSourceLabel('compensation_plan')).toContain('อัตโนมัติ')
   })
 
-  it('รายการที่กรอกเอง/ตามใบเสร็จ = บันทึกเอง', () => {
+  it('รายการที่กรอกเอง = บันทึกเอง', () => {
     expect(claimSourceLabel('manual')).toContain('บันทึกเอง')
-    expect(claimSourceLabel('receipt')).toContain('บันทึกเอง')
+  })
+
+  it('ตรวจซ้ำ staging SV5-R-04 — ค่าที่พักที่ผู้เบิกส่งจากมือถือ (receipt) = ส่งจากภาคสนาม ไม่ใช่ "บันทึกเอง"', () => {
+    const label = claimSourceLabel('receipt')
+    expect(label).toContain('ภาคสนาม')
+    expect(label).not.toContain('บันทึกเอง')
+    expect(claimSourceLabel('receipt', 'พักโรงแรม 1 คืน')).toBe(label)
   })
 
   it('mytester F-08 — คำขอเบิกส่วนเกินที่ระบบสร้างจากเงินทดรอง = อ้างเลข ADV ไม่ใช่ "บันทึกเอง"', () => {

@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useState } from 'react'
-import { NoReceiptLinesEditor } from '@/components/substitute-receipts/no-receipt-lines'
+import { NoReceiptLinesEditor, type NoReceiptLinesVariant } from '@/components/substitute-receipts/no-receipt-lines'
 import { Button, ConfirmModal, Field, InlineAlert, Modal, StatusBadge, Textarea, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { REASON_MAX } from '@/lib/api/validation'
@@ -32,6 +32,7 @@ export function SubstituteReceiptPanel({
   canCancel = false,
   compact = false,
   defaultLineDate,
+  variant = 'general',
   onSigned,
   onChanged,
 }: {
@@ -43,6 +44,8 @@ export function SubstituteReceiptPanel({
   compact?: boolean
   /** วันที่ตั้งต้นของบรรทัดใบใหม่ (`YYYY-MM-DD`) — ไม่ส่ง = วันที่ออกใบเดิม */
   defaultLineDate?: string
+  /** ตัวอย่างในฟอร์ม "ออกใบใหม่แทน" ตามชนิดรายจ่าย (ค่าที่พัก ⇒ ค่าห้องพัก — ตรวจซ้ำ staging SV5-R-04) */
+  variant?: NoReceiptLinesVariant
   onSigned?: (receipt: SubstituteReceiptRefDto) => void
   /** หลังยกเลิก/ออกใบใหม่สำเร็จ — ผู้เรียกโหลดรายการใหม่ */
   onChanged?: (receipt: SubstituteReceiptRefDto) => void
@@ -319,7 +322,12 @@ export function SubstituteReceiptPanel({
           {loadingLines ? (
             <p className="text-xs text-slate-500">กำลังดึงรายการจากใบ {receipt.receiptNumber}...</p>
           ) : (
-            <NoReceiptLinesEditor lines={reissueLines} onChange={setReissueLines} defaultDate={lineDate} />
+            <NoReceiptLinesEditor
+              lines={reissueLines}
+              onChange={setReissueLines}
+              defaultDate={lineDate}
+              variant={variant}
+            />
           )}
         </div>
       </Modal>

@@ -70,6 +70,7 @@ import { expenseStatusBadgeGroup } from '@/lib/field/expense-ui'
 import { fmtDate } from '@/lib/format/datetime'
 import { canViewFinanceTabSection } from '@/lib/finance/operation-tabs'
 import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
+import { noReceiptVariantOf } from '@/components/substitute-receipts/no-receipt-lines'
 import { SubstituteReceiptPanel } from '@/components/substitute-receipts/substitute-receipt-panel'
 import { RejectReasonNotes } from '@/components/finance/reject-reason-notes'
 
@@ -262,6 +263,7 @@ export function ApprovalTab() {
                               receipt={item.substituteReceipt}
                               compact
                               canCancel={canManageSubstituteReceipts && item.status !== 'approved'}
+                              variant={noReceiptVariantOf(item.expenseType)}
                               onChanged={() => void claims.reload()}
                             />
                           </div>
