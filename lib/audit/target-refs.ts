@@ -356,12 +356,26 @@ export function auditRefKey(ref: AuditRef): string {
   return `${ref.type}:${ref.id.toLowerCase()}`
 }
 
+/**
+ * mytester5 รีวิว H5-01 — เปิดดูเอกสารยืนยันตัวตนที่ยังไม่ผูกผู้รับเงิน ลง audit ที่องค์กร (`buildPersonalFileViewAudit()`)
+ * ⇒ ป้ายเฉพาะแทน "ข้อมูลองค์กร" (ไม่ได้แตะข้อมูลองค์กรจริง)
+ */
+export const UNLINKED_ID_DOCUMENT_TARGET_LABEL = 'เอกสารยืนยันตัวตน (ยังไม่ผูกผู้รับ)'
+
+function isUnlinkedIdDocumentView(row: { targetType: string; action?: string; afterData?: unknown }): boolean {
+  if (row.targetType !== 'organizations' || row.action !== 'view') return false
+  const data = row.afterData
+  if (data === null || typeof data !== 'object' || Array.isArray(data)) return false
+  return (data as Record<string, unknown>).kind === 'payee_id_document'
+}
+
 /** ป้ายของค่าตั้งระดับองค์กร — `target_id` ไม่ใช่ id ขององค์กรผู้เรียก = `null` (ใช้ตัวแปลงปกติ) */
 export function auditOrgLevelTargetLabel(
-  row: { targetType: string; targetId: string | null },
+  row: { targetType: string; targetId: string | null; action?: string; afterData?: unknown },
   organizationId: string,
 ): string | null {
   if (row.targetId === null || row.targetId.toLowerCase() !== organizationId.toLowerCase()) return null
+  if (isUnlinkedIdDocumentView(row)) return UNLINKED_ID_DOCUMENT_TARGET_LABEL
   return ORG_LEVEL_TARGET_LABEL[row.targetType] ?? null
 }
 

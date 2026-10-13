@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildAuditRecord } from '@/lib/audit/audit'
+import { auditOrgLevelTargetLabel, UNLINKED_ID_DOCUMENT_TARGET_LABEL } from '@/lib/audit/target-refs'
 import { buildPersonalFileViewAudit, personalDataFileOf } from '@/lib/uploads/personal-data'
 
 const CASE_ID = '00000000-0000-4000-8000-000000000011'
@@ -96,5 +97,12 @@ describe('มติ PO U150 — เอกสารยืนยันตัวต
   it('ไฟล์ที่ยังไม่มีผู้รับอ้าง (เพิ่งอัปโหลดในฟอร์ม) ⇒ ลงที่องค์กร', () => {
     const entry = buildPersonalFileViewAudit({ actor, path, ipAddress: null, userAgent: null, payeeId: null })
     expect(entry).toMatchObject({ targetType: 'organizations', targetId: ORG })
+    // mytester5 รีวิว H5-01 — บันทึกการใช้งานแสดง "เอกสารยืนยันตัวตน (ยังไม่ผูกผู้รับ)" ไม่ใช่ "ข้อมูลองค์กร"
+    expect(
+      auditOrgLevelTargetLabel(
+        { targetType: entry?.targetType ?? '', targetId: entry?.targetId ?? null, action: entry?.action, afterData: entry?.after },
+        ORG,
+      ),
+    ).toBe(UNLINKED_ID_DOCUMENT_TARGET_LABEL)
   })
 })
