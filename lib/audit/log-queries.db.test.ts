@@ -436,3 +436,101 @@ suite('mytester5 A5-01 — รายการตั้งค่า + ค่า�
     expect(byId.get(LOG_FOREIGN_ORG)?.targetRef).toBeNull()
   })
 })
+
+suite('mytester5 H5-01 — ธุรกรรม/ภาคสนามเป็นชื่อที่อ่านได้ + ฟิลด์ *_id ในค่าก่อน/หลัง', () => {
+  const ORG = '00000000-0000-4000-8000-000000e501a0'
+  const ROLE = '00000000-0000-4000-8000-000000e501a1'
+  const USER = '00000000-0000-4000-8000-000000e501a2'
+  const AGENT = '00000000-0000-4000-8000-000000e501a3'
+  const COMPANY = '00000000-0000-4000-8000-000000e501a4'
+  const CASE = '00000000-0000-4000-8000-000000e501a5'
+  const TEAM = '00000000-0000-4000-8000-000000e501a6'
+  const PAYEE = '00000000-0000-4000-8000-000000e501a7'
+  const EXPENSE = '00000000-0000-4000-8000-000000e501a8'
+  const ASSIGNMENT = '00000000-0000-4000-8000-000000e501a9'
+  const BATCH = '00000000-0000-4000-8000-000000e501aa'
+  const ADJUSTMENT = '00000000-0000-4000-8000-000000e501ab'
+  const DELETED_DRAFT = '00000000-0000-4000-8000-000000e501ac'
+  const LOG_EXPENSE = '00000000-0000-4000-8000-000000e501b1'
+  const LOG_ASSIGNMENT = '00000000-0000-4000-8000-000000e501b2'
+  const LOG_ADJUSTMENT = '00000000-0000-4000-8000-000000e501b3'
+  const LOG_DRAFT = '00000000-0000-4000-8000-000000e501b4'
+  const LOG_PUSH = '00000000-0000-4000-8000-000000e501b5'
+  const LOG_USER = '00000000-0000-4000-8000-000000e501b6'
+  const h501User = sessionUser({ id: USER, organizationId: ORG, roleId: ROLE })
+
+  beforeAll(async () => {
+    if (!url) return
+    const tx = db()
+    await tx.$executeRawUnsafe(`
+      INSERT INTO organizations (id, name, tax_id, address) VALUES ('${ORG}', 'H501Test', '9999999995011', 'ที่อยู่ H501')
+      ON CONFLICT (id) DO NOTHING`)
+    await tx.$executeRawUnsafe(`
+      INSERT INTO roles (id, organization_id, name, role_group, is_seed)
+      VALUES ('${ROLE}', '${ORG}', 'บริหาร H501', 'system', false) ON CONFLICT (id) DO NOTHING`)
+    await tx.$executeRawUnsafe(`
+      INSERT INTO users (id, organization_id, role_id, email, full_name, status) VALUES
+        ('${USER}', '${ORG}', '${ROLE}', 'h501@test.local', 'ผู้บริหาร H501', 'active'),
+        ('${AGENT}', '${ORG}', '${ROLE}', 'h501-agent@test.local', 'อนันต์ H501', 'active')
+      ON CONFLICT (id) DO NOTHING`)
+    await tx.$executeRawUnsafe(`
+      INSERT INTO finance_companies (id, organization_id, name, short_name, tax_id, created_by)
+      VALUES ('${COMPANY}', '${ORG}', 'ไฟแนนซ์ H501', 'H501', '9999999995012', '${USER}') ON CONFLICT (id) DO NOTHING`)
+    await tx.$executeRawUnsafe(`
+      INSERT INTO cases (id, organization_id, case_ref, case_ref_normalized, company_id, source, status, created_by)
+      VALUES ('${CASE}', '${ORG}', 'MTJ-H501-01', 'MTJ-H501-01', '${COMPANY}', 'manual', 'active', '${USER}')
+      ON CONFLICT (id) DO NOTHING`)
+    await tx.$executeRawUnsafe(`
+      INSERT INTO teams (id, organization_id, name, side, provinces, status, created_by)
+      VALUES ('${TEAM}', '${ORG}', 'ทีม H501', 'inhouse', ARRAY['เชียงใหม่'], 'active', '${USER}') ON CONFLICT (id) DO NOTHING`)
+    await tx.$executeRawUnsafe(`
+      INSERT INTO payee_profiles (id, organization_id, user_id, payee_type, is_verified, created_by)
+      VALUES ('${PAYEE}', '${ORG}', '${AGENT}', 'individual', true, '${USER}') ON CONFLICT (id) DO NOTHING`)
+    await tx.$executeRawUnsafe(`
+      INSERT INTO expenses (id, organization_id, case_id, payee_id, expense_type, gross_satang, expense_date, status, created_by)
+      VALUES ('${EXPENSE}', '${ORG}', '${CASE}', '${PAYEE}', 'fuel', 7236, '2026-10-13', 'pending_approval', '${USER}')
+      ON CONFLICT (id) DO NOTHING`)
+    await tx.$executeRawUnsafe(`
+      INSERT INTO case_assignments (id, organization_id, case_id, agent_id, team_id, status, created_by)
+      VALUES ('${ASSIGNMENT}', '${ORG}', '${CASE}', '${AGENT}', '${TEAM}', 'scheduled', '${USER}') ON CONFLICT (id) DO NOTHING`)
+    await tx.$executeRawUnsafe(`
+      INSERT INTO billing_batches (id, organization_id, company_id, period, due_date, created_by, batch_number)
+      VALUES ('${BATCH}', '${ORG}', '${COMPANY}', '2569-10', '2026-10-31', '${USER}', 'BL-H501-001') ON CONFLICT (id) DO NOTHING`)
+    await tx.$executeRawUnsafe(`
+      INSERT INTO adjustments (id, organization_id, adjustment_type, amount_satang, reason, status, billing_batch_id, created_by)
+      VALUES ('${ADJUSTMENT}', '${ORG}', 'decrease', 10000, 'ปรับลดทดสอบ H501', 'pending_approval', '${BATCH}', '${USER}')
+      ON CONFLICT (id) DO NOTHING`)
+    await tx.$executeRawUnsafe(`
+      INSERT INTO audit_logs (id, organization_id, actor_id, actor_role, action, target_type, target_id, before_data, after_data, reason, created_at) VALUES
+        ('${LOG_EXPENSE}', '${ORG}', '${USER}', 'บริหาร H501', 'approve', 'expenses', '${EXPENSE}', NULL,
+         '{"payee_id":"${PAYEE}","case_id":"${CASE}","assignmentId":"${ASSIGNMENT}","team_id":"${TEAM}"}', NULL, '2026-10-13T03:00:00Z'),
+        ('${LOG_ASSIGNMENT}', '${ORG}', '${USER}', 'บริหาร H501', 'create', 'case_assignments', '${ASSIGNMENT}', NULL, '{"agentId":"${AGENT}"}', NULL, '2026-10-13T03:01:00Z'),
+        ('${LOG_ADJUSTMENT}', '${ORG}', '${USER}', 'บริหาร H501', 'create', 'adjustments', '${ADJUSTMENT}', NULL, '{"amount_satang":10000}', 'ปรับลด', '2026-10-13T03:02:00Z'),
+        ('${LOG_DRAFT}', '${ORG}', '${AGENT}', 'บริหาร H501', 'update', 'close_case_drafts', '${DELETED_DRAFT}', NULL, '{"caseId":"${CASE}"}', NULL, '2026-10-13T03:03:00Z'),
+        ('${LOG_PUSH}', '${ORG}', '${AGENT}', 'บริหาร H501', 'delete', 'push_subscriptions', '${AGENT}', '{"userId":"${AGENT}"}', '{"removed":1}', 'ยกเลิกแจ้งเตือน', '2026-10-13T03:04:00Z'),
+        ('${LOG_USER}', '${ORG}', '${USER}', 'บริหาร H501', 'update', 'users', '${AGENT}', NULL, '{"status":"active"}', NULL, '2026-10-13T03:05:00Z')
+      ON CONFLICT (id) DO NOTHING`)
+  })
+
+  it('รายการ: รายการเบิก/การมอบหมาย/รายการปรับปรุงเป็นชื่อ · ร่างปิดงานที่ถูกลบใช้เลขเคส · id ผู้ใช้คนละชนิดไม่ชนกัน', async () => {
+    const list = await logs.listAuditLogs(h501User, baseQuery)
+    const byId = new Map(list.items.map((item) => [item.id, item]))
+    expect(byId.get(LOG_EXPENSE)?.targetRef).toBe('ค่าน้ำมัน MTJ-H501-01 ฿72.36')
+    expect(byId.get(LOG_ASSIGNMENT)?.targetRef).toBe('MTJ-H501-01 → อนันต์ H501')
+    expect(byId.get(LOG_ADJUSTMENT)?.targetRef).toBe('ลดยอด BL-H501-001 −฿100.00')
+    expect(byId.get(LOG_DRAFT)?.targetRef).toBe('MTJ-H501-01')
+    expect(byId.get(LOG_PUSH)?.targetRef).toBe('อนันต์ H501')
+    expect(byId.get(LOG_USER)?.targetRef).toBe('อนันต์ H501')
+  })
+
+  it('รายละเอียด: payee_id / case_id / assignmentId / team_id ในค่าหลังมีป้าย · องค์กรอื่นเปิดไม่ได้', async () => {
+    const detail = await logs.getAuditLog(h501User, LOG_EXPENSE)
+    expect(detail?.refLabels).toEqual({
+      [PAYEE]: 'อนันต์ H501',
+      [CASE]: 'MTJ-H501-01',
+      [ASSIGNMENT]: 'MTJ-H501-01 → อนันต์ H501',
+      [TEAM]: 'ทีม H501',
+    })
+    expect(await logs.getAuditLog(sessionUser({ id: EXEC_ID }), LOG_EXPENSE)).toBeNull()
+  })
+})

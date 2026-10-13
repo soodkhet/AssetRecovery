@@ -3,7 +3,14 @@ import type { SessionUser } from '@/lib/auth/types'
 import { auditLoginFailureOf } from '@/lib/audit/log-display'
 import type { AuditLogListQuery } from '@/lib/audit/log-schemas'
 import { resolveAuditRefLabels } from '@/lib/audit/target-ref-queries'
-import { auditOrgLevelTargetLabel, auditTargetRef, auditValueRefs, type AuditRef } from '@/lib/audit/target-refs'
+import {
+  auditOrgLevelTargetLabel,
+  auditRefKey,
+  auditTargetContextRef,
+  auditTargetRef,
+  auditValueRefs,
+  type AuditRef,
+} from '@/lib/audit/target-refs'
 import type {
   AuditLogActorOptionDto,
   AuditLogDetailDto,
@@ -54,7 +61,34 @@ function targetRefOf(row: ListRow, labels: ReadonlyMap<string, string>, organiza
   const orgLevel = auditOrgLevelTargetLabel(row, organizationId)
   if (orgLevel !== null) return orgLevel
   const ref = auditTargetRef(row)
-  return ref === null ? null : (labels.get(ref.id.toLowerCase()) ?? null)
+  if (ref === null) return null
+  const label = labels.get(auditRefKey(ref))
+  if (label !== undefined) return label
+  // mytester5 H5-01 — แถวเป้าหมายถูกลบจริงแล้ว (ร่างปิดงาน) ⇒ ป้ายของค่าอ้างอิงสำรองในค่าหลัง (เคส)
+  const context = auditTargetContextRef(row)
+  return context === null ? null : (labels.get(auditRefKey(context)) ?? null)
+}
+
+/** ค่าที่ต้องค้นชื่อของแถวในหน้า — เป้าหมาย + ค่าอ้างอิงสำรอง (ค้นรวมทีละชนิด ไม่ N+1) */
+function listRefsOf(rows: readonly ListRow[]): AuditRef[] {
+  const refs: AuditRef[] = []
+  for (const row of rows) {
+    const target = auditTargetRef(row)
+    if (target !== null) refs.push(target)
+    const context = auditTargetContextRef(row)
+    if (context !== null) refs.push(context)
+  }
+  return refs
+}
+
+/** ป้ายของค่าก่อน/หลัง ส่งให้หน้าจอเป็น id → ป้าย (ชนิดรู้ได้จากชื่อฟิลด์ฝั่งหน้าจอ) */
+function valueRefLabels(refs: readonly AuditRef[], labels: ReadonlyMap<string, string>): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const ref of refs) {
+    const label = labels.get(auditRefKey(ref))
+    if (label !== undefined) out[ref.id.toLowerCase()] = label
+  }
+  return out
 }
 
 function toListItem(row: ListRow, labels: ReadonlyMap<string, string>, organizationId: string): AuditLogListItemDto {
@@ -144,10 +178,7 @@ export async function listAuditLogs(user: SessionUser, query: AuditLogListQuery)
   ])
 
   // known H-06 — ชื่อเป้าหมายที่อ่านได้: ค้นทีละชนิดครั้งเดียวทั้งหน้า (ไม่ N+1)
-  const labels = await resolveAuditRefLabels(
-    user.organizationId,
-    rows.map(auditTargetRef).filter((ref): ref is AuditRef => ref !== null),
-  )
+  const labels = await resolveAuditRefLabels(user.organizationId, listRefsOf(rows))
 
   return {
     items: rows.map((row) => toListItem(row, labels, user.organizationId)),
@@ -185,18 +216,14 @@ export async function getAuditLog(user: SessionUser, id: string): Promise<AuditL
   })
   if (row === null) return null
 
-  const target = auditTargetRef(row)
-  const labels = await resolveAuditRefLabels(user.organizationId, [
-    ...(target === null ? [] : [target]),
-    ...auditValueRefs(row.beforeData),
-    ...auditValueRefs(row.afterData),
-  ])
+  const valueRefs = [...auditValueRefs(row.beforeData), ...auditValueRefs(row.afterData)]
+  const labels = await resolveAuditRefLabels(user.organizationId, [...listRefsOf([row]), ...valueRefs])
 
   return {
     ...toListItem(row, labels, user.organizationId),
     before: row.beforeData ?? null,
     after: row.afterData ?? null,
-    refLabels: Object.fromEntries(labels),
+    refLabels: valueRefLabels(valueRefs, labels),
     ipAddress: row.ipAddress,
     userAgent: row.userAgent,
   }

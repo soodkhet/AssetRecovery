@@ -1,35 +1,55 @@
+import { ADJUSTMENT_TYPE_LABEL } from '@/lib/adjustments/adjustment'
 import {
+  adjustmentRefLabel,
+  assignmentRefLabel,
+  auditRefKey,
   bankAccountRefLabel,
   bankFileFormatRefLabel,
   bankTransactionRefLabel,
   caseRefLabel,
+  caseScopedRefLabel,
   cashReceiptRefLabel,
   companyDocumentRefLabel,
   costCenterRefLabel,
+  customerWhtRefLabel,
+  deviceTacRefLabel,
+  effectiveVersionRefLabel,
+  expenseRefLabel,
   exportRecordRefLabel,
+  fieldDaySettlementRefLabel,
   groupAuditRefs,
   holidayRefLabel,
   jobRefLabel,
+  payeeAmountRefLabel,
+  reassignmentRefLabel,
+  shortRefText,
+  signedAdjustmentDisplaySatang,
   taxProfileDefaultRefLabel,
+  vatRateRefLabel,
   versionedRefLabel,
   type AuditRef,
   type AuditRefType,
 } from '@/lib/audit/target-refs'
+import { DOCUMENT_SLOT_LABEL, DOCUMENT_SLOTS, type DocumentSlot } from '@/lib/cases/case'
+import { CASE_STATUS_LABEL } from '@/lib/cases/status-display'
 import { DOCUMENT_NUMBER_LABEL } from '@/lib/document-numbering/format'
 import { exportVersionLabel } from '@/lib/exports/pack'
+import { EXPENSE_TYPE_LABEL } from '@/lib/field/expense-ui'
+import { checkinTypeLabel } from '@/lib/field/evidence-review-ui'
 import { COMPANY_DOCUMENT_LABEL } from '@/lib/finance-companies/documents'
 import { fmtDate, fmtDateTime } from '@/lib/format/datetime'
-import { fmtSatangSymbol } from '@/lib/format/money'
+import { fmtPercent, fmtSatangSymbol } from '@/lib/format/money'
 import { JOB_TYPE_SPECS, JOB_TYPES, type JobTypeCode } from '@/lib/jobs/job-types'
 import { payeeLegalName } from '@/lib/payees/payee'
 import { prisma } from '@/lib/prisma'
+import { SETTING_ASSUMPTION_KEYS, SETTING_ASSUMPTIONS, type SettingAssumptionKey } from '@/lib/settings/assumptions'
 import { maskAccountNumber } from '@/lib/settings/bank-account'
 import { TEMPLATE_DOCUMENT_TYPE_LABEL } from '@/lib/settings/tax-doc-template'
 
 /**
  * known H-06 — ค้นชื่อ/เลขเอกสารของ id ในบันทึกการใช้งานแบบ **batch**: 1 query ต่อชนิดเป้าหมาย (ไม่ใช่ต่อแถว)
  * กรอง `organization_id` ของผู้เรียกทุก query (Rule 02) · แถวที่ถูกลบแบบ soft delete ยังแสดงชื่อได้ (ประวัติย้อนหลัง)
- * ผลลัพธ์ = Map ของ id (ตัวพิมพ์เล็ก) → ป้าย · id ที่หาไม่พบไม่อยู่ใน Map (หน้าจอแสดง id ย่อแทน)
+ * ผลลัพธ์ = Map ของ `ชนิด:id` (ตัวพิมพ์เล็ก) → ป้าย · id ที่หาไม่พบไม่อยู่ใน Map (หน้าจอแสดง id ย่อแทน)
  */
 
 type Labeled = { id: string; label: string }
@@ -41,6 +61,38 @@ function jobTypeLabel(jobType: string): string {
   return JOB_TYPE_SET.has(jobType) ? JOB_TYPE_SPECS[jobType as JobTypeCode].label : jobType
 }
 type Resolver = (organizationId: string, ids: string[]) => Promise<Labeled[]>
+
+// ── mytester5 H5-01 — select/ป้ายย่อยที่ใช้ซ้ำหลายชนิด ────────────────────────────────────────
+
+const caseLabelSelect = { caseRef: true, trackingRound: true } as const
+const payeeLabelSelect = { payeeType: true, legalName: true, user: { select: { fullName: true } } } as const
+
+type CaseLabelRow = { caseRef: string; trackingRound: number }
+type PayeeLabelRow = { payeeType: 'individual' | 'corporate'; legalName: string | null; user: { fullName: string } }
+
+function caseText(row: CaseLabelRow): string {
+  return caseRefLabel(row.caseRef, row.trackingRound)
+}
+
+function payeeText(row: PayeeLabelRow): string {
+  return payeeLegalName({ payeeType: row.payeeType, legalName: row.legalName, userFullName: row.user.fullName })
+}
+
+const DOCUMENT_SLOT_SET: ReadonlySet<string> = new Set(DOCUMENT_SLOTS)
+const ASSUMPTION_KEY_SET: ReadonlySet<string> = new Set(SETTING_ASSUMPTION_KEYS)
+
+/** เลขอ้างอิงของต้นทางรายการปรับปรุง (รายได้/รายการเบิก = เลขเคส · รอบวางบิล/รอบจ่าย = เลข/ชื่อรอบ) */
+function adjustmentTargetText(row: {
+  revenue: { case: CaseLabelRow } | null
+  expense: { case: CaseLabelRow | null; payee: PayeeLabelRow } | null
+  billingBatch: { batchNumber: string } | null
+  payoutBatch: { name: string } | null
+}): string {
+  if (row.revenue !== null) return caseText(row.revenue.case)
+  if (row.expense !== null) return row.expense.case !== null ? caseText(row.expense.case) : payeeText(row.expense.payee)
+  if (row.billingBatch !== null) return row.billingBatch.batchNumber
+  return row.payoutBatch?.name ?? '—'
+}
 
 const RESOLVERS: Readonly<Record<AuditRefType, Resolver>> = {
   cases: async (organizationId, ids) =>
@@ -282,16 +334,298 @@ const RESOLVERS: Readonly<Record<AuditRefType, Resolver>> = {
         select: { id: true, jobType: true, createdAt: true },
       })
     ).map((row) => ({ id: row.id, label: jobRefLabel(jobTypeLabel(row.jobType), fmtDateTime(row.createdAt)) })),
+  // mytester5 H5-01 — ธุรกรรมการเงิน
+  expenses: async (organizationId, ids) =>
+    (
+      await prisma.expense.findMany({
+        where: { organizationId, id: { in: ids } },
+        select: {
+          id: true,
+          expenseType: true,
+          grossSatang: true,
+          case: { select: caseLabelSelect },
+          payee: { select: payeeLabelSelect },
+        },
+      })
+    ).map((row) => ({
+      id: row.id,
+      label: expenseRefLabel(
+        EXPENSE_TYPE_LABEL[row.expenseType],
+        row.case !== null ? caseText(row.case) : payeeText(row.payee),
+        fmtSatangSymbol(row.grossSatang),
+      ),
+    })),
+  expense_records: async (organizationId, ids) =>
+    (
+      await prisma.expenseRecord.findMany({
+        where: { organizationId, id: { in: ids } },
+        select: {
+          id: true,
+          grossSatang: true,
+          payoutBatchItem: { select: { payee: { select: payeeLabelSelect }, payoutBatch: { select: { name: true } } } },
+        },
+      })
+    ).map((row) => ({
+      id: row.id,
+      label: payeeAmountRefLabel(
+        payeeText(row.payoutBatchItem.payee),
+        fmtSatangSymbol(row.grossSatang),
+        row.payoutBatchItem.payoutBatch.name,
+      ),
+    })),
+  payout_batch_items: async (organizationId, ids) =>
+    (
+      await prisma.payoutBatchItem.findMany({
+        where: { organizationId, id: { in: ids } },
+        select: { id: true, netSatang: true, payee: { select: payeeLabelSelect }, payoutBatch: { select: { name: true } } },
+      })
+    ).map((row) => ({
+      id: row.id,
+      label: payeeAmountRefLabel(payeeText(row.payee), fmtSatangSymbol(row.netSatang), row.payoutBatch.name),
+    })),
+  adjustments: async (organizationId, ids) =>
+    (
+      await prisma.adjustment.findMany({
+        where: { organizationId, id: { in: ids } },
+        select: {
+          id: true,
+          adjustmentType: true,
+          amountSatang: true,
+          revenue: { select: { case: { select: caseLabelSelect } } },
+          expense: { select: { case: { select: caseLabelSelect }, payee: { select: payeeLabelSelect } } },
+          billingBatch: { select: { batchNumber: true } },
+          payoutBatch: { select: { name: true } },
+        },
+      })
+    ).map((row) => ({
+      id: row.id,
+      label: adjustmentRefLabel(
+        ADJUSTMENT_TYPE_LABEL[row.adjustmentType],
+        adjustmentTargetText(row),
+        fmtSatangSymbol(signedAdjustmentDisplaySatang(row.adjustmentType, row.amountSatang)),
+      ),
+    })),
+  advance_returns: async (organizationId, ids) =>
+    (
+      await prisma.advanceReturn.findMany({
+        where: { organizationId, id: { in: ids } },
+        select: { id: true, returnNumber: true },
+      })
+    ).map((row) => ({ id: row.id, label: row.returnNumber })),
+  customer_wht_certificates: async (organizationId, ids) =>
+    (
+      await prisma.customerWhtCertificate.findMany({
+        where: { organizationId, id: { in: ids } },
+        select: { id: true, withheldSatang: true, certificateNumber: true, company: { select: { name: true } } },
+      })
+    ).map((row) => ({
+      id: row.id,
+      label: customerWhtRefLabel(row.company.name, fmtSatangSymbol(row.withheldSatang), row.certificateNumber),
+    })),
+  sales_records: async (organizationId, ids) =>
+    (
+      await prisma.salesRecord.findMany({
+        where: { organizationId, id: { in: ids } },
+        select: { id: true, totalSatang: true, billingBatch: { select: { batchNumber: true } } },
+      })
+    ).map((row) => ({ id: row.id, label: `${row.billingBatch.batchNumber} ${fmtSatangSymbol(row.totalSatang)}` })),
+  revenues: async (organizationId, ids) =>
+    (
+      await prisma.revenue.findMany({
+        where: { organizationId, id: { in: ids } },
+        select: { id: true, totalSatang: true, case: { select: caseLabelSelect } },
+      })
+    ).map((row) => ({ id: row.id, label: `${caseText(row.case)} ${fmtSatangSymbol(row.totalSatang)}` })),
+  payee_recoveries: async (organizationId, ids) =>
+    (
+      await prisma.payeeRecovery.findMany({
+        where: { organizationId, id: { in: ids } },
+        select: { id: true, amountSatang: true, payee: { select: payeeLabelSelect } },
+      })
+    ).map((row) => ({ id: row.id, label: payeeAmountRefLabel(payeeText(row.payee), fmtSatangSymbol(row.amountSatang)) })),
+  payee_recovery_collections: async (organizationId, ids) =>
+    (
+      await prisma.payeeRecoveryCollection.findMany({
+        where: { organizationId, id: { in: ids } },
+        select: { id: true, amountSatang: true, payee: { select: payeeLabelSelect }, payoutBatch: { select: { name: true } } },
+      })
+    ).map((row) => ({
+      id: row.id,
+      label: payeeAmountRefLabel(payeeText(row.payee), fmtSatangSymbol(row.amountSatang), row.payoutBatch.name),
+    })),
+  field_day_settlements: async (organizationId, ids) =>
+    (
+      await prisma.fieldDaySettlement.findMany({
+        where: { organizationId, id: { in: ids } },
+        select: {
+          id: true,
+          fieldDate: true,
+          fuelTotalSatang: true,
+          allowanceTotalSatang: true,
+          agent: { select: { fullName: true } },
+        },
+      })
+    ).map((row) => ({
+      id: row.id,
+      label: fieldDaySettlementRefLabel(
+        row.agent.fullName,
+        fmtDate(row.fieldDate),
+        // ยอดรวมของวัน (ค่าน้ำมันเหมา + เบี้ยเลี้ยง) — จำนวนเต็มสตางค์ บวกกันเพื่อแสดงผลเท่านั้น
+        fmtSatangSymbol(row.fuelTotalSatang + row.allowanceTotalSatang),
+      ),
+    })),
+  // ── ภาคสนาม / เคส
+  case_documents: async (organizationId, ids) =>
+    (
+      await prisma.caseDocument.findMany({
+        where: { organizationId, id: { in: ids } },
+        select: { id: true, documentType: true, originalName: true, case: { select: caseLabelSelect } },
+      })
+    ).map((row) => ({
+      id: row.id,
+      label: caseScopedRefLabel(
+        caseText(row.case),
+        DOCUMENT_SLOT_SET.has(row.documentType) ? DOCUMENT_SLOT_LABEL[row.documentType as DocumentSlot] : row.originalName,
+      ),
+    })),
+  case_evidences: async (organizationId, ids) =>
+    (
+      await prisma.caseEvidence.findMany({
+        where: { organizationId, id: { in: ids } },
+        select: { id: true, outcome: true, submittedAt: true, case: { select: caseLabelSelect } },
+      })
+    ).map((row) => ({
+      id: row.id,
+      label: caseScopedRefLabel(caseText(row.case), `${CASE_STATUS_LABEL[row.outcome]} ${fmtDateTime(row.submittedAt)}`),
+    })),
+  check_ins: async (organizationId, ids) =>
+    (
+      await prisma.checkIn.findMany({
+        where: { organizationId, id: { in: ids } },
+        select: { id: true, checkinType: true, checkedInAt: true, case: { select: caseLabelSelect } },
+      })
+    ).map((row) => ({
+      id: row.id,
+      label: caseScopedRefLabel(caseText(row.case), `${checkinTypeLabel(row.checkinType)} ${fmtDateTime(row.checkedInAt)}`),
+    })),
+  case_assignments: async (organizationId, ids) =>
+    (
+      await prisma.caseAssignment.findMany({
+        where: { organizationId, id: { in: ids } },
+        select: { id: true, case: { select: caseLabelSelect }, agent: { select: { fullName: true } } },
+      })
+    ).map((row) => ({ id: row.id, label: assignmentRefLabel(caseText(row.case), row.agent.fullName) })),
+  // ร่างที่ส่งปิดงานแล้วถูกลบ ⇒ หาไม่พบ — หน้าจอใช้เคสในค่าหลังแทน (`auditTargetContextRef`)
+  close_case_drafts: async (organizationId, ids) =>
+    (
+      await prisma.closeCaseDraft.findMany({
+        where: { organizationId, id: { in: ids } },
+        select: { id: true, case: { select: caseLabelSelect } },
+      })
+    ).map((row) => ({ id: row.id, label: caseText(row.case) })),
+  pending_reassignments: async (organizationId, ids) =>
+    (
+      await prisma.pendingReassignment.findMany({
+        where: { organizationId, id: { in: ids } },
+        select: {
+          id: true,
+          case: { select: caseLabelSelect },
+          fromAgent: { select: { fullName: true } },
+          newAgent: { select: { fullName: true } },
+        },
+      })
+    ).map((row) => ({
+      id: row.id,
+      label: reassignmentRefLabel(caseText(row.case), row.fromAgent.fullName, row.newAgent.fullName),
+    })),
+  // ── บัญชี / ค่าตั้ง
+  accountant_questions: async (organizationId, ids) =>
+    (
+      await prisma.accountantQuestion.findMany({
+        where: { organizationId, id: { in: ids } },
+        select: { id: true, questionText: true },
+      })
+    ).map((row) => ({ id: row.id, label: shortRefText(row.questionText) })),
+  wht_filing_summaries: async (organizationId, ids) =>
+    (
+      await prisma.whtFilingSummary.findMany({
+        where: { organizationId, id: { in: ids } },
+        select: { id: true, periodLabel: true },
+      })
+    ).map((row) => ({ id: row.id, label: row.periodLabel })),
+  wht_policy_history: async (organizationId, ids) =>
+    (
+      await prisma.whtPolicyHistory.findMany({
+        where: { organizationId, id: { in: ids } },
+        select: { id: true, effectiveFrom: true },
+      })
+    ).map((row) => ({ id: row.id, label: effectiveVersionRefLabel(fmtDate(row.effectiveFrom)) })),
+  vat_rate_history: async (organizationId, ids) =>
+    (
+      await prisma.vatRateHistory.findMany({
+        where: { organizationId, id: { in: ids } },
+        select: { id: true, ratePct: true, effectiveFrom: true },
+      })
+    ).map((row) => ({ id: row.id, label: vatRateRefLabel(fmtPercent(row.ratePct.toString()), fmtDate(row.effectiveFrom)) })),
+  setting_assumption_confirmations: async (organizationId, ids) =>
+    (
+      await prisma.settingAssumptionConfirmation.findMany({
+        where: { organizationId, id: { in: ids } },
+        select: { id: true, assumptionKey: true },
+      })
+    ).map((row) => ({
+      id: row.id,
+      label: ASSUMPTION_KEY_SET.has(row.assumptionKey)
+        ? SETTING_ASSUMPTIONS[row.assumptionKey as SettingAssumptionKey].label
+        : row.assumptionKey,
+    })),
+  device_tacs: async (organizationId, ids) =>
+    (
+      await prisma.deviceTac.findMany({
+        where: { organizationId, id: { in: ids } },
+        select: { id: true, tac: true, brandName: true, modelName: true },
+      })
+    ).map((row) => ({ id: row.id, label: deviceTacRefLabel(row.tac, row.brandName, row.modelName) })),
+  roles: async (organizationId, ids) =>
+    (
+      await prisma.role.findMany({ where: { organizationId, id: { in: ids } }, select: { id: true, name: true } })
+    ).map((row) => ({ id: row.id, label: row.name })),
+  // audit สิทธิ์ของบทบาทลง `target_id` = id ของบทบาท
+  role_capabilities: async (organizationId, ids) =>
+    (
+      await prisma.role.findMany({ where: { organizationId, id: { in: ids } }, select: { id: true, name: true } })
+    ).map((row) => ({ id: row.id, label: row.name })),
+  // สมัครรับแจ้งเตือนลง id ของ subscription · ยกเลิก (ลบทุกอุปกรณ์ของผู้ใช้) ลง id ของผู้ใช้ ⇒ ค้นทั้งสองแบบ
+  push_subscriptions: async (organizationId, ids) => {
+    const [subscriptions, users] = await Promise.all([
+      prisma.pushSubscription.findMany({
+        where: { organizationId, id: { in: ids } },
+        select: { id: true, user: { select: { fullName: true } } },
+      }),
+      prisma.user.findMany({ where: { organizationId, id: { in: ids } }, select: { id: true, fullName: true } }),
+    ])
+    return [
+      ...subscriptions.map((row) => ({ id: row.id, label: row.user.fullName })),
+      ...users.map((row) => ({ id: row.id, label: row.fullName })),
+    ]
+  },
 }
 
+/**
+ * ผล = Map คีย์ `auditRefKey()` (ชนิด:id) → ป้าย — แยกตามชนิดเพราะ id เดียวกันอาจถูกแปลงต่างกัน
+ * (mytester5 H5-01: id ผู้ใช้ในเป้าหมาย "การรับแจ้งเตือนบนอุปกรณ์")
+ */
 export async function resolveAuditRefLabels(organizationId: string, refs: readonly AuditRef[]): Promise<Map<string, string>> {
   const grouped = groupAuditRefs(refs)
   const results = await Promise.all(
-    [...grouped].map(([type, ids]) => (ids.length === 0 ? Promise.resolve([]) : RESOLVERS[type](organizationId, ids))),
+    [...grouped].map(async ([type, ids]) => ({
+      type,
+      rows: ids.length === 0 ? [] : await RESOLVERS[type](organizationId, ids),
+    })),
   )
   const labels = new Map<string, string>()
-  for (const rows of results) {
-    for (const row of rows) labels.set(row.id.toLowerCase(), row.label)
+  for (const { type, rows } of results) {
+    for (const row of rows) labels.set(auditRefKey({ type, id: row.id }), row.label)
   }
   return labels
 }

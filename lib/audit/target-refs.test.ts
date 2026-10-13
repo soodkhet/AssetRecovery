@@ -2,6 +2,22 @@ import { describe, expect, it } from 'vitest'
 import { auditRefLabel, auditValueDisplay } from '@/lib/audit/log-display'
 import {
   AUDIT_REF_TYPES,
+  AUDIT_TARGET_TYPES_WITHOUT_REF,
+  adjustmentRefLabel,
+  assignmentRefLabel,
+  auditRefKey,
+  auditTargetContextRef,
+  caseScopedRefLabel,
+  customerWhtRefLabel,
+  deviceTacRefLabel,
+  effectiveVersionRefLabel,
+  expenseRefLabel,
+  fieldDaySettlementRefLabel,
+  payeeAmountRefLabel,
+  reassignmentRefLabel,
+  shortRefText,
+  signedAdjustmentDisplaySatang,
+  vatRateRefLabel,
   auditOrgLevelTargetLabel,
   auditTargetRef,
   auditValueRefs,
@@ -150,5 +166,123 @@ describe('mytester5 A5-01 — รายการตั้งค่า + ค่�
     expect(companyDocumentRefLabel('สัญญาว่าจ้าง', 'ไฟแนนซ์ A', 2)).toBe('สัญญาว่าจ้าง · ไฟแนนซ์ A (ฉบับที่ 2)')
     expect(taxProfileDefaultRefLabel('13/10/2569 10:00')).toBe('ฉบับ 13/10/2569 10:00')
     expect(jobRefLabel('สร้างไฟล์โอนเงินของรอบจ่าย', '13/10/2569 10:00')).toBe('สร้างไฟล์โอนเงินของรอบจ่าย · 13/10/2569 10:00')
+  })
+})
+
+describe('mytester5 H5-01 — ธุรกรรม/ภาคสนามเป็นชื่อที่อ่านได้', () => {
+  const ID = '0a1b2c3d-0000-4000-8000-0000000000cc'
+  const CASE_ID = '0a1b2c3d-0000-4000-8000-0000000000dd'
+
+  it('ชนิดธุรกรรม/ภาคสนาม 14 ชนิดที่ผู้ทดสอบพบ + ชื่อเอกพจน์ revenue/expense/payout_batch', () => {
+    for (const type of [
+      'expense_records',
+      'expenses',
+      'adjustments',
+      'advance_returns',
+      'customer_wht_certificates',
+      'sales_records',
+      'case_documents',
+      'case_evidences',
+      'check_ins',
+      'case_assignments',
+      'close_case_drafts',
+      'field_day_settlements',
+      'pending_reassignments',
+      'jobs',
+    ]) {
+      expect(auditTargetRef({ targetType: type, targetId: ID })).toEqual({ type, id: ID })
+    }
+    expect(auditTargetRef({ targetType: 'expense', targetId: ID })).toEqual({ type: 'expenses', id: ID })
+    expect(auditTargetRef({ targetType: 'revenue', targetId: ID })).toEqual({ type: 'revenues', id: ID })
+    expect(auditTargetRef({ targetType: 'payout_batch', targetId: ID })).toEqual({ type: 'payout_batches', id: ID })
+  })
+
+  it('portal อยู่ในรายการยกเว้น (ไม่ค้นชื่อของ id ที่ผู้ใช้พอร์ทัลส่งมา)', () => {
+    expect(AUDIT_TARGET_TYPES_WITHOUT_REF.portal).toBeTruthy()
+    expect(auditTargetRef({ targetType: 'portal', targetId: ID })).toBeNull()
+  })
+
+  it('ฟิลด์ *_id ที่พบบ่อยในค่าก่อน/หลังถูกค้นชื่อ (snake/camel)', () => {
+    const refs = auditValueRefs({
+      cost_center_id: ID,
+      payee_id: ID,
+      case_id: ID,
+      team_id: ID,
+      company_id: ID,
+      plan_id: ID,
+      compPlanId: ID,
+      advance_id: ID,
+      approval_matrix_id: ID,
+      assignmentId: ID,
+      agentId: ID,
+      evidenceApprovedId: ID,
+      fieldDaySettlementId: ID,
+      payout_batch_item_id: ID,
+      expense_record_id: ID,
+      matched_billing_id: ID,
+      matched_payout_id: ID,
+      wht_policy_id: ID,
+      debtorNationalId: ID,
+    })
+    expect(refs.map((ref) => ref.type)).toEqual([
+      'cost_centers',
+      'payee_profiles',
+      'cases',
+      'teams',
+      'finance_companies',
+      'compensation_plans',
+      'compensation_plans',
+      'advances',
+      'approval_matrices',
+      'case_assignments',
+      'users',
+      'case_evidences',
+      'field_day_settlements',
+      'payout_batch_items',
+      'expense_records',
+      'billing_batches',
+      'payout_batches',
+      'wht_policy_history',
+    ])
+  })
+
+  it('ร่างปิดงานที่ถูกลบแล้ว ⇒ ค่าอ้างอิงสำรอง = เคสในค่าหลัง · ชนิดอื่น/ไม่มีค่า ⇒ null', () => {
+    expect(auditTargetContextRef({ targetType: 'close_case_drafts', afterData: { caseId: CASE_ID } })).toEqual({
+      type: 'cases',
+      id: CASE_ID,
+    })
+    expect(auditTargetContextRef({ targetType: 'close_case_drafts', afterData: { case_id: CASE_ID } })).toEqual({
+      type: 'cases',
+      id: CASE_ID,
+    })
+    expect(auditTargetContextRef({ targetType: 'close_case_drafts', afterData: null })).toBeNull()
+    expect(auditTargetContextRef({ targetType: 'close_case_drafts', afterData: { caseId: 'x' } })).toBeNull()
+    expect(auditTargetContextRef({ targetType: 'check_ins', afterData: { caseId: CASE_ID } })).toBeNull()
+  })
+
+  it('คีย์ป้ายแยกตามชนิด (id เดียวกันคนละชนิดไม่ชนกัน)', () => {
+    expect(auditRefKey({ type: 'users', id: ID.toUpperCase() })).toBe(`users:${ID}`)
+    expect(auditRefKey({ type: 'push_subscriptions', id: ID })).not.toBe(auditRefKey({ type: 'users', id: ID }))
+  })
+
+  it('รูปแบบป้าย', () => {
+    expect(expenseRefLabel('ค่าน้ำมัน', 'MTJ-2569-01', '฿72.36')).toBe('ค่าน้ำมัน MTJ-2569-01 ฿72.36')
+    expect(signedAdjustmentDisplaySatang('decrease', 10000)).toBe(-10000)
+    expect(signedAdjustmentDisplaySatang('increase', 10000)).toBe(10000)
+    expect(adjustmentRefLabel('ลดยอด', 'SPC-2569-0005', '−฿100.00')).toBe('ลดยอด SPC-2569-0005 −฿100.00')
+    expect(assignmentRefLabel('MTJ-2569-01', 'อนันต์')).toBe('MTJ-2569-01 → อนันต์')
+    expect(reassignmentRefLabel('MTJ-2569-01', 'สมชาย', 'อนันต์')).toBe('MTJ-2569-01: สมชาย → อนันต์')
+    expect(caseScopedRefLabel('MTJ-2569-01', 'รูปสินค้า')).toBe('MTJ-2569-01 · รูปสินค้า')
+    expect(fieldDaySettlementRefLabel('อนันต์', '13/10/2569', '฿250.00')).toBe('อนันต์ 13/10/2569 ฿250.00')
+    expect(payeeAmountRefLabel('สมชาย', '฿500.00')).toBe('สมชาย ฿500.00')
+    expect(payeeAmountRefLabel('สมชาย', '฿500.00', 'รอบจ่าย 1')).toBe('สมชาย ฿500.00 · รอบจ่าย 1')
+    expect(payeeAmountRefLabel('สมชาย', '฿500.00', '  ')).toBe('สมชาย ฿500.00')
+    expect(customerWhtRefLabel('ไฟแนนซ์ A', '฿30.00', null)).toBe('ไฟแนนซ์ A ฿30.00')
+    expect(customerWhtRefLabel('ไฟแนนซ์ A', '฿30.00', '001/2569')).toBe('ไฟแนนซ์ A ฿30.00 (เลขที่ 001/2569)')
+    expect(vatRateRefLabel('7.00%', '01/01/2569')).toBe('7.00% ตั้งแต่ 01/01/2569')
+    expect(effectiveVersionRefLabel('01/10/2569')).toBe('ฉบับมีผล 01/10/2569')
+    expect(deviceTacRefLabel('35391110', 'Apple', 'iPhone 15')).toBe('TAC 35391110 · Apple iPhone 15')
+    expect(shortRefText('ยอด  ภ.ง.ด.3\nเดือนนี้')).toBe('ยอด ภ.ง.ด.3 เดือนนี้')
+    expect(shortRefText('ก'.repeat(50), 10)).toBe(`${'ก'.repeat(9)}…`)
   })
 })
