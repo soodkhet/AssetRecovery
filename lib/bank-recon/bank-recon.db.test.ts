@@ -2,6 +2,7 @@ import { PrismaPg } from '@prisma/adapter-pg'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { SessionUser } from '@/lib/auth/types'
 import { PrismaClient } from '@/lib/generated/prisma/client'
+import { TAX_INVOICE_FIXTURE_COLUMNS, taxInvoiceFixtureValues } from '@/tests/helpers/tax-invoice-fixture'
 
 /**
  * เทสต์ระดับ DB ของ Phase 4.2 — DoD ของไฟล์ 35
@@ -109,6 +110,55 @@ async function seedBilling(
   `)
 }
 
+/**
+ * มติผู้ใช้ 13/10/2569 — รอบวางบิลที่มีรายการขาย + ใบกำกับ (ยอดก่อน VAT `beforeVat` · VAT 7%) และใบลด/เพิ่มหนี้
+ * ⇒ ยอดตามเอกสาร = ใบกำกับ − ใบลดหนี้ + ใบเพิ่มหนี้ · `receivedSatang` > 0 = รับเงินไปบางส่วนแล้ว
+ */
+async function seedDocumentedBilling(
+  id: string,
+  beforeVat: number,
+  options: {
+    receivedSatang: number
+    notes: { type: 'credit' | 'debit'; beforeVat: number; issueDate: string }[]
+  },
+): Promise<void> {
+  const tx = db()
+  const vat = Math.round(beforeVat * 0.07)
+  await seedBilling(id, beforeVat + vat)
+  if (options.receivedSatang > 0) {
+    await tx.$executeRawUnsafe(
+      `UPDATE billing_batches SET received_satang = ${options.receivedSatang}, status = 'partially_paid' WHERE id = '${id}'`,
+    )
+  }
+  await tx.$executeRawUnsafe(`
+    INSERT INTO accounting_periods (organization_id, period_label, year_be, month, status, created_by)
+    SELECT '${ORG_ID}', 'สิงหาคม 2569', 2569, 8, 'collecting', '${ACCOUNTING_ID}'
+    WHERE NOT EXISTS (SELECT 1 FROM accounting_periods WHERE organization_id = '${ORG_ID}' AND year_be = 2569 AND month = 8)
+  `)
+  const sales = await tx.$queryRawUnsafe<{ id: string }[]>(`
+    INSERT INTO sales_records (organization_id, period_id, billing_batch_id, company_id, total_before_vat_satang, vat_satang, total_satang, created_by)
+    SELECT '${ORG_ID}', p.id, '${id}', '${COMPANY_A}', ${beforeVat}, ${vat}, ${beforeVat + vat}, '${ACCOUNTING_ID}'
+    FROM accounting_periods p WHERE p.organization_id = '${ORG_ID}' AND p.year_be = 2569 AND p.month = 8
+    RETURNING id
+  `)
+  const salesId = sales[0]?.id ?? ''
+  const invoice = await tx.$queryRawUnsafe<{ id: string }[]>(`
+    INSERT INTO tax_invoices (organization_id, sales_record_id, invoice_number, invoice_date, buyer_branch_code, seller_branch_code, created_by,
+                              ${TAX_INVOICE_FIXTURE_COLUMNS})
+    VALUES ('${ORG_ID}', '${salesId}', 'INV-RECON-${id.slice(-4)}', '2026-08-01', '00000', '00000', '${ACCOUNTING_ID}',
+            ${taxInvoiceFixtureValues(salesId)}) RETURNING id
+  `)
+  for (const [index, note] of options.notes.entries()) {
+    const noteVat = Math.round(note.beforeVat * 0.07)
+    await tx.$executeRawUnsafe(`
+      INSERT INTO credit_notes (organization_id, tax_invoice_id, note_type, credit_note_number, issue_date,
+                                amount_before_vat_satang, vat_satang, total_satang, vat_rate_pct_used, reason, created_by, buyer_branch_code)
+      VALUES ('${ORG_ID}', '${invoice[0]?.id ?? ''}', '${note.type}', 'CN-RECON-${id.slice(-4)}-${index}', '${note.issueDate}',
+              ${note.beforeVat}, ${noteVat}, ${note.beforeVat + noteVat}, 7, 'เอกสารทดสอบ', '${ACCOUNTING_ID}', '00000')
+    `)
+  }
+}
+
 let seq = 0
 
 /**
@@ -167,6 +217,18 @@ async function transactionsOf(): Promise<
 
 async function cleanup(): Promise<void> {
   const tx = db()
+  // มติผู้ใช้ 13/10/2569 — เทสต์รอบที่มีใบลด/เพิ่มหนี้: ใบกำกับ/ใบลดหนี้ลบไม่ได้ด้วย trigger (`02` §13) ⇒ ปิดเฉพาะตอนล้างข้อมูลเทสต์
+  // (ไฟล์ DB รันทีละไฟล์ — singleFork · แนวเดียวกับ exports.db.test.ts)
+  await tx.$executeRawUnsafe(`ALTER TABLE credit_notes DISABLE TRIGGER trg_credit_notes_no_delete`)
+  await tx.$executeRawUnsafe(`ALTER TABLE tax_invoices DISABLE TRIGGER trg_tax_invoices_no_delete`)
+  try {
+    await tx.$executeRawUnsafe(`DELETE FROM credit_notes WHERE organization_id = '${ORG_ID}'`)
+    await tx.$executeRawUnsafe(`DELETE FROM tax_invoices WHERE organization_id = '${ORG_ID}'`)
+    await tx.$executeRawUnsafe(`DELETE FROM sales_records WHERE organization_id = '${ORG_ID}'`)
+  } finally {
+    await tx.$executeRawUnsafe(`ALTER TABLE tax_invoices ENABLE TRIGGER trg_tax_invoices_no_delete`)
+    await tx.$executeRawUnsafe(`ALTER TABLE credit_notes ENABLE TRIGGER trg_credit_notes_no_delete`)
+  }
   await tx.$executeRawUnsafe(`DELETE FROM customer_wht_certificates WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM cash_receipts WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM bank_transactions WHERE organization_id = '${ORG_ID}'`)
@@ -865,6 +927,85 @@ suite('U137 — คู่ที่เสนอ (จับคู่ทางก�
     const proposals = await recon.listMatchProposals(accountant)
     expect(proposals).toHaveLength(2)
     expect(proposals.every((p) => p.ambiguous)).toBe(true)
+  })
+})
+
+suite('มติผู้ใช้ 13/10/2569 — คู่ที่ระบบเสนอ/จับอัตโนมัติกับรอบที่รับเงินบางส่วนแล้วใช้ยอดค้างจริง', () => {
+  it('ยังไม่เคยรับเงิน ⇒ เสนอด้วยยอดเต็มตามเอกสาร (หลังใบลดหนี้)', async () => {
+    await recon.importStatement(ctx, {
+      bankAccountId: BANK_ACCOUNT_ID,
+      fileName: 'unpaid.csv',
+      csv: csvOf('03/08/2569,โอนเข้า,KBANK-TRX-U1,"963.00",'),
+    })
+    // ใบกำกับ 1,070 − ใบลดหนี้ 107 ⇒ ยอดตามเอกสาร 963
+    await seedDocumentedBilling(BILLING_A, 100000, {
+      receivedSatang: 0,
+      notes: [{ type: 'credit', beforeVat: 10000, issueDate: '2026-08-01' }],
+    })
+    const proposals = await recon.listMatchProposals(accountant)
+    expect(proposals.map((p) => [p.target.id, p.matchedAmountSatang])).toEqual([[BILLING_A, 96300]])
+  })
+
+  it('รับบางส่วนแล้ว + มีใบลดหนี้: เงินเข้าเท่ายอดเต็มบิล/ยอดตามเอกสาร ⇒ ไม่เสนอ · เท่ายอดค้างหลังเอกสาร ⇒ เสนอ', async () => {
+    await recon.importStatement(ctx, {
+      bankAccountId: BANK_ACCOUNT_ID,
+      fileName: 'partial.csv',
+      csv: csvOf(
+        '03/08/2569,โอนเข้ายอดเต็มบิลเดิม,KBANK-TRX-P1,"1,070.00",',
+        '03/08/2569,โอนเข้ายอดตามเอกสาร,KBANK-TRX-P2,"963.00",',
+        '03/08/2569,โอนเข้ายอดค้าง,KBANK-TRX-P3,"463.00",',
+      ),
+    })
+    // ยอดตามเอกสาร 963 · รับแล้ว 500 ⇒ ค้าง 463
+    await seedDocumentedBilling(BILLING_A, 100000, {
+      receivedSatang: 50000,
+      notes: [{ type: 'credit', beforeVat: 10000, issueDate: '2026-08-01' }],
+    })
+    const proposals = await recon.listMatchProposals(accountant)
+    expect(proposals.map((p) => [p.target.id, p.transaction.amountSatang, p.matchedAmountSatang])).toEqual([
+      [BILLING_A, 46300, 46300],
+    ])
+
+    // นำเข้ารอบใหม่ที่มีเงินเข้าเท่ายอดเต็มตามเอกสาร ⇒ ไม่จับคู่อัตโนมัติ (มีผู้สมัครรายเดียวก็ตาม)
+    const again = await recon.importStatement(ctx, {
+      bankAccountId: BANK_ACCOUNT_ID,
+      fileName: 'partial-2.csv',
+      csv: csvOf('04/08/2569,โอนเข้ายอดตามเอกสารอีกครั้ง,KBANK-TRX-P4,"963.00",'),
+    })
+    expect(again.autoMatched).toBe(0)
+
+    // จับคู่เองด้วยยอดเต็มยังทำได้ แต่ต้องมีหมายเหตุ (LR4-05)
+    const full = (await transactionsOf()).find((row) => row.amountSatang === 107000)
+    await expectCode(
+      () =>
+        recon.matchBankTransaction(ctx, full?.id ?? '', {
+          targetKind: 'billing',
+          targetId: BILLING_A,
+          matchNote: null,
+          confirmRematch: false,
+        }),
+      'MATCH_NOTE_REQUIRED',
+    )
+  })
+
+  it('รับบางส่วนแล้ว + ใบเพิ่มหนี้: เสนอยอดค้างหลังเอกสาร ช่วงวันนับจากวันออกใบเพิ่มหนี้ (มติ O77) · ยอดเต็มไม่เสนอ', async () => {
+    await recon.importStatement(ctx, {
+      bankAccountId: BANK_ACCOUNT_ID,
+      fileName: 'debit.csv',
+      csv: csvOf(
+        '03/08/2569,โอนเข้ายอดเต็มตามเอกสาร,KBANK-TRX-D1,"1,177.00",',
+        '15/08/2569,โอนเข้าส่วนเพิ่ม,KBANK-TRX-D2,"107.00",',
+      ),
+    })
+    // ใบกำกับ 1,070 + ใบเพิ่มหนี้ 107 (ออก 12/08) ⇒ ยอดตามเอกสาร 1,177 · รับแล้ว 1,070 ⇒ ค้าง 107
+    await seedDocumentedBilling(BILLING_A, 100000, {
+      receivedSatang: 107000,
+      notes: [{ type: 'debit', beforeVat: 10000, issueDate: '2026-08-12' }],
+    })
+    const proposals = await recon.listMatchProposals(accountant)
+    expect(proposals.map((p) => [p.target.id, p.transaction.amountSatang, p.matchedAmountSatang])).toEqual([
+      [BILLING_A, 10700, 10700],
+    ])
   })
 })
 

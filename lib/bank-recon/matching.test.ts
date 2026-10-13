@@ -349,12 +349,26 @@ describe('มติ O77 — คู่ที่ระบบเสนอ: ยอ�
     ).toHaveLength(0)
   })
 
-  it('ยอดเต็มยังนับจากวันวางบิลเดิม (ไม่ขยับตามใบเพิ่มหนี้)', () => {
+  // เปลี่ยนตามมติผู้ใช้ 13/10/2569 — เดิมล็อกว่ารอบที่มียอดค้างยังเสนอยอดเต็มได้ (ภายในช่วงวันวางบิล) ⇒ ยืนยันแล้วรับเกิน
+  it('รอบที่รับบางส่วนแล้ว: ยอดเต็มไม่ถูกเสนอเลย ทั้งในช่วงวันวางบิลและหลังใบเพิ่มหนี้ (มติ 13/10/2569)', () => {
     expect(
       findMatchProposals([candidate], [{ id: 'c', amountSatang: 1_294_700, transactionDate: paidAfterDebit, toleranceDays: 7 }]),
     ).toHaveLength(0)
+    expect(
+      findMatchProposals(
+        [candidate],
+        [{ id: 'd', amountSatang: 1_294_700, transactionDate: new Date('2026-09-28T00:00:00Z'), toleranceDays: 7 }],
+      ),
+    ).toHaveLength(0)
+  })
+
+  it('ยังไม่รับเงิน: ยอดเต็มนับจากวันวางบิลเดิม (ไม่ขยับตามใบเพิ่มหนี้)', () => {
+    const unpaid = { ...candidate, remainingAmountSatang: null, remainingReferenceDate: null }
+    expect(
+      findMatchProposals([unpaid], [{ id: 'c', amountSatang: 1_294_700, transactionDate: paidAfterDebit, toleranceDays: 7 }]),
+    ).toHaveLength(0)
     const onTime = findMatchProposals(
-      [candidate],
+      [unpaid],
       [{ id: 'd', amountSatang: 1_294_700, transactionDate: new Date('2026-09-28T00:00:00Z'), toleranceDays: 7 }],
     )
     expect(onTime[0]?.referenceDate).toEqual(sentAt)
@@ -503,5 +517,49 @@ describe('mytester4 LR4-05 — ป้าย "ยอดตรง" ของรอ
     const unpaid = { ...partial, remainingAmountSatang: null }
     expect(matchCandidateOptionText(100_000, unpaid)).toBe('BL-2569-010 · ฿1,000.00 (ยอดตรง)')
     expect(isExactMatchAmount(100_000, unpaid)).toBe(true)
+  })
+})
+
+describe('มติผู้ใช้ 13/10/2569 — คู่ที่ระบบเสนอ/จับอัตโนมัติกับรอบที่รับเงินบางส่วนแล้วใช้ยอดค้างจริง', () => {
+  const sent = new Date('2026-08-01T00:00:00Z')
+  const onTime = new Date('2026-08-03T00:00:00Z')
+  const tx = (amountSatang: number) => [{ id: 'tx', amountSatang, transactionDate: onTime, toleranceDays: 7 }]
+  // ยอดตามเอกสาร 2,454.58 (หลังใบลด/เพิ่มหนี้) · หลังลูกค้าหัก 2,385.76 · รับแล้วบางส่วน ⇒ ค้าง 954.58 / หลังหัก 885.76
+  const unpaid: MatchCandidate = {
+    kind: 'billing',
+    id: 'b1',
+    ref: 'BL-2569-010',
+    amountSatang: 245_458,
+    altAmountSatang: 238_576,
+    referenceDate: sent,
+  }
+  const partial: MatchCandidate = { ...unpaid, remainingAmountSatang: 95_458, remainingAltAmountSatang: 88_576 }
+
+  it('ยังไม่เคยรับเงิน ⇒ เสนอ/จับอัตโนมัติด้วยยอดเต็ม และยอดหลังลูกค้าหักภาษีได้', () => {
+    expect(findMatchProposals([unpaid], tx(245_458))[0]?.matchedAmountSatang).toBe(245_458)
+    expect(findMatchProposals([unpaid], tx(238_576))[0]?.matchedAmountSatang).toBe(238_576)
+    expect(findAutoMatch({ amountSatang: 245_458, transactionDate: onTime, toleranceDays: 7 }, [unpaid])).toMatchObject({
+      matched: true,
+    })
+  })
+
+  it('รับบางส่วนแล้ว + เงินเข้าเท่ายอดเต็มบิล/ยอดเต็มหลังหัก ⇒ ไม่เสนอ ไม่จับอัตโนมัติ', () => {
+    expect(findMatchProposals([partial], tx(245_458))).toEqual([])
+    expect(findMatchProposals([partial], tx(238_576))).toEqual([])
+    expect(findAutoMatch({ amountSatang: 245_458, transactionDate: onTime, toleranceDays: 7 }, [partial])).toMatchObject({
+      matched: false,
+      reason: 'no_candidate',
+    })
+  })
+
+  it('รับบางส่วนแล้ว + เงินเข้าเท่ายอดค้าง/ยอดค้างหลังหัก ⇒ เสนอ', () => {
+    expect(findMatchProposals([partial], tx(95_458))[0]?.matchedAmountSatang).toBe(95_458)
+    expect(findMatchProposals([partial], tx(88_576))[0]?.matchedAmountSatang).toBe(88_576)
+  })
+
+  it('จับคู่เองด้วยยอดเต็มยังทำได้ แต่ไม่นับเป็นยอดตรง ⇒ ต้องมีหมายเหตุ', () => {
+    const exact = isExactMatchAmount(245_458, partial)
+    expect(exact).toBe(false)
+    expect(manualMatchRequiresNote({ exactAmount: exact, isRematch: false })).toBe(true)
   })
 })

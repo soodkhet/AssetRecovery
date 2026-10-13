@@ -83,7 +83,8 @@ export function daysAfter(referenceDate: Date, transactionDate: Date): number {
 }
 
 /**
- * ผู้สมัครรายนี้เข้าเกณฑ์ auto-match ไหม — ยอดตรงเป๊ะ (เต็มหรือ `total − wht`)
+ * ผู้สมัครรายนี้เข้าเกณฑ์ auto-match ไหม — ยอดตรงเป๊ะ (เต็มหรือ `total − wht` เมื่อยังไม่เคยรับเงิน ·
+ * รอบที่รับบางส่วนแล้ว = ยอดค้าง/ยอดค้างหลังหักภาษีเท่านั้น — มติผู้ใช้ 13/10/2569)
  * และเงินต้องเกิด**ตั้งแต่วันเอกสารเป็นต้นไป** ไม่เกิน tolerance (`35` §6.2 "เงินเข้าที่ช้ากว่า
  * วันวางบิลไม่เกินจำนวนวันนี้")
  */
@@ -92,10 +93,13 @@ export function candidateMatches(
   input: { amountSatang: number; transactionDate: Date; toleranceDays: number },
 ): { matched: boolean; matchedAmountSatang: number; referenceDate: Date | null } {
   const absolute = Math.abs(input.amountSatang)
+  // มติผู้ใช้ 13/10/2569 — รอบที่รับเงินไปบางส่วนแล้ว (มียอดค้างแยก) ⇒ เสนอ/จับอัตโนมัติด้วยยอดค้างจริงเท่านั้น
+  // ไม่เสนอยอดเต็มบิล/ยอดเต็มหลังหักภาษีอีก (ยืนยันแล้วกลายเป็นรับเกิน) · จับคู่เองด้วยยอดเต็มยังทำได้แต่ต้องมีหมายเหตุ
+  const fullApplies = fullAmountApplies(candidate)
   // ยอดที่ยอมรับ + วันอ้างอิงของยอดนั้น — ยอดค้างจากใบเพิ่มหนี้นับช่วงวันจากวันออกใบเพิ่มหนี้ล่าสุด (มติ O77)
   const options: { amount: number | null; referenceDate: Date | null }[] = [
-    { amount: candidate.amountSatang, referenceDate: candidate.referenceDate },
-    { amount: candidate.altAmountSatang, referenceDate: candidate.referenceDate },
+    { amount: fullApplies ? candidate.amountSatang : null, referenceDate: candidate.referenceDate },
+    { amount: fullApplies ? candidate.altAmountSatang : null, referenceDate: candidate.referenceDate },
     {
       amount: candidate.remainingAmountSatang ?? null,
       referenceDate: candidate.remainingReferenceDate ?? candidate.referenceDate,
