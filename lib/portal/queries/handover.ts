@@ -7,7 +7,13 @@ import { getRequestMeta } from '@/lib/auth/request-meta'
 import { endOfBangkokDay, startOfBangkokDay } from '@/lib/format/datetime'
 import type { Prisma } from '@/lib/generated/prisma/client'
 import { HandoverLotStatus, type HandoverType } from '@/lib/generated/prisma/enums'
-import { portalViewAsAuditFields, rejectPortalRow, requirePortalRow, type PortalContext } from '@/lib/portal/guard'
+import {
+  portalViewAsAuditFields,
+  rejectPortalRow,
+  requirePortalRow,
+  type PortalContext,
+  type PortalRowTarget,
+} from '@/lib/portal/guard'
 import { portalDeliveryNoteFileName } from '@/lib/portal/handover-view'
 import {
   serializePortalLotDetail,
@@ -246,7 +252,7 @@ export async function getPortalLotSignedDoc(
   lotId: string,
   request?: Request,
 ): Promise<PortalLotFile> {
-  const target = { type: PORTAL_LOT_TARGET, id: lotId }
+  const target: PortalRowTarget = { type: PORTAL_LOT_TARGET, id: lotId }
   const where = lotByIdWhere(ctx, lotId)
   const row = where === null ? null : await prisma.handoverLot.findFirst({ where, select: lotDownloadSelect })
   const lot = await requirePortalRow(ctx, row, target, { request, download: true })
@@ -347,7 +353,7 @@ export async function getPortalLotDeliveryProof(
   lotId: string,
   request?: Request,
 ): Promise<PortalLotFile> {
-  const target = { type: PORTAL_LOT_TARGET, id: lotId }
+  const target: PortalRowTarget = { type: PORTAL_LOT_TARGET, id: lotId }
   const where = lotByIdWhere(ctx, lotId)
   const row =
     where === null

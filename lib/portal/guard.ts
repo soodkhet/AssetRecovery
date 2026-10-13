@@ -1,5 +1,6 @@
 import type { NextRequest } from 'next/server'
 import { emitAudit } from '@/lib/audit/audit'
+import type { AuditTargetType } from '@/lib/audit/target-refs'
 import { loadCompanyStatus } from '@/lib/auth/company-status'
 import { AuthError, COMPANY_NOT_LINKED_MESSAGE, toAuthErrorResponse } from '@/lib/auth/errors'
 import { isSessionExpired } from '@/lib/auth/permission'
@@ -81,7 +82,7 @@ export interface PortalGuardOptions extends PortalAccessOptions {
 }
 
 /** ชนิดปลายทางของ audit เมื่อปฏิเสธระดับหมวด (ยังไม่ได้ระบุแถว) */
-export const PORTAL_AUDIT_TARGET = 'portal'
+export const PORTAL_AUDIT_TARGET = 'portal' satisfies AuditTargetType
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -92,7 +93,7 @@ interface DenyDetail {
   download: boolean
   /** เหตุผลภายในสำหรับ audit เท่านั้น */
   cause: string
-  targetType?: string
+  targetType?: AuditTargetType
   requestedId?: string
   /** บริษัทเป้าหมายของโหมดดูแทน (ถ้ามี) — ลง audit `after.view_as_company_id` */
   viewAsCompanyId?: string | null
@@ -243,8 +244,8 @@ async function resolveViewAs(
 }
 
 export interface PortalRowTarget {
-  /** ชื่อตารางของแถวที่ร้องขอ (snake_case ตาม `02`) เช่น `cases` / `handover_lots` */
-  type: string
+  /** ชื่อตารางของแถวที่ร้องขอ (snake_case ตาม `02`) เช่น `cases` / `handover_lots` — ลง audit ⇒ ต้องเป็นชนิดที่แปลงชื่อได้ */
+  type: AuditTargetType
   /** id ที่ผู้เรียกส่งมา (ดิบ — อาจไม่ใช่ uuid) */
   id: string
 }

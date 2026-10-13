@@ -1,7 +1,7 @@
 import type { NextRequest } from 'next/server'
 import { toModuleErrorResponse } from '@/lib/api/http'
 import { getRawSessionUser } from '@/lib/auth/session'
-import { denyPortalRow, requirePortalAccess, requirePortalRow } from '@/lib/portal/guard'
+import { denyPortalRow, requirePortalAccess, requirePortalRow, type PortalRowTarget } from '@/lib/portal/guard'
 import {
   findPortalAssetPhotoRow,
   portalAssetPhotoSection,
@@ -36,7 +36,7 @@ export async function GET(request: NextRequest, context: RouteContext): Promise<
     const portal = await requirePortalAccess(section, { download: true, request })
 
     const { id, index } = await context.params
-    const target = { type: 'assets', id }
+    const target: PortalRowTarget = { type: 'assets', id }
     const asset = await requirePortalRow(portal, await findPortalAssetPhotoRow(portal, id), target, {
       request,
       download: true,
