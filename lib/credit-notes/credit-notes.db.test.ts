@@ -657,6 +657,7 @@ suite('มติ PO U18–U21 — ใบเพิ่มหนี้ · บล็
       batchId: seeded.billingBatchId,
       receivedSatang: 1_294_700,
       sourceRef: 'TEST-O75',
+      sourceLabel: 'รายการเดินบัญชีทดสอบ TEST-O75',
       actorId: ACCOUNTING_ID,
       actorRole: 'บัญชี',
     })

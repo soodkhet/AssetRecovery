@@ -41,6 +41,9 @@ import {
   isAuditRefField,
   AUDIT_NESTED_REF_MAX_DEPTH,
   auditReplaceNestedRefs,
+  auditTextRefs,
+  auditReplaceTextRefs,
+  BANK_TRANSACTION_REMATCH_SUFFIX,
 } from '@/lib/audit/target-refs'
 
 /** known H-06 — เป้าหมาย/ค่าอ้างอิงในบันทึกการใช้งานเป็นชื่อที่อ่านได้ (ส่วน pure) */
@@ -433,5 +436,36 @@ describe('ตรวจซ้ำ staging SV5-R-02 — id ในค่าซ้อ
       '[{"caseId":"CS-2569-0001","result":"skipped"}]',
     )
     expect(auditValueDisplay({ a: 1 }, 'payload', 'jobs', {})).toBe('{"a":1}')
+  })
+})
+
+describe('ตรวจซ้ำ staging SV5-R-03 — อ้างอิงรายการเดินบัญชีในข้อความ', () => {
+  const TX = 'af8cd930-4998-4000-8000-0000000000b1'
+  const LABEL = '13/10/2569 · ฿1,000.00 · กสิกรไทย'
+  const labelOf = (ref: { type: string; id: string }) => (ref.type === 'bank_transactions' && ref.id === TX ? LABEL : null)
+
+  it('auditTextRefs ดึง id จาก bank_transaction:<id>[:rematch] และ "รายการเดินบัญชี <id>"', () => {
+    expect(auditTextRefs(`รับชำระจากรายการเดินบัญชี bank_transaction:${TX}`)).toEqual([{ type: 'bank_transactions', id: TX }])
+    expect(auditTextRefs(`bank_transaction:${TX}:rematch`)).toEqual([{ type: 'bank_transactions', id: TX }])
+    expect(auditTextRefs(`เปลี่ยนการจับคู่รายการเดินบัญชี ${TX}`)).toEqual([{ type: 'bank_transactions', id: TX }])
+    expect(auditTextRefs(`เคส ${TX}`)).toEqual([])
+    expect(auditTextRefs(null)).toEqual([])
+  })
+
+  it('auditReplaceTextRefs แทนด้วยป้าย · rematch ต่อท้าย · หาไม่พบคงเดิม', () => {
+    expect(auditReplaceTextRefs(`รับชำระจากรายการเดินบัญชี bank_transaction:${TX} (ไฟล์ 35)`, labelOf)).toBe(
+      `รับชำระจากรายการเดินบัญชี ${LABEL} (ไฟล์ 35)`,
+    )
+    expect(auditReplaceTextRefs(`bank_transaction:${TX}:rematch`, labelOf)).toBe(`${LABEL}${BANK_TRANSACTION_REMATCH_SUFFIX}`)
+    const unknown = 'bank_transaction:00000000-0000-4000-8000-000000000000'
+    expect(auditReplaceTextRefs(unknown, labelOf)).toBe(unknown)
+  })
+
+  it('auditValueRefs เก็บ id จาก source_ref · auditValueDisplay แสดงป้าย', () => {
+    expect(auditValueRefs({ source_ref: `bank_transaction:${TX}`, received_source: 'bank_reconciliation' })).toEqual([
+      { type: 'bank_transactions', id: TX },
+    ])
+    expect(auditValueDisplay(`bank_transaction:${TX}`, 'source_ref', 'billing_batches', { [TX]: LABEL })).toBe(LABEL)
+    expect(auditValueDisplay('BANKTX-001', 'source_ref', 'billing_batches', { [TX]: LABEL })).toBe('BANKTX-001')
   })
 })

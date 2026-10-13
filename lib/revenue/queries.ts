@@ -875,8 +875,13 @@ export async function applyBillingReceipt(input: {
    * ไม่ระบุ = วันนี้ตามเวลาไทย
    */
   lastReceivedDate?: Date | null
-  /** ธุรกรรม/เอกสารต้นทาง — ลง audit เพื่อ trace กลับได้ */
+  /** ธุรกรรม/เอกสารต้นทาง — ลง audit (`source_ref`) เพื่อ trace กลับได้ */
   sourceRef: string
+  /**
+   * ตรวจซ้ำ staging SV5-R-03 — ป้ายที่คนอ่านได้ของต้นทาง (เช่น "รายการเดินบัญชี 13/10/2569 · ฿1,000.00 · กสิกรไทย")
+   * ใช้ในเหตุผลของ audit (ห้ามใส่ id ดิบ)
+   */
+  sourceLabel: string
   /** ผู้สั่งงาน — `null` = job อัตโนมัติ */
   actorId: string | null
   actorRole: string
@@ -985,8 +990,8 @@ export async function applyBillingReceipt(input: {
         },
         reason:
           bankFeeChanged && bankFeeSatang > 0
-            ? `รับชำระจากรายการเดินบัญชี ${input.sourceRef} · ตัดส่วนต่างเป็นค่าธรรมเนียมธนาคาร ${fmtSatang(bankFeeSatang)} บาท (ไม่เกินเพดาน)`
-            : `รับชำระจากรายการเดินบัญชี ${input.sourceRef}`,
+            ? `รับชำระจาก${input.sourceLabel} · ตัดส่วนต่างเป็นค่าธรรมเนียมธนาคาร ${fmtSatang(bankFeeSatang)} บาท (ไม่เกินเพดาน)`
+            : `รับชำระจาก${input.sourceLabel}`,
         ipAddress: null,
         userAgent: null,
         diffOnly: false,

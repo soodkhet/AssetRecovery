@@ -313,6 +313,7 @@ suite('ทดสอบซ้ำ local LR5-01 — ชุดส่งบัญช�
   const LOG_BRAND = '00000000-0000-4000-8000-000000e515b2'
   const LOG_RECEIPT = '00000000-0000-4000-8000-000000e515b3'
   const LOG_BANK_TX = '00000000-0000-4000-8000-000000e515b4'
+  const LOG_BILLING_RECEIPT = '00000000-0000-4000-8000-000000e515b5'
   const lr5User = sessionUser({ id: USER, organizationId: ORG, roleId: ROLE })
 
   beforeAll(async () => {
@@ -357,7 +358,9 @@ suite('ทดสอบซ้ำ local LR5-01 — ชุดส่งบัญช�
         ('${LOG_BRAND}', '${ORG}', '${USER}', 'บริหาร LR5', 'update', 'device_brands', '${BRAND}', '{"manual_status":null}', '{"manual_status":"hidden"}', NULL, '2026-10-13T04:00:00Z'),
         ('${LOG_RECEIPT}', '${ORG}', '${USER}', 'บริหาร LR5', 'create', 'cash_receipts', '${RECEIPT}', NULL,
          '{"bank_transaction_id":"${BANK_TX}","amount_satang":107000}', 'จับคู่อัตโนมัติ', '2026-10-13T05:00:00Z'),
-        ('${LOG_BANK_TX}', '${ORG}', '${USER}', 'บริหาร LR5', 'update', 'bank_transactions', '${BANK_TX}', '{"match_status":"unmatched"}', '{"match_status":"matched"}', 'จับคู่', '2026-10-13T06:00:00Z')
+        ('${LOG_BANK_TX}', '${ORG}', '${USER}', 'บริหาร LR5', 'update', 'bank_transactions', '${BANK_TX}', '{"match_status":"unmatched"}', '{"match_status":"matched"}', 'จับคู่', '2026-10-13T06:00:00Z'),
+        ('${LOG_BILLING_RECEIPT}', '${ORG}', '${USER}', 'บริหาร LR5', 'update', 'billing_batches', '${BATCH}', '{"status":"sent"}',
+         '{"status":"paid","source_ref":"bank_transaction:${BANK_TX}"}', 'รับชำระจากรายการเดินบัญชี bank_transaction:${BANK_TX}', '2026-10-13T07:00:00Z')
       ON CONFLICT (id) DO NOTHING`)
   })
 
@@ -368,6 +371,18 @@ suite('ทดสอบซ้ำ local LR5-01 — ชุดส่งบัญช�
     expect(byId.get(LOG_BRAND)?.targetRef).toBe('aLR5')
     expect(byId.get(LOG_RECEIPT)?.targetRef).toBe('รับเงิน BL-2569-010 · ฿1,070.00')
     expect(byId.get(LOG_BANK_TX)?.targetRef).toBe('08/10/2569 · ฿1,070.00 · กสิกรไทย')
+  })
+
+  it('ตรวจซ้ำ staging SV5-R-03 — เหตุผล/source_ref "bank_transaction:<id>" แสดงเป็นป้ายรายการเดินบัญชี (ข้อมูลเดิมไม่ถูกแก้)', async () => {
+    const list = await logs.listAuditLogs(lr5User, baseQuery)
+    const row = list.items.find((item) => item.id === LOG_BILLING_RECEIPT)
+    expect(row?.reason).toBe('รับชำระจากรายการเดินบัญชี 08/10/2569 · ฿1,070.00 · กสิกรไทย')
+    const detail = await logs.getAuditLog(lr5User, LOG_BILLING_RECEIPT)
+    expect(detail?.reason).toBe('รับชำระจากรายการเดินบัญชี 08/10/2569 · ฿1,070.00 · กสิกรไทย')
+    expect(detail?.refLabels[BANK_TX]).toBe('08/10/2569 · ฿1,070.00 · กสิกรไทย')
+    expect((detail?.after as { source_ref?: string }).source_ref).toBe(`bank_transaction:${BANK_TX}`)
+    const stored = await db().auditLog.findUniqueOrThrow({ where: { id: LOG_BILLING_RECEIPT }, select: { reason: true } })
+    expect(stored.reason).toBe(`รับชำระจากรายการเดินบัญชี bank_transaction:${BANK_TX}`)
   })
 
   it('รายละเอียด: bank_transaction_id ในค่าหลังมีป้าย · องค์กรอื่นไม่เห็นชื่อ', async () => {

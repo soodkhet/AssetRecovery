@@ -689,6 +689,8 @@ suite('Phase 4.2 — จับคู่ manual + ปิดรายการ (`3
   })
 
   it('ALREADY_MATCHED — เตือนก่อนโดยไม่เปลี่ยนอะไร แล้วยืนยันจึงเปลี่ยนการจับคู่ + ถอนเงินรับเดิม', async () => {
+    // audit ลบไม่ได้ (immutable) ⇒ แถวของรอบทดสอบก่อนยังอยู่ — กรองด้วยเวลาเริ่มของเทสต์นี้
+    const startedAt = new Date()
     await seedBilling(BILLING_A, 802500, { period: 'รอบ A' })
     await seedBilling(BILLING_B, 800000, { period: 'รอบ B', sentAt: '2026-09-01T03:00:00Z' })
 
@@ -746,6 +748,33 @@ suite('Phase 4.2 — จับคู่ manual + ปิดรายการ (`3
     })
     expect(audits.map((row) => row.action)).toEqual(['import', 'update', 'update'])
     expect(audits.at(-1)?.reason).toBe('จับคู่ผิดรอบ — ย้ายไปรอบ B')
+
+    // ตรวจซ้ำ staging SV5-R-03 — เหตุผลอ้างรายการเดินบัญชีด้วยป้ายที่อ่านได้ (id ดิบอยู่ใน source_ref เพื่อ trace)
+    const uuid = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i
+    const billingAudits = await db().auditLog.findMany({
+      where: {
+        organizationId: ORG_ID,
+        targetType: 'billing_batches',
+        targetId: { in: [BILLING_A, BILLING_B] },
+        createdAt: { gte: startedAt },
+      },
+      select: { targetId: true, reason: true, afterData: true },
+      orderBy: { createdAt: 'asc' },
+    })
+    const receiptAudits = billingAudits.filter((row) => row.reason?.startsWith('รับชำระจาก') === true)
+    expect(receiptAudits.length).toBeGreaterThanOrEqual(3)
+    for (const row of receiptAudits) {
+      expect(row.reason).toMatch(/^รับชำระจากรายการเดินบัญชี 05\/08\/2569 · ฿8,025\.00 · /)
+      expect(row.reason).not.toMatch(uuid)
+      expect((row.afterData as { source_ref?: string }).source_ref).toMatch(/^bank_transaction:/)
+    }
+    expect(receiptAudits.at(-2)?.reason).toContain('เปลี่ยนการจับคู่')
+    const deletedReceipt = await db().auditLog.findFirstOrThrow({
+      where: { organizationId: ORG_ID, targetType: 'cash_receipts', action: 'delete', createdAt: { gte: startedAt } },
+      select: { reason: true },
+    })
+    expect(deletedReceipt.reason).toMatch(/^ยกเลิกเงินรับเดิมเพราะเปลี่ยนการจับคู่รายการเดินบัญชี 05\/08\/2569/)
+    expect(deletedReceipt.reason).not.toMatch(uuid)
   })
 
   it('ปิดรายการโดยไม่จับคู่ ⇒ unmatched_resolved + FK ทั้งคู่ยัง null + audit มีเหตุผล (`35` §16)', async () => {

@@ -388,6 +388,10 @@ function collectRecordRefs(record: Record<string, unknown>, depth: number, refs:
       refs.push({ type, id: value })
       continue
     }
+    if (typeof value === 'string') {
+      refs.push(...auditTextRefs(value))
+      continue
+    }
     const listType = Array.isArray(value) ? auditListFieldRefType(field) : null
     if (listType !== null && Array.isArray(value)) {
       for (const item of value.slice(0, AUDIT_LIST_REF_DISPLAY_LIMIT)) {
@@ -450,6 +454,33 @@ export function auditReplaceNestedRefs(
     }
   }
   return out
+}
+
+/**
+ * ตรวจซ้ำ staging SV5-R-03 — อ้างอิงรายการเดินบัญชีที่ฝังในข้อความ (`reason` / `source_ref`) ของข้อมูลเดิม:
+ * `bank_transaction:<UUID>[:rematch]` และ "รายการเดินบัญชี <UUID>" ⇒ แปลงเป็นป้ายตอนแสดงเท่านั้น (audit immutable)
+ */
+const TEXT_BANK_TRANSACTION_REF =
+  /(?:bank_transaction:|(?<=รายการเดินบัญชี ))([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(:rematch)?/gi
+
+/** ส่วนท้ายของป้ายเมื่ออ้างถึงรอบวางบิลเดิมหลังเปลี่ยนการจับคู่ */
+export const BANK_TRANSACTION_REMATCH_SUFFIX = ' (เปลี่ยนการจับคู่ — ปรับยอดรอบเดิม)'
+
+/** id รายการเดินบัญชีที่อ้างในข้อความ */
+export function auditTextRefs(text: string | null | undefined): AuditRef[] {
+  if (text === null || text === undefined || text === '') return []
+  return [...text.matchAll(TEXT_BANK_TRANSACTION_REF)].flatMap((match) =>
+    match[1] === undefined ? [] : [{ type: 'bank_transactions' as const, id: match[1] }],
+  )
+}
+
+/** แทนอ้างอิงในข้อความด้วยป้าย (`labelOf` คืน `null` = หาไม่พบ ⇒ คงข้อความเดิม) */
+export function auditReplaceTextRefs(text: string, labelOf: (ref: AuditRef) => string | null): string {
+  return text.replace(TEXT_BANK_TRANSACTION_REF, (whole, id: string, rematch: string | undefined) => {
+    const label = labelOf({ type: 'bank_transactions', id })
+    if (label === null) return whole
+    return rematch === undefined ? label : `${label}${BANK_TRANSACTION_REMATCH_SUFFIX}`
+  })
 }
 
 /** รวม id ต่อชนิด (ไม่ซ้ำ) — ใช้ค้นทีละชนิดครั้งเดียว */

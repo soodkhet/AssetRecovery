@@ -1067,6 +1067,7 @@ suite('Phase 3.6 — AR Aging + รับชำระ (`19` §6.4/§9.2)', () =>
       batchId,
       receivedSatang: 50_000,
       sourceRef: 'BANKTX-001',
+      sourceLabel: 'รายการเดินบัญชีทดสอบ BANKTX-001',
       actorId: null,
       actorRole: 'system',
     })
@@ -1080,6 +1081,7 @@ suite('Phase 3.6 — AR Aging + รับชำระ (`19` §6.4/§9.2)', () =>
       batchId,
       receivedSatang: 50_000,
       sourceRef: 'BANKTX-001',
+      sourceLabel: 'รายการเดินบัญชีทดสอบ BANKTX-001',
       actorId: null,
       actorRole: 'system',
     })
@@ -1090,6 +1092,7 @@ suite('Phase 3.6 — AR Aging + รับชำระ (`19` §6.4/§9.2)', () =>
       batchId,
       receivedSatang: 107_000,
       sourceRef: 'BANKTX-002',
+      sourceLabel: 'รายการเดินบัญชีทดสอบ BANKTX-002',
       actorId: null,
       actorRole: 'system',
     })
@@ -1106,6 +1109,7 @@ suite('Phase 3.6 — AR Aging + รับชำระ (`19` §6.4/§9.2)', () =>
       receivedSatang: 104_000,
       whtWithheldByCustomerSatang: 3_000,
       sourceRef: 'BANKTX-003',
+      sourceLabel: 'รายการเดินบัญชีทดสอบ BANKTX-003',
       actorId: null,
       actorRole: 'system',
     })
@@ -1129,6 +1133,7 @@ suite('Phase 3.6 — AR Aging + รับชำระ (`19` §6.4/§9.2)', () =>
         batchId,
         receivedSatang: 101_999,
         sourceRef: 'BANKTX-FEE-0',
+        sourceLabel: 'รายการเดินบัญชีทดสอบ BANKTX-FEE-0',
         actorId: null,
         actorRole: 'system',
       })
@@ -1141,6 +1146,7 @@ suite('Phase 3.6 — AR Aging + รับชำระ (`19` §6.4/§9.2)', () =>
         receivedSatang: 104_500,
         lastReceivedDate: new Date(Date.UTC(2026, 8, 3)),
         sourceRef: 'BANKTX-FEE-1',
+        sourceLabel: 'รายการเดินบัญชีทดสอบ BANKTX-FEE-1',
         actorId: null,
         actorRole: 'system',
       })

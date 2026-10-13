@@ -53,6 +53,9 @@ import type {
   StatementImportTemplateDto,
 } from '@/lib/bank-recon/types'
 import { emitAudit } from '@/lib/audit/audit'
+import { fmtDate } from '@/lib/format/datetime'
+import { fmtSatangSymbol } from '@/lib/format/money'
+import { BANK_TRANSACTION_REMATCH_SUFFIX, bankTransactionRefLabel } from '@/lib/audit/target-refs'
 import { SalesError } from '@/lib/sales/errors'
 import type { SessionUser } from '@/lib/auth/types'
 import { documentedBillingAmounts, expectedCustomerWhtSatang, type CustomerWhtNoteAmounts } from '@/lib/finance/wht-calc'
@@ -603,6 +606,7 @@ async function syncBillingAfterReceipt(
   ctx: AccountingMutationContext,
   billingBatchId: string,
   sourceRef: string,
+  sourceLabel: string,
 ): Promise<{ billingStatus: string; outstandingSatang: number; bankFeeWrittenOffSatang: number }> {
   const received = await receivedTotalSatang(ctx.actor.organizationId, billingBatchId)
   const result = await applyBillingReceipt({
@@ -612,6 +616,7 @@ async function syncBillingAfterReceipt(
     whtWithheldByCustomerSatang: received.whtWithheldByCustomerSatang,
     lastReceivedDate: received.lastReceivedDate,
     sourceRef,
+    sourceLabel,
     actorId: ctx.actor.id,
     actorRole: ctx.actor.roleName,
   })
@@ -876,6 +881,15 @@ async function loadTransaction(organizationId: string, id: string): Promise<TxRo
   return row
 }
 
+/** "รายการเดินบัญชี 13/10/2569 · ฿1,000.00 · กสิกรไทย" — ป้ายเดียวกับหน้าบันทึกการใช้งาน (SV5-R-03) */
+function bankTransactionAuditLabel(row: Pick<TxRow, 'transactionDate' | 'amountSatang' | 'bankAccount'>): string {
+  return `รายการเดินบัญชี ${bankTransactionRefLabel(
+    fmtDate(row.transactionDate),
+    fmtSatangSymbol(row.amountSatang),
+    row.bankAccount.bankName,
+  )}`
+}
+
 interface ApplyMatchInput {
   transactionId: string
   candidate: MatchCandidate
@@ -909,6 +923,8 @@ async function applyMatch(ctx: AccountingMutationContext, input: ApplyMatchInput
   })
 
   const previousBillingId = before.matchedBillingId
+  // ตรวจซ้ำ staging SV5-R-03 — เหตุผลใน audit อ้างรายการเดินบัญชีด้วยป้ายที่คนอ่านได้ (id อยู่ใน source_ref/target_id)
+  const transactionLabel = bankTransactionAuditLabel(before)
   const typedNote = input.matchNote?.trim() ?? ''
   // staging E-056 — ยืนยันคู่ที่ระบบเสนอโดยไม่กรอกหมายเหตุ ⇒ เติมหมายเหตุอัตโนมัติ (เดิมแสดง "—")
   const note = typedNote !== '' ? typedNote : input.fromProposal === true ? PROPOSAL_MATCH_NOTE : null
@@ -958,7 +974,7 @@ async function applyMatch(ctx: AccountingMutationContext, input: ApplyMatchInput
       }
       for (const receipt of stale) {
         // U40 — รายการรอ 50 ทวิ ของเงินรับเดิมต้องถูกถอนก่อน (ไม่งั้นค้างตามหนังสือที่ไม่มีวันมา)
-        await releaseCustomerWhtForReceipt(tx, ctx, receipt.id, `เปลี่ยนการจับคู่รายการเดินบัญชี ${before.id}`)
+        await releaseCustomerWhtForReceipt(tx, ctx, receipt.id, `เปลี่ยนการจับคู่${transactionLabel}`)
         await tx.cashReceipt.delete({ where: { id: receipt.id } })
         await emitAudit(
           {
@@ -973,7 +989,7 @@ async function applyMatch(ctx: AccountingMutationContext, input: ApplyMatchInput
               amount_satang: receipt.amountSatang,
               received_date: receipt.receivedDate,
             },
-            reason: `ยกเลิกเงินรับเดิมเพราะเปลี่ยนการจับคู่รายการเดินบัญชี ${before.id}`,
+            reason: `ยกเลิกเงินรับเดิมเพราะเปลี่ยนการจับคู่${transactionLabel}`,
             ipAddress: ctx.meta.ipAddress,
             userAgent: ctx.meta.userAgent,
           },
@@ -1099,11 +1115,16 @@ async function applyMatch(ctx: AccountingMutationContext, input: ApplyMatchInput
 
   if (previousBillingId !== null && previousBillingId !== input.candidate.id) {
     // รอบเดิมต้องถูกลดยอดรับลงหลังถอน Cash Receipt ออกแล้ว
-    await syncBillingAfterReceipt(ctx, previousBillingId, `bank_transaction:${before.id}:rematch`)
+    await syncBillingAfterReceipt(
+      ctx,
+      previousBillingId,
+      `bank_transaction:${before.id}:rematch`,
+      `${transactionLabel}${BANK_TRANSACTION_REMATCH_SUFFIX}`,
+    )
   }
 
   if (input.candidate.kind === 'billing' && cashReceiptId !== null) {
-    const applied = await syncBillingAfterReceipt(ctx, input.candidate.id, `bank_transaction:${before.id}`)
+    const applied = await syncBillingAfterReceipt(ctx, input.candidate.id, `bank_transaction:${before.id}`, transactionLabel)
     effect = { kind: 'billing', cashReceiptId, ...applied }
   }
 

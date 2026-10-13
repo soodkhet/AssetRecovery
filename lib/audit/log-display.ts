@@ -3,6 +3,7 @@ import {
   AUDIT_LIST_REF_DISPLAY_LIMIT,
   auditListFieldRefType,
   auditReplaceNestedRefs,
+  auditReplaceTextRefs,
   isAuditRefField,
 } from '@/lib/audit/target-refs'
 import { fmtSatangSymbol } from '@/lib/format/money'
@@ -327,6 +328,7 @@ const AUDIT_FIELD_LABEL: Readonly<Record<string, string>> = {
   resolved_by: 'ผู้แก้ไข',
   source_module: 'โมดูลต้นทาง',
   amount_satang: 'ยอดเงิน',
+  source_ref: 'ที่มา',
   match_note: 'หมายเหตุการจับคู่',
   rejection_reason: 'เหตุผลที่ปฏิเสธ',
   cancel_reason: 'เหตุผลที่ยกเลิก',
@@ -387,5 +389,10 @@ export function auditValueDisplay(
   }
   // ตรวจซ้ำ staging SV5-R-02 — id ในค่าซ้อน (`revenueByCase[].caseId` · `payload.actorId`) ⇒ ชื่อ (แปลงตอนแสดงเท่านั้น)
   if (value !== null && typeof value === 'object') return JSON.stringify(auditReplaceNestedRefs(value, refLabels))
+  // ตรวจซ้ำ staging SV5-R-03 — `source_ref` "bank_transaction:<id>" ⇒ ป้ายรายการเดินบัญชี
+  if (typeof value === 'string') {
+    const replaced = auditReplaceTextRefs(value, (ref) => refLabels[ref.id.toLowerCase()] ?? null)
+    if (replaced !== value) return replaced
+  }
   return auditValueText(value, field)
 }

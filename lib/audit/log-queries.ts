@@ -9,6 +9,8 @@ import {
   auditTargetContextRef,
   auditTargetRef,
   auditValueRefs,
+  auditTextRefs,
+  auditReplaceTextRefs,
   type AuditRef,
 } from '@/lib/audit/target-refs'
 import type {
@@ -77,6 +79,8 @@ function listRefsOf(rows: readonly ListRow[]): AuditRef[] {
     if (target !== null) refs.push(target)
     const context = auditTargetContextRef(row)
     if (context !== null) refs.push(context)
+    // ตรวจซ้ำ staging SV5-R-03 — รายการเดินบัญชีที่อ้างในเหตุผล (`bank_transaction:<id>`)
+    refs.push(...auditTextRefs(row.reason))
   }
   return refs
 }
@@ -103,7 +107,8 @@ function toListItem(row: ListRow, labels: ReadonlyMap<string, string>, organizat
     targetType: row.targetType,
     targetId: row.targetId,
     targetRef: targetRefOf(row, labels, organizationId),
-    reason: row.reason,
+    // ตรวจซ้ำ staging SV5-R-03 — แปลงอ้างอิงรายการเดินบัญชีในเหตุผลเป็นป้ายตอนแสดง (ข้อมูล audit คงเดิม)
+    reason: row.reason === null ? null : auditReplaceTextRefs(row.reason, (ref) => labels.get(auditRefKey(ref)) ?? null),
     loginFailure: auditLoginFailureOf(row.action, row.afterData),
   }
 }
