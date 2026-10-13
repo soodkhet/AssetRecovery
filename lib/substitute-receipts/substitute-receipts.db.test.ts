@@ -343,6 +343,34 @@ suite('ใบเบิกค่าที่พัก "ไม่มีใบเ�
     expect(created.substituteReceipt?.receiptNumber).toMatch(/^CRT-\d{4}-0001$/)
   })
 
+  it('mytester5 รีวิว D-OUT5-01: ส่งใหม่หลังตีกลับ — มีใบรับรองแทนที่ยังมีผล ⇒ "ใบเสร็จในนามบริษัท" ถูกบังคับเป็น false', async () => {
+    const created = await fieldExpenses.submitHotelClaim(
+      agent,
+      {
+        expenseDate: new Date('2026-10-07T00:00:00Z'),
+        amountSatang: 5_000,
+        receiptFileUrl: null,
+        substituteReceipt: { lines: [line(5_000)] },
+        sharedWithUserId: null,
+        note: null,
+      },
+      { actor: agent, meta },
+    )
+    // ข้อมูลเก่าที่บันทึก true ไว้ก่อนแก้ + ถูกตีกลับ
+    await db().expense.update({
+      where: { id: created.id },
+      data: { status: 'needs_revision', receiptInCompanyName: true, rejectionReason: 'แก้จำนวนคืน' },
+    })
+    const resubmitted = await fieldExpenses.resubmitFieldExpense(
+      agent,
+      created.id,
+      { receiptInCompanyName: true, note: 'แก้แล้ว' },
+      { actor: agent, meta },
+    )
+    expect(resubmitted.status).toBe('pending_approval')
+    expect(resubmitted.receiptInCompanyName).toBe(false)
+  })
+
   it('ไม่มีทั้งใบเสร็จและรายการ = HOTEL_CLAIM_FIELD_REQUIRED', async () => {
     await expectCode(
       () =>

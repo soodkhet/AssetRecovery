@@ -25,6 +25,7 @@ import {
   bankFeeWriteOffCsv,
   type BankFeeWriteOffExportRow,
   advanceReturnCsv,
+  receiptInCompanyNameExportValue,
   bankReconCsv,
   buildPackCoverDoc,
   canTransitionExport,
@@ -386,7 +387,10 @@ function expenseRows(rows: readonly ExpenseRecordRow[], vouchers: PayoutVouchers
       whtSatang: row.whtSatang,
       netSatang: row.netSatang,
       // มติ PO U96 #14 — เฉพาะค่าที่พัก (ชนิดอื่น/เงินทดรอง = ว่าง)
-      receiptInCompanyName: expense?.expenseType === 'hotel' ? expense.receiptInCompanyName : null,
+      // mytester5 รีวิว D-OUT5-01 — ใช้ใบรับรองแทนใบเสร็จที่ยังมีผล (select กรองใบยกเลิกออกแล้ว) ⇒ "N" แม้ข้อมูลเก่าบันทึก true
+      receiptInCompanyName: receiptInCompanyNameExportValue(
+        expense === null ? null : { ...expense, activeSubstituteReceipts: expense.substituteReceipts },
+      ),
       // มติ PO U96 #15 — เงินทดรองจ่ายไม่มีใบเบิก ⇒ ใช้เลขอ้างอิงเงินทดรอง
       expenseId: expense?.id ?? item.advance?.advanceNumber ?? null,
       workDate: expense?.expenseDate ?? null,

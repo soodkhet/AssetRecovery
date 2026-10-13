@@ -203,6 +203,18 @@ export function isSubstituteReceiptActive(status: SubstituteReceiptStatus): bool
   return status !== 'cancelled'
 }
 
+/** รายการ (ใบเบิก/เงินทดรอง) มีใบรับรองแทนใบเสร็จที่ยังมีผลอยู่ไหม — ไม่นับใบที่ลบ/ยกเลิก */
+export function hasActiveSubstituteReceipt(
+  rows: readonly { status: SubstituteReceiptStatus; deletedAt?: Date | null }[],
+): boolean {
+  return rows.some((row) => (row.deletedAt ?? null) === null && isSubstituteReceiptActive(row.status))
+}
+
+/** ใบที่แสดงบนรายการ (`substituteReceiptRefOf()` — อาจเป็นใบที่ยกเลิกแล้วถ้าไม่มีใบที่ใช้อยู่) ยังมีผลไหม */
+export function isSubstituteReceiptRefActive(ref: { status: SubstituteReceiptStatus } | null): boolean {
+  return ref !== null && isSubstituteReceiptActive(ref.status)
+}
+
 /** รายการที่ใบผูกอยู่ — สถานะที่ใช้ตัดสินว่ายกเลิก/ออกใหม่ได้ไหม */
 export type SubstituteReceiptLinkState =
   | {

@@ -2,6 +2,7 @@ import type { ReadinessCheck } from '@/lib/accounting/period'
 import { payoutTransferSatang } from '@/lib/finance/advance-offset-calc'
 import { isPayerBorneWhtCondition } from '@/lib/finance/wht-calc'
 import { buildCsv, csvBaht, csvDate, csvText, CSV_EMPTY, CSV_NEWLINE } from '@/lib/exports/csv'
+import { effectiveReceiptInCompanyName } from '@/lib/field/hotel-claim'
 import { formatBranch } from '@/lib/format/branch'
 import { fmtDate } from '@/lib/format/datetime'
 import { fmtCount, fmtSatang } from '@/lib/format/money'
@@ -307,6 +308,18 @@ export interface ExpenseExportRow {
 export function receiptInCompanyNameCell(value: boolean | null): string {
   if (value === null) return ''
   return value ? 'Y' : 'N'
+}
+
+/**
+ * ค่าของคอลัมน์ `receipt_in_company_name` ต่อใบเบิก — ค่าที่พักเท่านั้น (ชนิดอื่น/เงินทดรอง = `null`) ·
+ * mytester5 รีวิว D-OUT5-01: มีใบรับรองแทนใบเสร็จที่ยังมีผล (`activeSubstituteReceipts` — ผู้เรียกกรองใบยกเลิก/ลบออกแล้ว)
+ * ⇒ ไม่มีใบเสร็จจริง = `false` แม้ข้อมูลเก่าบันทึก `true` ไว้
+ */
+export function receiptInCompanyNameExportValue(
+  expense: { expenseType: string; receiptInCompanyName: boolean; activeSubstituteReceipts: readonly unknown[] } | null,
+): boolean | null {
+  if (expense === null || expense.expenseType !== 'hotel') return null
+  return effectiveReceiptInCompanyName(expense.receiptInCompanyName, expense.activeSubstituteReceipts.length > 0)
 }
 
 export function expenseCsv(rows: readonly ExpenseExportRow[]): string {

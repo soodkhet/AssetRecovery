@@ -16,6 +16,7 @@ import {
   parseHotelNightsInput,
   receiptInCompanyNameText,
   hotelReceiptNameText,
+  effectiveReceiptInCompanyName,
 } from '@/lib/field/hotel-claim'
 import { hotelClaimSchema, resubmitExpenseSchema } from '@/lib/field/schemas'
 
@@ -227,6 +228,13 @@ describe('ใบเสร็จค่าที่พักในนามบร�
     // mytester5 D-OUT5-01 — ใช้ใบรับรองแทนใบเสร็จ ⇒ ไม่มีป้าย
     expect(hotelReceiptNameText(false, true)).toBeNull()
     expect(hotelReceiptNameText(false, false)).toBe('ใบเสร็จไม่ได้ออกในนามบริษัท')
+  })
+
+  it('mytester5 รีวิว D-OUT5-01: ใช้ใบรับรองแทนใบเสร็จที่ยังมีผล ⇒ ค่าจริงเป็น false เสมอ (ครอบข้อมูลเก่าที่บันทึก true)', () => {
+    expect(effectiveReceiptInCompanyName(true, true)).toBe(false)
+    expect(effectiveReceiptInCompanyName(false, true)).toBe(false)
+    expect(effectiveReceiptInCompanyName(true, false)).toBe(true)
+    expect(effectiveReceiptInCompanyName(false, false)).toBe(false)
   })
 })
 

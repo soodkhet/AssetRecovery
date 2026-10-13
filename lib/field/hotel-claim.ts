@@ -133,6 +133,14 @@ export function hotelReceiptNameText(receiptInCompanyName: boolean, usesSubstitu
   return usesSubstituteReceipt ? null : receiptInCompanyNameText(receiptInCompanyName)
 }
 
+/**
+ * mytester5 รีวิว D-OUT5-01 — ค่าที่ถือว่าเป็น "ใบเสร็จออกในนามบริษัท" จริง: ใช้ใบรับรองแทนใบเสร็จที่ยังมีผล ⇒ `false` เสมอ
+ * (ไม่มีใบเสร็จจริง) · ใช้ทั้งตอนส่งใหม่ (ไม่รับค่าจากผู้เรียก) และตอนส่งออก (ครอบข้อมูลเก่าที่บันทึก true ไว้)
+ */
+export function effectiveReceiptInCompanyName(receiptInCompanyName: boolean, usesSubstituteReceipt: boolean): boolean {
+  return usesSubstituteReceipt ? false : receiptInCompanyName
+}
+
 /** ข้อความสั้น "2 คืน · เพดาน ฿1,600.00" (ไม่ตั้งเพดาน → "2 คืน") — ใช้ทั้งรายการเบิกและคิวอนุมัติ */
 export function hotelNightsCapText(nights: number, maxPerNightSatang: number | null): string {
   const cap = hotelClaimCapSatang(maxPerNightSatang, nights)

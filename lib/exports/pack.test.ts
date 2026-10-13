@@ -16,6 +16,7 @@ import {
   checklistSummary,
   expenseCsv,
   receiptInCompanyNameCell,
+  receiptInCompanyNameExportValue,
   exportVersionLabel,
   normalizeTaxId,
   packAttemptId,
@@ -339,6 +340,16 @@ describe('02/03/04 — เงินรับ ค่าใช้จ่าย จ�
     expect(lines[1]?.split(',').slice(2, 6)).toEqual(['800.00', '0.00', '800.00', 'Y'])
     expect(lines[2]?.split(',').slice(2, 6)).toEqual(['800.00', '0.00', '800.00', 'N'])
     expect(receiptInCompanyNameCell(null)).toBe('')
+  })
+
+  it('mytester5 รีวิว D-OUT5-01: ค่าที่พักที่ใช้ใบรับรองแทนใบเสร็จ ⇒ N แม้ข้อมูลเก่าบันทึก true · ชนิดอื่นว่าง', () => {
+    const hotel = { expenseType: 'hotel', receiptInCompanyName: true }
+    expect(receiptInCompanyNameExportValue({ ...hotel, activeSubstituteReceipts: [{ receiptNumber: 'CRT-2569-0001' }] })).toBe(false)
+    expect(receiptInCompanyNameExportValue({ ...hotel, activeSubstituteReceipts: [] })).toBe(true)
+    expect(
+      receiptInCompanyNameExportValue({ expenseType: 'fuel', receiptInCompanyName: true, activeSubstituteReceipts: [] }),
+    ).toBeNull()
+    expect(receiptInCompanyNameExportValue(null)).toBeNull()
   })
 
   it('มติ U96 #15: หลักฐานรายจ่ายต่อท้าย 8 คอลัมน์ — ใบเสร็จเป็นชื่อไฟล์ ไม่เปิดเผย path', () => {
