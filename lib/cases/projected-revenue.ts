@@ -89,29 +89,70 @@ export interface CaseServiceFeeSnapshot {
   serviceFeeBaseSatang: number | null
   serviceFeeRatePct: number | null
   serviceFeeBasisSnapshot: ServiceFeeBasis | null
+  /** เทมเพลตต้นทางของ snapshot — ใส่ลงที่มา (`template=`) ให้ป้ายสูตรค้นชื่อเทมเพลตได้ · ไม่ส่ง = ไม่ระบุ */
+  serviceFeeTemplateId?: string | null
 }
 
 /**
- * mytester5 B5-01 — ประมาณการของเคสที่รับแล้วคิดจาก **snapshot ค่าบริการของเคส** (สูตรเดียวกับ
- * {@link calculateProjectedRevenue}) + มูลหนี้ปัจจุบัน — ไม่ใช่ยอดที่คำนวณไว้จากเทมเพลตก่อนรับเคส
- * · ยังไม่มี snapshot (ยังไม่รับเคส) ⇒ ใช้ยอดที่บันทึกไว้ (`storedSatang`) เหมือนเดิม
+ * mytester5 B5-01 (+ รีวิว) — ประมาณการของเคสที่รับแล้วคิดจาก **snapshot ค่าบริการของเคส** (สูตรเดียวกับ
+ * {@link calculateProjectedRevenue}) + มูลหนี้ของเคส ⇒ ทั้งยอดและ "ที่มา" (`source` — ป้ายสูตรบนจอ) มาจาก snapshot
+ * · ใช้ทั้งตอนรับเคส (เขียนลง `projected_revenue_*`) หน้าเคส พอร์ทัล และรายงาน SLA ⇒ ได้ค่าเดียวกันทุกที่
+ * · ยังไม่มี snapshot (ยังไม่รับเคส) ⇒ ใช้ยอด/ที่มาที่บันทึกไว้ (`stored`) เหมือนเดิม
+ * · เวอร์ชันเทมเพลตไม่ได้ snapshot ไว้ ⇒ ยืมจากที่มาที่บันทึกไว้เมื่อเป็นเทมเพลตเดียวกัน (ใช้แสดงผลเท่านั้น)
  */
-export function caseProjectedRevenueSatang(
+export function caseProjectedRevenue(
   snapshot: CaseServiceFeeSnapshot,
   values: ProjectedRevenueCaseValues,
-  storedSatang: number | null,
-): { amountSatang: number | null; fromSnapshot: boolean } {
-  if (snapshot.serviceFeeModelSnapshot === null) return { amountSatang: storedSatang, fromSnapshot: false }
+  stored: { amountSatang: number | null; source: string | null },
+): { amountSatang: number | null; source: string | null; fromSnapshot: boolean } {
+  if (snapshot.serviceFeeModelSnapshot === null) {
+    return { amountSatang: stored.amountSatang, source: stored.source, fromSnapshot: false }
+  }
+  const templateId = snapshot.serviceFeeTemplateId ?? null
+  const storedParts = stored.source === null ? null : parseProjectedRevenueSource(stored.source)
+  const templateVersion =
+    templateId !== null && storedParts !== null && storedParts.templateId === templateId
+      ? storedParts.templateVersion
+      : null
   const projected = calculateProjectedRevenue(
     {
       model: snapshot.serviceFeeModelSnapshot,
       baseSatang: snapshot.serviceFeeBaseSatang ?? 0,
       ratePct: snapshot.serviceFeeRatePct ?? 0,
       basis: snapshot.serviceFeeBasisSnapshot,
+      ...(templateId === null ? {} : { templateId }),
+      ...(templateVersion === null ? {} : { templateVersion }),
     },
     values,
   )
-  return { amountSatang: projected.amountSatang, fromSnapshot: true }
+  return { amountSatang: projected.amountSatang, source: projected.source, fromSnapshot: true }
+}
+
+/** แถวเคส (Prisma — `service_fee_rate_pct` เป็น Decimal) → {@link CaseServiceFeeSnapshot} · ใช้ร่วมหน้าเคส/พอร์ทัล/รายงาน */
+export function caseServiceFeeSnapshotOf(row: {
+  serviceFeeModelSnapshot: ServiceFeeModel | null
+  serviceFeeBaseSatang: number | null
+  serviceFeeRatePct: number | { toString(): string } | null
+  serviceFeeBasisSnapshot: ServiceFeeBasis | null
+  serviceFeeTemplateId?: string | null
+}): CaseServiceFeeSnapshot {
+  return {
+    serviceFeeModelSnapshot: row.serviceFeeModelSnapshot,
+    serviceFeeBaseSatang: row.serviceFeeBaseSatang,
+    serviceFeeRatePct: row.serviceFeeRatePct === null ? null : Number(row.serviceFeeRatePct.toString()),
+    serviceFeeBasisSnapshot: row.serviceFeeBasisSnapshot,
+    serviceFeeTemplateId: row.serviceFeeTemplateId ?? null,
+  }
+}
+
+/** ยอดอย่างเดียวของ {@link caseProjectedRevenue} — พอร์ทัล/รายงานที่ไม่แสดงที่มา */
+export function caseProjectedRevenueSatang(
+  snapshot: CaseServiceFeeSnapshot,
+  values: ProjectedRevenueCaseValues,
+  storedSatang: number | null,
+): { amountSatang: number | null; fromSnapshot: boolean } {
+  const { amountSatang, fromSnapshot } = caseProjectedRevenue(snapshot, values, { amountSatang: storedSatang, source: null })
+  return { amountSatang, fromSnapshot }
 }
 
 const NOT_CONFIRMED_NOTE = 'ไม่ใช่รายได้ที่ยืนยันแล้ว (รายได้จริงเกิดเมื่อรายการเบิกอนุมัติและคลังยืนยันส่งมอบ)'

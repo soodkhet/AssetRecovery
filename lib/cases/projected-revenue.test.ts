@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   calculateProjectedRevenue,
+  caseProjectedRevenue,
   caseProjectedRevenueSatang,
+  caseServiceFeeSnapshotOf,
   projectedRevenueNote,
   parseProjectedRevenueSource,
   projectedRevenueSourceText,
@@ -214,5 +216,47 @@ describe('mytester5 B5-01 — เคสที่รับแล้วคิด�
     expect(
       projectedRevenueNote({ status: 'draft', projectedRevenueSource: null, projectedRevenueSourceLabel: null, serviceFeeModelSnapshot: null }),
     ).toContain('ระบบคำนวณให้เมื่อส่งตรวจสอบ')
+  })
+})
+
+describe('mytester5 รีวิว B5-01 — ยอด + ที่มาจาก snapshot ตัวเดียวกันทุกจุด', () => {
+  const TEMPLATE = '11111111-1111-4111-8111-111111111111'
+  const snapshot = {
+    serviceFeeModelSnapshot: 'FLAT' as const,
+    serviceFeeBaseSatang: 150_000,
+    serviceFeeRatePct: 0,
+    serviceFeeBasisSnapshot: null,
+    serviceFeeTemplateId: TEMPLATE,
+  }
+
+  it('รับเคสแล้ว ⇒ ที่มา (ป้ายสูตร) มาจาก snapshot ไม่ใช่ที่มาที่เก็บไว้ก่อนรับเคส · ยืมเวอร์ชันเมื่อเป็นเทมเพลตเดียวกัน', () => {
+    const result = caseProjectedRevenue(snapshot, { debtAmountSatang: 1_000_000 }, {
+      amountSatang: 1,
+      source: `model=HYBRID · template=${TEMPLATE} · v3 · base=50000 · rate=15% · basis=debt_amount`,
+    })
+    expect(result).toEqual({ amountSatang: 150_000, source: `model=FLAT · template=${TEMPLATE} · v3 · base=150000`, fromSnapshot: true })
+    expect(projectedRevenueSourceText(result.source ?? '', 'เหมาจ่าย')).toBe('เทมเพลต "เหมาจ่าย" v3 · เหมาจ่ายรายเคส: ฿1,500.00')
+  })
+
+  it('เทมเพลตต่างจากที่มาเดิม ⇒ ไม่ยืมเวอร์ชัน · ยังไม่รับเคส ⇒ ยอด/ที่มาที่เก็บไว้', () => {
+    const other = caseProjectedRevenue(snapshot, { debtAmountSatang: null }, { amountSatang: 1, source: 'model=FLAT · template=x · v9 · base=1' })
+    expect(other.source).toBe(`model=FLAT · template=${TEMPLATE} · base=150000`)
+    expect(
+      caseProjectedRevenue({ ...snapshot, serviceFeeModelSnapshot: null }, { debtAmountSatang: null }, { amountSatang: 7, source: 'model=FLAT · base=7' }),
+    ).toEqual({ amountSatang: 7, source: 'model=FLAT · base=7', fromSnapshot: false })
+  })
+
+  it('caseServiceFeeSnapshotOf — อ่าน Decimal ของ Prisma เป็นตัวเลข · ยอดตรงกับ caseProjectedRevenueSatang', () => {
+    const row = {
+      serviceFeeModelSnapshot: 'HYBRID' as const,
+      serviceFeeBaseSatang: 50_000,
+      serviceFeeRatePct: { toString: () => '10.50' },
+      serviceFeeBasisSnapshot: 'debt_amount' as const,
+    }
+    const converted = caseServiceFeeSnapshotOf(row)
+    expect(converted).toMatchObject({ serviceFeeRatePct: 10.5, serviceFeeTemplateId: null })
+    const full = caseProjectedRevenue(converted, { debtAmountSatang: 1_000_000 }, { amountSatang: null, source: null })
+    expect(full.amountSatang).toBe(155_000)
+    expect(caseProjectedRevenueSatang(converted, { debtAmountSatang: 1_000_000 }, null).amountSatang).toBe(155_000)
   })
 })

@@ -121,6 +121,7 @@ function caseRow(status: CaseStatus, extra: Partial<PortalCaseDetailSource> = {}
     serviceFeeBasisSnapshot: 'debt_amount',
     serviceFeeFailFeeSatang: 50_000,
     projectedRevenueSatang: 150_000,
+    debtAmountSatang: 952_381,
     asset: { ...FORBIDDEN, id: 'asset-1', photos: [PHOTO_PATH, 'p2', 'p3'], condition: 'damaged', conditionNote: 'จอแตก' },
     ...extra,
   } as PortalCaseDetailSource
@@ -320,6 +321,13 @@ describe('portal serializers — เนื้อหา', () => {
     const fee = serializePortalCaseDetail(caseRow('active')).serviceFee
     expect(fee).toMatchObject({ model: 'HYBRID', ratePct: 10.5, baseSatang: 50_000, basis: 'debt_amount', failFeeSatang: 50_000, projectedRevenueSatang: 150_000 })
     expect(serializePortalCaseDetail(caseRow('pending_review', { serviceFeeModelSnapshot: null })).serviceFee).toBeNull()
+  })
+
+  it('mytester5 รีวิว B5-01 — ประมาณการคิดจาก snapshot + มูลหนี้ (ตัวเดียวกับหน้าเคส) ไม่อ่านยอดที่เก็บไว้ตรง ๆ', () => {
+    const fee = serializePortalCaseDetail(
+      caseRow('active', { debtAmountSatang: 1_000_000, projectedRevenueSatang: 999 }),
+    ).serviceFee
+    expect(fee?.projectedRevenueSatang).toBe(50_000 + 105_000)
   })
 
   it('mytester3 G3-03 — ป้ายรูปแบบค่าบริการในพอร์ทัลเป็นไทยล้วน (รายละเอียดเคส + ข้อมูลบริษัท)', () => {

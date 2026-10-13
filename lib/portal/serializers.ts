@@ -1,3 +1,4 @@
+import { caseProjectedRevenueSatang, caseServiceFeeSnapshotOf } from '@/lib/cases/projected-revenue'
 import { netInvoiceAmounts } from '@/lib/credit-notes/credit-note'
 import { arOutstandingSatang } from '@/lib/finance/ar-calc'
 import { pctOfSatang } from '@/lib/finance/satang'
@@ -148,6 +149,8 @@ export interface PortalCaseServiceFeeSource {
   serviceFeeBasisSnapshot: ServiceFeeBasis | null
   serviceFeeFailFeeSatang: number | null
   projectedRevenueSatang: number | null
+  /** มูลหนี้ของเคส — ฐานของประมาณการจาก snapshot (mytester5 รีวิว B5-01 · ไม่ส่งออกไปพอร์ทัล) */
+  debtAmountSatang: number | null
   /** staging E-073 — โหมด VAT **ปัจจุบัน**ของบริษัท (ใช้เป็นป้ายของยอดค่าบริการ) · ไม่ส่ง = ไม่ติดป้าย */
   companyVatMode?: VatMode | null
   /**
@@ -338,7 +341,12 @@ function serializeServiceFee(row: PortalCaseServiceFeeSource, closedFail: boolea
     basis,
     basisLabel: basis === null ? null : SERVICE_FEE_BASIS_LABEL[basis],
     failFeeSatang: row.serviceFeeFailFeeSatang,
-    projectedRevenueSatang: row.projectedRevenueSatang,
+    // mytester5 รีวิว B5-01 — คิดจาก snapshot ค่าบริการของเคส ตัวเดียวกับหน้าเคส/รายงาน SLA (ไม่อ่านยอดที่เก็บไว้ตรง ๆ)
+    projectedRevenueSatang: caseProjectedRevenueSatang(
+      caseServiceFeeSnapshotOf(row),
+      { debtAmountSatang: row.debtAmountSatang },
+      row.projectedRevenueSatang,
+    ).amountSatang,
     vatLabel: row.companyVatMode == null ? null : PORTAL_VAT_MODE_LABEL[row.companyVatMode],
     closedFail,
     actualRevenueSatang:

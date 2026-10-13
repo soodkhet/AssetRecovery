@@ -472,6 +472,26 @@ suite('O4 — เคสค้างเกิน SLA', () => {
     expect(kpiOf(payload, 'projectedRevenue')).toBe(250_000_00)
   })
 
+  it('mytester5 รีวิว B5-01 — เคสที่รับแล้ว: ยอดประมาณการคิดจาก snapshot ค่าบริการ + มูลหนี้ (ตัวเดียวกับหน้าเคส/พอร์ทัล)', async () => {
+    const id = await seedCase({
+      status: 'active',
+      closedAt: null,
+      createdAt: '2026-08-10T05:00:00Z',
+      projectedRevenueSatang: 1, // ยอดเก่าที่ไม่ตรง snapshot — ต้องไม่ถูกใช้
+    })
+    // มูลหนี้ 10,000 บาท (seed) · HYBRID 500 + 10.5% ⇒ 1,550 บาท
+    await db().$executeRawUnsafe(`
+      UPDATE cases SET service_fee_model_snapshot = 'HYBRID', service_fee_base_satang = 50000,
+                       service_fee_rate_pct = 10.50, service_fee_basis_snapshot = 'debt_amount'
+      WHERE id = '${id}'
+    `)
+
+    const payload = await run('sla-breach')
+
+    expect(payload.rows).toHaveLength(1)
+    expect(payload.rows[0]).toMatchObject({ projectedRevenueSatang: 155_000 })
+  })
+
   it('เคสที่ปิดแล้วไม่อยู่ในรายงาน แม้จะเก่ากว่าเกณฑ์', async () => {
     await seedCase({ status: 'closed_success', createdAt: '2026-06-01T03:00:00Z' })
     await seedCase({ status: 'draft', closedAt: null, createdAt: '2026-06-01T03:00:00Z' })

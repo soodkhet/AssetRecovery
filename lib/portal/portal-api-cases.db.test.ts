@@ -202,14 +202,16 @@ interface CaseSeed {
 async function insertCase(seed: CaseSeed): Promise<string> {
   const closed = seed.status === 'closed_success' || seed.status === 'closed_fail'
   const fee = seed.approved
-    ? `'HYBRID', 50000, 10.50, 'debt_amount', 50000, 150000`
-    : 'NULL, NULL, NULL, NULL, NULL, NULL'
+    ? // mytester5 รีวิว B5-01 — ประมาณการคิดจาก snapshot + มูลหนี้: 500 + 10.5% × 10,000 = 1,550 บาท
+      `'HYBRID', 50000, 10.50, 'debt_amount', 50000, 155000, 1000000`
+    : 'NULL, NULL, NULL, NULL, NULL, NULL, NULL'
   const rows = await db().$queryRawUnsafe<{ id: string }[]>(`
     INSERT INTO cases (organization_id, case_ref, case_ref_normalized, company_id, source, status, created_by,
                        debtor_name, debtor_national_id, debtor_phone_mobile, addr_province, imei, assigned_team_id,
                        review_note, outcome, closed_at,
                        service_fee_model_snapshot, service_fee_base_satang, service_fee_rate_pct,
-                       service_fee_basis_snapshot, service_fee_fail_fee_satang, projected_revenue_satang)
+                       service_fee_basis_snapshot, service_fee_fail_fee_satang, projected_revenue_satang,
+                       debt_amount_satang)
     VALUES ('${ORG_ID}', $$${seed.ref}$$, $$${seed.ref.toUpperCase()}$$, '${seed.company}', 'manual', '${seed.status}',
             '${INTERNAL_USER}', $$ลูกหนี้ ${seed.ref}$$, '${SECRET.nationalId}', '${SECRET.phone}', 'เชียงใหม่',
             '${SECRET.imei}', '${TEAM_ID}', ${seed.reviewNote ? `$$${seed.reviewNote}$$` : 'NULL'},
@@ -461,7 +463,7 @@ suite('Portal-P4 — GET /api/portal/cases/:id (`97` §6.1/§6.6 v4.1 · §12 ·
       baseSatang: 50000,
       basis: 'debt_amount',
       failFeeSatang: 50000,
-      projectedRevenueSatang: 150000,
+      projectedRevenueSatang: 155000,
     })
     // staging E-073 — ป้าย VAT ภาษาไทยตามโหมดปัจจุบันของบริษัท (ไม่ส่ง enum)
     expect(['ก่อน VAT', 'รวม VAT แล้ว', 'ไม่มี VAT']).toContain((dto.serviceFee as { vatLabel: string }).vatLabel)

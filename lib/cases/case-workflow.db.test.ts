@@ -577,6 +577,48 @@ suite('Phase 2.3 — state machine + snapshot + recycle (DB จริง)', () =
     expect(rejected[0]?.reason).toMatchObject({ code: 'CASE_EDIT_CONFLICT' })
   })
 
+  it('mytester5 รีวิว B5-01 — รับเคส: ประมาณการที่เก็บไว้เขียนใหม่จาก snapshot · หน้าเคสได้ยอด/ที่มาเดียวกัน · เคสเก่าคิดจาก snapshot', async () => {
+    const caseId = await seedCase('SF-2026-B501', { withDocuments: true })
+    // ส่งตรวจตอนบริษัทผูก v1 (HYBRID) → ประมาณการก่อนรับเคสมาจาก v1
+    await service.changeCaseStatus(actor, caseId, change({ action: 'review' }), { actor, meta })
+    await db().$executeRawUnsafe(`
+      INSERT INTO service_fee_templates
+        (id, organization_id, name, model, base_satang, rate_pct, basis, fail_fee_satang, version, is_current, created_by)
+      VALUES ('${TEMPLATE_V2}', '${ORG_ID}', 'เทมเพลตทดสอบ 2.3', 'FLAT', 999900, 0, NULL, 999900, 2, true, '${USER_ID}')
+      ON CONFLICT (id) DO NOTHING
+    `)
+    await db().$executeRawUnsafe(
+      `UPDATE finance_companies SET service_fee_template_id = '${TEMPLATE_V2}' WHERE id = '${COMPANY_ID}'`,
+    )
+    try {
+      await service.changeCaseStatus(actor, caseId, change({ action: 'accept', teamId: TEAM_ID }), { actor, meta })
+      const stored = await db().$queryRawUnsafe<Array<{ projected_revenue_satang: number | null; projected_revenue_source: string | null }>>(
+        `SELECT projected_revenue_satang, projected_revenue_source FROM cases WHERE id = '${caseId}'`,
+      )
+      expect(stored[0]?.projected_revenue_satang).toBe(999_900)
+      expect(stored[0]?.projected_revenue_source).toContain('model=FLAT')
+      expect(stored[0]?.projected_revenue_source).toContain(`template=${TEMPLATE_V2}`)
+
+      const { getCase } = await import('@/lib/cases/queries')
+      const detail = await getCase(actor, caseId)
+      expect(detail.projectedRevenueSatang).toBe(999_900)
+      expect(detail.projectedRevenueSource).toBe(stored[0]?.projected_revenue_source)
+      expect(detail.projectedRevenueSourceLabel).toContain('เหมาจ่ายรายเคส')
+
+      // เคสที่รับไปก่อนแก้ (ยอดที่เก็บไว้ยังเป็นของเทมเพลตก่อนรับเคส) — หน้าเคสคิดจาก snapshot ได้ถูก ไม่ต้องย้ายข้อมูล
+      await db().$executeRawUnsafe(
+        `UPDATE cases SET projected_revenue_satang = 1, projected_revenue_source = 'model=HYBRID · template=${TEMPLATE_V1} · v1 · base=50000 · rate=15% · basis=debt_amount' WHERE id = '${caseId}'`,
+      )
+      const legacy = await getCase(actor, caseId)
+      expect(legacy.projectedRevenueSatang).toBe(999_900)
+      expect(legacy.projectedRevenueSourceLabel).toContain('เหมาจ่ายรายเคส')
+    } finally {
+      await db().$executeRawUnsafe(
+        `UPDATE finance_companies SET service_fee_template_id = '${TEMPLATE_V1}' WHERE id = '${COMPANY_ID}'`,
+      )
+    }
+  })
+
   it('เคสแยกประเภทเดิมรับเคสได้โดยไม่ต้องยืนยันเอกสารชุด และ audit ไม่มีฟิลด์ชุด', async () => {
     const caseId = await seedCase('SF-2026-2341', { withDocuments: true })
     await service.changeCaseStatus(actor, caseId, change({ action: 'review' }), { actor, meta })

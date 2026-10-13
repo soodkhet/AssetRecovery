@@ -1,5 +1,6 @@
 import { getAssignmentPolicy } from '@/lib/assignments/policy-queries'
 import { caseStatusLabel } from '@/lib/cases/status-display'
+import { caseProjectedRevenueSatang, caseServiceFeeSnapshotOf } from '@/lib/cases/projected-revenue'
 import { endOfBangkokDay, startOfBangkokDay } from '@/lib/format/datetime'
 import type { AssignmentStatus, CaseStatus } from '@/lib/generated/prisma/enums'
 import { reportableCaseStatusWhere } from '@/lib/reports/case-scope'
@@ -258,6 +259,13 @@ const slaBreachProvider: ReportProvider = async (ctx: ReportContext): Promise<Re
       status: true,
       createdAt: true,
       projectedRevenueSatang: true,
+      // mytester5 รีวิว B5-01 — snapshot ค่าบริการ + มูลหนี้ ⇒ ประมาณการตัวเดียวกับหน้าเคส/พอร์ทัล
+      debtAmountSatang: true,
+      serviceFeeTemplateId: true,
+      serviceFeeModelSnapshot: true,
+      serviceFeeBaseSatang: true,
+      serviceFeeRatePct: true,
+      serviceFeeBasisSnapshot: true,
       company: { select: { name: true } },
       assignedTeam: { select: { name: true } },
       assignments: {
@@ -277,7 +285,11 @@ const slaBreachProvider: ReportProvider = async (ctx: ReportContext): Promise<Re
     teamName: row.assignedTeam?.name ?? null,
     receivedAt: row.createdAt,
     statusLabel: caseStatusLabel(row.status),
-    projectedRevenueSatang: row.projectedRevenueSatang,
+    projectedRevenueSatang: caseProjectedRevenueSatang(
+      caseServiceFeeSnapshotOf(row),
+      { debtAmountSatang: row.debtAmountSatang },
+      row.projectedRevenueSatang,
+    ).amountSatang,
   }))
 
   return buildSlaBreachReport({ cases, slaAlertHours: policy.slaAlertHours, asOf: ctx.now })

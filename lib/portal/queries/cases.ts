@@ -173,6 +173,8 @@ export async function findPortalCaseDetail(ctx: PortalContext, id: string): Prom
       serviceFeeBasisSnapshot: true,
       serviceFeeFailFeeSatang: true,
       projectedRevenueSatang: true,
+      // mytester5 รีวิว B5-01 — ฐานของประมาณการจาก snapshot (ไม่ส่งออกไปพอร์ทัล)
+      debtAmountSatang: true,
       assetDescription: true,
       assetCapacity: true,
       assetColor: true,
