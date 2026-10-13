@@ -2,8 +2,7 @@ import type { NextRequest } from 'next/server'
 import { apiSuccess } from '@/lib/api/envelope'
 import { toModuleErrorResponse, validationErrorResponse, withApiPermission } from '@/lib/api/http'
 import { CREATE_CLAIM_CAPABILITIES, manualHotelReceiptRequired } from '@/lib/claims/queries'
-import { hotelReceiptPolicyQuerySchema } from '@/lib/claims/schemas'
-import { fromInputDate, toInputDate } from '@/lib/format/datetime'
+import { hotelReceiptPolicyExpenseDate, hotelReceiptPolicyQuerySchema } from '@/lib/claims/schemas'
 
 /**
  * `GET /api/claims/hotel-receipt-policy?payeeId=&expenseDate=` (mytester5 F5-01 · มติ Q7/Q7-R)
@@ -19,7 +18,7 @@ export const GET = withApiPermission(
   async (request: NextRequest, _context: unknown, user) => {
     const parsed = hotelReceiptPolicyQuerySchema.safeParse(Object.fromEntries(new URL(request.url).searchParams))
     if (!parsed.success) return validationErrorResponse(parsed.error)
-    const expenseDate = parsed.data.expenseDate ?? fromInputDate(toInputDate(new Date())) ?? new Date()
+    const expenseDate = hotelReceiptPolicyExpenseDate(parsed.data)
     const hotelReceiptRequired = await manualHotelReceiptRequired(user, { payeeId: parsed.data.payeeId, expenseDate })
     return apiSuccess({ hotelReceiptRequired })
   },

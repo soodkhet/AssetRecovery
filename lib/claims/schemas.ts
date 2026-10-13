@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { dateOnlySchema, satangSchema } from '@/lib/api/validation'
 import { MANUAL_CLAIM_TYPES } from '@/lib/claims/claim'
+import { toInputDate } from '@/lib/format/datetime'
 import type { ExpenseType } from '@/lib/generated/prisma/enums'
 import { substituteReceiptDraftSchema } from '@/lib/substitute-receipts/schemas'
 
@@ -75,3 +76,12 @@ export const hotelReceiptPolicyQuerySchema = z.object({
 })
 
 export type HotelReceiptPolicyQuery = z.infer<typeof hotelReceiptPolicyQuerySchema>
+
+/**
+ * วันที่ใช้หาแผนของนโยบายใบเสร็จค่าที่พัก — ยังไม่กรอก = **วันนี้ตามเวลาไทย** ในรูปเดียวกับวันที่ที่กรอก
+ * (date-only = เที่ยงคืน UTC ผ่าน `dateOnlySchema` ชุดเดียวกับ `POST /api/claims`) · ทดสอบซ้ำ local LR6-02:
+ * เดิมใช้เที่ยงคืนเวลาไทย (17:00Z ของวันก่อน) ⇒ แผนฉบับที่เริ่มมีผลวันนี้ถูกมองข้าม
+ */
+export function hotelReceiptPolicyExpenseDate(query: HotelReceiptPolicyQuery, now: Date = new Date()): Date {
+  return query.expenseDate ?? dateOnlySchema('วันที่เกิดรายการ').parse(toInputDate(now))
+}
