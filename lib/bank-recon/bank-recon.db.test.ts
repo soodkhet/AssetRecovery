@@ -219,16 +219,17 @@ async function cleanup(): Promise<void> {
   const tx = db()
   // มติผู้ใช้ 13/10/2569 — เทสต์รอบที่มีใบลด/เพิ่มหนี้: ใบกำกับ/ใบลดหนี้ลบไม่ได้ด้วย trigger (`02` §13) ⇒ ปิดเฉพาะตอนล้างข้อมูลเทสต์
   // (ไฟล์ DB รันทีละไฟล์ — singleFork · แนวเดียวกับ exports.db.test.ts)
-  await tx.$executeRawUnsafe(`ALTER TABLE credit_notes DISABLE TRIGGER trg_credit_notes_no_delete`)
-  await tx.$executeRawUnsafe(`ALTER TABLE tax_invoices DISABLE TRIGGER trg_tax_invoices_no_delete`)
-  try {
-    await tx.$executeRawUnsafe(`DELETE FROM credit_notes WHERE organization_id = '${ORG_ID}'`)
-    await tx.$executeRawUnsafe(`DELETE FROM tax_invoices WHERE organization_id = '${ORG_ID}'`)
-    await tx.$executeRawUnsafe(`DELETE FROM sales_records WHERE organization_id = '${ORG_ID}'`)
-  } finally {
-    await tx.$executeRawUnsafe(`ALTER TABLE tax_invoices ENABLE TRIGGER trg_tax_invoices_no_delete`)
-    await tx.$executeRawUnsafe(`ALTER TABLE credit_notes ENABLE TRIGGER trg_credit_notes_no_delete`)
-  }
+  // DISABLE → DELETE → ENABLE อยู่ในทรานแซกชันเดียว (DDL ของ Postgres ย้อนกลับได้) — ล้มกลางทาง = rollback ทั้งหมด
+  // trigger ไม่ค้างปิด (รีวิวโค้ด known items)
+  await tx.$transaction(async (t) => {
+    await t.$executeRawUnsafe(`ALTER TABLE credit_notes DISABLE TRIGGER trg_credit_notes_no_delete`)
+    await t.$executeRawUnsafe(`ALTER TABLE tax_invoices DISABLE TRIGGER trg_tax_invoices_no_delete`)
+    await t.$executeRawUnsafe(`DELETE FROM credit_notes WHERE organization_id = '${ORG_ID}'`)
+    await t.$executeRawUnsafe(`DELETE FROM tax_invoices WHERE organization_id = '${ORG_ID}'`)
+    await t.$executeRawUnsafe(`DELETE FROM sales_records WHERE organization_id = '${ORG_ID}'`)
+    await t.$executeRawUnsafe(`ALTER TABLE tax_invoices ENABLE TRIGGER trg_tax_invoices_no_delete`)
+    await t.$executeRawUnsafe(`ALTER TABLE credit_notes ENABLE TRIGGER trg_credit_notes_no_delete`)
+  })
   await tx.$executeRawUnsafe(`DELETE FROM customer_wht_certificates WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM cash_receipts WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM bank_transactions WHERE organization_id = '${ORG_ID}'`)

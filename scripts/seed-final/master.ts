@@ -314,10 +314,12 @@ async function seedSettings(): Promise<void> {
 async function seedPlans(): Promise<void> {
   const s = await import('@/lib/compensation/schemas')
   const q = await import('@/lib/compensation/queries')
+  // known Q7/M2: PLAN_OUT ปิด "บังคับใบเสร็จค่าที่พัก" — out1/out2 ใช้ใบรับรองแทนใบเสร็จ (timeline FT-19 · october FT-09)
+  //   แผนทีมในเปิดไว้ (ทีมในแนบใบเสร็จจริงทุกใบ) ⇒ dataset ครอบทั้งสองค่า
   const plans = [
-    { key: 'PLAN_IN', name: 'PLAN_IN แผนทีมใน', side: 'inhouse', fuelMode: 'DAILY_FLAT', fuelDailyFlatSatang: 20000, allowanceSatang: 15000, commissionSatang: 50000, noSuccessFeeSatang: 20000, hotelMaxPerNightSatang: 80000, whtPct: 3 },
-    { key: 'PLAN_OUT', name: 'PLAN_OUT แผนทีมนอก', side: 'outsource', fuelMode: 'DAILY_FLAT', fuelDailyFlatSatang: 30000, allowanceSatang: 0, commissionSatang: 100000, noSuccessFeeSatang: 30000, hotelMaxPerNightSatang: null, whtPct: 5 },
-    { key: 'PLAN_KM', name: 'PLAN_KM แผนกิโลเมตร', side: 'inhouse', fuelMode: 'PER_KM', fuelRatePerKmSatang: 500, fuelMaxPerCaseSatang: 40000, allowanceSatang: 15000, commissionSatang: 50000, noSuccessFeeSatang: 20000, hotelMaxPerNightSatang: 80000, whtPct: 3 },
+    { key: 'PLAN_IN', name: 'PLAN_IN แผนทีมใน', side: 'inhouse', fuelMode: 'DAILY_FLAT', fuelDailyFlatSatang: 20000, allowanceSatang: 15000, commissionSatang: 50000, noSuccessFeeSatang: 20000, hotelMaxPerNightSatang: 80000, hotelReceiptRequired: true, whtPct: 3 },
+    { key: 'PLAN_OUT', name: 'PLAN_OUT แผนทีมนอก', side: 'outsource', fuelMode: 'DAILY_FLAT', fuelDailyFlatSatang: 30000, allowanceSatang: 0, commissionSatang: 100000, noSuccessFeeSatang: 30000, hotelMaxPerNightSatang: null, hotelReceiptRequired: false, whtPct: 5 },
+    { key: 'PLAN_KM', name: 'PLAN_KM แผนกิโลเมตร', side: 'inhouse', fuelMode: 'PER_KM', fuelRatePerKmSatang: 500, fuelMaxPerCaseSatang: 40000, allowanceSatang: 15000, commissionSatang: 50000, noSuccessFeeSatang: 20000, hotelMaxPerNightSatang: 80000, hotelReceiptRequired: true, whtPct: 3 },
   ]
   for (const plan of plans) {
     const existing = await findId('compensationPlan', plan.name)
@@ -327,7 +329,7 @@ async function seedPlans(): Promise<void> {
     }
     const { key, ...values } = plan
     const created = await q.createCompensationPlan(await sctx(`แผน ${key} v1`), strip(
-      s.compensationPlanCreateSchema.parse({ ...values, hotelReceiptRequired: true, effectiveFrom: '2026-09-01', reason: R(key) }),
+      s.compensationPlanCreateSchema.parse({ ...values, effectiveFrom: '2026-09-01', reason: R(key) }),
     ))
     ids.plans[key] = created.id
   }

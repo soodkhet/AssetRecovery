@@ -1271,7 +1271,7 @@ model CompensationPlan {
   noSuccessFeeSatang Int @default(0) @map("no_success_fee_satang")
 
   hotelMaxPerNightSatang Int?    @map("hotel_max_per_night_satang")
-  hotelReceiptRequired   Boolean @default(true) @map("hotel_receipt_required")
+  hotelReceiptRequired   Boolean @default(false) @map("hotel_receipt_required")
 
   /// fallback เมื่อ payee ไม่มี tax profile — Payee-level ชนะเสมอ (`18` §6.3)
   whtPct Decimal @default(3.00) @map("wht_pct") @db.Decimal(5, 2)
