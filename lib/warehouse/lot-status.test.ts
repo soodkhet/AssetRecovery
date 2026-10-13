@@ -3,6 +3,7 @@ import { WarehouseError } from '@/lib/warehouse/errors'
 import {
   assertLotAssetRemovable,
   assertLotConfirmDocuments,
+  assertLotDeletable,
   assertLotDeliveredAt,
   assertLotHasAssetsForDocument,
   assertLotMutable,
@@ -183,5 +184,22 @@ describe('ล็อตว่าง — isEmptyOpenLot / assertLotHasAssetsForDoc
       expect((error as WarehouseError).code).toBe('EMPTY_LOT')
       expect((error as WarehouseError).userMessage).not.toMatch(/§|`\d{2}`/)
     }
+  })
+})
+
+describe('assertLotDeletable (known Q9 — ลบล็อตว่าง)', () => {
+  it('ยังไม่ยืนยัน + ไม่มีเครื่อง ⇒ ลบได้ทั้งสองสถานะที่ยังไม่ยืนยัน', () => {
+    expect(() => assertLotDeletable({ status: 'pending_attach', assetCount: 0 })).not.toThrow()
+    expect(() => assertLotDeletable({ status: 'pending_delivery_proof', assetCount: 0 })).not.toThrow()
+  })
+  it('ยังมีเครื่อง ⇒ ASSET_ALREADY_IN_LOT พร้อมข้อความให้นำเครื่องออกก่อน', () => {
+    expect(() => assertLotDeletable({ status: 'pending_attach', assetCount: 2 })).toThrow(
+      expect.objectContaining({ code: 'ASSET_ALREADY_IN_LOT' }),
+    )
+  })
+  it('ยืนยันแล้ว ⇒ LOT_ALREADY_CONFIRMED (แม้ไม่มีเครื่อง)', () => {
+    expect(() => assertLotDeletable({ status: 'confirmed', assetCount: 0 })).toThrow(
+      expect.objectContaining({ code: 'LOT_ALREADY_CONFIRMED' }),
+    )
   })
 })

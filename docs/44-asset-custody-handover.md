@@ -30,6 +30,7 @@
 | v2.13 | 11/10/2569 | **มติชั่วคราว M5 (mytester WH-05 — Claude ตัดสินแทน PO รอยืนยัน)**: §9.1 เพิ่ม transition `handover_pending → in_custody` (นำเครื่องออกจากล็อตที่**ยังไม่ยืนยัน** — ไม่มีสถานะใหม่) · §15 `PATCH /api/handover-lots/:id/remove-asset` (เหตุผลบังคับ · audit · สิทธิ์เดียวกับจัดการล็อต) · ปุ่ม "นำออกจากล็อต" ในรายละเอียดล็อต · ล็อตที่ไม่มีเครื่องเหลือยืนยันไม่ได้ (`EMPTY_LOT`) · ยังไม่มีสถานะ "ยกเลิกล็อต" (ต้องแก้ state machine — รอ PO) |
 | v2.14 | 11/10/2569 | **มติชั่วคราว M5 ต่อ (รีวิวเฟส 4)**: นำเครื่องออกจากล็อตได้เฉพาะล็อต `pending_attach` ที่**ยังไม่แนบใบเซ็นรับ** — แนบใบเซ็นรับแล้ว (รายการเครื่องต้องตรงเอกสารที่ผู้รับเซ็น) หรือ `pending_delivery_proof` (ของออกจากคลังแล้ว) ⇒ ปฏิเสธ `LOT_ALREADY_CONFIRMED` (§12 — ไม่ตั้ง code ใหม่) พร้อมข้อความบอกเหตุ · หน้าจอซ่อนปุ่ม "นำออกจากล็อต" (`LotDetailDto.assetRemovalLocked`) |
 | v2.15 | 11/10/2569 | **ทดสอบซ้ำ local L-02 (ต่อมติชั่วคราว M5 — Claude ตัดสินชั่วคราว รอ PO)**: "ล็อตว่าง" = ล็อตที่ยังไม่ยืนยันและนำเครื่องออกหมดแล้ว (**ไม่ใช่สถานะใหม่** — คำนวณจากสถานะ + จำนวนเครื่อง) · หน้าคลัง: การ์ด/หัวรายละเอียดติดป้าย "ล็อตว่าง" · ตารางแสดง "ล็อตนี้ยังไม่มีเครื่อง" (ไม่ใช่ "ไม่พบตามคำค้น") · ซ่อนปุ่มแนบเอกสาร/ยืนยัน และ Export Excel/ใบส่งมอบ PDF · §15 `GET /api/handover-lots/:id/pdf` และ `/export-excel` ของล็อตว่าง ⇒ `EMPTY_LOT` · ล็อตว่างยังอยู่ในแท็บรอส่งมอบ (ยังไม่มีทางยกเลิกล็อต — รอ PO) |
+| v2.16 | 13/10/2569 | **known Q9 (mytester · Claude ตัดสินแทน PO รอยืนยัน)**: ล็อตว่าง (ยังไม่ยืนยัน · ไม่มีเครื่องเหลือ) ลบได้ — `DELETE /api/handover-lots/:id` soft delete (`deleted_at` คอลัมน์เดิม · ไม่มี migration · ไม่เพิ่มสถานะ) · เหตุผลบังคับ + confirm + audit `delete` · ไม่ขึ้นรายการ/badge/พอร์ทัล · เลขล็อตไม่นำกลับมาใช้ · §9.3 · §12 `ASSET_ALREADY_IN_LOT` · §15 |
 
 ขอบเขตเอกสารนี้: โมดูลบริหารจัดการสินทรัพย์ที่ยึดคืนจากเคส `closed_success` ตั้งแต่รับเข้าคลัง ตรวจสภาพ จัดล็อตส่งมอบ จนถึงยืนยันส่งมอบคืนบริษัทไฟแนนซ์ — พร้อม trigger ปลดล็อก expense และสร้าง Revenue อัตโนมัติเมื่อล็อต confirmed
 
@@ -393,6 +394,8 @@ stateDiagram-v2
 | `pending_delivery_proof` | ส่งมอบแล้ว | รอแนบหลักฐานจัดส่ง (amber) |
 | `confirmed` | ส่งมอบแล้ว | ยืนยันแล้ว ✅ (emerald) |
 
+> **ล็อตว่าง** (known Q9 · มติ 13/10/2569 — Claude ตัดสินแทน PO รอยืนยัน): ล็อตที่ยังไม่ยืนยันและนำเครื่องออกหมดแล้ว ผู้ถือ `create_handover_lot` กด **"ลบล็อตว่าง"** ในรายละเอียดล็อตได้ (เหตุผลบังคับ + กล่องยืนยัน) ⇒ soft delete ไม่เพิ่มสถานะใน `handover_lot_status` · ดู §15
+
 ---
 
 ## 10. Security / Control Rules
@@ -462,7 +465,7 @@ WHEN HandoverLot.status → confirmed:
 | `MIXED_COMPANY_LOT` | Asset ใน Lot มี company_id ต่างกัน | reject — show mismatched companies |
 | `EMPTY_LOT` | สร้าง Lot โดยไม่เลือก Asset · ยืนยันล็อตที่ไม่มีเครื่องเหลือ (มติชั่วคราว M5) · ออกใบส่งมอบ PDF/Excel ของล็อตว่าง (ภายใน + พอร์ทัล — v2.15) | reject |
 | `ASSET_NOT_IN_CUSTODY` | เลือก Asset ที่ไม่ใช่ in_custody | reject — ระบุ asset IDs |
-| `ASSET_ALREADY_IN_LOT` | Asset มี lot_id แล้ว | reject — ระบุ lot number |
+| `ASSET_ALREADY_IN_LOT` | Asset มี lot_id แล้ว · ลบล็อตที่ยังมีเครื่อง (known Q9) | reject — ระบุ lot number · ลบล็อต: ให้นำเครื่องออกให้หมดก่อน |
 | `LOT_MISSING_SIGNED_DOC` | ยืนยัน Lot ไม่แนบใบเซ็นรับ | reject — บังคับทุกประเภท |
 | `LOT_MISSING_DELIVERY_PROOF` | ยืนยัน we_deliver ไม่แนบหลักฐาน | reject |
 | `LOT_ALREADY_CONFIRMED` | แก้ไข/เพิ่ม/ลด Asset ใน Lot ที่ confirmed · นำเครื่องออกจากล็อตที่แนบใบเซ็นรับแล้วหรือ `pending_delivery_proof` (มติชั่วคราว M5 v2.14) | reject — Terminal State (กรณีล็อตยังไม่ยืนยันใช้ข้อความบอกเหตุเฉพาะ) |
@@ -566,6 +569,7 @@ limit?:     number   (default: 50)
 | POST | `/api/handover-lots` | ธุรการ | สร้าง Lot + นัดวัน |
 | POST | `/api/handover-lots/:id/documents` | ธุรการ | ผูกเอกสารที่อัปโหลดแล้ว (body: `document`, `fileUrl`, `fileHash?`) — server ตรวจไฟล์ + เก็บ SHA-256 · ล็อต confirmed แล้วไม่ได้ (§6.4 · มติ PO 03/10/2569 Q13) |
 | PATCH | `/api/handover-lots/:id/remove-asset` | ผู้ถือ `create_handover_lot` | นำเครื่องออกจากล็อต `pending_attach` ที่ยังไม่แนบใบเซ็นรับ (`assetId` + `reason` บังคับ) → เครื่อง `in_custody` · audit ล็อต (`lot.asset_removed`) + เครื่อง (มติชั่วคราว M5) |
+| DELETE | `/api/handover-lots/:id` | ผู้ถือ `create_handover_lot` | **ลบล็อตว่าง** (known Q9): เฉพาะล็อตที่ยังไม่ยืนยันและไม่มีเครื่องเหลือ (นับทุกเครื่อง ไม่ตาม scope ผู้ดู) · body `{ reason }` บังคับ · soft delete (`deleted_at`) — ไม่ใช่สถานะใหม่ · ล็อตที่ลบไม่ขึ้นรายการ/badge/พอร์ทัล · เลขล็อต/ใบส่งมอบไม่นำกลับมาใช้ · audit `delete` · ยังมีเครื่อง = `ASSET_ALREADY_IN_LOT` · ยืนยันแล้ว = `LOT_ALREADY_CONFIRMED` |
 | PATCH | `/api/handover-lots/:id/confirm` | ธุรการ | ยืนยัน + แนบเอกสาร → trigger side effects |
 | GET | `/api/handover-lots/:id/pdf` | ธุรการ+ | ดาวน์โหลดใบส่งมอบ PDF |
 | GET | `/api/handover-lots/:id/export-excel` | ธุรการ+ | Export รายการเครื่องใน Lot |

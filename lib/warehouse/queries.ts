@@ -5,6 +5,7 @@ import {
   type DocumentTemplateSnapshot,
 } from '@/lib/settings/tax-doc-template'
 import type { Prisma } from '@/lib/generated/prisma/client'
+import type { HandoverLotStatus } from '@/lib/generated/prisma/enums'
 import { prisma } from '@/lib/prisma'
 import { emitAudit } from '@/lib/audit/audit'
 import type { ApiWarning } from '@/lib/api/envelope'
@@ -44,6 +45,7 @@ import { bangkokDayRange, buildLotCompanyGroups } from '@/lib/warehouse/lot-comp
 import {
   assertLotAssetRemovable,
   assertLotConfirmDocuments,
+  assertLotDeletable,
   assertLotDeliveredAt,
   assertLotHasAssetsForDocument,
   assertLotMutable,
@@ -65,6 +67,7 @@ import type {
   AssetRejectIntakeInput,
   LotConfirmInput,
   LotRemoveAssetInput,
+  LotDeleteInput,
   LotCreateInput,
   LotDocumentAttachInput,
   LotCompanySummaryQuery,
@@ -983,6 +986,65 @@ export async function removeAssetFromLot(
   })
 
   return getLot(user, lotId)
+}
+
+// ── DELETE /api/handover-lots/:id (known Q9 — ลบล็อตว่าง) ─────────────────
+
+/**
+ * ลบล็อตว่าง (ยังไม่ยืนยัน · ไม่มีเครื่องเหลือ) แบบ soft delete — ล็อตที่ลบไม่ขึ้นรายการ/badge/พอร์ทัล
+ * (ทุกคำค้นกรอง `deleted_at IS NULL` อยู่แล้ว) · เลขล็อตไม่นำกลับมาใช้ · เหตุผลบังคับ + audit `delete`
+ * ยึดแถวล็อต (`FOR UPDATE`) แล้วนับเครื่องในทรานแซกชันเดียวกัน — กันแข่งกับการยืนยัน/ลบซ้ำ
+ */
+export async function deleteEmptyLot(
+  user: SessionUser,
+  lotId: string,
+  input: LotDeleteInput,
+  context: WarehouseMutationContext,
+): Promise<{ id: string; lotNumber: string }> {
+  const reason = input.reason.trim()
+  if (reason === '') {
+    throw new WarehouseError('REQUIRED_MISSING', {
+      messages: { title: 'ต้องระบุเหตุผล', message: 'ต้องระบุเหตุผลที่ลบล็อต' },
+      context: { fields: { reason: 'ต้องระบุเหตุผลที่ลบล็อต' } },
+    })
+  }
+  const current = await loadLot(user, lotId)
+
+  await prisma.$transaction(async (tx) => {
+    const locked = await tx.$queryRaw<Array<{ status: HandoverLotStatus; deleted: boolean }>>`
+      SELECT status::text AS status, deleted_at IS NOT NULL AS deleted FROM handover_lots
+      WHERE id = ${lotId}::uuid AND organization_id = ${user.organizationId}::uuid FOR UPDATE`
+    const row = locked[0]
+    if (row === undefined || row.deleted) throw new WarehouseError('LOT_NOT_FOUND')
+    // นับทุกเครื่องในล็อต (ไม่ตาม scope ผู้ดู — ผู้จัดการทีมอาจมองไม่เห็นเครื่องของทีมอื่นในล็อตเดียวกัน)
+    const assetCount = await tx.asset.count({ where: { lotId, organizationId: user.organizationId, deletedAt: null } })
+    assertLotDeletable({ status: row.status, assetCount })
+
+    const deletedAt = new Date()
+    await tx.handoverLot.update({
+      where: { id: lotId },
+      data: { deletedAt, updatedBy: context.actor.id },
+    })
+    await emitAudit(
+      {
+        organizationId: user.organizationId,
+        actorId: context.actor.id,
+        actorRole: context.actor.roleName,
+        action: 'delete',
+        targetType: 'handover_lots',
+        targetId: lotId,
+        before: { lotNumber: current.lotNumber, docRef: current.docRef, status: row.status, deletedAt: null },
+        after: { deletedAt: deletedAt.toISOString(), events: ['lot.deleted_empty'] },
+        reason,
+        ipAddress: context.meta.ipAddress,
+        userAgent: context.meta.userAgent,
+        diffOnly: false,
+      },
+      tx as WarehouseTxClient,
+    )
+  })
+
+  return { id: lotId, lotNumber: current.lotNumber }
 }
 
 // ── POST /api/handover-lots/:id/documents (`44` §6.4 · มติ PO 03/10/2569 UAT Q13) ──

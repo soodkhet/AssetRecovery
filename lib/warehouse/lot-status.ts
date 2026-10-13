@@ -68,6 +68,27 @@ export function isEmptyOpenLot(lot: { status: HandoverLotStatus; assetCount: num
 
 export const EMPTY_LOT_BADGE_LABEL = 'ล็อตว่าง'
 
+/** known Q9 — ลบล็อตที่ยังมีเครื่อง ⇒ `ASSET_ALREADY_IN_LOT` (เครื่องยังผูกกับล็อตนี้ — `44` §12) พร้อมข้อความเฉพาะกรณี */
+export const LOT_DELETE_NOT_EMPTY_MESSAGES = {
+  title: 'ลบล็อตนี้ไม่ได้ — ยังมีเครื่องในล็อต',
+  message: 'ลบได้เฉพาะล็อตว่าง — นำเครื่องออกจากล็อตให้หมดก่อน (ปุ่ม "นำออกจากล็อต") แล้วจึงลบล็อต',
+} as const
+
+/**
+ * known Q9 (mytester · มติ 13/10/2569 — Claude ตัดสินแทน PO รอยืนยัน): ลบล็อตว่างได้เฉพาะล็อตที่**ยังไม่ยืนยัน**และ
+ * **ไม่มีเครื่องเหลือ** (นับทุกเครื่อง ไม่ตาม scope ผู้ดู) · เป็น soft delete (`deleted_at`) — ไม่ใช่สถานะใหม่ของล็อต
+ * เลขล็อต/เลขใบส่งมอบไม่ถูกนำกลับมาใช้ (แถวยังอยู่ + ลำดับเลขเดินต่อ)
+ */
+export function assertLotDeletable(lot: { status: HandoverLotStatus; assetCount: number }): void {
+  assertLotMutable(lot.status)
+  if (lot.assetCount > 0) {
+    throw new WarehouseError('ASSET_ALREADY_IN_LOT', {
+      messages: LOT_DELETE_NOT_EMPTY_MESSAGES,
+      context: { assetCount: lot.assetCount },
+    })
+  }
+}
+
 /** ใบส่งมอบของล็อตที่ไม่มีเครื่อง = เอกสารเปล่า ⇒ `EMPTY_LOT` (ทั้งภายในและพอร์ทัล — ทดสอบซ้ำ local L-02) */
 export function assertLotHasAssetsForDocument(lot: { id: string; assetCount: number }): void {
   if (lot.assetCount > 0) return
