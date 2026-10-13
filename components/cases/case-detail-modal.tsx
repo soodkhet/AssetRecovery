@@ -62,6 +62,7 @@ import { fmtDate, fmtDateTime } from '@/lib/format/datetime'
 import { caseEditedFieldsText } from '@/lib/cases/status-timeline'
 import { debtorDocumentsPurgedText } from '@/lib/settings/data-retention'
 import { fmtSatangSymbol } from '@/lib/format/money'
+import { projectedRevenueNote } from '@/lib/cases/projected-revenue'
 
 /**
  * **Case Detail / Review Modal (consolidated — `38` §7.5)**
@@ -625,19 +626,7 @@ function ProjectedRevenueBox({ detail }: { detail: CaseDetailDto }) {
       <div className="mt-1 font-mono text-lg font-bold text-slate-800">
         {fmtSatangSymbol(detail.projectedRevenueSatang, 'ยังคำนวณไม่ได้')}
       </div>
-      <p className="mt-1 text-[11px] text-slate-500">
-        {detail.projectedRevenueSource === null
-          ? // ระบบคำนวณตอนส่งตรวจสอบ — เคสร่างยังไม่มีผลแม้ข้อมูลครบแล้ว อย่าบอกว่าขาดข้อมูล (staging S-018)
-            detail.status === 'draft'
-            ? 'ระบบคำนวณให้เมื่อส่งตรวจสอบ (ใช้เทมเพลตค่าบริการของบริษัทไฟแนนซ์และมูลหนี้)'
-            : 'ต้องมีเทมเพลตค่าบริการของบริษัทไฟแนนซ์และมูลหนี้ก่อน'
-          : `คำนวณจาก${detail.projectedRevenueSourceLabel ?? 'เทมเพลตค่าบริการของบริษัทไฟแนนซ์'}`}{' '}
-        {/* mytester4 ข้อสังเกตช่วง B — รับเคสแล้วค่าบริการถูก snapshot ไว้ที่เคส (`10` §9.2) ⇒ ข้อความต้องตรงสถานะ */}
-        {detail.serviceFeeTemplateId === null
-          ? '· เป็นประมาณการก่อนรับเคส'
-          : '· รับเคสแล้ว ค่าบริการของเคสถูกบันทึกไว้ ณ ตอนรับเคส — ยอดนี้คำนวณไว้ก่อนรับเคส'}{' '}
-        ไม่ใช่รายได้ที่ยืนยันแล้ว (รายได้จริงเกิดเมื่อรายการเบิกอนุมัติและคลังยืนยันส่งมอบ)
-      </p>
+      <p className="mt-1 text-[11px] text-slate-500">{projectedRevenueNote(detail)}</p>
     </div>
   )
 }

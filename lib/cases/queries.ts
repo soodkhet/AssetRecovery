@@ -23,7 +23,11 @@ import {
 } from '@/lib/cases/case'
 import { normalizeCaseRef } from '@/lib/cases/case-ref'
 import { CaseError } from '@/lib/cases/errors'
-import { parseProjectedRevenueSource, projectedRevenueSourceText } from '@/lib/cases/projected-revenue'
+import {
+  caseProjectedRevenueSatang,
+  parseProjectedRevenueSource,
+  projectedRevenueSourceText,
+} from '@/lib/cases/projected-revenue'
 import { allowedActionsFrom } from '@/lib/cases/state-machine'
 import { loadCaseCloseFailReason, loadCaseFieldEvidence } from '@/lib/field/evidence-review'
 import { loadCaseResubmittedAt } from '@/lib/field/resubmission'
@@ -498,7 +502,17 @@ export function toDetailDto(row: CaseDetailRow): CaseDetailDto {
     assetIdentifierWarning: assetIdentifierWarning(row.serialNo),
     activeAssetImeiWarning: null,
     activeCaseImeiWarning: null,
-    projectedRevenueSatang: row.projectedRevenueSatang,
+    // mytester5 B5-01 — เคสที่รับแล้วคิดจาก snapshot ค่าบริการของเคส (ไม่ใช่ยอดจากเทมเพลตก่อนรับเคส)
+    projectedRevenueSatang: caseProjectedRevenueSatang(
+      {
+        serviceFeeModelSnapshot: row.serviceFeeModelSnapshot,
+        serviceFeeBaseSatang: row.serviceFeeBaseSatang,
+        serviceFeeRatePct: row.serviceFeeRatePct === null ? null : Number(row.serviceFeeRatePct),
+        serviceFeeBasisSnapshot: row.serviceFeeBasisSnapshot,
+      },
+      { debtAmountSatang: row.debtAmountSatang },
+      row.projectedRevenueSatang,
+    ).amountSatang,
     projectedRevenueSource: row.projectedRevenueSource,
     projectedRevenueSourceLabel:
       row.projectedRevenueSource === null ? null : projectedRevenueSourceText(row.projectedRevenueSource, null),

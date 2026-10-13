@@ -83,6 +83,63 @@ export function calculateProjectedRevenue(
   return { amountSatang, source, basisSatang: base, missingBasis: false }
 }
 
+/** ค่าบริการที่ snapshot ไว้ที่เคสตอนรับเคส (`10` §9.2 · `92` §7.1) — model `null` = ยังไม่รับเคส */
+export interface CaseServiceFeeSnapshot {
+  serviceFeeModelSnapshot: ServiceFeeModel | null
+  serviceFeeBaseSatang: number | null
+  serviceFeeRatePct: number | null
+  serviceFeeBasisSnapshot: ServiceFeeBasis | null
+}
+
+/**
+ * mytester5 B5-01 — ประมาณการของเคสที่รับแล้วคิดจาก **snapshot ค่าบริการของเคส** (สูตรเดียวกับ
+ * {@link calculateProjectedRevenue}) + มูลหนี้ปัจจุบัน — ไม่ใช่ยอดที่คำนวณไว้จากเทมเพลตก่อนรับเคส
+ * · ยังไม่มี snapshot (ยังไม่รับเคส) ⇒ ใช้ยอดที่บันทึกไว้ (`storedSatang`) เหมือนเดิม
+ */
+export function caseProjectedRevenueSatang(
+  snapshot: CaseServiceFeeSnapshot,
+  values: ProjectedRevenueCaseValues,
+  storedSatang: number | null,
+): { amountSatang: number | null; fromSnapshot: boolean } {
+  if (snapshot.serviceFeeModelSnapshot === null) return { amountSatang: storedSatang, fromSnapshot: false }
+  const projected = calculateProjectedRevenue(
+    {
+      model: snapshot.serviceFeeModelSnapshot,
+      baseSatang: snapshot.serviceFeeBaseSatang ?? 0,
+      ratePct: snapshot.serviceFeeRatePct ?? 0,
+      basis: snapshot.serviceFeeBasisSnapshot,
+    },
+    values,
+  )
+  return { amountSatang: projected.amountSatang, fromSnapshot: true }
+}
+
+const NOT_CONFIRMED_NOTE = 'ไม่ใช่รายได้ที่ยืนยันแล้ว (รายได้จริงเกิดเมื่อรายการเบิกอนุมัติและคลังยืนยันส่งมอบ)'
+
+/**
+ * คำอธิบายใต้กล่อง "ประมาณการรายได้" ของรายละเอียดเคส — ข้อความเดียวตามสถานะ (mytester5 B5-01):
+ * รับเคสแล้ว = ยอดคิดจากค่าบริการที่บันทึกไว้ตอนรับเคส · ยังไม่รับ = ประมาณการจากเทมเพลตของบริษัทไฟแนนซ์
+ */
+export function projectedRevenueNote(detail: {
+  status: string
+  projectedRevenueSource: string | null
+  projectedRevenueSourceLabel: string | null
+  serviceFeeModelSnapshot: string | null
+}): string {
+  if (detail.serviceFeeModelSnapshot !== null) {
+    const formula = detail.projectedRevenueSourceLabel === null ? '' : ` (${detail.projectedRevenueSourceLabel})`
+    return `คำนวณจากค่าบริการที่บันทึกไว้ตอนรับเคส${formula} · ${NOT_CONFIRMED_NOTE}`
+  }
+  if (detail.projectedRevenueSource === null) {
+    // ระบบคำนวณตอนส่งตรวจสอบ — เคสร่างยังไม่มีผลแม้ข้อมูลครบแล้ว อย่าบอกว่าขาดข้อมูล (staging S-018)
+    return detail.status === 'draft'
+      ? `ระบบคำนวณให้เมื่อส่งตรวจสอบ (ใช้เทมเพลตค่าบริการของบริษัทไฟแนนซ์และมูลหนี้) · ${NOT_CONFIRMED_NOTE}`
+      : `ต้องมีเทมเพลตค่าบริการของบริษัทไฟแนนซ์และมูลหนี้ก่อน · ${NOT_CONFIRMED_NOTE}`
+  }
+  const source = detail.projectedRevenueSourceLabel ?? 'เทมเพลตค่าบริการของบริษัทไฟแนนซ์'
+  return `คำนวณจาก${source} · เป็นประมาณการก่อนรับเคส ${NOT_CONFIRMED_NOTE}`
+}
+
 // ── แปล `calculation_source` เป็นข้อความสำหรับผู้ใช้ (UAT BUG-034) ─────────────
 
 export interface ProjectedRevenueSourceParts {
