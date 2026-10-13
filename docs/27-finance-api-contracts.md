@@ -47,6 +47,7 @@
 | v3.30 | 12/10/2569 | **mytester2 F2-01** — §6.5 เพิ่ม `GET /api/compensation/bulk-preview?ids=` (อ่านอย่างเดียว · capability/scope เดียวกับ `GET /api/compensation`) ยอดสรุปของหน้าต่าง "อนุมัติที่เลือก (N)": ชุดที่เลือกรวมกลุ่มต่อผู้รับกับรายการ `approved` ที่ยังไม่เข้ารอบ + ยอดสะสมของเดือน แล้วคิด WHT แบบรอบจ่ายด้วย pure module เดียวกับคิว (`22` §6.9) — ยอดสุทธิ = ส่วนที่รอบจ่ายถัดไปเพิ่มขึ้น · เป็นประมาณการ (ขั้นอนุมัติที่เหลือ/วันตัดรอบ) · **สูตรไม่เปลี่ยน** |
 | v3.31 | 12/10/2569 | **mytester3 LR3-02** — §6.10 เพิ่ม `GET /api/accounting/tax-invoices/preview?cashReceiptId=|replacesInvoiceId=` (ยอด/ส่วนประกอบที่ระบบจะออกจริง — เงินโอน + ภาษีที่ลูกค้าหัก + เครดิตใบลดหนี้ + ค่าธรรมเนียม · ครบยอด/บางส่วน · สูตรเดียวกับ POST · manage `manage_tax_invoice` · อ่านอย่างเดียว ไม่จองเลข ไม่ลง audit) |
 | v3.32 | 13/10/2569 | **mytester DO-07** — §6.4 `POST /api/advances` รับ `caseId?` (เคสที่ผู้รับเงินมีงานค้าง · ไม่ใช่ = `CASE_NOT_FOUND`) + `GET /api/advances/case-options` (`manage:request_advance` — ตัวเลือกช่องอ้างอิงเคส) · `AdvanceDto` เพิ่ม `caseId`/`caseRef` |
+| v3.33 | 13/10/2569 | **mytester5 F5-01 (มติ Q7/Q7-R)** — §6.4 เติม `GET /api/claims/hotel-receipt-policy?payeeId=&expenseDate=` → `{ hotelReceiptRequired }` แผนทีมของผู้รับเงิน ณ วันที่เกิดรายการบังคับแนบใบเสร็จค่าที่พักไหม (ตรรกะเดียวกับที่ `POST /api/claims` บังคับ) · สิทธิ์ชุดเดียวกับ `POST /api/claims` · ถามแทนผู้อื่นต้องบันทึกแทนได้ (ไม่งั้น `PERMISSION_DENIED`) · ฟอร์มสร้างรายการเบิกเอง (ค่าที่พัก) ใช้ซ่อน "ไม่มีใบเสร็จ" ก่อนกรอก |
 
 ขอบเขตเอกสารนี้: รวม API Endpoint ทั้งหมดของโมดูล Finance/Accounting เป็นรายการเดียว จัดกลุ่มตาม resource เพื่อให้ backend implement ตาม REST convention เดียวกันทั้งระบบ
 
@@ -125,6 +126,7 @@ PATCH  /api/payees/:id/verify
 ```
 GET    /api/claims
 POST   /api/claims
+GET    /api/claims/hotel-receipt-policy             (v3.33 mytester5 F5-01 — `payeeId?` `expenseDate?` → `{ hotelReceiptRequired }` แผนทีมผู้รับเงินบังคับใบเสร็จค่าที่พักไหม)
 PATCH  /api/claims/:id/approve
 PATCH  /api/claims/:id/reject
 PATCH  /api/claims/:id/reject-permanent                (v3.12 มติ PO U117 — ปฏิเสธถาวรใบเบิกค่าที่พัก · เหตุผลบังคับ)

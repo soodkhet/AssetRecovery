@@ -21,6 +21,9 @@ import {
   type SubstituteLineDraft,
 } from '@/lib/substitute-receipts/form'
 
+/** ข้อความแทนตัวเลือก "ไม่มีใบเสร็จ" เมื่อแผนทีมของผู้รับเงินบังคับใบเสร็จค่าที่พัก (ตรงกับฟอร์มมือถือ) */
+export const HOTEL_RECEIPT_REQUIRED_NOTE = 'แผนค่าตอบแทนของทีมผู้รับเงินบังคับแนบใบเสร็จค่าที่พัก — ใช้ใบรับรองแทนใบเสร็จไม่ได้'
+
 /**
  * Modal "สร้าง Claim Manual" (`15` §6.1 ข้อ 2 · mockup `finance.html` `create-manual-claim`)
  *
@@ -63,6 +66,32 @@ export function ManualClaimModal({
     if (!open) uploadAbortRef.current?.abort()
   }, [open])
   useEffect(() => () => uploadAbortRef.current?.abort(), [])
+
+  // mytester5 F5-01 — ค่าที่พัก: ถาม server ว่าแผนทีมของผู้รับเงิน ณ วันที่เกิดรายการบังคับใบเสร็จไหม (มติ Q7/Q7-R)
+  // บังคับ ⇒ ซ่อน "ไม่มีใบเสร็จ" ตั้งแต่ก่อนกรอก · การบังคับจริงอยู่ที่ server ตอนบันทึก
+  // ผลผูกกับคำถาม (ผู้รับ + วันที่) — เปลี่ยนผู้รับ/วันที่แล้วผลเก่าไม่ถูกใช้ระหว่างรอคำตอบใหม่
+  const policyKey = `${payeeId}|${expenseDate}`
+  const [hotelPolicy, setHotelPolicy] = useState<{ key: string; required: boolean } | null>(null)
+  const hotelReceiptRequired = claimType === 'hotel' && hotelPolicy?.key === policyKey && hotelPolicy.required
+  useEffect(() => {
+    if (!open || claimType !== 'hotel') return
+    let cancelled = false
+    void (async () => {
+      const query = new URLSearchParams()
+      if (payeeId !== '') query.set('payeeId', payeeId)
+      if (expenseDate !== '') query.set('expenseDate', expenseDate)
+      const response = await callApi<{ hotelReceiptRequired: boolean }>(
+        `/api/claims/hotel-receipt-policy${query.size === 0 ? '' : `?${query.toString()}`}`,
+      )
+      if (cancelled) return
+      const required = response.data?.hotelReceiptRequired === true
+      setHotelPolicy({ key: `${payeeId}|${expenseDate}`, required })
+      if (required) setNoReceipt(false)
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [open, claimType, payeeId, expenseDate])
 
   if (!open) return null
 
@@ -212,18 +241,29 @@ export function ManualClaimModal({
           <Input type="date" value={expenseDate} onChange={(event) => setExpenseDate(event.target.value)} />
         </Field>
 
-        <NoReceiptToggle
-          checked={noReceipt}
-          onChange={(checked) => {
-            setNoReceipt(checked)
-            setErrors({})
-          }}
-          hint="เรียกใบเสร็จจากผู้รับเงินไม่ได้ — กรอกรายการแล้วระบบออกใบรับรองแทนใบเสร็จรับเงินให้เซ็น"
-        />
+        {hotelReceiptRequired ? (
+          <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs text-slate-600">
+            {HOTEL_RECEIPT_REQUIRED_NOTE}
+          </p>
+        ) : (
+          <NoReceiptToggle
+            checked={noReceipt}
+            onChange={(checked) => {
+              setNoReceipt(checked)
+              setErrors({})
+            }}
+            hint="เรียกใบเสร็จจากผู้รับเงินไม่ได้ — กรอกรายการแล้วระบบออกใบรับรองแทนใบเสร็จรับเงินให้เซ็น"
+          />
+        )}
 
         {noReceipt ? (
           <>
-            <NoReceiptLinesEditor lines={substituteLines} onChange={setSubstituteLines} defaultDate={expenseDate} />
+            <NoReceiptLinesEditor
+              lines={substituteLines}
+              onChange={setSubstituteLines}
+              defaultDate={expenseDate}
+              variant={claimType === 'hotel' ? 'hotel' : 'general'}
+            />
             {errors.substituteReceipt !== undefined && (
               <p className="text-xs font-semibold text-red-600">{errors.substituteReceipt}</p>
             )}
