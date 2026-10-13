@@ -1494,7 +1494,8 @@ export interface PackCoverDoc {
   contentDigest: string
   /** ป้ายช่วงไฟล์ที่ digest ครอบคลุม เช่น `00–18` — มาจาก `PACK_FILES` ไม่พิมพ์ตายตัวใน component */
   fileRangeLabel: string
-  checks: readonly { label: string; passed: boolean }[]
+  /** `statusText` ประกอบแล้ว (known H-05 — "ผ่าน (อนุมัติยกเว้น n รายการ)") · component ห้ามคิดเอง */
+  checks: readonly { label: string; passed: boolean; statusText: string }[]
   files: readonly PackCoverFileRow[]
   /** ยอดสรุปของงวด (U94 ข้อ 4) — ว่าง = ไม่แสดงตาราง */
   totals: readonly PackCoverTotalRow[]
@@ -1522,6 +1523,18 @@ export const PACK_ATTACHMENT_NOTE =
 export const PACK_COVER_TITLE = 'หน้าปกชุดเอกสารบัญชี'
 export const PACK_COVER_HEADER_NOTE = 'ส่งสำนักงานบัญชี — ประจำรอบเดือน'
 
+/**
+ * known H-05 (mytester · `34` §6.3 มาตรการกัน "หายเงียบ") — สถานะของเงื่อนไขบนหน้าปกชุดส่งบัญชี:
+ * ข้อ "ไม่มีข้อยกเว้นระดับวิกฤตที่เปิดอยู่" ที่ผ่านเพราะผู้บริหารอนุมัติยกเว้น ⇒ "ผ่าน (อนุมัติยกเว้น n รายการ)"
+ */
+export function packCoverCheckStatus(check: Pick<ReadinessCheck, 'key' | 'passed'>, criticalAuthorizedCount: number): string {
+  if (!check.passed) return 'ไม่ผ่าน'
+  if (check.key === 'no_critical_exception' && criticalAuthorizedCount > 0) {
+    return `ผ่าน (อนุมัติยกเว้น ${criticalAuthorizedCount.toLocaleString('en-US')} รายการ)`
+  }
+  return 'ผ่าน'
+}
+
 export function buildPackCoverDoc(input: {
   organizationName: string
   periodLabel: string
@@ -1530,6 +1543,8 @@ export function buildPackCoverDoc(input: {
   generatedAt: Date
   contentDigest: string
   checks: readonly ReadinessCheck[]
+  /** known H-05 — ข้อยกเว้นวิกฤตที่ผู้บริหารอนุมัติยกเว้น · ไม่ส่ง = 0 */
+  criticalAuthorizedCount?: number
   /** มติ U94 ข้อ 4 — ไม่ส่ง = ไม่มีจำนวนแถว/ตารางยอดสรุป (เทสต์เก่า) */
   controlTotals?: PackCoverControlTotals
 }): PackCoverDoc {
@@ -1544,7 +1559,11 @@ export function buildPackCoverDoc(input: {
     generatedAtLabel: fmtDate(input.generatedAt),
     contentDigest: input.contentDigest,
     fileRangeLabel: packFileRangeLabel(),
-    checks: input.checks.map((check) => ({ label: check.label, passed: check.passed })),
+    checks: input.checks.map((check) => ({
+      label: check.label,
+      passed: check.passed,
+      statusText: packCoverCheckStatus(check, input.criticalAuthorizedCount ?? 0),
+    })),
     files: PACK_FILES.map((file) => {
       const count = input.controlTotals?.rowCounts[file.fileName]
       return {

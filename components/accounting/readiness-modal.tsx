@@ -3,7 +3,12 @@
 import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
 import { Button, InlineAlert, LoadingState, Modal } from '@/components/ui'
-import { READINESS_CHECK_LINK, readinessDescription } from '@/lib/accounting/period'
+import {
+  READINESS_CHECK_LINK,
+  readinessDescription,
+  type ReadinessLink,
+  type ReadinessWarningItem,
+} from '@/lib/accounting/period'
 import type { AccountingPeriodDto, PeriodReadinessDto } from '@/lib/accounting/types'
 import { callApi } from '@/lib/api/types'
 import { fmtDate } from '@/lib/format/datetime'
@@ -125,7 +130,7 @@ export function ReadinessModal({
             ))}
           </ul>
 
-          <ReadinessWarnings warnings={data.warnings} />
+          <ReadinessWarnings items={data.warningItems} />
 
           {data.criticalOpen.length > 0 && (
             <div className="rounded-lg border border-red-200">
@@ -201,16 +206,36 @@ export function ReadinessModal({
  * mytester3 H3-01 — คำเตือนทุกแหล่ง (ข้อยกเว้นระดับคำเตือน · ศูนย์ต้นทุนว่าง ฯลฯ) อยู่ใต้หัวข้อเดียว
  * (เดิม render กล่องละหัวข้อ ⇒ หัวข้อ "คำเตือน — ผ่านได้แต่ควรตรวจก่อน" ซ้ำเมื่อมีหลายกลุ่ม)
  */
-export function ReadinessWarnings({ warnings }: { warnings: readonly string[] }) {
-  if (warnings.length === 0) return null
+/** known H-05 — คำเตือนแต่ละข้อมีลิงก์ไปหน้าที่ตรวจ/แก้ได้ */
+function WarningLink({ link }: { link: ReadinessLink | null }) {
+  if (link === null) return null
+  return (
+    <>
+      {' '}
+      <Link href={link.href} className="font-semibold text-blue-700 underline-offset-2 hover:underline">
+        {link.label} →
+      </Link>
+    </>
+  )
+}
+
+export function ReadinessWarnings({ items }: { items: readonly ReadinessWarningItem[] }) {
+  if (items.length === 0) return null
+  const [first] = items
   return (
     <InlineAlert tone="warning" title="คำเตือน — ผ่านได้แต่ควรตรวจก่อน">
-      {warnings.length === 1 ? (
-        warnings[0]
+      {items.length === 1 && first !== undefined ? (
+        <>
+          {first.text}
+          <WarningLink link={first.link} />
+        </>
       ) : (
         <ul className="list-disc space-y-1 pl-4">
-          {warnings.map((warning) => (
-            <li key={warning}>{warning}</li>
+          {items.map((item) => (
+            <li key={item.text}>
+              {item.text}
+              <WarningLink link={item.link} />
+            </li>
           ))}
         </ul>
       )}

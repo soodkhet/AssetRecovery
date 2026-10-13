@@ -408,7 +408,11 @@ export interface ReadinessResult {
   checks: readonly ReadinessCheck[]
   /** เตือนแต่ไม่บล็อก (`30` §6.2 — warning ผ่านได้) */
   warnings: readonly string[]
+  /** known H-05 — คำเตือนชุดเดียวกับ `warnings` (ลำดับเดียวกัน) พร้อมลิงก์ไปหน้าที่แก้ได้ */
+  warningItems: readonly ReadinessWarningItem[]
   criticalOpen: readonly { id: string; title: string; sourceModule: string }[]
+  /** known H-05 — ข้อยกเว้นวิกฤตที่ผ่านเพราะผู้บริหารอนุมัติยกเว้น (`authorized`) — หน้าปกชุดส่งบัญชีต้องบอกจำนวน */
+  criticalAuthorizedCount: number
   unmatchedBankCount: number
   billingMismatches: readonly BillingRevenueMismatch[]
   /** รายได้ค้างรับ (มติ U87) — ไม่มี = 0 รายการ */
@@ -472,6 +476,27 @@ export const READINESS_CHECK_LINK: Readonly<Record<ReadinessCheckKey, { href: st
   no_open_payouts: { href: '/finance?tab=payout', label: 'ไปหน้ารอบจ่ายเงิน' },
 }
 
+export interface ReadinessLink {
+  href: string
+  label: string
+}
+
+export interface ReadinessWarningItem {
+  text: string
+  link: ReadinessLink | null
+}
+
+/** known H-05 — หน้าที่ต้องไปตรวจ/แก้ของคำเตือนแต่ละชนิดในหน้าต่างตรวจความพร้อม */
+export const READINESS_WARNING_LINK = {
+  warningExceptions: { href: '/accounting?tab=documents', label: 'ไปหน้าเอกสารไม่ครบ' },
+  suspense: { href: '/accounting?tab=bank', label: 'ไปหน้ากระทบยอด' },
+  customerWht: { href: '/accounting?tab=customer-wht', label: 'ไปหน้า 50 ทวิ ลูกค้า' },
+  receipts: { href: '/accounting?tab=receipts', label: 'ไปหน้าเงินรับ' },
+  revenue: { href: '/finance?tab=revenue', label: 'ไปหน้ารายได้และวางบิล' },
+  organization: { href: '/settings/organization', label: 'ไปหน้าข้อมูลองค์กร' },
+  expenses: { href: '/accounting?tab=expenses', label: 'ไปหน้าบัญชีค่าใช้จ่าย' },
+} as const satisfies Record<string, ReadinessLink>
+
 /**
  * ประเมินความพร้อมปิดงวด — **pure** เพื่อให้เทสต์ยิงครบ 3 เงื่อนไขได้โดยไม่ต้องมี DB
  * เงื่อนไขทั้ง 3 เป็น blocker เท่ากันหมด (ไม่มีข้อไหน "ข้ามได้")
@@ -526,50 +551,61 @@ export function evaluateReadiness(input: ReadinessInput): ReadinessResult {
     })
   }
 
-  const warnings: string[] = []
+  const warningItems: ReadinessWarningItem[] = []
+  const warn = (text: string | null, link: ReadinessLink): void => {
+    if (text !== null) warningItems.push({ text, link })
+  }
   if (input.warningOpenCount > 0) {
-    warnings.push(`มีข้อยกเว้นระดับคำเตือน ${input.warningOpenCount} รายการ — ปิดงวดได้แต่ควรตรวจก่อน`)
+    warn(
+      `มีข้อยกเว้นระดับคำเตือน ${input.warningOpenCount} รายการ — ปิดงวดได้แต่ควรตรวจก่อน`,
+      READINESS_WARNING_LINK.warningExceptions,
+    )
   }
   if (input.suspenseOutstanding !== undefined && input.suspenseOutstanding.count > 0) {
-    warnings.push(
+    warn(
       `มีเงินรับรอตรวจสอบคงค้าง ${fmtCount(input.suspenseOutstanding.count)} รายการ ` +
         `(${fmtSatangSymbol(input.suspenseOutstanding.amountSatang)}) — ยังไม่รับรู้เป็นรายได้ ปิดงวดได้แต่ควรติดตามที่มา`,
+      READINESS_WARNING_LINK.suspense,
     )
   }
   if (input.pendingCustomerWht !== undefined && input.pendingCustomerWht.count > 0) {
-    warnings.push(
+    warn(
       `ยังรอหนังสือรับรอง 50 ทวิ จากลูกค้า ${fmtCount(input.pendingCustomerWht.count)} รายการ ` +
         `(${fmtSatangSymbol(input.pendingCustomerWht.withheldSatang)}) — ปิดงวดได้ ติดตามหนังสือต่อได้ที่รายการ 50 ทวิ ลูกค้า`,
+      READINESS_WARNING_LINK.customerWht,
     )
   }
   if (input.receiptsAwaitingTaxInvoice !== undefined && input.receiptsAwaitingTaxInvoice.count > 0) {
-    warnings.push(
+    warn(
       `รับเงินแล้วแต่ยังไม่ออกใบเสร็จรับเงิน/ใบกำกับภาษี ${fmtCount(input.receiptsAwaitingTaxInvoice.count)} รายการ ` +
         `(${fmtSatangSymbol(input.receiptsAwaitingTaxInvoice.amountSatang)}) — ภาษีขายเกิดในเดือนที่รับเงิน ` +
         'ออกเอกสารได้ที่แท็บเงินรับ · ปิดงวดได้',
+      READINESS_WARNING_LINK.receipts,
     )
   }
   const unbilledRevenue = input.unbilledRevenue ?? NO_UNBILLED
   const draftBillingBatches = input.draftBillingBatches ?? NO_DRAFT_BATCHES
   const unbilledWarning = unbilledRevenueWarning(unbilledRevenue)
-  if (unbilledWarning !== null) warnings.push(unbilledWarning)
+  warn(unbilledWarning, READINESS_WARNING_LINK.revenue)
   const draftWarning = draftBillingBatchWarning(draftBillingBatches)
-  if (draftWarning !== null) warnings.push(draftWarning)
+  warn(draftWarning, READINESS_WARNING_LINK.revenue)
   const profileWarning = organizationProfileWarning(input.organizationProfileIssues ?? [])
-  if (profileWarning !== null) warnings.push(profileWarning)
+  warn(profileWarning, READINESS_WARNING_LINK.organization)
   const costCenterWarning = unmappedCostCenterWarning(input.unmappedCostCenter)
-  if (costCenterWarning !== null) warnings.push(costCenterWarning)
+  warn(costCenterWarning, READINESS_WARNING_LINK.expenses)
   const coverageWarning = taxInvoiceCoverageWarning(input.taxInvoiceCoverage)
-  if (coverageWarning !== null) warnings.push(coverageWarning)
+  warn(coverageWarning, READINESS_WARNING_LINK.receipts)
   // mytester4 H4-01 — ใบกำกับเกินมูลค่าสุทธิของรอบ (ทุกรอบที่มีใบกำกับ/เงินรับในงวด ไม่จำกัดรับครบ)
   const overNetValueWarning = taxInvoiceOverNetValueWarning(input.taxInvoiceCoverage)
-  if (overNetValueWarning !== null) warnings.push(overNetValueWarning)
+  warn(overNetValueWarning, READINESS_WARNING_LINK.receipts)
 
   return {
     ready: checks.every((check) => check.passed),
     checks,
-    warnings,
+    warnings: warningItems.map((item) => item.text),
+    warningItems,
     criticalOpen: input.criticalOpen,
+    criticalAuthorizedCount: input.criticalAuthorizedCount ?? 0,
     unmatchedBankCount: input.unmatchedBankCount,
     billingMismatches: input.billingMismatches,
     unbilledRevenue,

@@ -45,6 +45,7 @@ import {
   bankFeeWriteOffCsv,
   advanceBalanceCsv,
   buildPackCoverDoc,
+  packCoverCheckStatus,
   createPackPdfBudget,
   packFileRangeLabel,
   packNotAttachedFile,
@@ -1517,5 +1518,31 @@ describe('18_Bank_Fee_Write_Offs.csv (มติ PO 07/10/2569 U144)', () => {
 
   it('ไม่มีการตัดในงวด ⇒ มีแต่หัวคอลัมน์', () => {
     expect(bankFeeWriteOffCsv([]).split(/\r?\n/).filter((line) => line !== '')).toHaveLength(1)
+  })
+})
+
+describe('known H-05 — หน้าปกชุดส่งบัญชีบอกข้อที่ผ่านเพราะผู้บริหารอนุมัติยกเว้น', () => {
+  it('สถานะ: ไม่ผ่าน / ผ่าน / ผ่าน (อนุมัติยกเว้น n รายการ) เฉพาะข้อข้อยกเว้นวิกฤต', () => {
+    expect(packCoverCheckStatus({ key: 'no_critical_exception', passed: true }, 2)).toBe('ผ่าน (อนุมัติยกเว้น 2 รายการ)')
+    expect(packCoverCheckStatus({ key: 'no_critical_exception', passed: true }, 0)).toBe('ผ่าน')
+    expect(packCoverCheckStatus({ key: 'no_critical_exception', passed: false }, 2)).toBe('ไม่ผ่าน')
+    expect(packCoverCheckStatus({ key: 'bank_reconcile', passed: true }, 2)).toBe('ผ่าน')
+  })
+
+  it('buildPackCoverDoc ใส่ statusText ตามจำนวนที่อนุมัติยกเว้น', () => {
+    const doc = buildPackCoverDoc({
+      organizationName: 'x',
+      periodLabel: 'ตุลาคม 2569',
+      version: 1,
+      generatedByName: 'x',
+      generatedAt: new Date('2026-10-13T03:00:00Z'),
+      contentDigest: 'x',
+      checks: [
+        { key: 'bank_reconcile', label: 'กระทบยอดครบ', passed: true, detail: '' },
+        { key: 'no_critical_exception', label: 'ไม่มีข้อยกเว้นระดับวิกฤตที่เปิดอยู่', passed: true, detail: '' },
+      ],
+      criticalAuthorizedCount: 1,
+    })
+    expect(doc.checks.map((check) => check.statusText)).toEqual(['ผ่าน', 'ผ่าน (อนุมัติยกเว้น 1 รายการ)'])
   })
 })

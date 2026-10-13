@@ -11,6 +11,7 @@ import {
   canTransitionPeriod,
   evaluateReadiness,
   READINESS_CHECK_LINK,
+  READINESS_WARNING_LINK,
   isPeriodEnded,
   nextPeriodKey,
   periodCloseAvailableFrom,
@@ -564,5 +565,27 @@ describe('mytester H-05 — หน้าต่างตรวจความพ�
     expect(READINESS_CHECK_LINK.bank_reconcile?.href).toBe('/accounting?tab=bank')
     expect(READINESS_CHECK_LINK.no_critical_exception?.href).toBe('/accounting?tab=documents')
     expect(READINESS_CHECK_LINK.period_ended).toBeNull()
+  })
+
+  it('known H-05 — คำเตือนทุกข้อมีลิงก์ไปหน้าที่แก้ (ลำดับ/ข้อความตรงกับ warnings) · จำนวนที่อนุมัติยกเว้นออกไปกับผล', () => {
+    const result = evaluateReadiness({
+      ...readyInput,
+      criticalAuthorizedCount: 2,
+      warningOpenCount: 1,
+      suspenseOutstanding: { count: 1, amountSatang: 10_000 },
+      pendingCustomerWht: { count: 1, withheldSatang: 3_000 },
+      receiptsAwaitingTaxInvoice: { count: 1, amountSatang: 5_000 },
+      unmappedCostCenter: { count: 3, amountSatang: 9_000 },
+    })
+    expect(result.criticalAuthorizedCount).toBe(2)
+    expect(result.warningItems.map((item) => item.text)).toEqual(result.warnings)
+    expect(result.warningItems.map((item) => item.link?.href)).toEqual([
+      READINESS_WARNING_LINK.warningExceptions.href,
+      READINESS_WARNING_LINK.suspense.href,
+      READINESS_WARNING_LINK.customerWht.href,
+      READINESS_WARNING_LINK.receipts.href,
+      READINESS_WARNING_LINK.expenses.href,
+    ])
+    expect(evaluateReadiness(readyInput).criticalAuthorizedCount).toBe(0)
   })
 })
