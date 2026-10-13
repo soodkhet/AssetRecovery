@@ -526,6 +526,7 @@ export async function loadRevenueReconciliationInput(
             amountSatang: share,
             invoiced: isInvoiced(row.billingBatchId),
             hasActiveNote: row.hasActiveNote,
+            ...(row.billingBatchId === null ? {} : { batchKey: row.billingBatchId }),
           },
         ]
   })
@@ -536,6 +537,7 @@ export async function loadRevenueReconciliationInput(
     const batchId = invoice.salesRecord.billingBatchId
     if (!invoicedBatches.has(batchId)) continue
     const current = invoicedBatchMap.get(batchId) ?? {
+      batchKey: batchId,
       batchBeforeVatSatang: invoice.salesRecord.totalBeforeVatSatang,
       issuedBeforeVatSatang: 0,
       inRangeGrossSatang: 0,
@@ -564,12 +566,16 @@ export async function loadRevenueReconciliationInput(
     revenues: revenues.map((row) => ({ grossSatang: row.grossSatang, invoiced: isInvoiced(row.billingBatchId) })),
     invoicedBatches: [...invoicedBatchMap.values()],
     adjustments: [
-      ...adjustments.map((row) => ({
-        adjustmentType: row.adjustmentType,
-        amountSatang: row.amountSatang,
-        invoiced: isInvoiced(row.revenueId === null ? row.billingBatchId : (revenueBatch.get(row.revenueId) ?? null)),
-        hasActiveNote: row.creditNotes.length > 0,
-      })),
+      ...adjustments.map((row) => {
+        const batchId = row.revenueId === null ? row.billingBatchId : (revenueBatch.get(row.revenueId) ?? null)
+        return {
+          adjustmentType: row.adjustmentType,
+          amountSatang: row.amountSatang,
+          invoiced: isInvoiced(batchId),
+          hasActiveNote: row.creditNotes.length > 0,
+          ...(batchId === null ? {} : { batchKey: batchId }),
+        }
+      }),
       ...batchLevelInRange,
     ],
     notes: invoices.flatMap((row) => row.creditNotes),

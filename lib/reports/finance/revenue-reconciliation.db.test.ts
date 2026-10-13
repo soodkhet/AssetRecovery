@@ -305,4 +305,42 @@ suite('U44 — บรรทัดกระทบยอด F2 กับใบก�
     // ผลต่างไม่เปลี่ยน (Adjustment ระดับรอบไม่ทำให้กระทบยอดไม่ลงอีกต่อไป)
     expect(after.reconciliation?.differenceSatang).toBe(before.reconciliation?.differenceSatang)
   })
+
+  it('mytester5 J5-01 — BL-2569-003 ลดคร่อม: −100 + −1,000 (ใบลดหนี้ส่วนเกิน 39.36) ⇒ ไม่ขึ้นรอรับชำระ · ผลต่างไม่เปลี่ยน', async () => {
+    const before = await run()
+    const tx = db()
+    const batch = await tx.$queryRawUnsafe<{ id: string }[]>(`
+      INSERT INTO billing_batches (organization_id, company_id, period, status, total_satang, due_date, created_by)
+      VALUES ('${ORG_ID}', '${COMPANY_ID}', 'สิงหาคม 2569', 'partially_paid', 263489, '2026-09-30', '${USER_ID}') RETURNING id
+    `)
+    const batchId = batch[0]?.id ?? ''
+    const revenueId = await seedRevenue(246_251, batchId)
+    const sales = await tx.$queryRawUnsafe<{ id: string }[]>(`
+      INSERT INTO sales_records (organization_id, period_id, billing_batch_id, company_id, total_before_vat_satang, vat_satang, total_satang, created_by)
+      VALUES ('${ORG_ID}', '${periodId}', '${batchId}', '${COMPANY_ID}', 246251, 17238, 263489, '${USER_ID}') RETURNING id
+    `)
+    const salesId = sales[0]?.id ?? ''
+    // ใบเสร็จฯ ออกแล้ว 1,401.87 ก่อน VAT ⇒ ยังไม่ออกใบ 1,060.64
+    const fixture = taxInvoiceFixtureValues(salesId)
+      .replace(`'tax_invoice'`, `'receipt_tax_invoice'`)
+      .replace(`(SELECT s.total_before_vat_satang FROM sales_records s WHERE s.id = '${salesId}')`, '140187')
+      .replace(`(SELECT s.vat_satang FROM sales_records s WHERE s.id = '${salesId}')`, '9813')
+      .replace(`(SELECT s.total_satang FROM sales_records s WHERE s.id = '${salesId}')`, '150000')
+    const invoice = await tx.$queryRawUnsafe<{ id: string }[]>(`
+      INSERT INTO tax_invoices (organization_id, sales_record_id, invoice_number, invoice_date, buyer_branch_code, seller_branch_code, created_by,
+                                ${TAX_INVOICE_FIXTURE_COLUMNS})
+      VALUES ('${ORG_ID}', '${salesId}', 'INVJ-${TAG}', '2026-08-12', '00000', '00000', '${USER_ID}', ${fixture}) RETURNING id
+    `)
+    await seedAdjustment(revenueId, 'decrease', 10_000)
+    const straddling = await seedAdjustment(revenueId, 'decrease', 100_000)
+    await seedNote(invoice[0]?.id ?? '', 'credit', 3_936, straddling)
+
+    const after = await run()
+    expect(Number(after.totalRow?.['revenueSatang'])).toBe(Number(before.totalRow?.['revenueSatang']) + 246_251 - 110_000)
+    expect(line(after, 'invoiced')).toBe((line(before, 'invoiced') ?? 0) + 140_187)
+    expect(line(after, 'pendingReceipt')).toBe(line(before, 'pendingReceipt'))
+    expect(line(after, 'creditNotes')).toBe((line(before, 'creditNotes') ?? 0) + 3_936)
+    expect(line(after, 'awaitingCredit')).toBe(line(before, 'awaitingCredit'))
+    expect(after.reconciliation?.differenceSatang).toBe(before.reconciliation?.differenceSatang)
+  })
 })

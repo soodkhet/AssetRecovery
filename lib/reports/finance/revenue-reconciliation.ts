@@ -16,7 +16,8 @@ import type { ReportReconciliation, ReportReconciliationLine } from '@/lib/repor
  * + ยังไม่ออกใบกำกับ (รอรับชำระ)                 (ใบกำกับเมื่อรับชำระ — mytester3 J3-03)
  * − ใบลดหนี้ + ใบเพิ่มหนี้                       (เอกสาร active)
  * − Adjustment ลดยอดที่รอใบลดหนี้ + Adjustment เพิ่มยอดที่รอใบเพิ่มหนี้
- *   (ส่วนที่ลดก่อนออกใบ — ไม่ต้องออกใบลดหนี้ — หักออกจากทั้งส่วนที่ยังไม่ออกใบและบรรทัดนี้ด้วยยอดเดียวกัน ⇒ ไม่แสดง · LR3-04)
+ *   (ส่วนที่ลดก่อนออกใบ R — ไม่ต้องออกใบลดหนี้ — หักออกจากส่วนที่ยังไม่ออกใบเต็มจำนวน และหักจากบรรทัดนี้ไม่เกินยอดรอใบลดหนี้
+ *    ส่วนที่เหลือของ R เป็นของ Adjustment ที่ลดคร่อมและมีใบลดหนี้ส่วนเกินแล้ว ⇒ ไม่แสดงบรรทัดแยก · LR3-04 + J5-01)
  * + รายได้ที่ยังไม่ออกใบกำกับ ± Adjustment ของรายได้นั้น
  * = ยอดคาดหมาย  →  เทียบกับยอดรายงาน (ไม่ลง ⇒ แสดงผลต่าง)
  * ```
@@ -47,6 +48,8 @@ export interface ReconciliationAdjustment {
   invoiced: boolean
   /** มีใบลดหนี้/ใบเพิ่มหนี้ active อ้างถึงแล้ว */
   hasActiveNote: boolean
+  /** mytester5 J5-01 — รอบวางบิลต้นทาง (จับคู่กับ {@link ReconciliationInvoicedBatch.batchKey}) · ไม่ส่ง = กองกลาง */
+  batchKey?: string
 }
 
 /** ใบลดหนี้/ใบเพิ่มหนี้ active ของใบกำกับในรายงาน (ยอดก่อน VAT) */
@@ -72,6 +75,11 @@ export interface ReconciliationInvoicedBatch {
   uninvoicedReductionBeforeVatSatang?: number
   /** mytester3 LR3-04 — เงินรับที่ยังไม่ออกใบเสร็จฯ (ก่อน VAT) ณ วันสิ้นช่วง · ไม่ส่ง = 0 */
   receivedNotInvoicedBeforeVatSatang?: number
+  /**
+   * mytester5 J5-01 — รหัสรอบ: ส่วนที่ลดก่อนออกใบของรอบนี้หักบรรทัด "รอใบลดหนี้" ได้เฉพาะ Adjustment ที่มี `batchKey` เดียวกัน
+   * (กันไม่ให้ R ของรอบหนึ่งไปกลบยอดรอใบลดหนี้จริงของอีกรอบ) · ไม่ส่ง = กองกลาง (จับคู่กับ Adjustment ที่ไม่ส่งเช่นกัน)
+   */
+  batchKey?: string
 }
 
 /** ส่วนของรอบที่ตกในช่วงรายงาน (สัดส่วนรายได้ในช่วง ปัดลง) — ใช้สูตรเดียวทุกบรรทัด */
@@ -94,22 +102,50 @@ export interface PendingReceiptBreakdown {
  * mytester3 LR3-04 — แยกมูลค่าที่ยังไม่ออกใบของรอบ (= {@link pendingReceiptInvoiceSatang} ทุกสตางค์) เป็น 3 ส่วน:
  * ส่วนที่ปรับลดก่อนออกใบ (ไม่ต้องออก) → รับชำระแล้วรอออกใบ (ไม่เกินที่เหลือ) → รอรับชำระ (ที่เหลือ)
  */
+function batchBreakdown(batch: ReconciliationInvoicedBatch): PendingReceiptBreakdown {
+  const pending = Math.max(0, batch.batchBeforeVatSatang - batch.issuedBeforeVatSatang)
+  const reduction = Math.min(pending, Math.max(0, batch.uninvoicedReductionBeforeVatSatang ?? 0))
+  const received = Math.min(pending - reduction, Math.max(0, batch.receivedNotInvoicedBeforeVatSatang ?? 0))
+  const total = inRangeShare(pending, batch)
+  const reductionSatang = Math.min(total, inRangeShare(reduction, batch))
+  const receivedSatang = Math.min(total - reductionSatang, inRangeShare(received, batch))
+  return { receivedSatang, awaitingPaymentSatang: total - reductionSatang - receivedSatang, reductionSatang }
+}
+
 export function pendingReceiptBreakdown(batches: readonly ReconciliationInvoicedBatch[]): PendingReceiptBreakdown {
   let receivedSatang = 0
   let awaitingPaymentSatang = 0
   let reductionSatang = 0
   for (const batch of batches) {
-    const pending = Math.max(0, batch.batchBeforeVatSatang - batch.issuedBeforeVatSatang)
-    const reduction = Math.min(pending, Math.max(0, batch.uninvoicedReductionBeforeVatSatang ?? 0))
-    const received = Math.min(pending - reduction, Math.max(0, batch.receivedNotInvoicedBeforeVatSatang ?? 0))
-    const total = inRangeShare(pending, batch)
-    const reductionShare = Math.min(total, inRangeShare(reduction, batch))
-    const receivedShare = Math.min(total - reductionShare, inRangeShare(received, batch))
-    reductionSatang += reductionShare
-    receivedSatang += receivedShare
-    awaitingPaymentSatang += total - reductionShare - receivedShare
+    const parts = batchBreakdown(batch)
+    reductionSatang += parts.reductionSatang
+    receivedSatang += parts.receivedSatang
+    awaitingPaymentSatang += parts.awaitingPaymentSatang
   }
   return { receivedSatang, awaitingPaymentSatang, reductionSatang }
+}
+
+/**
+ * mytester5 J5-01 — ยอดที่หักออกจากบรรทัด "Adjustment ลดยอดที่รอใบลดหนี้" ได้ = Σ ต่อรอบ min(R ของรอบ, รอใบลดหนี้ของรอบ)
+ * · ส่วนที่เหลือของ R เป็นของ Adjustment ที่ลดคร่อมซึ่งมีใบลดหนี้ส่วนเกินแล้ว (G4-01) ⇒ ไม่หักบรรทัดนี้
+ */
+function awaitingCreditOffsetSatang(
+  batches: readonly ReconciliationInvoicedBatch[],
+  awaitingDecreases: readonly ReconciliationAdjustment[],
+): number {
+  const reductionByKey = new Map<string, number>()
+  for (const batch of batches) {
+    const key = batch.batchKey ?? ''
+    reductionByKey.set(key, (reductionByKey.get(key) ?? 0) + batchBreakdown(batch).reductionSatang)
+  }
+  const awaitingByKey = new Map<string, number>()
+  for (const row of awaitingDecreases) {
+    const key = row.batchKey ?? ''
+    awaitingByKey.set(key, (awaitingByKey.get(key) ?? 0) + row.amountSatang)
+  }
+  let offset = 0
+  for (const [key, reduction] of reductionByKey) offset += Math.min(reduction, awaitingByKey.get(key) ?? 0)
+  return offset
 }
 
 export interface RevenueReconciliationInput {
@@ -172,10 +208,23 @@ export function buildRevenueReconciliation(input: RevenueReconciliationInput): R
     awaiting.filter((row) => row.adjustmentType === 'decrease').map((row) => row.amountSatang),
     'รอใบลดหนี้',
   )
-  const reductionSatang = Math.min(breakdown.reductionSatang, pendingReceiptSatang, awaitingCreditSatang)
+  // mytester5 J5-01 — R (ส่วนที่ลดในมูลค่าที่ยังไม่ออกใบ) หักออกจากฝั่งยังไม่ออกใบ**เต็มจำนวน** ไม่ถูกจำกัดด้วยยอดรอใบลดหนี้:
+  // Adjustment ที่ลดคร่อม (ส่วนที่ยังไม่ออกใบ + ส่วนเกินที่ออกใบลดหนี้แล้ว — G4-01) มีใบลดหนี้อ้างอยู่ ⇒ ไม่อยู่ในยอดรอใบลดหนี้
+  // แต่ส่วน R ของมันยังต้องหักจาก "รอรับชำระ" · บรรทัดรอใบลดหนี้ลดเฉพาะส่วนของ R ที่ตรงกับ Adjustment ที่ยังไม่มีเอกสาร
+  // ของรอบเดียวกัน (ต่อรอบ — R ของรอบหนึ่งไม่กลบยอดรอใบลดหนี้ของอีกรอบ)
+  const reductionSatang = Math.min(breakdown.reductionSatang, pendingReceiptSatang)
   const pendingReceivedSatang = Math.min(breakdown.receivedSatang, pendingReceiptSatang - reductionSatang)
   const pendingAwaitingPaymentSatang = pendingReceiptSatang - reductionSatang - pendingReceivedSatang
-  const awaitingCreditNoteSatang = awaitingCreditSatang - reductionSatang
+  const awaitingCreditNoteSatang =
+    awaitingCreditSatang -
+    Math.min(
+      reductionSatang,
+      awaitingCreditSatang,
+      awaitingCreditOffsetSatang(
+        input.invoicedBatches ?? [],
+        awaiting.filter((row) => row.adjustmentType === 'decrease'),
+      ),
+    )
   const awaitingDebitSatang = sumSatang(
     awaiting.filter((row) => row.adjustmentType === 'increase').map((row) => row.amountSatang),
     'รอใบเพิ่มหนี้',
