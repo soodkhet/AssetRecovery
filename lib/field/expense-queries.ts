@@ -899,6 +899,8 @@ export async function submitHotelClaim(
   }
   const substituteLines = input.substituteReceipt?.lines ?? null
   const receiptFileUrl = input.receiptFileUrl ?? null
+  // mytester5 D-OUT5-01 — ใช้ใบรับรองแทนใบเสร็จ = ไม่มีใบเสร็จจริง ⇒ ไม่มีเรื่อง "ใบเสร็จออกในนามบริษัท" (เก็บ false เสมอ)
+  const receiptInCompanyName = substituteLines === null ? input.receiptInCompanyName : false
   assertHotelClaimFields({
     expenseDate: input.expenseDate,
     amountSatang: input.amountSatang,
@@ -967,7 +969,7 @@ export async function submitHotelClaim(
       revisionNote: input.note ?? null,
       hotelNights: input.hotelNights,
       sharedWithUserId: input.sharedWithUserId ?? null,
-      receiptInCompanyName: input.receiptInCompanyName,
+      receiptInCompanyName,
       actorId: context.actor.id,
     })
 
@@ -979,7 +981,7 @@ export async function submitHotelClaim(
         grossSatang: input.amountSatang,
         expenseDate: input.expenseDate,
         hotelNights: input.hotelNights,
-        receiptInCompanyName: input.receiptInCompanyName,
+        receiptInCompanyName,
         calculationSource: 'receipt',
         // snapshot แผนที่ใช้ตรวจเพดาน (`92` §7.1) — ส่งใหม่หลังตีกลับใช้เพดานชุดเดิม ไม่อ่านแผนปัจจุบัน
         compPlanId: capSnapshot?.compPlanId ?? null,
@@ -1019,7 +1021,7 @@ export async function submitHotelClaim(
           grossSatang: input.amountSatang,
           expenseDate: input.expenseDate,
           hotelNights: input.hotelNights,
-          receiptInCompanyName: input.receiptInCompanyName,
+          receiptInCompanyName,
           sharedWithUserId: input.sharedWithUserId ?? null,
           receiptFileUrl,
           receiptFileHash: receipt?.sha256 ?? null,

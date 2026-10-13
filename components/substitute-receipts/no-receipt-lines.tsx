@@ -36,16 +36,28 @@ export function NoReceiptToggle({
   )
 }
 
+/** ตัวอย่างในคำอธิบาย/placeholder ตามชนิดรายจ่าย (mytester5 D-OUT5-01 — ฟอร์มค่าที่พักไม่ควรยกตัวอย่างค่าทางด่วน) */
+const NO_RECEIPT_EXAMPLES = {
+  general: { intro: 'เช่น ค่าทางด่วน ค่ารถรับจ้าง ค่าที่จอดรถ', placeholder: 'รายละเอียด เช่น ค่าผ่านทางพิเศษ ด่านบางนา' },
+  hotel: { intro: 'เช่น ค่าห้องพักรายคืนที่ที่พักไม่ออกใบเสร็จ', placeholder: 'รายละเอียด เช่น ค่าห้องพัก 1 คืน เกสต์เฮาส์ อ.เมือง' },
+} as const
+
+export type NoReceiptLinesVariant = keyof typeof NO_RECEIPT_EXAMPLES
+
 export function NoReceiptLinesEditor({
   lines,
   onChange,
   defaultDate,
+  variant = 'general',
 }: {
   lines: readonly SubstituteLineDraft[]
   onChange: (lines: SubstituteLineDraft[]) => void
   /** วันที่ตั้งต้นของบรรทัดใหม่ (`YYYY-MM-DD`) */
   defaultDate: string
+  /** ชนิดรายจ่าย — เปลี่ยนเฉพาะตัวอย่างในข้อความ (ค่าตั้งต้น = รายจ่ายทั่วไป) */
+  variant?: NoReceiptLinesVariant
 }) {
+  const examples = NO_RECEIPT_EXAMPLES[variant]
   const total = substituteDraftTotalSatang(lines)
 
   function update(key: string, patch: Partial<SubstituteLineDraft>): void {
@@ -64,7 +76,7 @@ export function NoReceiptLinesEditor({
   return (
     <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50/50 p-3">
       <p className="text-xs text-slate-600">
-        กรอกรายจ่ายที่เรียกใบเสร็จไม่ได้ (เช่น ค่าทางด่วน ค่ารถรับจ้าง ค่าที่จอดรถ) — ระบบจะออกใบรับรองแทนใบเสร็จรับเงินให้ดาวน์โหลดไปเซ็น
+        กรอกรายจ่ายที่เรียกใบเสร็จไม่ได้ ({examples.intro}) — ระบบจะออกใบรับรองแทนใบเสร็จรับเงินให้ดาวน์โหลดไปเซ็น
         แล้วอัปโหลดฉบับเซ็นกลับเข้าระบบ · ยอดรวมต้องไม่เกินเพดานที่บริษัทกำหนด
       </p>
       {lines.map((line, index) => (
@@ -91,7 +103,7 @@ export function NoReceiptLinesEditor({
             />
             <Input
               aria-label={`รายละเอียดรายจ่าย รายการที่ ${index + 1}`}
-              placeholder="รายละเอียด เช่น ค่าผ่านทางพิเศษ ด่านบางนา"
+              placeholder={examples.placeholder}
               value={line.description}
               onChange={(event) => update(line.key, { description: event.target.value })}
             />

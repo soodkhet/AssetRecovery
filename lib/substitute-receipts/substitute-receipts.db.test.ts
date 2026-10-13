@@ -330,12 +330,15 @@ suite('ใบเบิกค่าที่พัก "ไม่มีใบเ�
         amountSatang: 11_000,
         receiptFileUrl: null,
         substituteReceipt: { lines: [line(7_000), line(4_000, 'ค่ารถจักรยานยนต์รับจ้าง')] },
+        // mytester5 D-OUT5-01 — ส่ง true มาก็ตาม ใบรับรองแทนใบเสร็จไม่มีเรื่องชื่อบนใบเสร็จ ⇒ เก็บ false
+        receiptInCompanyName: true,
         sharedWithUserId: null,
         note: null,
       },
       { actor: agent, meta },
     )
     expect(created.receiptFileUrl).toBeNull()
+    expect(created.receiptInCompanyName).toBe(false)
     expect(created.substituteReceipt).toMatchObject({ status: 'pending_signature', totalSatang: 11_000 })
     expect(created.substituteReceipt?.receiptNumber).toMatch(/^CRT-\d{4}-0001$/)
   })

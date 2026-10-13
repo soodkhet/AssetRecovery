@@ -125,6 +125,14 @@ export function receiptInCompanyNameText(receiptInCompanyName: boolean): string 
   return receiptInCompanyName ? 'ใบเสร็จในนามบริษัท' : 'ใบเสร็จไม่ได้ออกในนามบริษัท'
 }
 
+/**
+ * mytester5 D-OUT5-01 — ใบเบิกที่ใช้ใบรับรองแทนใบเสร็จ (ไม่มีใบเสร็จจริง) ไม่มีเรื่อง "ชื่อบนใบเสร็จ" ⇒ ไม่มีป้าย (`null`)
+ * มีใบเสร็จจริง ⇒ ป้ายเดิมของ {@link receiptInCompanyNameText}
+ */
+export function hotelReceiptNameText(receiptInCompanyName: boolean, usesSubstituteReceipt: boolean): string | null {
+  return usesSubstituteReceipt ? null : receiptInCompanyNameText(receiptInCompanyName)
+}
+
 /** ข้อความสั้น "2 คืน · เพดาน ฿1,600.00" (ไม่ตั้งเพดาน → "2 คืน") — ใช้ทั้งรายการเบิกและคิวอนุมัติ */
 export function hotelNightsCapText(nights: number, maxPerNightSatang: number | null): string {
   const cap = hotelClaimCapSatang(maxPerNightSatang, nights)

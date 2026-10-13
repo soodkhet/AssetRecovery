@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useSession } from '@/components/auth/permission-provider'
 import { FileViewerModal } from '@/components/cases/file-viewer-modal'
 import { HotelClaimModal } from '@/components/field/hotel-claim-modal'
-import { hotelNightsCapText, receiptInCompanyNameText } from '@/lib/field/hotel-claim'
+import { hotelNightsCapText, hotelReceiptNameText } from '@/lib/field/hotel-claim'
 import { IconAlert, IconChevronRight, IconFile, IconPlus } from '@/components/field/field-icons'
 import { ResubmitExpenseModal } from '@/components/field/resubmit-expense-modal'
 import { PAYMENT_INFO_INCOMPLETE_LABEL } from '@/components/payees/payment-info-incomplete-badge'
@@ -377,7 +377,13 @@ export function ExpensesTab({ initialView = 'caseBound' }: { initialView?: Expen
                         <div className="truncate text-xs text-slate-400">
                           วันที่ {fmtDate(item.expenseDate)}
                           {item.expenseType === 'hotel'
-                            ? ` · ${hotelNightsCapText(item.hotelNights, item.hotelMaxPerNightSatang)} · ${receiptInCompanyNameText(item.receiptInCompanyName)}`
+                            ? [
+                                '',
+                                hotelNightsCapText(item.hotelNights, item.hotelMaxPerNightSatang),
+                                hotelReceiptNameText(item.receiptInCompanyName, item.substituteReceipt !== null),
+                              ]
+                                .filter((part): part is string => part !== null)
+                                .join(' · ')
                             : ''}
                           {item.sharedWithName === null ? '' : ` · พักร่วมกับ ${item.sharedWithName}`}
                         </div>
