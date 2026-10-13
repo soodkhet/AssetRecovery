@@ -131,6 +131,15 @@ describe('auditValueText()', () => {
     // ข้อความธรรมดาที่ไม่ใช่ ISO ต้องไม่ถูกแตะ
     expect(auditValueText('approved', 'status')).toBe('approved')
   })
+
+  it('ทดสอบซ้ำ local LR5-04 — ฟิลด์วันที่ล้วนแสดง DD/MM/YYYY ไม่มีเวลา · timestamp ยังมีเวลา', () => {
+    expect(auditValueText('2026-10-08T00:00:00.000Z', 'received_date')).toBe('08/10/2569')
+    expect(auditValueText('2026-10-08T00:00:00.000Z', 'expenseDate')).toBe('08/10/2569')
+    expect(auditValueText('2026-10-08T00:00:00.000Z', 'effective_from')).toBe('08/10/2569')
+    expect(auditValueText('2026-10-08', 'transaction_date')).toBe('08/10/2569')
+    expect(auditValueText('2026-10-08T00:00:00.000Z', 'matched_at')).toBe('08/10/2569 07:00')
+    expect(auditValueText('2026-10-08T00:00:00.000Z', 'updated')).toBe('08/10/2569 07:00')
+  })
 })
 
 describe('auditLogListQuerySchema', () => {

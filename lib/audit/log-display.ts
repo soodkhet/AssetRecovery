@@ -1,4 +1,4 @@
-import { fmtDateTime } from '@/lib/format/datetime'
+import { fmtDate, fmtDateTime } from '@/lib/format/datetime'
 import { auditFieldRefType } from '@/lib/audit/target-refs'
 import { fmtSatangSymbol } from '@/lib/format/money'
 import type { AuditAction } from '@/lib/generated/prisma/enums'
@@ -266,6 +266,19 @@ const SATANG_FIELD = /(^|_)satang$|Satang$/
 /** ค่า `TIMESTAMPTZ` ที่ `emitAudit()` เก็บลง before/after เป็น ISO UTC เสมอ */
 const ISO_DATETIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/
 
+/** ค่าวันที่ล้วนแบบ `YYYY-MM-DD` (บาง payload เก็บแบบนี้) */
+const ISO_DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/
+
+/**
+ * ทดสอบซ้ำ local LR5-04 — ฟิลด์ที่เป็นคอลัมน์ `DATE` (วันที่ล้วน) ในสคีมา: ลงท้าย `_date`/`Date` + `effective_from/to`
+ * (ทุกคอลัมน์ชื่อ `*_date` เป็น `@db.Date`) — ค่า ISO เที่ยงคืน UTC ห้ามแสดงเวลา "07:00"
+ */
+const DATE_ONLY_FIELD = /(^|_)date$|[a-z]Date$|^effective_(from|to)$|^effective(From|To)$/
+
+export function isAuditDateOnlyField(field: string): boolean {
+  return DATE_ONLY_FIELD.test(field)
+}
+
 /**
  * ค่าในคอลัมน์ before/after ของ drawer — object/array แสดงเป็น JSON บรรทัดเดียว
  *
@@ -281,7 +294,9 @@ export function auditValueText(value: unknown, field?: string): string {
   }
   if (typeof value === 'string') {
     if (value === '') return '—'
-    return ISO_DATETIME.test(value) ? fmtDateTime(value) : value
+    if (ISO_DATE_ONLY.test(value)) return fmtDate(`${value}T00:00:00Z`)
+    if (!ISO_DATETIME.test(value)) return value
+    return field !== undefined && isAuditDateOnlyField(field) ? fmtDate(value) : fmtDateTime(value)
   }
   if (typeof value === 'number' || typeof value === 'boolean') return String(value)
   return JSON.stringify(value)
