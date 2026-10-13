@@ -43,7 +43,10 @@ export function ResubmitExpenseModal({
   const editable = isSeparateExpense(expense)
   const isHotel = expense.expenseType === 'hotel'
   // mytester5 รีวิว D-OUT5-01 — ใช้ใบรับรองแทนใบเสร็จที่ยังมีผล = ไม่มีใบเสร็จจริง ⇒ ไม่มีช่อง "ใบเสร็จออกในนามบริษัท"
-  const showReceiptName = isHotel && !isSubstituteReceiptRefActive(expense.substituteReceipt)
+  const activeSubstitute = isSubstituteReceiptRefActive(expense.substituteReceipt) ? expense.substituteReceipt : null
+  const showReceiptName = isHotel && activeSubstitute === null
+  // staging SV5-01 — ค่าที่พักที่ใช้ใบรับรองแทนใบเสร็จ: ยอดเบิกต้องเท่ายอดใบ ⇒ ล็อกช่องยอด (BE ตรวจซ้ำ)
+  const amountLocked = isHotel && activeSubstitute !== null
   const [nightsText, setNightsText] = useState(() => String(expense.hotelNights))
   const [receiptInCompanyName, setReceiptInCompanyName] = useState(() => expense.receiptInCompanyName)
   const [amountBaht, setAmountBaht] = useState(() => toBahtInput(expense.grossSatang))
@@ -76,7 +79,7 @@ export function ResubmitExpenseModal({
     }
 
     let amountSatang: number | undefined
-    if (editable) {
+    if (editable && !amountLocked) {
       const parsed = parseBahtInput(amountBaht)
       if (parsed === null || Number.isNaN(parsed) || parsed <= 0) {
         setError(bahtInputError(amountBaht, 'จำนวนเงิน') ?? 'จำนวนเงินต้องมากกว่า 0')
@@ -160,14 +163,35 @@ export function ResubmitExpenseModal({
 
         {editable ? (
           <>
-            <Field label="จำนวนเงิน (บาท)" required>
-              <Input
-                numeric
-                inputMode="decimal"
-                value={amountBaht}
-                onChange={(event) => setAmountBaht(event.target.value)}
-              />
-            </Field>
+            {amountLocked ? (
+              <Field label="จำนวนเงิน (บาท)">
+                <p className="rounded-xl bg-slate-50 p-3 text-sm font-semibold text-slate-700">
+                  {fmtSatangSymbol(expense.grossSatang)}
+                </p>
+                {activeSubstitute !== null && activeSubstitute.totalSatang !== expense.grossSatang && (
+                  <p className="mt-1 text-xs text-amber-700">
+                    ยอดเบิกไม่ตรงยอดใบรับรอง ({fmtSatangSymbol(activeSubstitute.totalSatang)}) — ยกเลิกใบรับรองแล้วออกใบใหม่ตามยอดที่ถูกต้องก่อนส่ง
+                  </p>
+                )}
+              </Field>
+            ) : (
+              <Field
+                label="จำนวนเงิน (บาท)"
+                required
+                hint={
+                  activeSubstitute === null
+                    ? undefined
+                    : `ต้องไม่น้อยกว่ายอดใบรับรองแทนใบเสร็จ ${fmtSatangSymbol(activeSubstitute.totalSatang)}`
+                }
+              >
+                <Input
+                  numeric
+                  inputMode="decimal"
+                  value={amountBaht}
+                  onChange={(event) => setAmountBaht(event.target.value)}
+                />
+              </Field>
+            )}
 
             {isHotel && (
               <Field
@@ -186,25 +210,35 @@ export function ResubmitExpenseModal({
               </Field>
             )}
 
-            <Field label="แนบใบเสร็จใหม่ (ถ้าต้องเปลี่ยน)">
-              <button
-                type="button"
-                onClick={() => fileRef.current?.click()}
-                className="focus-ring flex w-full flex-col items-center gap-1.5 rounded-xl border-2 border-dashed border-slate-300 py-5 text-slate-400"
-              >
-                <IconFile className="h-6 w-6" />
-                <span className="text-xs font-semibold">
-                  {receipt === null ? 'ใช้ใบเสร็จเดิม — แตะเพื่อเปลี่ยน' : receipt.name}
-                </span>
-              </button>
-              <input
-                ref={fileRef}
-                type="file"
-                accept={EXPENSE_RECEIPT_ACCEPT}
-                className="hidden"
-                onChange={(event) => setReceipt(event.target.files?.[0] ?? null)}
-              />
-            </Field>
+            {activeSubstitute !== null ? (
+              // ไม่มีใบเสร็จจริง — ใช้ใบรับรองเลขเดิม · เปลี่ยนยอด/แนบใบเสร็จจริงต้องยกเลิกใบรับรองก่อน (BE ปฏิเสธไฟล์ใหม่)
+              <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-500">
+                ใช้ใบรับรองแทนใบเสร็จเลขเดิม{' '}
+                <span className="font-mono font-semibold text-slate-700">{activeSubstitute.receiptNumber}</span> (ยอด{' '}
+                {fmtSatangSymbol(activeSubstitute.totalSatang)}) — ถ้าต้องเปลี่ยนยอดหรือแนบใบเสร็จจริง
+                ให้ยกเลิกใบรับรองที่รายการเบิกก่อน
+              </p>
+            ) : (
+              <Field label="แนบใบเสร็จใหม่ (ถ้าต้องเปลี่ยน)">
+                <button
+                  type="button"
+                  onClick={() => fileRef.current?.click()}
+                  className="focus-ring flex w-full flex-col items-center gap-1.5 rounded-xl border-2 border-dashed border-slate-300 py-5 text-slate-400"
+                >
+                  <IconFile className="h-6 w-6" />
+                  <span className="text-xs font-semibold">
+                    {receipt === null ? 'ใช้ใบเสร็จเดิม — แตะเพื่อเปลี่ยน' : receipt.name}
+                  </span>
+                </button>
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept={EXPENSE_RECEIPT_ACCEPT}
+                  className="hidden"
+                  onChange={(event) => setReceipt(event.target.files?.[0] ?? null)}
+                />
+              </Field>
+            )}
 
             {showReceiptName && (
               <ReceiptInCompanyNameCheckbox checked={receiptInCompanyName} onChange={setReceiptInCompanyName} />

@@ -371,6 +371,64 @@ suite('ใบเบิกค่าที่พัก "ไม่มีใบเ�
     expect(resubmitted.receiptInCompanyName).toBe(false)
   })
 
+  it('staging SV5-01: ส่งใหม่ขณะมีใบรับรองที่ใช้งานอยู่ — ยอดต้องเท่ายอดใบ · แนบใบเสร็จใหม่ทับไม่ได้ · ยกเลิกใบก่อนแล้วจึงเปลี่ยนยอดได้', async () => {
+    const created = await fieldExpenses.submitHotelClaim(
+      agent,
+      {
+        expenseDate: new Date('2026-10-08T00:00:00Z'),
+        amountSatang: 3_200,
+        receiptFileUrl: null,
+        substituteReceipt: { lines: [line(3_200)] },
+        sharedWithUserId: null,
+        note: null,
+      },
+      { actor: agent, meta },
+    )
+    const toRevision = () =>
+      db().expense.update({ where: { id: created.id }, data: { status: 'needs_revision', rejectionReason: 'ตรวจยอด' } })
+    await toRevision()
+
+    // ยอดไม่เท่ายอดใบรับรอง ⇒ ปฏิเสธ ใบเบิกไม่เปลี่ยน
+    await expectCode(
+      () => fieldExpenses.resubmitFieldExpense(agent, created.id, { amountSatang: 3_500, note: 'แก้ยอด' }, { actor: agent, meta }),
+      'SUBSTITUTE_RECEIPT_REISSUE_NOT_ALLOWED',
+    )
+    // แนบใบเสร็จไฟล์ใหม่ทับใบรับรองที่ใช้งานอยู่ ⇒ ปฏิเสธ (ก่อนตรวจไฟล์)
+    await expectCode(
+      () =>
+        fieldExpenses.resubmitFieldExpense(
+          agent,
+          created.id,
+          { receiptFileUrl: `expense-receipts/${agent.id}/66666666-6666-4666-8666-666666666666.jpg`, note: 'แนบใบเสร็จ' },
+          { actor: agent, meta },
+        ),
+      'SUBSTITUTE_RECEIPT_REISSUE_NOT_ALLOWED',
+    )
+    const unchanged = await db().expense.findUniqueOrThrow({ where: { id: created.id } })
+    expect(unchanged).toMatchObject({ status: 'needs_revision', grossSatang: 3_200, receiptFileUrl: null })
+
+    // ยอดเท่ายอดใบ (หรือไม่ส่งยอด) ⇒ ผ่าน
+    const resubmitted = await fieldExpenses.resubmitFieldExpense(
+      agent,
+      created.id,
+      { amountSatang: 3_200, note: 'ยืนยันยอด' },
+      { actor: agent, meta },
+    )
+    expect(resubmitted).toMatchObject({ status: 'pending_approval', grossSatang: 3_200 })
+
+    // ยกเลิกใบรับรองแล้ว ⇒ ไม่มีใบที่ใช้งานอยู่ เปลี่ยนยอดได้ (ต้องออกใบใหม่ตามยอดใหม่/แนบใบเสร็จจริงก่อนอนุมัติ)
+    await toRevision()
+    const crtId = resubmitted.substituteReceipt?.id ?? ''
+    await receipts.cancelSubstituteReceipt({ actor: agent, meta }, crtId, { reason: 'ยอดผิด ต้องออกใหม่' })
+    const changed = await fieldExpenses.resubmitFieldExpense(
+      agent,
+      created.id,
+      { amountSatang: 3_000, note: 'แก้ยอดหลังยกเลิกใบรับรอง' },
+      { actor: agent, meta },
+    )
+    expect(changed.grossSatang).toBe(3_000)
+  })
+
   it('ไม่มีทั้งใบเสร็จและรายการ = HOTEL_CLAIM_FIELD_REQUIRED', async () => {
     await expectCode(
       () =>

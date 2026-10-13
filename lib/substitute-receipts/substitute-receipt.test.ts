@@ -17,6 +17,7 @@ import {
   substituteReceiptCancelProblem,
   substituteReceiptCancelProblemMessage,
   substituteReceiptReissueTotalProblem,
+  substituteReceiptResubmitProblem,
   substituteReceiptStatusBadgeGroup,
   SUBSTITUTE_RECEIPT_STATUS_LABEL,
   substituteReceiptCertification,
@@ -302,6 +303,27 @@ describe('มติ PO U107 — ยกเลิก / ออกใบใหม่
     expect(substituteReceiptReissueTotalProblem({ kind: 'advance', usedSatang: 5_000 }, 5_000)).toBeNull()
     expect(substituteReceiptReissueTotalProblem({ kind: 'advance', usedSatang: 5_000 }, 5_001)).toContain('ยอดที่ใช้จริง')
     expect(substituteReceiptReissueTotalProblem({ kind: 'advance', usedSatang: null }, 1)).not.toBeNull()
+  })
+
+  it('staging SV5-01 — ส่งใหม่ขณะมีใบที่ใช้งานอยู่: ค่าที่พักยอดต้องเท่าใบ · ชนิดอื่นไม่ต่ำกว่ายอดใบ · แนบไฟล์ใหม่ทับไม่ได้', () => {
+    const base = {
+      receiptNumber: 'CRT-2569-0003',
+      receiptTotalSatang: 32_000,
+      expenseType: 'hotel' as const,
+      amountSatang: 32_000,
+      replacesReceiptFile: false,
+    }
+    expect(substituteReceiptResubmitProblem(base)).toBeNull()
+    const mismatch = substituteReceiptResubmitProblem({ ...base, amountSatang: 35_000 })
+    expect(mismatch).toContain('เท่ากับยอดเบิกค่าที่พัก')
+    expect(mismatch).toContain('CRT-2569-0003')
+    expect(mismatch).toContain('฿320.00')
+    expect(mismatch).not.toMatch(/§|ไฟล์ \d/)
+    expect(substituteReceiptResubmitProblem({ ...base, amountSatang: 30_000 })).not.toBeNull()
+    const other = { ...base, expenseType: 'receipt' as const }
+    expect(substituteReceiptResubmitProblem({ ...other, amountSatang: 35_000 })).toBeNull()
+    expect(substituteReceiptResubmitProblem({ ...other, amountSatang: 31_999 })).toContain('ไม่เกินยอดเบิก')
+    expect(substituteReceiptResubmitProblem({ ...base, replacesReceiptFile: true })).toContain('ยกเลิกใบรับรองก่อน')
   })
 })
 

@@ -54,7 +54,12 @@ import { prisma } from '@/lib/prisma'
 import { expenseReceiptRule } from '@/lib/uploads/rules'
 import { verifyUploadedFile } from '@/lib/uploads/verify'
 import { issueSubstituteReceipt, substituteReceiptRefOf, substituteReceiptsRelationSelect } from '@/lib/substitute-receipts/queries'
-import { hasActiveSubstituteReceipt } from '@/lib/substitute-receipts/substitute-receipt'
+import { SubstituteReceiptError } from '@/lib/substitute-receipts/errors'
+import {
+  hasActiveSubstituteReceipt,
+  isSubstituteReceiptActive,
+  substituteReceiptResubmitProblem,
+} from '@/lib/substitute-receipts/substitute-receipt'
 
 /**
  * รายการเบิกของงานภาคสนาม (`41` §6.6 · §7.9 · §7.10 · §10.1) — ชั้น DB
@@ -1085,6 +1090,29 @@ export async function resubmitFieldExpense(
   // มติ PO O50 — แก้จำนวนคืนได้ตอนส่งใหม่ (เฉพาะค่าที่พัก) · ตรวจเพดานด้วยจำนวนคืนหลังแก้
   const isHotel = current.expenseType === 'hotel'
   const usesSubstituteReceipt = hasActiveSubstituteReceipt(current.substituteReceipts)
+  const nextAmountSatang = editable && input.amountSatang !== undefined ? input.amountSatang : current.grossSatang
+  // staging SV5-01 — ใบรับรองแทนใบเสร็จที่ใช้งานอยู่คือหลักฐานของยอดเบิก ⇒ ยอดที่ส่งใหม่ต้องเข้ากติกาเดียวกับยอดของใบ
+  // (ค่าที่พักต้องเท่ายอดใบ) และห้ามแนบใบเสร็จไฟล์ใหม่ทับ — เปลี่ยนยอด/ใช้ใบเสร็จจริงต้องยกเลิกใบรับรองก่อน
+  const activeSubstitute = current.substituteReceipts.find(
+    (entry) => entry.deletedAt === null && isSubstituteReceiptActive(entry.status),
+  )
+  if (activeSubstitute !== undefined) {
+    const problem = substituteReceiptResubmitProblem({
+      receiptNumber: activeSubstitute.receiptNumber,
+      receiptTotalSatang: activeSubstitute.totalSatang,
+      expenseType: current.expenseType,
+      amountSatang: nextAmountSatang,
+      replacesReceiptFile:
+        editable && input.receiptFileUrl !== undefined && input.receiptFileUrl !== current.receiptFileUrl,
+    })
+    if (problem !== null) {
+      throw new SubstituteReceiptError('SUBSTITUTE_RECEIPT_REISSUE_NOT_ALLOWED', {
+        title: 'ส่งใบเบิกใหม่ไม่ได้',
+        message: problem,
+        detail: `expense=${expenseId} resubmit substitute_receipt=${activeSubstitute.id}`,
+      })
+    }
+  }
   const nextHotelNights = isHotel && input.hotelNights !== undefined ? input.hotelNights : current.hotelNights
   let hotelCap: HotelCapSnapshot | null = null
   if (isHotel) {
@@ -1100,7 +1128,7 @@ export async function resubmitFieldExpense(
             onDate: current.expenseDate,
           })
     assertHotelClaimWithinCap({
-      amountSatang: editable && input.amountSatang !== undefined ? input.amountSatang : current.grossSatang,
+      amountSatang: nextAmountSatang,
       maxPerNightSatang: hotelCap?.hotelMaxPerNightSatang ?? null,
       nights: nextHotelNights,
     })

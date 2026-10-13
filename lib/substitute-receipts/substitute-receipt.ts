@@ -282,3 +282,37 @@ export function substituteReceiptReissueTotalProblem(link: SubstituteReceiptLink
   }
   return totalSatang > link.expenseGrossSatang ? 'ยอดรวมของใบรับรองต้องไม่เกินยอดเบิก' : null
 }
+
+/**
+ * ส่งใบเบิกที่ถูกตีกลับใหม่ ขณะยังมีใบรับรองแทนใบเสร็จที่ใช้งานอยู่ (staging SV5-01) — `null` = ผ่าน
+ *
+ * ใบรับรองคือหลักฐานของยอดเบิก ⇒ ยอดที่ส่งใหม่ต้องเข้ากติกาเดียวกับยอดของใบ (`substituteReceiptReissueTotalProblem()`:
+ * ค่าที่พักต้อง**เท่า**ยอดใบ · ชนิดอื่นยอดใบต้องไม่เกินยอดเบิก) และห้ามแนบใบเสร็จไฟล์ใหม่ทับ (ไฟล์ของใบเบิกคือฉบับเซ็น
+ * ของใบรับรอง) — ต้องการเปลี่ยนยอด/ใช้ใบเสร็จจริง ⇒ ยกเลิกใบรับรองก่อน แล้วออกใบใหม่แทนหรือแนบใบเสร็จจริง
+ */
+export function substituteReceiptResubmitProblem(input: {
+  receiptNumber: string
+  receiptTotalSatang: number
+  expenseType: ExpenseType
+  /** ยอดเบิกหลังส่งใหม่ (ไม่แก้ = ยอดเดิม) */
+  amountSatang: number
+  /** ผู้เบิกแนบไฟล์ใบเสร็จใหม่ที่ต่างจากไฟล์เดิมของใบเบิก */
+  replacesReceiptFile: boolean
+}): string | null {
+  if (input.replacesReceiptFile) {
+    return `รายการนี้ใช้ใบรับรองแทนใบเสร็จ ${input.receiptNumber} — ถ้าจะแนบใบเสร็จจริง ให้ยกเลิกใบรับรองก่อน`
+  }
+  const totalProblem = substituteReceiptReissueTotalProblem(
+    {
+      kind: 'expense',
+      expenseType: input.expenseType,
+      expenseGrossSatang: input.amountSatang,
+      // สถานะใบเบิกไม่ใช้ในการตรวจยอด
+      expenseStatus: 'needs_revision',
+      inCompletedPayout: false,
+    },
+    input.receiptTotalSatang,
+  )
+  if (totalProblem === null) return null
+  return `${totalProblem} (ใบรับรองแทนใบเสร็จ ${input.receiptNumber} ยอด ${fmtSatangSymbol(input.receiptTotalSatang)}) — ถ้าต้องเปลี่ยนยอด ให้ยกเลิกใบรับรองก่อน แล้วออกใบใหม่แทนหรือแนบใบเสร็จจริง`
+}

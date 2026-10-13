@@ -69,15 +69,18 @@ export function substituteReceiptErrorMessage(code: SubstituteReceiptErrorCode):
 }
 
 export class SubstituteReceiptError extends ModuleError<SubstituteReceiptErrorCode> {
-  /** `message` = ข้อความไทยเฉพาะกรณี (เช่น บอกยอดที่เหลือของเดือน) แทนข้อความกลางของ code */
+  /** `message`/`title` = ข้อความไทยเฉพาะกรณี (เช่น บอกยอดที่เหลือของเดือน) แทนข้อความกลางของ code */
   constructor(
     code: SubstituteReceiptErrorCode,
-    options?: { detail?: string; context?: Record<string, unknown>; message?: string },
+    options?: { detail?: string; context?: Record<string, unknown>; message?: string; title?: string },
   ) {
     const base = MESSAGES[code]
     super(
       code,
-      options?.message === undefined ? base : { ...base, message: options.message },
+      {
+        title: options?.title ?? base.title,
+        message: options?.message ?? base.message,
+      },
       HTTP_STATUS[code],
       options,
     )
