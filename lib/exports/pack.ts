@@ -4,7 +4,7 @@ import { isPayerBorneWhtCondition } from '@/lib/finance/wht-calc'
 import { buildCsv, csvBaht, csvDate, csvText, CSV_EMPTY, CSV_NEWLINE } from '@/lib/exports/csv'
 import { formatBranch } from '@/lib/format/branch'
 import { fmtDate } from '@/lib/format/datetime'
-import { fmtSatang } from '@/lib/format/money'
+import { fmtCount, fmtSatang } from '@/lib/format/money'
 import type { StatusBadgeGroup } from '@/lib/ui/status-badge'
 import type {
   BankMatchStatus,
@@ -1530,7 +1530,7 @@ export const PACK_COVER_HEADER_NOTE = 'ส่งสำนักงานบั�
 export function packCoverCheckStatus(check: Pick<ReadinessCheck, 'key' | 'passed'>, criticalAuthorizedCount: number): string {
   if (!check.passed) return 'ไม่ผ่าน'
   if (check.key === 'no_critical_exception' && criticalAuthorizedCount > 0) {
-    return `ผ่าน (อนุมัติยกเว้น ${criticalAuthorizedCount.toLocaleString('en-US')} รายการ)`
+    return `ผ่าน (อนุมัติยกเว้น ${fmtCount(criticalAuthorizedCount)} รายการ)`
   }
   return 'ผ่าน'
 }
