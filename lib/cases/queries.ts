@@ -340,6 +340,9 @@ async function loadCaseStatusHistory(organizationId: string, caseId: string): Pr
   )
 }
 
+/** เพดานจำนวน audit ที่ดึงมาทำประวัติเคส — เก็บรายการล่าสุด */
+export const CASE_ACTIVITY_AUDIT_LIMIT = 300
+
 /**
  * เหตุการณ์หลังรับเคส (`38` v3.21 — ข้อสังเกต mytester "ประวัติเคสหยุดที่รับเคส") — audit ของงานภาคสนาม
  * (`case_assignments` ทุกแถว/ทุกรอบของเคส) + เครื่องของเคส (`assets`) + ล็อตส่งมอบที่ยืนยันแล้ว
@@ -365,8 +368,10 @@ async function loadCaseActivityHistory(organizationId: string, caseId: string): 
       ? []
       : await prisma.auditLog.findMany({
           where: { organizationId, action: { not: 'view' }, OR: targets },
-          orderBy: { createdAt: 'asc' },
-          take: 300,
+          // รีวิวโค้ด known — เอา**ล่าสุด** N รายการ (desc + take) แล้วกลับเป็นเรียงเก่า→ใหม่ด้านล่าง
+          // (asc + take ตัดเหตุการณ์ล่าสุดทิ้งเมื่อเคสมี audit เกินเพดาน)
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          take: CASE_ACTIVITY_AUDIT_LIMIT,
           select: {
             targetType: true,
             targetId: true,
@@ -377,7 +382,7 @@ async function loadCaseActivityHistory(organizationId: string, caseId: string): 
             createdAt: true,
             actor: { select: { fullName: true } },
           },
-        })
+        }).then((rows) => rows.reverse())
   // ชื่อพนักงานที่อ้างใน audit (ผู้รับงาน/ผู้ถูกโอน) — รวม agent ของทุกแถวมอบหมาย
   const userIds = new Set<string>(assignments.map((row) => row.agentId))
   for (const row of audits) {

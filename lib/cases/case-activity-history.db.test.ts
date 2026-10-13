@@ -180,4 +180,38 @@ suite('ประวัติเคส — เหตุการณ์หลั�
     const external = await getCase(companyUser, caseId)
     expect(external.activityHistory).toEqual([])
   })
+
+  it('audit เกินเพดาน ⇒ เหตุการณ์ล่าสุดยังแสดง (ตัดของเก่าทิ้ง ไม่ใช่ของใหม่)', async () => {
+    const { getCase, CASE_ACTIVITY_AUDIT_LIMIT } = await import('@/lib/cases/queries')
+    const caseRef = `CA7L-${Date.now()}`
+    const cases = await db().$queryRawUnsafe<{ id: string }[]>(`
+      INSERT INTO cases (
+        organization_id, case_ref, case_ref_normalized, company_id, source, status, created_by,
+        debtor_name, addr_province, addr_district, asset_kind, asset_description, debt_amount_satang, assigned_team_id
+      ) VALUES (
+        '${ORG_ID}', $$${caseRef}$$, $$${caseRef}$$, '${COMPANY_ID}', 'manual', 'active', '${ADMIN_ID}',
+        'ลูกหนี้ CA7L', 'ลำพูน', 'เมือง', 'smartphone', 'iPhone 15', 1000000, '${TEAM_ID}'
+      ) RETURNING id
+    `)
+    const caseId = cases[0]?.id ?? ''
+    const rows = await db().$queryRawUnsafe<{ id: string }[]>(`
+      INSERT INTO case_assignments (organization_id, case_id, agent_id, team_id, status, created_by)
+      VALUES ('${ORG_ID}', '${caseId}', '${AGENT_ID}', '${TEAM_ID}', 'closed_fail', '${ADMIN_ID}') RETURNING id
+    `)
+    const assignmentId = rows[0]?.id ?? ''
+
+    await audit({ action: 'create', assignmentId, after: { agentId: AGENT_ID, status: 'pending_accept', trackingRound: 1, events: ['assignment.created'] }, at: '2026-10-01T02:00:00Z' })
+    // audit ที่ไม่แสดงบนประวัติ (สลับลำดับ) จำนวนเท่าเพดาน — เก่ากว่าเหตุการณ์ปิดงาน
+    await db().$executeRawUnsafe(
+      `INSERT INTO audit_logs (organization_id, actor_id, actor_role, action, target_type, target_id, after_data, created_at)
+       SELECT '${ORG_ID}', '${ADMIN_ID}', 'ทดสอบ', 'update', 'case_assignments', '${assignmentId}',
+              '{"events":["case.reordered"]}'::jsonb, TIMESTAMPTZ '2026-10-02T00:00:00Z' + (n * INTERVAL '1 second')
+       FROM generate_series(1, ${CASE_ACTIVITY_AUDIT_LIMIT}) AS n`,
+    )
+    await audit({ action: 'status_change', assignmentId, after: { status: 'closed_fail', failReason: 'other' }, at: '2026-10-05T05:00:00Z' })
+
+    const internal = await getCase(admin, caseId)
+    expect(internal.activityHistory.map((entry) => entry.label)).toContain('ปิดงานไม่สำเร็จ')
+    expect(internal.activityHistory.at(-1)?.label).toBe('ปิดงานไม่สำเร็จ')
+  })
 })
