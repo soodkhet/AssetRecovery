@@ -550,6 +550,35 @@ suite('การแสดงในตัวเลือก: ตัวกรอ�
     expect(visible.length + hidden.length).toBe(rows.length)
   })
 
+  it('รายการแบรนด์ (known Q3/A-13): แสดงในตัวเลือกก่อน · ชื่อขยะไปท้าย · ตามตัวอักษรไม่สนตัวพิมพ์ · ตรงกับ pure + count', async () => {
+    await runJob()
+    const c = loaded(catalog)
+    const extra = ['.flairmicro', '@phone', '1-Call', '10.or', 'acer', 'Zte', 'alcatel']
+    await db().deviceBrand.createMany({
+      data: extra.map((name) => ({ organizationId: ORG_ID, name, nameKey: c.normalizeCatalogName(name), source: 'tacdb' as const })),
+    })
+    const q = loaded(queries)
+    const filter = await loaded(settings).getCatalogFilter(ORG_ID)
+    for (const visibility of ['all', 'visible', 'hidden', 'manual'] as const) {
+      const all = await q.listDeviceBrands(ORG_ID, { visibility, page: 1, pageSize: 200 })
+      const rows = await db().deviceBrand.findMany({ where: { organizationId: ORG_ID, id: { in: all.items.map((item) => item.id) } } })
+      const expected = [...rows].sort((a, b) => c.compareBrandListRows(a, b, filter)).map((row) => row.name)
+      expect(all.items.map((item) => item.name)).toEqual(expected)
+      expect(all.items.length).toBe(all.total)
+    }
+    const names = (await q.listDeviceBrands(ORG_ID, { visibility: 'all', page: 1, pageSize: 200 })).items.map((item) => item.name)
+    expect(names.indexOf('Samsung')).toBeLessThan(names.indexOf('acer'))
+    expect(names.slice(-4)).toEqual(['.flairmicro', '1-Call', '10.or', '@phone'])
+    // แบ่งหน้าแล้วต่อกันได้ลำดับเดิม
+    const page1 = await q.listDeviceBrands(ORG_ID, { visibility: 'all', page: 1, pageSize: 3 })
+    const page2 = await q.listDeviceBrands(ORG_ID, { visibility: 'all', page: 2, pageSize: 3 })
+    expect([...page1.items, ...page2.items].map((item) => item.name)).toEqual(names.slice(0, 6))
+    // ค้นหาใช้เงื่อนไขเดียวกับ count
+    const found = await q.listDeviceBrands(ORG_ID, { visibility: 'all', q: 'AL', page: 1, pageSize: 50 })
+    expect(found.items.map((item) => item.name)).toContain('alcatel')
+    expect(found.items.length).toBe(found.total)
+  })
+
   it('เพิ่มแบรนด์/รุ่นเอง = แสดงทันที (ตั้งด้วยมือ) · ชื่อซ้ำ = DUPLICATE_DEVICE_CATALOG_ITEM', async () => {
     const q = loaded(queries)
     const brand = await q.createManualDeviceBrand(context, { name: 'Wiko' })
