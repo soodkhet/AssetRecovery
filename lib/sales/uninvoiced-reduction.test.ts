@@ -4,6 +4,7 @@ import { applyCreditNotes, ZERO_AMOUNTS } from '@/lib/portal/documented-amounts'
 import { receiptInvoiceAmounts, receiptSettlementOf } from '@/lib/sales/receipt-invoice'
 import { evaluateTaxInvoiceCoverage, receiptAwaitsTaxInvoice } from '@/lib/sales/tax-invoice-coverage'
 import {
+  creditNoteNotRequiredReasonOf,
   creditNoteStillRequired,
   decreaseFitsUninvoiced,
   NO_UNINVOICED_REDUCTION,
@@ -107,6 +108,29 @@ describe('uninvoicedReductionOf', () => {
   })
 })
 
+describe('creditNoteNotRequiredReasonOf (mytester4 V4-01 — เหตุของเพดานใบลดหนี้ 0)', () => {
+  const reasonOf = (overrides: Partial<UninvoicedReductionInput>) => creditNoteNotRequiredReasonOf({ ...BASE, ...overrides })
+
+  it('ลดทั้งหมดในส่วนที่ยังไม่ออกใบ ⇒ uninvoiced', () => {
+    expect(reasonOf({ invoicedBeforeVatSatang: 90_000, decreaseSatang: 10_000 })).toBe('uninvoiced')
+  })
+
+  it('ลดคร่อมส่วนที่ออกใบแล้ว + บันทึกใบลดหนี้ส่วนเกินครบ ⇒ recorded · ยังไม่ครบ ⇒ null (ยังบันทึกได้)', () => {
+    expect(reasonOf({ invoicedBeforeVatSatang: 90_000, decreaseSatang: 30_000, creditNoteBeforeVatSatang: 20_000 })).toBe('recorded')
+    expect(reasonOf({ invoicedBeforeVatSatang: 90_000, decreaseSatang: 30_000, creditNoteBeforeVatSatang: 5_000 })).toBeNull()
+  })
+
+  it('ไม่มี Adjustment ลดยอด ⇒ no_decrease · มีใบลดหนี้อยู่แล้ว ⇒ recorded', () => {
+    expect(reasonOf({ invoicedBeforeVatSatang: 90_000 })).toBe('no_decrease')
+    expect(reasonOf({ invoicedBeforeVatSatang: 90_000, creditNoteBeforeVatSatang: 1_000 })).toBe('recorded')
+  })
+
+  it('กติกาไม่คุม (ใบกำกับแบบเดิม / ออกใบครบรอบแล้ว) ⇒ null', () => {
+    expect(reasonOf({ legacyInvoice: true, invoicedBeforeVatSatang: 90_000 })).toBeNull()
+    expect(reasonOf({ invoicedBeforeVatSatang: 100_000, decreaseSatang: 10_000 })).toBeNull()
+  })
+})
+
 describe('decreaseFitsUninvoiced (ปิดอัตโนมัติตอนอนุมัติ)', () => {
   it('ลดไม่เกินส่วนที่ยังไม่ออกใบ ⇒ ปิดแบบไม่ต้องใบลดหนี้ · เกิน ⇒ รอใบลดหนี้ · ใบแบบเดิม ⇒ ไม่ปิด', () => {
     const before = with_({ invoicedBeforeVatSatang: 90_000 })
@@ -129,6 +153,21 @@ describe('assertWithinUninvoicedAllowance (ฝั่งบันทึกใบ�
       expect((error as { code?: string }).code).toBe('CREDIT_NOTE_EXCEEDS_OUTSTANDING')
     }
     expect(message).toContain('ส่วนที่ลดยังไม่ได้ออกใบกำกับภาษี ไม่ต้องออกใบลดหนี้')
+  })
+
+  it('mytester4 V4-01 — เพดาน 0 เพราะบันทึกครบแล้ว / ไม่มีรายการรอ ⇒ ข้อความตรงเหตุ ไม่ใช่ "ส่วนที่ลดยังไม่ได้ออกใบ"', () => {
+    const messageOf = (reason: 'recorded' | 'no_decrease') => {
+      try {
+        assertWithinUninvoicedAllowance(0, note(10_000), reason)
+      } catch (error) {
+        return String((error as Error).message)
+      }
+      return ''
+    }
+    expect(messageOf('recorded')).toContain('ครบแล้ว')
+    expect(messageOf('recorded')).not.toContain('ส่วนที่ลดยังไม่ได้ออกใบกำกับภาษี')
+    expect(messageOf('no_decrease')).toContain('ไม่มีรายการปรับปรุงลดยอด')
+    expect(messageOf('no_decrease')).not.toContain('ส่วนที่ลดยังไม่ได้ออกใบกำกับภาษี')
   })
 
   it('ลดได้เฉพาะส่วนเกิน 200 · null = กติกาเดิม', () => {

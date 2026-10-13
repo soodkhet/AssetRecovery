@@ -8,6 +8,7 @@ import type {
   TaxInvoiceStatus,
 } from '@/lib/generated/prisma/enums'
 import { SalesError } from '@/lib/sales/errors'
+import type { CreditNoteNotRequiredReason } from '@/lib/sales/uninvoiced-reduction'
 
 /**
  * ใบลดหนี้ที่สำนักงานบัญชีออกนอกระบบ (มติ PO 05/10/2569 U14 + มติบัญชี B1 · ม.86/10) — **pure ล้วน ไม่มี I/O**
@@ -294,6 +295,33 @@ export function isCreditNoteBlockedByOutstanding(noteType: 'credit' | 'debit', m
 export const CREDIT_NOTE_NOT_REQUIRED_TEXT = 'ส่วนที่ลดยังไม่ได้ออกใบกำกับภาษี ไม่ต้องออกใบลดหนี้'
 
 /**
+ * mytester4 V4-01 — ข้อความเมื่อใบลดหนี้ที่ยังบันทึกได้ = 0 ตามเหตุจาก server (`creditNoteNotRequiredReasonOf()`) ·
+ * ไม่ทราบเหตุ (`null`) ⇒ ข้อความเดิม (ส่วนที่ลดยังไม่ออกใบ)
+ */
+export function creditNoteNotRequiredCopy(reason: CreditNoteNotRequiredReason | null): { title: string; text: string; detail: string } {
+  if (reason === 'recorded') {
+    return {
+      title: 'บันทึกใบลดหนี้ครบแล้ว',
+      text: 'บันทึกใบลดหนี้ของส่วนที่ลดลงไปในยอดที่ออกใบกำกับภาษีแล้วครบแล้ว ไม่ต้องออกใบลดหนี้เพิ่ม',
+      detail: 'ถ้าใบที่บันทึกไว้ผิด ให้ยกเลิกใบนั้นพร้อมเหตุผลแล้วบันทึกใหม่',
+    }
+  }
+  if (reason === 'no_decrease') {
+    return {
+      title: 'ไม่มีรายการปรับปรุงรอใบลดหนี้',
+      text: 'รอบวางบิลนี้ไม่มีรายการปรับปรุงลดยอดที่อนุมัติแล้วรอใบลดหนี้ จึงยังไม่ต้องออกใบลดหนี้',
+      detail: 'ถ้าต้องลดยอด ให้สร้างรายการปรับปรุง (ลดยอด) และอนุมัติก่อน แล้วจึงบันทึกใบลดหนี้ตามที่ระบบแจ้ง',
+    }
+  }
+  return {
+    title: 'ไม่ต้องออกใบลดหนี้',
+    text: CREDIT_NOTE_NOT_REQUIRED_TEXT,
+    detail:
+      'ยอดที่ลดผ่านรายการปรับปรุง (ลดยอด) หักจากยอดเรียกเก็บของรอบให้แล้ว และใบเสร็จรับเงิน/ใบกำกับภาษีครั้งถัดไปจะออกตามยอดหลังลด',
+  }
+}
+
+/**
  * mytester3 LR3-01 — เพดานในฟอร์มใบลดหนี้ (แสดงผลเท่านั้น · server ตรวจซ้ำเสมอ) รวม 2 กติกา:
  * - U171 ยอดค้างของรอบ ⇒ `maxCreditTotalSatang` (รวมภาษี — {@link maxCreditNoteTotalSatang})
  * - รีวิว R3 #1 ส่วนที่ออกใบแล้วเกินมูลค่าใหม่ ⇒ `allowanceBeforeVatSatang` (ก่อนภาษี — `uninvoicedReductionOf()` · `null` = ไม่จำกัด)
@@ -381,7 +409,11 @@ export function assertWithinBillingOutstanding(billingOutstandingSatang: number,
  * · ส่วนที่ลดยังไม่ได้ออกใบกำกับ ไม่ต้องออกใบลดหนี้ · `null` = กติกานี้ไม่จำกัด (ใบกำกับแบบเดิม/ออกใบครบรอบแล้ว)
  * · code เดียวกับเพดานยอดค้าง (`CREDIT_NOTE_EXCEEDS_OUTSTANDING` — `24` §6.8) ข้อความบอกเหตุผล + ยอดที่ลดได้
  */
-export function assertWithinUninvoicedAllowance(allowanceBeforeVatSatang: number | null, next: CreditNoteAmounts): void {
+export function assertWithinUninvoicedAllowance(
+  allowanceBeforeVatSatang: number | null,
+  next: CreditNoteAmounts,
+  notRequiredReason: CreditNoteNotRequiredReason | null = null,
+): void {
   if (allowanceBeforeVatSatang === null || next.amountBeforeVatSatang <= allowanceBeforeVatSatang) return
   const available = Math.max(0, allowanceBeforeVatSatang)
   throw new SalesError('CREDIT_NOTE_EXCEEDS_OUTSTANDING', {
@@ -391,11 +423,11 @@ export function assertWithinUninvoicedAllowance(allowanceBeforeVatSatang: number
       requestedBeforeVatSatang: next.amountBeforeVatSatang,
     },
     // mytester3 LR3-01 — หัวข้อตรงเหตุผลจริง (ไม่ใช่ "เกินยอดค้างชำระ")
-    title: available === 0 ? 'ไม่ต้องออกใบลดหนี้' : 'ยอดใบลดหนี้เกินส่วนที่ออกใบกำกับภาษีแล้ว',
+    // mytester4 V4-01 — เพดาน 0 ⇒ ข้อความตามเหตุจริง (ส่วนที่ลดยังไม่ออกใบ / บันทึกครบแล้ว / ไม่มีรายการรอ)
+    title: available === 0 ? creditNoteNotRequiredCopy(notRequiredReason).title : 'ยอดใบลดหนี้เกินส่วนที่ออกใบกำกับภาษีแล้ว',
     message:
       available === 0
-        ? `${CREDIT_NOTE_NOT_REQUIRED_TEXT} — ยอดที่ลดผ่านรายการปรับปรุง (ลดยอด) ของรอบนี้ ` +
-          'หักจากยอดเรียกเก็บให้แล้ว และใบเสร็จรับเงิน/ใบกำกับภาษีครั้งถัดไปจะออกตามยอดหลังลด'
+        ? `${creditNoteNotRequiredCopy(notRequiredReason).text} — ${creditNoteNotRequiredCopy(notRequiredReason).detail}`
         : `ใบลดหนี้ลดได้เฉพาะส่วนที่ลดลงไปในยอดที่ออกใบกำกับภาษีแล้ว ไม่เกิน ${fmtSatangSymbol(available)} (ก่อนภาษี) — ` +
           CREDIT_NOTE_NOT_REQUIRED_TEXT,
   })

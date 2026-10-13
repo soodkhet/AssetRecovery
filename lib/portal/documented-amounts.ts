@@ -6,11 +6,14 @@ import type { CreditNoteType } from '@/lib/generated/prisma/enums'
 import { endOfBangkokDay } from '@/lib/format/datetime'
 import { prisma } from '@/lib/prisma'
 import {
+  creditNoteNotRequiredReasonOf,
   creditNoteStillRequired,
   NO_UNINVOICED_REDUCTION,
   UNINVOICED_REDUCTION_WAIVE_REASON,
   uninvoicedReductionOf,
+  type CreditNoteNotRequiredReason,
   type UninvoicedReduction,
+  type UninvoicedReductionInput,
 } from '@/lib/sales/uninvoiced-reduction'
 
 /**
@@ -71,6 +74,8 @@ export interface DocumentedBillingAmounts {
    * (`closingCreditNoteVatSatang()` — ส่วนต่างให้ผลรวมเอกสาร = มูลค่าสุทธิทุกสตางค์) · ไม่เข้าเงื่อนไข/ไม่คำนวณ ⇒ `null`/ไม่มี
    */
   creditNoteClosingVatSatang?: number | null
+  /** mytester4 V4-01 — เหตุที่ใบลดหนี้ที่ยังบันทึกได้ = 0 (`creditNoteNotRequiredReasonOf()`) · ยังบันทึกได้/ไม่คุม ⇒ `null`/ไม่มี */
+  creditNoteNotRequiredReason?: CreditNoteNotRequiredReason | null
 }
 
 export type DocumentedBillingRef = { billingBatchId: string } | { taxInvoiceId: string }
@@ -284,10 +289,10 @@ export async function documentedAmountsForBatches(
     const debit = notes.debit.get(batch.id) ?? ZERO_AMOUNTS
     const loaded = reductionInputs.get(batch.id) ?? emptyReductionInputs()
     // มติผู้ใช้ 12/10/2569 (รีวิว R3 #1) — เฉพาะรอบที่ส่งแล้ว (มีรายการขาย)
-    const uninvoicedReduction =
+    const reductionInput: UninvoicedReductionInput | null =
       sales === null
-        ? NO_UNINVOICED_REDUCTION
-        : uninvoicedReductionOf({
+        ? null
+        : {
             billedBeforeVatSatang: sales.totalBeforeVatSatang,
             billedVatSatang: sales.vatSatang,
             billedVatRatesPct: batch.revenues.map((row) => row.vatRatePctUsed.toNumber()),
@@ -297,7 +302,9 @@ export async function documentedAmountsForBatches(
             creditNoteBeforeVatSatang: credit.beforeVatSatang,
             decreaseSatang: loaded.decreaseSatang,
             legacyInvoice: loaded.legacyInvoice,
-          })
+          }
+    const uninvoicedReduction =
+      reductionInput === null ? NO_UNINVOICED_REDUCTION : uninvoicedReductionOf(reductionInput)
     const documented = applyCreditNotes(invoiced, credit, debit, uninvoicedReduction)
     const allowance = uninvoicedReduction.creditNoteAllowanceBeforeVatSatang
     result.set(batch.id, {
@@ -308,6 +315,7 @@ export async function documentedAmountsForBatches(
       debitNotes: debit,
       uninvoicedReduction,
       documented,
+      creditNoteNotRequiredReason: reductionInput === null ? null : creditNoteNotRequiredReasonOf(reductionInput),
       creditNoteClosingVatSatang:
         allowance === null
           ? null

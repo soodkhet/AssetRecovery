@@ -138,6 +138,25 @@ export function uninvoicedReductionOf(input: UninvoicedReductionInput): Uninvoic
 }
 
 /**
+ * mytester4 V4-01 — เหตุที่ใบลดหนี้ที่ยังบันทึกได้ = 0 (แยกข้อความในฟอร์มใบลดหนี้ให้ตรงกรณี):
+ * - `'recorded'` — มีส่วนที่ลดลงไปในยอดที่ออกใบแล้ว (required > 0) และบันทึกใบลดหนี้ครบแล้ว (C ≥ required)
+ *   · ไม่มี Adjustment ลดยอดแต่มีใบลดหนี้ active แล้ว ⇒ นับเป็นบันทึกครบแล้วเช่นกัน
+ * - `'no_decrease'` — ไม่มี Adjustment ลดยอดที่อนุมัติแล้วรอใบลดหนี้ และยังไม่มีใบลดหนี้
+ * - `'uninvoiced'` — ส่วนที่ลดอยู่ในมูลค่าที่ยังไม่ออกใบทั้งหมด (required = 0) ⇒ ไม่ต้องออกใบลดหนี้
+ * · ใบลดหนี้ยังบันทึกได้ (> 0) หรือกติกานี้ไม่คุม (`null`) ⇒ `null`
+ */
+export type CreditNoteNotRequiredReason = 'uninvoiced' | 'recorded' | 'no_decrease'
+
+export function creditNoteNotRequiredReasonOf(input: UninvoicedReductionInput): CreditNoteNotRequiredReason | null {
+  if (uninvoicedReductionOf(input).creditNoteAllowanceBeforeVatSatang !== 0) return null
+  const uninvoiced = Math.max(0, input.billedBeforeVatSatang - input.invoicedBeforeVatSatang)
+  const required = Math.max(0, input.decreaseSatang - uninvoiced)
+  if (required > 0) return 'recorded'
+  if (input.decreaseSatang === 0) return input.creditNoteBeforeVatSatang > 0 ? 'recorded' : 'no_decrease'
+  return 'uninvoiced'
+}
+
+/**
  * ตอนอนุมัติ Adjustment ลดยอด: ยอดนี้ลดอยู่ในมูลค่าที่ยังไม่ออกใบ**ทั้งหมด**ไหม — `before` = ผลของรอบ**ก่อน**นับรายการนี้
  * ⇒ `true` = ปิดแบบ "ไม่ต้องออกใบลดหนี้" อัตโนมัติ · `false` = มีส่วนที่ลดลงไปในส่วนที่ออกใบแล้ว ⇒ รอใบลดหนี้ (เฉพาะส่วนเกิน)
  * · รอบใบกำกับแบบเดิม (`remainingBeforeVatSatang` = 0) ⇒ `false` เสมอ (กติกาเดิม)

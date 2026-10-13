@@ -27,7 +27,7 @@ import {
   creditableInvoiceBalance,
   creditNoteAllowanceVatSatang,
   creditNoteFormLimit,
-  CREDIT_NOTE_NOT_REQUIRED_TEXT,
+  creditNoteNotRequiredCopy,
   CREDIT_NOTE_TYPE_LABEL,
   creditNoteCappedByOutstanding,
   maxCreditNoteTotalSatang,
@@ -35,6 +35,7 @@ import {
   suggestedCreditNoteVatSatang,
 } from '@/lib/credit-notes/credit-note'
 import type { CreditNoteType } from '@/lib/credit-notes/schemas'
+import type { CreditNoteNotRequiredReason } from '@/lib/sales/uninvoiced-reduction'
 import type { AwaitingCreditNoteDto, CreditNoteCreateResultDto, CreditNoteDto } from '@/lib/credit-notes/types'
 import { fmtDate, toInputDate } from '@/lib/format/datetime'
 import { bahtInputError, fmtSatang, fmtSatangSymbol, parseBahtInput } from '@/lib/format/money'
@@ -74,6 +75,7 @@ export function CreditNoteModal({
   billingOutstandingSatang,
   creditNoteAllowanceBeforeVatSatang = null,
   creditNoteClosingVatSatang = null,
+  creditNoteNotRequiredReason = null,
   notes,
   awaiting,
   canManage,
@@ -87,6 +89,8 @@ export function CreditNoteModal({
   creditNoteAllowanceBeforeVatSatang?: number | null
   /** mytester4 — VAT ที่ระบบเสนอเมื่อลดเท่าส่วนที่ยังบันทึกได้พอดี (แบบส่วนต่าง — server ใช้ค่าเดียวกันเมื่อเว้นว่าง) */
   creditNoteClosingVatSatang?: number | null
+  /** mytester4 V4-01 — เหตุที่ใบลดหนี้ที่ยังบันทึกได้ = 0 จาก server (เลือกข้อความให้ตรงกรณี) · `null` = ข้อความเดิม */
+  creditNoteNotRequiredReason?: CreditNoteNotRequiredReason | null
   notes: readonly CreditNoteDto[]
   awaiting: readonly AwaitingCreditNoteDto[]
   canManage: boolean
@@ -282,7 +286,7 @@ export function CreditNoteModal({
             </div>
           </div>
 
-          <CreditNoteBlockedAlert reason={blockedReason} />
+          <CreditNoteBlockedAlert reason={blockedReason} notRequiredReason={creditNoteNotRequiredReason} />
 
           {awaiting.some((row) => row.noteType === 'credit') && (
             <InlineAlert tone="warning" title="รอใบลดหนี้">
@@ -385,7 +389,7 @@ export function CreditNoteModal({
                   isDebit
                     ? 'ใบเพิ่มหนี้ — เพิ่มมูลค่าบริการหลังออกใบกำกับแล้ว (ผูกได้เฉพาะรายการปรับปรุงเพิ่มยอด)'
                     : limit.blocked === 'uninvoiced'
-                      ? `ใบลดหนี้ — ${CREDIT_NOTE_NOT_REQUIRED_TEXT}`
+                      ? `ใบลดหนี้ — ${creditNoteNotRequiredCopy(creditNoteNotRequiredReason).text}`
                       : !outstandingCapped
                         ? `ใบลดหนี้ — ลดได้เฉพาะส่วนที่ลดลงไปในยอดที่ออกใบกำกับภาษีแล้ว${
                             limit.maxBeforeVatSatang === null ? '' : ` ไม่เกิน ${fmtSatangSymbol(limit.maxBeforeVatSatang)} ก่อนภาษี`
@@ -530,14 +534,21 @@ export function CreditNoteModal({
 }
 
 /**
- * เหตุที่บันทึกใบลดหนี้ไม่ได้ (เพดาน ฿0) — mytester G-10 (ยอดค้าง 0) · mytester3 LR3-01 (ส่วนที่ลดยังไม่ออกใบ)
+ * เหตุที่บันทึกใบลดหนี้ไม่ได้ (เพดาน ฿0) — mytester G-10 (ยอดค้าง 0) · mytester3 LR3-01 (ส่วนที่ลดยังไม่ออกใบ) · mytester4 V4-01 (บันทึกครบแล้ว / ไม่มีรายการรอ)
  */
-export function CreditNoteBlockedAlert({ reason }: { reason: 'uninvoiced' | 'outstanding' | null }) {
+export function CreditNoteBlockedAlert({
+  reason,
+  notRequiredReason = null,
+}: {
+  reason: 'uninvoiced' | 'outstanding' | null
+  /** mytester4 V4-01 — เพดาน 0 เพราะอะไร (ส่วนที่ลดยังไม่ออกใบ / บันทึกครบแล้ว / ไม่มีรายการรอ) · `null` = ข้อความเดิม */
+  notRequiredReason?: CreditNoteNotRequiredReason | null
+}) {
   if (reason === 'uninvoiced') {
+    const copy = creditNoteNotRequiredCopy(notRequiredReason)
     return (
-      <InlineAlert tone="info" title="ไม่ต้องออกใบลดหนี้">
-        {CREDIT_NOTE_NOT_REQUIRED_TEXT} — ยอดที่ลดผ่านรายการปรับปรุง (ลดยอด) หักจากยอดเรียกเก็บของรอบให้แล้ว
-        และใบเสร็จรับเงิน/ใบกำกับภาษีครั้งถัดไปจะออกตามยอดหลังลด
+      <InlineAlert tone="info" title={copy.title}>
+        {copy.text} — {copy.detail}
       </InlineAlert>
     )
   }

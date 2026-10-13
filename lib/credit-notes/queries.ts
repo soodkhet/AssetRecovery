@@ -525,7 +525,7 @@ async function assertCreditWithinOutstanding(
   // มติผู้ใช้ 12/10/2569 (รีวิว R3 #1) — ส่วนที่ลดยังไม่ได้ออกใบกำกับไม่ต้องออกใบลดหนี้ ⇒ ลดหนี้ได้เฉพาะส่วนที่ออกใบแล้วเกินมูลค่าใหม่
   const documented = (await documentedAmountsForBatches(organizationId, [batch.id], tx)).get(batch.id)
   const allowance = documented?.uninvoicedReduction.creditNoteAllowanceBeforeVatSatang ?? null
-  assertWithinUninvoicedAllowance(allowance, amounts)
+  assertWithinUninvoicedAllowance(allowance, amounts, documented?.creditNoteNotRequiredReason ?? null)
   // mytester4 G4-01 — ส่วนเกินตาม §6.8.3 ไม่ชนเพดานยอดค้าง (ลูกค้าชำระเกินแล้วโดยนิยาม — คืนนอกระบบตาม U171)
   if (!creditNoteCappedByOutstanding(allowance)) return
   const outstanding = await documentedOutstandingByBatch(organizationId, [batch], tx)

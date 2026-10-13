@@ -658,6 +658,9 @@ suite('มติ PO U95 — รับเงิน ⇒ ใบเสร็จร�
     // mytester3 LR3-01 — ฟอร์มใบลดหนี้ได้เพดานเดียวกับที่ server ตรวจ (0 ⇒ ไม่ต้องออกใบลดหนี้)
     const listed = (await sales.listSalesRecords(accountant, {})).items.find((item) => item.billingBatchId === batch.id)
     expect(listed?.creditNoteAllowanceBeforeVatSatang).toBe(0)
+    // mytester4 V4-01 — เหตุของเพดาน 0 = ส่วนที่ลดยังไม่ออกใบ
+    expect(documented?.creditNoteNotRequiredReason).toBe('uninvoiced')
+    expect(listed?.creditNoteNotRequiredReason).toBe('uninvoiced')
     expect((await db().billingBatch.findUniqueOrThrow({ where: { id: batch.id } })).status).toBe('paid')
     expect((await credit.listAdjustmentsAwaitingCreditNote(accountant)).some((row) => row.adjustmentId === created.id)).toBe(false)
 
@@ -790,6 +793,8 @@ suite('มติ PO U95 — รับเงิน ⇒ ใบเสร็จร�
     expect(after?.documented).toEqual({ beforeVatSatang: 136_251, vatSatang: 9_538, totalSatang: 145_789 })
     expect(invoice.totalSatang - note.totalSatang).toBe(after?.documented.totalSatang)
     expect(after?.uninvoicedReduction.creditNoteAllowanceBeforeVatSatang).toBe(0)
+    // mytester4 V4-01 — เพดาน 0 เพราะบันทึกใบลดหนี้ส่วนเกินครบแล้ว (ไม่ใช่ "ส่วนที่ลดยังไม่ออกใบ")
+    expect(after?.creditNoteNotRequiredReason).toBe('recorded')
     // ลูกค้าชำระเกิน 42.11 (ยอดค้างติดลบ) ⇒ คืนนอกระบบตาม U171 · ไม่มีป้ายรอใบลดหนี้ค้าง
     const afterRow = await db().billingBatch.findUniqueOrThrow({ where: { id: batch.id } })
     expect((await documentedOutstandingByBatch(ORG_ID, [afterRow])).get(batch.id)).toBe(-4_211)

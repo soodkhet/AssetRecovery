@@ -19,6 +19,7 @@ import { documentTemplateSnapshotJson, parseDocumentTemplateSnapshot } from '@/l
 import { prisma } from '@/lib/prisma'
 import { parseBillingPeriodLabel } from '@/lib/revenue/revenue'
 import { SalesError } from '@/lib/sales/errors'
+import type { CreditNoteNotRequiredReason } from '@/lib/sales/uninvoiced-reduction'
 import {
   assertInvoiceDateValid,
   assertVatApplicable,
@@ -204,6 +205,7 @@ function toSalesDto(
   outstandingByBatch: ReadonlyMap<string, number> = new Map(),
   allowanceByBatch: ReadonlyMap<string, number | null> = new Map(),
   closingVatByBatch: ReadonlyMap<string, number | null> = new Map(),
+  notRequiredReasonByBatch: ReadonlyMap<string, CreditNoteNotRequiredReason | null> = new Map(),
 ): SalesRecordDto {
   const active = activeInvoiceOf(row)
   return {
@@ -219,6 +221,7 @@ function toSalesDto(
     billingOutstandingSatang: outstandingByBatch.get(row.billingBatchId) ?? 0,
     creditNoteAllowanceBeforeVatSatang: allowanceByBatch.get(row.billingBatchId) ?? null,
     creditNoteClosingVatSatang: closingVatByBatch.get(row.billingBatchId) ?? null,
+    creditNoteNotRequiredReason: notRequiredReasonByBatch.get(row.billingBatchId) ?? null,
     totalBeforeVatSatang: row.totalBeforeVatSatang,
     vatSatang: row.vatSatang,
     totalSatang: row.totalSatang,
@@ -352,7 +355,12 @@ export async function listSalesRecords(user: SessionUser, query: SalesListQuery)
   const closingVatByBatch = new Map(
     [...documented].map(([batchId, amounts]) => [batchId, amounts.creditNoteClosingVatSatang ?? null]),
   )
-  const items = rows.map((row) => toSalesDto(row, periodClosed, outstandingByBatch, allowanceByBatch, closingVatByBatch))
+  const notRequiredReasonByBatch = new Map(
+    [...documented].map(([batchId, amounts]) => [batchId, amounts.creditNoteNotRequiredReason ?? null]),
+  )
+  const items = rows.map((row) =>
+    toSalesDto(row, periodClosed, outstandingByBatch, allowanceByBatch, closingVatByBatch, notRequiredReasonByBatch),
+  )
   return {
     items,
     totalBeforeVatSatang: items.reduce((sum, item) => sum + item.totalBeforeVatSatang, 0),

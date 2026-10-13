@@ -4,6 +4,7 @@ import type {
   TaxInvoiceDocKind,
   TaxInvoiceStatus,
 } from '@/lib/generated/prisma/enums'
+import type { CreditNoteNotRequiredReason } from '@/lib/sales/uninvoiced-reduction'
 
 /**
  * DTO ของบัญชีขายและเงินรับ (ไฟล์ 31 §8) — เงินเป็น satang เสมอ, วันที่เป็น ISO UTC
@@ -66,6 +67,8 @@ export interface SalesRecordDto {
    * ผลรวมเอกสาร = มูลค่าสุทธิทุกสตางค์) · `null` = ใช้ค่าตามอัตรา
    */
   creditNoteClosingVatSatang: number | null
+  /** mytester4 V4-01 — เหตุที่ `creditNoteAllowanceBeforeVatSatang` = 0 (ส่วนที่ลดยังไม่ออกใบ / บันทึกครบแล้ว / ไม่มีรายการรอ) · อื่น ๆ ⇒ `null` */
+  creditNoteNotRequiredReason: CreditNoteNotRequiredReason | null
   totalBeforeVatSatang: number
   vatSatang: number
   totalSatang: number
