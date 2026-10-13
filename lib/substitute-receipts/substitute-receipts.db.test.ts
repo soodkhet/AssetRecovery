@@ -53,6 +53,7 @@ let advances: typeof import('@/lib/advances/queries')
 let advanceDocs: typeof import('@/lib/advances/doc-queries')
 let fieldExpenses: typeof import('@/lib/field/expense-queries')
 let approvals: typeof import('@/lib/compensation/approval-queries')
+let claims: typeof import('@/lib/claims/queries')
 
 function db(): PrismaClient {
   if (!url) throw new Error('ไม่มี TEST_DATABASE_URL')
@@ -169,6 +170,7 @@ beforeAll(async () => {
   advanceDocs = await import('@/lib/advances/doc-queries')
   fieldExpenses = await import('@/lib/field/expense-queries')
   approvals = await import('@/lib/compensation/approval-queries')
+  claims = await import('@/lib/claims/queries')
 
   const tx = db()
   await tx.$executeRawUnsafe(`
@@ -376,6 +378,48 @@ suite('ใบเบิกค่าที่พัก "ไม่มีใบเ�
       await db().$executeRawUnsafe(`UPDATE compensation_plans SET hotel_receipt_required = false WHERE id = '${planId}'`)
       const created = await fieldExpenses.submitHotelClaim(agent, claim(3_100), { actor: agent, meta })
       expect(created.substituteReceipt).toMatchObject({ status: 'pending_signature', totalSatang: 3_100 })
+    } finally {
+      await db().$executeRawUnsafe(`UPDATE teams SET compensation_plan_id = NULL WHERE id = '${TEAM_ID}'`)
+      await db().$executeRawUnsafe(`UPDATE expenses SET comp_plan_id = NULL WHERE comp_plan_id = '${planId}'`)
+      await db().$executeRawUnsafe(`DELETE FROM compensation_plans WHERE id = '${planId}'`)
+    }
+  })
+})
+
+suite('known Q7/M2 — เบิกค่าที่พักด้วยมือ (POST /api/claims) ใช้นโยบายใบเสร็จเดียวกับภาคสนาม', () => {
+  it('แผนทีมผู้รับเงินบังคับใบเสร็จ ⇒ ใบรับรองแทนใช้ไม่ได้ (บันทึกเอง/การเงินบันทึกแทน) · ผู้รับไม่มีทีม/ปิดค่าตั้ง = ใช้ได้', async () => {
+    const planId = '00000000-0000-4000-8000-00000000c7d3'
+    await db().$executeRawUnsafe(`
+      INSERT INTO compensation_plans
+        (id, organization_id, name, side, fuel_mode, fuel_rate_per_km_satang, allowance_satang, commission_satang,
+         no_success_fee_satang, hotel_receipt_required, version, effective_from, is_current, created_by)
+      VALUES ('${planId}', '${ORG_ID}', 'แผน M2 มือ', 'outsource', 'PER_KM', 300, 20000, 50000, 10000, true, 1,
+              DATE '2026-01-01', true, '${FINANCE_ID}')
+    `)
+    await db().$executeRawUnsafe(`UPDATE teams SET compensation_plan_id = '${planId}' WHERE id = '${TEAM_ID}'`)
+    const claim = (payeeId: string | null, grossSatang: number) => ({
+      claimType: 'hotel' as const,
+      grossSatang,
+      expenseDate: new Date('2026-10-06T00:00:00Z'),
+      payeeId,
+      receiptFileUrl: null,
+      note: null,
+      substituteReceipt: { lines: [line(grossSatang)] },
+    })
+    try {
+      const own = await claims.createManualClaim({ actor: agent, meta }, claim(null, 3_000)).catch((e: unknown) => e)
+      expect(codeOf(own)).toBe('HOTEL_CLAIM_FIELD_REQUIRED')
+      const onBehalf = await claims.createManualClaim({ actor: finance, meta }, claim(PAYEE_ID, 3_000)).catch((e: unknown) => e)
+      expect(codeOf(onBehalf)).toBe('HOTEL_CLAIM_FIELD_REQUIRED')
+      expect(await db().expense.count({ where: { organizationId: ORG_ID } })).toBe(0)
+
+      // ผู้รับไม่มีทีม (ไม่มีแผน) ⇒ ไม่บังคับ
+      const other = await claims.createManualClaim({ actor: finance, meta }, claim(OTHER_PAYEE_ID, 3_100))
+      expect(other.substituteReceiptNumber).toMatch(/^CRT-\d{4}-\d{4}$/)
+
+      await db().$executeRawUnsafe(`UPDATE compensation_plans SET hotel_receipt_required = false WHERE id = '${planId}'`)
+      const allowed = await claims.createManualClaim({ actor: agent, meta }, claim(null, 3_200))
+      expect(allowed.substituteReceiptNumber).toMatch(/^CRT-\d{4}-\d{4}$/)
     } finally {
       await db().$executeRawUnsafe(`UPDATE teams SET compensation_plan_id = NULL WHERE id = '${TEAM_ID}'`)
       await db().$executeRawUnsafe(`UPDATE expenses SET comp_plan_id = NULL WHERE comp_plan_id = '${planId}'`)

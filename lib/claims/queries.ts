@@ -10,9 +10,10 @@ import {
 import { assertNoDuplicateClaimSubmission } from '@/lib/claims/duplicate-submission-queries'
 import type { ClaimCreateInput } from '@/lib/claims/schemas'
 import { AuthError } from '@/lib/auth/errors'
-import { ensureAgentPayeeId, type ExpenseTxClient } from '@/lib/field/expense-queries'
+import { ensureAgentPayeeId, resolveHotelCapForUser, type ExpenseTxClient } from '@/lib/field/expense-queries'
 import { ExpenseStateError } from '@/lib/field/expense-status'
 import { FieldError } from '@/lib/field/errors'
+import { assertHotelReceiptPolicy } from '@/lib/field/hotel-claim'
 import { notifyExpensesAwaitingApproval } from '@/lib/notifications/approval-queue'
 import { prisma } from '@/lib/prisma'
 import { issueSubstituteReceipt } from '@/lib/substitute-receipts/queries'
@@ -82,6 +83,11 @@ export async function createManualClaim(
       // mytester F-08 — fields เป็น { ช่อง: ข้อความไทย } (array ทำให้ toast ต่อท้ายชื่อฟิลด์ภายใน)
       context: { fields: { receiptFileUrl: 'ยังไม่ได้แนบใบเสร็จหรือใบรับรองแทนใบเสร็จ' } },
     })
+  }
+  // known Q7/M2 (รีวิวโค้ด) — ค่าที่พักที่บันทึกด้วยมือใช้นโยบายเดียวกับใบเบิกภาคสนาม: แผนของทีม**ผู้รับเงิน** ณ วันที่เข้าพัก
+  // บังคับใบเสร็จ ⇒ ใช้ใบรับรองแทนใบเสร็จไม่ได้ · ผู้รับไม่มีทีม/แผน (เช่นไม่ใช่พนักงานภาคสนาม) ⇒ ไม่บังคับ
+  if (input.claimType === 'hotel' && substituteLines !== null) {
+    await assertManualHotelReceiptPolicy(user, input)
   }
   const receipt =
     input.receiptFileUrl === null ? null : await verifyUploadedFile(input.receiptFileUrl, expenseReceiptRule(user.id))
@@ -224,6 +230,30 @@ export async function insertManualClaim(
   )
 
   return { id: row.id, payeeId: row.payeeId }
+}
+
+/** known Q7/M2 — หาแผนของผู้รับเงิน (ตัวผู้บันทึกเอง หรือ user ของ payee ที่บันทึกแทน) แล้วตรวจนโยบายใบเสร็จค่าที่พัก */
+async function assertManualHotelReceiptPolicy(user: SessionUser, input: ManualClaimCreateInput): Promise<void> {
+  let recipientUserId: string | null = user.id
+  if (input.payeeId !== null) {
+    const payee = await prisma.payeeProfile.findFirst({
+      where: { id: input.payeeId, organizationId: user.organizationId, deletedAt: null },
+      select: { userId: true },
+    })
+    // ไม่พบ payee ⇒ ปล่อยให้ assertPayeeInOrganization ในทรานแซกชันตอบ EXPENSE_NOT_FOUND ตามเดิม
+    recipientUserId = payee?.userId ?? null
+  }
+  if (recipientUserId === null) return
+  const plan = await resolveHotelCapForUser(prisma as ExpenseTxClient, {
+    organizationId: user.organizationId,
+    userId: recipientUserId,
+    onDate: input.expenseDate,
+  })
+  assertHotelReceiptPolicy({
+    hasReceiptFile: input.receiptFileUrl !== null,
+    hasSubstituteReceipt: true,
+    receiptRequired: plan?.hotelReceiptRequired ?? false,
+  })
 }
 
 async function assertPayeeInOrganization(
