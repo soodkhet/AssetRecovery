@@ -771,8 +771,10 @@ suite('Phase 4.2 — จับคู่ manual + ปิดรายการ (`3
     expect(receiptAudits.at(-2)?.reason).toContain('เปลี่ยนการจับคู่')
     const deletedReceipt = await db().auditLog.findFirstOrThrow({
       where: { organizationId: ORG_ID, targetType: 'cash_receipts', action: 'delete', createdAt: { gte: startedAt } },
-      select: { reason: true },
+      select: { reason: true, beforeData: true },
     })
+    // ป้ายในเหตุผลไม่ unique ⇒ id รายการเดินบัญชีต้องอยู่ใน before เพื่อ trace (รีวิว SV5-R-03)
+    expect((deletedReceipt.beforeData as { bank_transaction_id?: string }).bank_transaction_id).toBe(id)
     expect(deletedReceipt.reason).toMatch(/^ยกเลิกเงินรับเดิมเพราะเปลี่ยนการจับคู่รายการเดินบัญชี 05\/08\/2569/)
     expect(deletedReceipt.reason).not.toMatch(uuid)
   })

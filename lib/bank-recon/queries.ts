@@ -923,7 +923,7 @@ async function applyMatch(ctx: AccountingMutationContext, input: ApplyMatchInput
   })
 
   const previousBillingId = before.matchedBillingId
-  // ตรวจซ้ำ staging SV5-R-03 — เหตุผลใน audit อ้างรายการเดินบัญชีด้วยป้ายที่คนอ่านได้ (id อยู่ใน source_ref/target_id)
+  // ตรวจซ้ำ staging SV5-R-03 — เหตุผลใน audit อ้างรายการเดินบัญชีด้วยป้ายที่คนอ่านได้ (id อยู่ใน source_ref / bank_transaction_id)
   const transactionLabel = bankTransactionAuditLabel(before)
   const typedNote = input.matchNote?.trim() ?? ''
   // staging E-056 — ยืนยันคู่ที่ระบบเสนอโดยไม่กรอกหมายเหตุ ⇒ เติมหมายเหตุอัตโนมัติ (เดิมแสดง "—")
@@ -974,7 +974,7 @@ async function applyMatch(ctx: AccountingMutationContext, input: ApplyMatchInput
       }
       for (const receipt of stale) {
         // U40 — รายการรอ 50 ทวิ ของเงินรับเดิมต้องถูกถอนก่อน (ไม่งั้นค้างตามหนังสือที่ไม่มีวันมา)
-        await releaseCustomerWhtForReceipt(tx, ctx, receipt.id, `เปลี่ยนการจับคู่${transactionLabel}`)
+        await releaseCustomerWhtForReceipt(tx, ctx, receipt.id, `เปลี่ยนการจับคู่${transactionLabel}`, before.id)
         await tx.cashReceipt.delete({ where: { id: receipt.id } })
         await emitAudit(
           {
@@ -988,6 +988,8 @@ async function applyMatch(ctx: AccountingMutationContext, input: ApplyMatchInput
               billing_batch_id: receipt.billingBatchId,
               amount_satang: receipt.amountSatang,
               received_date: receipt.receivedDate,
+              // trace กลับรายการเดินบัญชี — ป้ายในเหตุผลไม่ unique (วัน/ยอด/ธนาคารซ้ำได้)
+              bank_transaction_id: before.id,
             },
             reason: `ยกเลิกเงินรับเดิมเพราะเปลี่ยนการจับคู่${transactionLabel}`,
             ipAddress: ctx.meta.ipAddress,

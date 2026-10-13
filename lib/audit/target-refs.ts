@@ -449,6 +449,9 @@ export function auditReplaceNestedRefs(
       )
     } else if (fieldValue !== null && typeof fieldValue === 'object') {
       out[field] = auditReplaceNestedRefs(fieldValue, refLabels, depth + 1)
+    } else if (typeof fieldValue === 'string') {
+      // อ้างอิงรายการเดินบัญชีในข้อความซ้อน (collector เก็บไว้ค้นชื่อแล้ว) — SV5-R-03
+      out[field] = auditReplaceTextRefs(fieldValue, (ref) => refLabels[ref.id.toLowerCase()] ?? null)
     } else {
       out[field] = fieldValue
     }
@@ -463,6 +466,9 @@ export function auditReplaceNestedRefs(
 const TEXT_BANK_TRANSACTION_REF =
   /(?:bank_transaction:|(?<=รายการเดินบัญชี ))([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(:rematch)?/gi
 
+/** คำนำหน้าป้ายเมื่อข้อความไม่ได้บอกชนิดเอง */
+const BANK_TRANSACTION_WORD = 'รายการเดินบัญชี '
+
 /** ส่วนท้ายของป้ายเมื่ออ้างถึงรอบวางบิลเดิมหลังเปลี่ยนการจับคู่ */
 export const BANK_TRANSACTION_REMATCH_SUFFIX = ' (เปลี่ยนการจับคู่ — ปรับยอดรอบเดิม)'
 
@@ -476,11 +482,17 @@ export function auditTextRefs(text: string | null | undefined): AuditRef[] {
 
 /** แทนอ้างอิงในข้อความด้วยป้าย (`labelOf` คืน `null` = หาไม่พบ ⇒ คงข้อความเดิม) */
 export function auditReplaceTextRefs(text: string, labelOf: (ref: AuditRef) => string | null): string {
-  return text.replace(TEXT_BANK_TRANSACTION_REF, (whole, id: string, rematch: string | undefined) => {
-    const label = labelOf({ type: 'bank_transactions', id })
-    if (label === null) return whole
-    return rematch === undefined ? label : `${label}${BANK_TRANSACTION_REMATCH_SUFFIX}`
-  })
+  return text.replace(
+    TEXT_BANK_TRANSACTION_REF,
+    (whole: string, id: string, rematch: string | undefined, offset: number, source: string) => {
+      const label = labelOf({ type: 'bank_transactions', id })
+      if (label === null) return whole
+      // แบบ `bank_transaction:<id>` ที่ข้อความก่อนหน้าไม่ได้บอกว่าเป็นรายการเดินบัญชี (เช่นค่า source_ref) ⇒ เติมคำนำหน้า
+      const named = source.slice(0, offset).endsWith(BANK_TRANSACTION_WORD)
+      const text = whole.startsWith('bank_transaction:') && !named ? `${BANK_TRANSACTION_WORD}${label}` : label
+      return rematch === undefined ? text : `${text}${BANK_TRANSACTION_REMATCH_SUFFIX}`
+    },
+  )
 }
 
 /** รวม id ต่อชนิด (ไม่ซ้ำ) — ใช้ค้นทีละชนิดครั้งเดียว */

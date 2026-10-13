@@ -25,6 +25,9 @@ export const MANUAL_CLAIM_INITIAL_STATUS: ExpenseStatus = 'pending_approval'
 /** `02` §8 `calculation_source` — ยอดมาจากการกรอกมือ ไม่ได้มาจากแผนค่าตอบแทน */
 export const MANUAL_CLAIM_CALCULATION_SOURCE = 'manual'
 
+/** `calculation_source` ของคำขอเบิกที่ผู้เบิกส่งจากหน้าภาคสนาม (เบิกที่พัก — `41` §6.6) */
+export const FIELD_RECEIPT_CALCULATION_SOURCE = 'receipt'
+
 /**
  * ผู้ที่สร้างรายการเบิกด้วยมือได้ (`25` §7.2) — การเงิน (บันทึกแทนผู้อื่นได้) และพนักงานภาคสนาม
  * อยู่ในโมดูล pure เพื่อให้หน้าจอ client import ได้โดยไม่ลาก Prisma เข้า bundle
@@ -33,7 +36,7 @@ export const CREATE_CLAIM_CAPABILITIES = ['approve_expense_finance', 'perform_fi
 
 /** รายการที่สร้างด้วยมือ (ไม่ได้มาจากไฟล์ 41 อัตโนมัติ) — ใช้ทำป้าย "🤖 Auto / ✏️ Manual" (`15` §8) */
 export function isManualClaim(calculationSource: string | null): boolean {
-  return calculationSource === MANUAL_CLAIM_CALCULATION_SOURCE || calculationSource === 'receipt'
+  return calculationSource === MANUAL_CLAIM_CALCULATION_SOURCE || calculationSource === FIELD_RECEIPT_CALCULATION_SOURCE
 }
 
 /**

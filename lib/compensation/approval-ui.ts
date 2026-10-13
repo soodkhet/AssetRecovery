@@ -3,7 +3,7 @@ import type { ApiCallError } from '@/lib/api/types'
 import type { ApprovalHistoryEntry } from '@/lib/compensation/approval'
 import type { CompensationApprovalDto, CompensationApprovalListQuery } from '@/lib/compensation/approval-types'
 import { advanceExcessItemLabel, advanceExcessSource } from '@/lib/advances/advance'
-import { isManualClaim } from '@/lib/claims/claim'
+import { FIELD_RECEIPT_CALCULATION_SOURCE, isManualClaim } from '@/lib/claims/claim'
 import { canExpenseAction } from '@/lib/field/expense-status'
 import { EXPENSE_STATUS_LABEL, EXPENSE_TYPE_LABEL } from '@/lib/field/expense-ui'
 import { approvalRoleColumn } from '@/lib/settings/approval-matrix'
@@ -111,9 +111,6 @@ export function approvalStepTone(status: ExpenseStatus): StatusBadgeGroup {
   if (status === 'superseded') return 'superseded'
   return 'neutral'
 }
-
-/** `calculation_source` ของคำขอเบิกที่ผู้เบิกส่งจากหน้าภาคสนาม (เบิกที่พัก — `41` §6.6) */
-const FIELD_RECEIPT_CALCULATION_SOURCE = 'receipt'
 
 /**
  * `15` §8 — ป้ายบอกที่มาของรายการ (auto จากไฟล์ 41 หรือบันทึกเอง)

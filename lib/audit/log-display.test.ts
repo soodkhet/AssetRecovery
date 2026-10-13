@@ -205,3 +205,34 @@ describe('mytester H-06 — ชื่อฟิลด์/ค่าในราย
     expect(auditValueDisplay(150_000, 'amount_satang', 'exceptions')).toBe('฿1,500.00')
   })
 })
+
+describe('ตรวจซ้ำ staging SV5-R-02/R-03 — auditValueDisplay กับค่าซ้อนและอ้างอิงรายการเดินบัญชี', () => {
+  const CASE = '0a1b2c3d-0000-4000-8000-0000000000c1'
+  const TX = '0a1b2c3d-0000-4000-8000-0000000000c2'
+  const labels = { [CASE]: 'CS-2569-0001', [TX]: '13/10/2569 · ฿1,000.00 · กสิกรไทย' }
+
+  it('object ซ้อน ⇒ JSON ที่แทน id และข้อความอ้างอิงแล้ว · id ที่หาไม่พบคงเดิม', () => {
+    const unknown = '0a1b2c3d-0000-4000-8000-0000000000ff'
+    expect(
+      auditValueDisplay(
+        { revenueByCase: [{ caseId: CASE }, { caseId: unknown }], reason: `จาก bank_transaction:${TX}` },
+        'payload',
+        'jobs',
+        labels,
+      ),
+    ).toBe(
+      `{"revenueByCase":[{"caseId":"CS-2569-0001"},{"caseId":"${unknown}"}],"reason":"จาก รายการเดินบัญชี 13/10/2569 · ฿1,000.00 · กสิกรไทย"}`,
+    )
+  })
+
+  it('source_ref ปกติ / rematch / หาไม่พบ', () => {
+    expect(auditValueDisplay(`bank_transaction:${TX}`, 'source_ref', 'billing_batches', labels)).toBe(
+      'รายการเดินบัญชี 13/10/2569 · ฿1,000.00 · กสิกรไทย',
+    )
+    expect(auditValueDisplay(`bank_transaction:${TX}:rematch`, 'source_ref', 'billing_batches', labels)).toContain(
+      'เปลี่ยนการจับคู่',
+    )
+    const missing = 'bank_transaction:0a1b2c3d-0000-4000-8000-0000000000ee'
+    expect(auditValueDisplay(missing, 'source_ref', 'billing_batches', labels)).toBe(missing)
+  })
+})

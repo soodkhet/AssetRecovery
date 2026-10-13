@@ -182,7 +182,10 @@ export async function releaseCustomerWhtForReceipt(
   ctx: AccountingMutationContext,
   cashReceiptId: string,
   reason: string,
+  /** รายการเดินบัญชีต้นเหตุ (เปลี่ยนการจับคู่) — ลง audit เพื่อ trace กลับได้ เพราะเหตุผลเป็นป้ายที่ไม่ unique */
+  bankTransactionId?: string,
 ): Promise<void> {
+  const trace = bankTransactionId === undefined ? {} : { bank_transaction_id: bankTransactionId }
   const rows = await tx.customerWhtCertificate.findMany({
     where: { organizationId: ctx.actor.organizationId, cashReceiptId, deletedAt: null },
     select: { id: true, status: true, withheldSatang: true, certificateNumber: true },
@@ -201,7 +204,7 @@ export async function releaseCustomerWhtForReceipt(
           action: 'delete',
           targetType: TARGET,
           targetId: row.id,
-          before: { status: row.status, cash_receipt_id: cashReceiptId, withheld_satang: row.withheldSatang },
+          before: { status: row.status, cash_receipt_id: cashReceiptId, withheld_satang: row.withheldSatang, ...trace },
           reason: `ยกเลิกรายการรอ 50 ทวิ เพราะ${reason}`,
           ipAddress: ctx.meta.ipAddress,
           userAgent: ctx.meta.userAgent,
@@ -218,7 +221,7 @@ export async function releaseCustomerWhtForReceipt(
         action: 'update',
         targetType: TARGET,
         targetId: row.id,
-        before: { cash_receipt_id: cashReceiptId },
+        before: { cash_receipt_id: cashReceiptId, ...trace },
         after: { cash_receipt_id: null, certificate_number: row.certificateNumber },
         reason: `เงินรับที่อ้างถึงถูกถอน (${reason}) — คงหนังสือที่ได้รับแล้วไว้`,
         ipAddress: ctx.meta.ipAddress,

@@ -456,7 +456,7 @@ describe('ตรวจซ้ำ staging SV5-R-03 — อ้างอิงรา
     expect(auditReplaceTextRefs(`รับชำระจากรายการเดินบัญชี bank_transaction:${TX} (ไฟล์ 35)`, labelOf)).toBe(
       `รับชำระจากรายการเดินบัญชี ${LABEL} (ไฟล์ 35)`,
     )
-    expect(auditReplaceTextRefs(`bank_transaction:${TX}:rematch`, labelOf)).toBe(`${LABEL}${BANK_TRANSACTION_REMATCH_SUFFIX}`)
+    expect(auditReplaceTextRefs(`bank_transaction:${TX}:rematch`, labelOf)).toBe(`รายการเดินบัญชี ${LABEL}${BANK_TRANSACTION_REMATCH_SUFFIX}`)
     const unknown = 'bank_transaction:00000000-0000-4000-8000-000000000000'
     expect(auditReplaceTextRefs(unknown, labelOf)).toBe(unknown)
   })
@@ -465,7 +465,7 @@ describe('ตรวจซ้ำ staging SV5-R-03 — อ้างอิงรา
     expect(auditValueRefs({ source_ref: `bank_transaction:${TX}`, received_source: 'bank_reconciliation' })).toEqual([
       { type: 'bank_transactions', id: TX },
     ])
-    expect(auditValueDisplay(`bank_transaction:${TX}`, 'source_ref', 'billing_batches', { [TX]: LABEL })).toBe(LABEL)
+    expect(auditValueDisplay(`bank_transaction:${TX}`, 'source_ref', 'billing_batches', { [TX]: LABEL })).toBe(`รายการเดินบัญชี ${LABEL}`)
     expect(auditValueDisplay('BANKTX-001', 'source_ref', 'billing_batches', { [TX]: LABEL })).toBe('BANKTX-001')
   })
 })

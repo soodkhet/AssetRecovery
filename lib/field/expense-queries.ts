@@ -1,3 +1,4 @@
+import { FIELD_RECEIPT_CALCULATION_SOURCE } from '@/lib/claims/claim'
 import { assertPeriodOpenAt, periodStatusAt } from '@/lib/accounting/period-guard'
 import { assertNoDuplicateClaimSubmission, assertReceiptNotReused } from '@/lib/claims/duplicate-submission-queries'
 import type { ExpenseTxClient } from '@/lib/field/expense-tx'
@@ -988,7 +989,7 @@ export async function submitHotelClaim(
         expenseDate: input.expenseDate,
         hotelNights: input.hotelNights,
         receiptInCompanyName,
-        calculationSource: 'receipt',
+        calculationSource: FIELD_RECEIPT_CALCULATION_SOURCE,
         // snapshot แผนที่ใช้ตรวจเพดาน (`92` §7.1) — ส่งใหม่หลังตีกลับใช้เพดานชุดเดิม ไม่อ่านแผนปัจจุบัน
         compPlanId: capSnapshot?.compPlanId ?? null,
         compPlanVersion: capSnapshot?.compPlanVersion ?? null,
