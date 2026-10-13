@@ -127,7 +127,12 @@ export function claimSourceLabel(calculationSource: string | null, note: string 
  * เคสของรายการ ⇒ คำขอเบิกส่วนเกินเงินทดรองที่เงินทดรองอ้างอิงเคส (อ่านจากหมายเหตุ — ไม่ผูก `case_id`) ⇒ "— ไม่ผูกเคส"
  */
 export function claimRefLabel(item: { caseRef: string | null; note: string | null }): string {
-  return item.caseRef ?? advanceExcessSource(item.note)?.caseRef ?? '— ไม่ผูกเคส'
+  return claimCaseRef(item) ?? '— ไม่ผูกเคส'
+}
+
+/** เลขเคสอ้างอิงของรายการ (เคสที่ผูก หรือเคสของเงินทดรองสำหรับใบเบิกส่วนเกิน) · ไม่มี = `null` (mytester F5-03) */
+export function claimCaseRef(item: { caseRef: string | null; note: string | null }): string | null {
+  return item.caseRef ?? advanceExcessSource(item.note)?.caseRef ?? null
 }
 
 /** mytester DO-07 — ป้ายประเภทในคิวอนุมัติ: คำขอเบิกส่วนเกินเงินทดรอง = "ส่วนเกินเงินทดรอง ADV-…" แทน "รายการกรอกเอง" */

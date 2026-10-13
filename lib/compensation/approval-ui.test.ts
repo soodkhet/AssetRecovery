@@ -10,6 +10,9 @@ import {
   whtAmountHint,
   whtAmountLabel,
   claimSourceLabel,
+  claimCaseRef,
+  claimRefLabel,
+  claimTypeLabel,
   CLAIM_STATUS_FILTERS,
   bulkApprovableIds,
   claimStatusLabel,
@@ -368,5 +371,23 @@ describe('known — ตัวกรองคิว "รอผู้บริห�
   it('ตัวเลือกบนหน้าจอมี "รอผู้บริหารอนุมัติ" และ API รับค่าเดียวกัน', () => {
     expect(CLAIM_STATUS_FILTERS.map((option) => option.label)).toContain('รอผู้บริหารอนุมัติ')
     expect(compensationListQuerySchema.parse({ status: 'pending_executive' }).status).toBe('pending_executive')
+  })
+})
+
+describe('mytester F5-03 — เลขเคสอ้างอิงของใบเบิกส่วนเกินเงินทดรอง (คิวผู้จัดการ/แท็บค่าตอบแทน/รายละเอียด)', () => {
+  const note = advanceExcessClaimNote({
+    purpose: 'ค่าเดินทาง',
+    approvedSatang: 400_000,
+    usedSatang: 438_075,
+    advanceNumber: 'ADV-2569-0002',
+    caseRef: 'NDP/2569/MT5-04',
+  })
+
+  it('ส่วนเกินที่เงินทดรองอ้างอิงเคส ⇒ เลขเคสจากหมายเหตุ · ผูกเคสตรง ⇒ เคสของรายการ · ไม่มีทั้งคู่ ⇒ null', () => {
+    expect(claimCaseRef({ caseRef: null, note })).toBe('NDP/2569/MT5-04')
+    expect(claimCaseRef({ caseRef: 'C-1', note })).toBe('C-1')
+    expect(claimCaseRef({ caseRef: null, note: 'บันทึกเอง' })).toBeNull()
+    expect(claimRefLabel({ caseRef: null, note: null })).toBe('— ไม่ผูกเคส')
+    expect(claimTypeLabel({ expenseType: 'manual', note })).toBe('ส่วนเกินเงินทดรอง ADV-2569-0002')
   })
 })

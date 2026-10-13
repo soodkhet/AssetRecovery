@@ -29,13 +29,15 @@ import {
   approvalStepTone,
   bulkApprovableIds,
   bulkApproveSummary,
+  claimRefLabel,
   claimStatusLabel,
+  claimTypeLabel,
   expenseRowActions,
   expenseRowHighlight,
   isResubmittedClaim,
   whtAmountLabel,
 } from '@/lib/compensation/approval-ui'
-import { EXPENSE_TYPE_LABEL, expenseStatusBadgeGroup } from '@/lib/field/expense-ui'
+import { expenseStatusBadgeGroup } from '@/lib/field/expense-ui'
 import { fmtSatangSymbol } from '@/lib/format/money'
 import { SubstituteReceiptPanel } from '@/components/substitute-receipts/substitute-receipt-panel'
 import { RejectReasonNotes } from '@/components/finance/reject-reason-notes'
@@ -156,7 +158,7 @@ export function CompensationTab() {
                     <Td>
                       {/* เลขเคสไม่ตัดบรรทัดที่ขีด (preship R5-002) */}
                       <p>
-                        <RefText className="font-semibold">{item.caseRef ?? '— ไม่ผูกเคส'}</RefText>
+                        <RefText className="font-semibold">{claimRefLabel(item)}</RefText>
                       </p>
                       <p className="text-xs text-slate-500">{item.payeeName}</p>
                       {item.agentName !== null && <p className="text-[10px] text-slate-400">ผู้ปฏิบัติงาน: {item.agentName}</p>}
@@ -166,7 +168,7 @@ export function CompensationTab() {
                         </div>
                       )}
                     </Td>
-                    <Td>{EXPENSE_TYPE_LABEL[item.expenseType]}</Td>
+                    <Td>{claimTypeLabel(item)}</Td>
                     <Td>
                       {/* สูตรยาวตัดบรรทัดในกรอบ ไม่ดันตารางล้นจนคอลัมน์จัดการหลุดจอที่ 1280 (preship R5-002) */}
                       <p className="max-w-xs min-w-40 font-mono text-xs break-words text-slate-700">{item.basisText}</p>

@@ -1,9 +1,16 @@
 'use client'
 
 import { Badge, InlineAlert, Modal, StatusBadge } from '@/components/ui'
-import { approvalHistoryLabel, approvalStepText, whtAmountHint, whtAmountLabel } from '@/lib/compensation/approval-ui'
+import {
+  approvalHistoryLabel,
+  approvalStepText,
+  claimRefLabel,
+  claimTypeLabel,
+  whtAmountHint,
+  whtAmountLabel,
+} from '@/lib/compensation/approval-ui'
 import type { CompensationApprovalDto } from '@/lib/compensation/approval-types'
-import { EXPENSE_TYPE_LABEL, EXPENSE_STATUS_LABEL, expenseStatusBadgeGroup } from '@/lib/field/expense-ui'
+import { EXPENSE_STATUS_LABEL, expenseStatusBadgeGroup } from '@/lib/field/expense-ui'
 import { fmtDate, fmtDateTime } from '@/lib/format/datetime'
 import { fmtPercent, fmtSatangSymbol } from '@/lib/format/money'
 
@@ -27,9 +34,9 @@ export function CalcDetailModal({
     <Modal open onClose={onClose} size="lg" title="รายละเอียดสูตรคำนวณค่าตอบแทน">
       <div className="space-y-4">
         <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800">
-          เคส: <span className="font-mono font-semibold">{item.caseRef ?? 'ไม่ผูกเคส'}</span> · ผู้รับเงิน:{' '}
+          เคส: <span className="font-mono font-semibold">{claimRefLabel(item)}</span> · ผู้รับเงิน:{' '}
           <span className="font-semibold">{item.payeeName}</span> · ประเภท:{' '}
-          <span className="font-semibold">{EXPENSE_TYPE_LABEL[item.expenseType]}</span>
+          <span className="font-semibold">{claimTypeLabel(item)}</span>
         </div>
 
         <div className="space-y-3 rounded-lg border border-slate-200 p-4">
