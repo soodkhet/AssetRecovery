@@ -1,4 +1,4 @@
-import { PERMANENT_REJECT_EXPENSE_TYPE_SET } from '@/lib/compensation/approval-ui'
+import { matchesClaimStatusFilter, PERMANENT_REJECT_EXPENSE_TYPE_SET } from '@/lib/compensation/approval-ui'
 import { hasUnverifiedReceipt, verifiedReceiptPath } from '@/lib/claims/receipt'
 import { assertPeriodOpenAt } from '@/lib/accounting/period-guard'
 import { emitAudit } from '@/lib/audit/audit'
@@ -607,6 +607,8 @@ const STATUS_FILTER: Readonly<Record<CompensationApprovalListQuery['status'], re
   pending_warehouse_confirm: ['pending_warehouse_confirm'],
   pending_approval: ['pending_approval'],
   pending_finance_approval: ['pending_finance_approval'],
+  // ขั้นบริหารแยกจากขั้นการเงินด้วยขั้นที่รออยู่ (กรองหลังรู้สายของแต่ละรายการ — `matchesClaimStatusFilter`)
+  pending_executive: ['pending_finance_approval'],
   needs_revision: ['needs_revision'],
   approved: ['approved'],
   all: PIPELINE_STATUSES,
@@ -667,7 +669,8 @@ export async function listCompensationApprovals(
       approvalStepCurrent: row.approvalStepCurrent,
       steps: flow.steps,
     })
-    return visible
+    const pendingStepRole = row.status === 'approved' ? null : (flow.steps[row.approvalStepCurrent - 1] ?? null)
+    return visible && matchesClaimStatusFilter(query.status, { status: row.status, pendingStepRole })
       ? [
           {
             ...toDto(row, flow, user, policy, payeeGaps, whtById.get(row.id)!, previousRejectReasons),

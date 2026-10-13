@@ -687,6 +687,46 @@ suite('Phase 3.2 — Compensation Approval หลายขั้น (`16`)', () 
     }
   })
 
+  it('known — ตัวกรอง "รอผู้บริหารอนุมัติ": เฉพาะรายการที่ขั้นที่รออยู่เป็นบริหาร · "รอขั้น 2 (การเงิน)" ไม่รวมขั้นบริหาร', async () => {
+    const roleExec = '00000000-0000-4000-8000-0000000032f1'
+    const matrixExec = '00000000-0000-4000-8000-0000000032f2'
+    await db().$executeRawUnsafe(`
+      INSERT INTO roles (id, organization_id, name, role_group, is_seed)
+      VALUES ('${roleExec}', '${ORG_ID}', 'บริหาร', 'system', false) ON CONFLICT (id) DO NOTHING
+    `)
+    await db().$executeRawUnsafe(`
+      INSERT INTO approval_matrices
+        (id, organization_id, condition, condition_threshold_satang, approval_flow_role_ids, enforce_segregation_of_duties, created_by)
+      VALUES ('${matrixExec}', '${ORG_ID}', 'สายยอดสูง 3 ขั้น', 100000,
+              ARRAY['${ROLE_MANAGER}', '${ROLE_FINANCE}', '${roleExec}']::uuid[], false, '${FINANCE_ID}')
+      ON CONFLICT (id) DO NOTHING
+    `)
+    const executive = sessionUser({
+      id: FINANCE_2_ID,
+      roleId: roleExec,
+      roleName: 'บริหาร',
+      roleGroup: 'system',
+      teamId: null,
+      capabilities: { approve_expense_executive: 'manage' },
+      scope: { kind: 'global', teamIds: [], companyId: null, userId: FINANCE_2_ID },
+    })
+    try {
+      const expenseId = await seedPendingExpense(await seedPayee(AGENT_ID), 50_000)
+      await approvals.approveCompensationExpense({ actor: manager, meta }, expenseId, {})
+      const step2 = await approvals.approveCompensationExpense({ actor: finance, meta }, expenseId, { step: 2 })
+      expect([step2.expense.status, step2.expense.approvalStepCurrent]).toEqual(['pending_finance_approval', 3])
+
+      const ids = async (status: 'all' | 'pending_executive' | 'pending_finance_approval') =>
+        (await approvals.listCompensationApprovals(executive, { status })).map((row) => row.id)
+      expect(await ids('all')).toContain(expenseId)
+      expect(await ids('pending_executive')).toEqual([expenseId])
+      expect(await ids('pending_finance_approval')).not.toContain(expenseId)
+    } finally {
+      await db().$executeRawUnsafe(`DELETE FROM approval_matrices WHERE id = '${matrixExec}'`)
+      await db().$executeRawUnsafe(`DELETE FROM roles WHERE id = '${roleExec}'`)
+    }
+  })
+
   it('`18` §6.3 — WHT ในรายการใช้ **Tax Profile ของ payee (1%) ชนะแผน (3%)**', async () => {
     const payeeId = await seedPayee(AGENT_ID)
     await seedPendingExpense(payeeId, 500_000)

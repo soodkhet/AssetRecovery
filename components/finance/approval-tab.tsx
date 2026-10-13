@@ -50,6 +50,7 @@ import { CREATE_CLAIM_CAPABILITIES } from '@/lib/claims/claim'
 import type { CompensationApprovalDto } from '@/lib/compensation/approval-types'
 import {
   CLAIM_STATUS_FILTERS,
+  matchesClaimStatusFilter,
   approvalStepText,
   bulkApprovableIds,
   bulkApproveSummary,
@@ -109,8 +110,7 @@ export function ApprovalTab() {
   const [reviewTarget, setReviewTarget] = useState<AdvanceDto | null>(null)
   const [reviewMode, setReviewMode] = useState<'approve' | 'reject'>('approve')
 
-  const visibleClaims =
-    claimFilter === 'all' ? claims.items : claims.items.filter((item) => item.status === claimFilter)
+  const visibleClaims = claims.items.filter((item) => matchesClaimStatusFilter(claimFilter, item))
   // staging E-045 — เลือกหลายแถวแล้วอนุมัติครั้งเดียว (เฉพาะแถวที่กดอนุมัติได้อยู่แล้ว)
   const [selectedClaims, setSelectedClaims] = useState<ReadonlySet<string>>(new Set())
   const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false)
