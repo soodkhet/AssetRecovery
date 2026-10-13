@@ -2,7 +2,7 @@
 
 import { Bar, BarChart, CartesianGrid, Cell, Legend, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { Card, EmptyState } from '@/components/ui'
-import { fmtSatang } from '@/lib/format/money'
+import { fmtSatangSymbol } from '@/lib/format/money'
 import { formatCellText, type ReportColumnType, type ReportRow } from '@/lib/reports/payload'
 
 /**
@@ -11,7 +11,7 @@ import { formatCellText, type ReportColumnType, type ReportRow } from '@/lib/rep
  * ตาราง** ⇒ กราฟกับตารางขัดกันไม่ได้
  *
  * - Recharts ตาม tech stack ที่ตัดสินใจไว้ (`96` §15) — ห้ามเขียน SVG เองซ้ำ
- * - เงินในแถวเป็น **satang** ⇒ แกน/ทูลทิปหารร้อยผ่าน `fmtSatang()` ที่เดียว (Rule 01)
+ * - เงินในแถวเป็น **satang** ⇒ แกน/ทูลทิปหารร้อยผ่าน `fmtSatangSymbol()` ที่เดียว (Rule 01)
  * - ค่าติดลบ (กำไรขั้นต้นขาดทุน) ต้องเห็นเป็นสีแดง ไม่ใช่หายไปจากกราฟ
  * - **โหมดซ้อนแท่ง** (ใส่ `stack`) ใช้เมื่อสองค่าเป็นส่วนย่อยของยอดเดียวกัน เช่น สำเร็จ/ไม่สำเร็จ
  *   ของ O1 — ค่าติดลบไม่มีความหมายในโหมดนี้ จึงใช้สีประจำชุดตายตัวแทนการเปลี่ยนสีตามเครื่องหมาย
@@ -122,7 +122,7 @@ export function ReportBarChart({
                 formatter={(value, name) => {
                   const amount = typeof value === 'number' ? value : Number(value)
                   return [
-                    valueType === 'money' ? `฿ ${fmtSatang(amount)}` : formatCellText(amount, valueType),
+                    valueType === 'money' ? fmtSatangSymbol(amount) : formatCellText(amount, valueType),
                     nameOf(String(name)),
                   ]
                 }}

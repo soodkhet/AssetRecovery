@@ -56,6 +56,10 @@ describe('fmtSatang', () => {
 describe('fmtSatangSymbol / fmtSatangRounded / fmtCount', () => {
   it('เติมสัญลักษณ์บาท', () => {
     expect(fmtSatangSymbol(10050)).toBe('฿100.50')
+    // mytester4 V4-02 — ติดลบ: เครื่องหมายลบนำหน้า ฿ (แบบเดียวกับที่อื่น "−฿x") ไม่ใช่ "฿-x"
+    expect(fmtSatangSymbol(-4211)).toBe('−฿42.11')
+    expect(fmtSatangSymbol(-123_456_789)).toBe('−฿1,234,567.89')
+    expect(fmtSatangSymbol(0)).toBe('฿0.00')
     expect(fmtSatangSymbol(null)).toBe(EMPTY_AMOUNT_DISPLAY)
   })
 

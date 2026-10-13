@@ -52,10 +52,16 @@ export function fmtSatang(satang: number | null | undefined, fallback = EMPTY_AM
   return `${sign}${integerFormatter.format(baht)}.${String(cents).padStart(2, '0')}`
 }
 
-/** `10050` → `"฿100.50"` */
+/** เครื่องหมายลบของยอดเงินที่แสดงพร้อมสัญลักษณ์บาท (U+2212 — แบบเดียวกับ "−฿x" ที่ใช้ทั้งระบบ) */
+export const MONEY_MINUS_SIGN = '\u2212'
+
+/**
+ * `10050` → `"฿100.50"` · ติดลบ `-4211` → `"−฿42.11"` (เครื่องหมายลบนำหน้าสัญลักษณ์บาท — mytester4 V4-02 ไม่ใช่ `"฿-42.11"`)
+ */
 export function fmtSatangSymbol(satang: number | null | undefined, fallback = EMPTY_AMOUNT_DISPLAY): string {
   if (satang === null || satang === undefined) return fallback
-  return `${BAHT_SYMBOL}${fmtSatang(satang)}`
+  assertSatang(satang)
+  return `${satang < 0 ? MONEY_MINUS_SIGN : ''}${BAHT_SYMBOL}${fmtSatang(Math.abs(satang))}`
 }
 
 /** `10050` → `"100"` — ใช้เฉพาะที่ mockup แสดงยอดกลม (KPI card) เท่านั้น ห้ามใช้กับยอดที่ต้องกระทบยอด */

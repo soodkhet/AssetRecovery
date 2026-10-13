@@ -2,7 +2,7 @@
 
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { Card, EmptyState } from '@/components/ui'
-import { fmtSatang } from '@/lib/format/money'
+import { fmtSatangSymbol } from '@/lib/format/money'
 import { formatCellText, type ReportColumnType, type ReportRow } from '@/lib/reports/payload'
 
 /**
@@ -12,7 +12,7 @@ import { formatCellText, type ReportColumnType, type ReportRow } from '@/lib/rep
  * คู่แฝดของ `<ReportBarChart>` (6.2) และกติกาเดียวกันทุกข้อ:
  * - **อ่านจาก `rows` ของ payload ชุดเดียวกับตาราง** ⇒ กราฟกับตารางขัดกันไม่ได้
  * - Recharts ตาม tech stack ที่ตัดสินใจไว้ (`96` §15) — ห้ามเขียน SVG เอง
- * - เงินในแถวเป็น **satang** ⇒ แกน/ทูลทิปหารร้อยผ่าน `fmtSatang()` ที่เดียว (Rule 01)
+ * - เงินในแถวเป็น **satang** ⇒ แกน/ทูลทิปหารร้อยผ่าน `fmtSatangSymbol()` ที่เดียว (Rule 01)
  * - ค่า `null` = ไม่มีข้อมูล (เช่น % สำเร็จของเดือนที่ยังไม่มีเคสปิด) ⇒ **เว้นช่องว่างในเส้น**
  *   ห้ามแทนด้วย 0 เพราะ 0% กับ "ยังไม่มีข้อมูล" คนละความหมาย
  */
@@ -59,7 +59,7 @@ export function ReportLineChart({
                 cursor={{ stroke: '#cbd5e1' }}
                 formatter={(value) => {
                   const amount = typeof value === 'number' ? value : Number(value)
-                  return [valueType === 'money' ? `฿ ${fmtSatang(amount)}` : formatCellText(amount, valueType), title]
+                  return [valueType === 'money' ? fmtSatangSymbol(amount) : formatCellText(amount, valueType), title]
                 }}
               />
               <Line
