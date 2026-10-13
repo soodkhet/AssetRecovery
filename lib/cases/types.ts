@@ -1,3 +1,4 @@
+import type { CaseActivityEntry } from '@/lib/cases/activity-timeline'
 import type { CaseStatusTimelineEntry } from '@/lib/cases/status-timeline'
 import type { DocumentMode, DocumentSlot } from '@/lib/cases/case'
 import type { TeamCostSnapshot } from '@/lib/cases/team-cost'
@@ -295,6 +296,11 @@ export interface CaseDetailDto extends CaseListItemDto {
   editHistory: CaseEditHistoryDto[]
   /** ประวัติสถานะจาก audit ของเคส เก่า → ใหม่ (staging E-004) · พอร์ทัลไม่เห็นชื่อพนักงาน/บันทึกภายใน */
   statusHistory: CaseStatusTimelineEntry[]
+  /**
+   * เหตุการณ์หลังรับเคส (มอบหมาย/รับงาน/เปลี่ยนผู้รับผิดชอบ/จัดวัน/ปิดงาน/ตีกลับ-ส่งใหม่/รับเข้าคลัง/ยืนยันล็อต) เก่า → ใหม่
+   * จาก audit ของงานภาคสนาม/คลัง (`38` v3.21) · **ภายในเท่านั้น** — ฝั่งบริษัทไฟแนนซ์ได้ `[]` เสมอ
+   */
+  activityHistory: CaseActivityEntry[]
   recycleHistory: CaseRecycleHistoryDto[]
   readiness: CaseReadinessDto
   /** หลักฐานปิดงานชุดล่าสุด — เฉพาะผู้มีสิทธิ์ตีกลับหลักฐาน (UAT BUG-045) · อื่น ๆ = `null` */

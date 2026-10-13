@@ -32,6 +32,7 @@ import {
   redactCaseStatusTimelineForCompany,
   type CaseStatusTimelineEntry,
 } from '@/lib/cases/status-timeline'
+import { buildCaseActivityTimeline, type CaseActivityEntry } from '@/lib/cases/activity-timeline'
 import { caseDocumentRule } from '@/lib/uploads/rules'
 import { verifyUploadedFile } from '@/lib/uploads/verify'
 import { assetIdentifierWarning } from '@/lib/warehouse/imei'
@@ -275,6 +276,8 @@ function redactCaseDetailForCompany(detail: CaseDetailDto): CaseDetailDto {
     reviewNote: null,
     editHistory: [],
     statusHistory: redactCaseStatusTimelineForCompany(detail.statusHistory),
+    // เหตุการณ์ภาคสนาม/คลัง = ข้อมูลภายใน (ชื่อพนักงาน/เหตุผลตีกลับ) — บริษัทไฟแนนซ์ไม่เห็น
+    activityHistory: [],
     recycleHistory: detail.recycleHistory.map((entry) => ({ ...entry, decisionNote: null, decidedByName: null })),
     documents: detail.documents.map((document) => ({ ...document, uploadedByName: '' })),
   }
@@ -335,6 +338,78 @@ async function loadCaseStatusHistory(organizationId: string, caseId: string): Pr
       createdAt: row.createdAt,
     })),
   )
+}
+
+/**
+ * เหตุการณ์หลังรับเคส (`38` v3.21 — ข้อสังเกต mytester "ประวัติเคสหยุดที่รับเคส") — audit ของงานภาคสนาม
+ * (`case_assignments` ทุกแถว/ทุกรอบของเคส) + เครื่องของเคส (`assets`) + ล็อตส่งมอบที่ยืนยันแล้ว
+ * แปลงด้วย `buildCaseActivityTimeline()` (pure) · เรียกเฉพาะผู้ใช้ภายใน (`getCase()` คืนฝั่งบริษัทก่อนถึงตรงนี้)
+ */
+async function loadCaseActivityHistory(organizationId: string, caseId: string): Promise<CaseActivityEntry[]> {
+  const [assignments, assets] = await Promise.all([
+    prisma.caseAssignment.findMany({ where: { organizationId, caseId }, select: { id: true, agentId: true } }),
+    prisma.asset.findMany({
+      where: { organizationId, caseId },
+      select: {
+        id: true,
+        lot: { select: { lotNumber: true, status: true, confirmedAt: true, confirmedByUser: { select: { fullName: true } } } },
+      },
+    }),
+  ])
+  const targets = [
+    ...assignments.map((row) => ({ targetType: 'case_assignments', targetId: row.id })),
+    ...assets.map((row) => ({ targetType: 'assets', targetId: row.id })),
+  ]
+  const audits =
+    targets.length === 0
+      ? []
+      : await prisma.auditLog.findMany({
+          where: { organizationId, action: { not: 'view' }, OR: targets },
+          orderBy: { createdAt: 'asc' },
+          take: 300,
+          select: {
+            targetType: true,
+            targetId: true,
+            action: true,
+            beforeData: true,
+            afterData: true,
+            reason: true,
+            createdAt: true,
+            actor: { select: { fullName: true } },
+          },
+        })
+  // ชื่อพนักงานที่อ้างใน audit (ผู้รับงาน/ผู้ถูกโอน) — รวม agent ของทุกแถวมอบหมาย
+  const userIds = new Set<string>(assignments.map((row) => row.agentId))
+  for (const row of audits) {
+    for (const value of [jsonString(row.beforeData, 'agentId'), jsonString(row.afterData, 'agentId')]) {
+      if (value !== null) userIds.add(value)
+    }
+  }
+  const users =
+    userIds.size === 0
+      ? []
+      : await prisma.user.findMany({ where: { organizationId, id: { in: [...userIds] } }, select: { id: true, fullName: true } })
+  const lots = new Map<string, { lotNumber: string; confirmedAt: Date; confirmedByName: string | null }>()
+  for (const asset of assets) {
+    const lot = asset.lot
+    if (lot === null || lot.status !== 'confirmed' || lot.confirmedAt === null) continue
+    lots.set(lot.lotNumber, { lotNumber: lot.lotNumber, confirmedAt: lot.confirmedAt, confirmedByName: lot.confirmedByUser?.fullName ?? null })
+  }
+  return buildCaseActivityTimeline({
+    audits: audits.map((row) => ({
+      targetType: row.targetType,
+      targetId: row.targetId ?? '',
+      action: row.action,
+      before: row.beforeData,
+      after: row.afterData,
+      reason: row.reason,
+      actorName: row.actor?.fullName ?? null,
+      createdAt: row.createdAt,
+    })),
+    lots: [...lots.values()],
+    userNames: new Map(users.map((user) => [user.id, user.fullName])),
+    assignmentAgents: new Map(assignments.map((row) => [row.id, row.agentId])),
+  })
 }
 
 function jsonString(value: Prisma.JsonValue | null, key: string): string | null {
@@ -466,6 +541,7 @@ export function toDetailDto(row: CaseDetailRow): CaseDetailDto {
     debtorDocumentsPurgedAt: row.debtorDocumentsPurgedAt?.toISOString() ?? null,
     // เติมเฉพาะ `getCase()` (อ่าน audit) — ผลของ mutation ส่งว่าง หน้าจอโหลดรายละเอียดใหม่เอง
     statusHistory: [],
+    activityHistory: [],
     editHistory: row.editHistory.map((entry) => ({
       id: entry.id,
       note: entry.note,
@@ -652,11 +728,17 @@ export async function getCase(user: SessionUser, caseId: string): Promise<CaseDe
   const warned = await withActiveAssetImeiWarning(user, detail)
   detail.activeAssetImeiWarning = warned.activeAssetImeiWarning
   detail.activeCaseImeiWarning = warned.activeCaseImeiWarning
-  const [fieldEvidence, resubmittedAt] = await Promise.all([
+  const [fieldEvidence, resubmittedAt, activityHistory] = await Promise.all([
     loadCaseFieldEvidence(user, row.id),
     loadCaseResubmittedAt(user.organizationId, row.id),
+    loadCaseActivityHistory(user.organizationId, row.id),
   ])
-  return await withProjectedSourceTemplateName(user.organizationId, { ...detail, fieldEvidence, resubmittedAt })
+  return await withProjectedSourceTemplateName(user.organizationId, {
+    ...detail,
+    fieldEvidence,
+    resubmittedAt,
+    activityHistory,
+  })
 }
 
 /**

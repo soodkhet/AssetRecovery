@@ -1,5 +1,6 @@
 'use client'
 
+import { mergeCaseHistory, type CaseActivityKind } from '@/lib/cases/activity-timeline'
 import { useCallback, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { usePermission } from '@/components/auth/permission-provider'
 import { FieldEvidenceSection } from '@/components/cases/field-evidence-section'
@@ -424,7 +425,9 @@ export function CaseDetailModal({
             {detail.recycleHistory.length > 0 && <RecycleHistorySection detail={detail} />}
 
             {/* staging E-004 — ประวัติสถานะ (จาก audit ฝั่ง server) + ประวัติการแก้ไข */}
-            {(detail.statusHistory.length > 0 || detail.editHistory.length > 0) && <CaseHistorySection detail={detail} />}
+            {(detail.statusHistory.length > 0 || detail.activityHistory.length > 0 || detail.editHistory.length > 0) && (
+              <CaseHistorySection detail={detail} />
+            )}
 
             {showsReasonBox(status) && mode !== 'readonly' && (
               <section>
@@ -842,34 +845,62 @@ function RecycleHistorySection({ detail }: { detail: CaseDetailDto }) {
   )
 }
 
+/** สีจุดของเหตุการณ์ภาคสนาม/คลังในประวัติเคส (ไม่ใช่ badge — badge ใช้กับสถานะเคสเท่านั้น) */
+const ACTIVITY_DOT_CLASS: Readonly<Record<CaseActivityKind, string>> = {
+  assignment: 'bg-slate-300',
+  field: 'bg-slate-300',
+  success: 'bg-emerald-500',
+  fail: 'bg-red-500',
+  revision: 'bg-amber-500',
+  warehouse: 'bg-slate-500',
+}
+
 function CaseHistorySection({ detail }: { detail: CaseDetailDto }) {
+  // mytester — ประวัติสถานะเคส + เหตุการณ์หลังรับเคส (ภาคสนาม/คลัง) เรียงเวลาเดียวกัน
+  const history = mergeCaseHistory(detail.statusHistory, detail.activityHistory)
   return (
     <section data-testid="case-history">
       <h3 className="mb-3 border-b border-slate-100 pb-2 text-sm font-bold text-slate-800">ประวัติเคส</h3>
-      {detail.statusHistory.length > 0 && (
+      {history.length > 0 && (
         <ol className="space-y-2">
-          {detail.statusHistory.map((entry, index) => (
-            <li key={`${entry.at}-${index}`} className="flex gap-3 text-xs">
-              <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-slate-400" aria-hidden />
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-semibold text-slate-800">{entry.label}</span>
-                  <StatusBadge
-                    status={entry.toStatus}
-                    group={caseStatusBadgeGroup(entry.toStatus)}
-                    label={entry.toStatusLabel}
-                  />
+          {history.map((item, index) =>
+            item.type === 'status' ? (
+              <li key={`s-${item.entry.at}-${index}`} className="flex gap-3 text-xs">
+                <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-slate-400" aria-hidden />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-semibold text-slate-800">{item.entry.label}</span>
+                    <StatusBadge
+                      status={item.entry.toStatus}
+                      group={caseStatusBadgeGroup(item.entry.toStatus)}
+                      label={item.entry.toStatusLabel}
+                    />
+                  </div>
+                  {item.entry.note !== null && (
+                    <p className="mt-0.5 whitespace-pre-wrap text-slate-600">เหตุผล: {item.entry.note}</p>
+                  )}
+                  <div className="text-[11px] text-slate-400">
+                    {fmtDateTime(item.entry.at)}
+                    {item.entry.actorName !== null && ` · ${item.entry.actorName}`}
+                  </div>
                 </div>
-                {entry.note !== null && (
-                  <p className="mt-0.5 whitespace-pre-wrap text-slate-600">เหตุผล: {entry.note}</p>
-                )}
-                <div className="text-[11px] text-slate-400">
-                  {fmtDateTime(entry.at)}
-                  {entry.actorName !== null && ` · ${entry.actorName}`}
+              </li>
+            ) : (
+              <li key={`a-${item.entry.at}-${index}`} className="flex gap-3 text-xs" data-testid="case-activity">
+                <span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${ACTIVITY_DOT_CLASS[item.entry.kind]}`} aria-hidden />
+                <div className="min-w-0 flex-1">
+                  <span className="font-semibold text-slate-700">{item.entry.label}</span>
+                  {item.entry.note !== null && (
+                    <p className="mt-0.5 whitespace-pre-wrap text-slate-600">เหตุผล: {item.entry.note}</p>
+                  )}
+                  <div className="text-[11px] text-slate-400">
+                    {fmtDateTime(item.entry.at)}
+                    {item.entry.actorName !== null && ` · ${item.entry.actorName}`}
+                  </div>
                 </div>
-              </div>
-            </li>
-          ))}
+              </li>
+            ),
+          )}
         </ol>
       )}
       {detail.editHistory.length > 0 && (

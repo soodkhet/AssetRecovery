@@ -21,6 +21,9 @@ export interface AdvanceDto {
   excessSatang: number
   status: AdvanceStatus
   purpose: string
+  /** mytester DO-07 — เคสที่อ้างอิง (ไม่บังคับ) · ไม่อ้างอิง = `null` */
+  caseId: string | null
+  caseRef: string | null
   /** `YYYY-MM-DD` (คอลัมน์ `DATE`) — display แปลงเป็น พ.ศ. ที่ layer บนสุด (Rule 01) */
   dueClearDate: string
   /**
@@ -94,4 +97,11 @@ export interface AdvanceReturnDto {
 /** ผลของการเคลียร์ยอด — `excessClaimId` = คำขอเบิกส่วนเกินที่ระบบสร้างให้ (มติ PO 03/10/2569 UAT Q3) · `null` = ไม่ได้ใช้เกิน */
 export interface AdvanceSettleResult extends AdvanceDto {
   excessClaimId: string | null
+}
+
+/** ตัวเลือกช่อง "อ้างอิงเคส" ของฟอร์มขอเงินทดรอง (mytester DO-07) — เคสที่ผู้ใช้รับผิดชอบอยู่ */
+export interface AdvanceCaseOptionDto {
+  caseId: string
+  caseRef: string
+  debtorName: string | null
 }

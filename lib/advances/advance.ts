@@ -173,27 +173,49 @@ export const ADVANCE_EXCESS_NOTE_PREFIX = 'เบิกส่วนเกิน�
 
 /**
  * หมายเหตุของคำขอเบิกส่วนเกิน — บอกที่มาให้ผู้อนุมัติเห็นโดยไม่ต้องเปิด audit
- * (mytester F-08 — อ้างเลขเงินทดรอง ADV-… ด้วย เมื่อมี)
+ * (mytester F-08 — อ้างเลขเงินทดรอง ADV-… ด้วย เมื่อมี · mytester DO-07 — ต่อด้วย "· เคส <เลขสัญญา>" เมื่อเงินทดรองอ้างอิงเคส)
+ *
+ * คำขอเบิกส่วนเกินเป็น Manual Claim ที่ **ไม่ผูก `expenses.case_id`** (ไม่ให้ไปค้างเกตรายได้ของเคส — `02` §8)
+ * ⇒ เลขเคสอยู่ในหมายเหตุเท่านั้น แล้วคิวอนุมัติ/รอบจ่าย/สลิปอ่านกลับด้วย {@link advanceExcessSource}
  */
 export function advanceExcessClaimNote(input: {
   purpose: string
   approvedSatang: number
   usedSatang: number
   advanceNumber?: string
+  caseRef?: string | null
 }): string {
   const ref = input.advanceNumber === undefined ? '' : ` ${input.advanceNumber}`
-  const note = `${ADVANCE_EXCESS_NOTE_PREFIX}${ref} (ใช้จริง ${fmtSatangSymbol(input.usedSatang)} เกินยอดอนุมัติ ${fmtSatangSymbol(input.approvedSatang)}) — ${input.purpose}`
+  const caseRef = input.advanceNumber === undefined || input.caseRef == null || input.caseRef.trim() === ''
+    ? ''
+    : `${ADVANCE_EXCESS_CASE_SEPARATOR}${input.caseRef.trim()}`
+  const note = `${ADVANCE_EXCESS_NOTE_PREFIX}${ref}${caseRef} (ใช้จริง ${fmtSatangSymbol(input.usedSatang)} เกินยอดอนุมัติ ${fmtSatangSymbol(input.approvedSatang)}) — ${input.purpose}`
   return note.length > 500 ? `${note.slice(0, 499)}…` : note
 }
 
+/** ตัวคั่นเลขเคสในหมายเหตุคำขอเบิกส่วนเกิน (mytester DO-07) */
+const ADVANCE_EXCESS_CASE_SEPARATOR = ' · เคส '
+
 /**
  * mytester F-08 — คำขอเบิกนี้ระบบสร้างจากส่วนเกินเงินทดรองหรือไม่ (อ่านจากหมายเหตุ)
- * คืนเลข ADV ถ้าหมายเหตุมี · ไม่ใช่รายการส่วนเกิน = `null`
+ * คืนเลข ADV (+ เลขเคสที่เงินทดรองอ้างอิง — DO-07) ถ้าหมายเหตุมี · ไม่ใช่รายการส่วนเกิน = `null`
  */
-export function advanceExcessSource(note: string | null): { advanceNumber: string | null } | null {
+export function advanceExcessSource(note: string | null): { advanceNumber: string | null; caseRef: string | null } | null {
   if (note === null || !note.startsWith(ADVANCE_EXCESS_NOTE_PREFIX)) return null
-  const match = /^\s(ADV-[\w-]+)/.exec(note.slice(ADVANCE_EXCESS_NOTE_PREFIX.length))
-  return { advanceNumber: match?.[1] ?? null }
+  const match = /^\s(ADV-[\w-]+)(?: · เคส (.+?))? \(ใช้จริง /.exec(note.slice(ADVANCE_EXCESS_NOTE_PREFIX.length))
+  if (match !== null) return { advanceNumber: match[1] ?? null, caseRef: match[2] ?? null }
+  const legacy = /^\s(ADV-[\w-]+)/.exec(note.slice(ADVANCE_EXCESS_NOTE_PREFIX.length))
+  return { advanceNumber: legacy?.[1] ?? null, caseRef: null }
+}
+
+/**
+ * ป้ายรายการของคำขอเบิกส่วนเกินบนคิว/รอบจ่าย/สลิป (mytester DO-07 — แทน "รายการกรอกเอง")
+ * ไม่ใช่รายการส่วนเกิน = `null` (ผู้เรียกใช้ป้ายประเภทเดิม)
+ */
+export function advanceExcessItemLabel(note: string | null): string | null {
+  const source = advanceExcessSource(note)
+  if (source === null) return null
+  return `ส่วนเกินเงินทดรอง${source.advanceNumber === null ? '' : ` ${source.advanceNumber}`}`
 }
 
 // ── ยอดคืนเงินทดรอง (มติ PO 05/10/2569 UAT U30 · BUG-109 · `15` §9.3) ─────────────

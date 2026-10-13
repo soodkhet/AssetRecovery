@@ -12,6 +12,7 @@ import { prisma } from '@/lib/prisma'
 const docSelect = {
   id: true,
   advanceNumber: true,
+  case: { select: { caseRef: true } },
   status: true,
   requestedSatang: true,
   approvedSatang: true,
@@ -88,6 +89,7 @@ function toAdvanceDocSource(row: AdvanceDocRow): AdvanceDocSource {
     usedSatang: row.usedSatang,
     returnSatang: row.returnSatang,
     purpose: row.purpose,
+    caseRef: row.case?.caseRef ?? null,
     dueClearDate: row.dueClearDate,
     createdAt: row.createdAt,
     approvedAt: row.approvedAt,
