@@ -298,28 +298,28 @@ suite('known H-06 — เป้าหมาย/รอบบัญชีเป็
 })
 
 suite('ทดสอบซ้ำ local LR5-01 — ชุดส่งบัญชี / แบรนด์ / รายการเดินบัญชี / รายการรับเงิน เป็นชื่อที่อ่านได้', () => {
-  const ORG = '00000000-0000-4000-8000-0000000053a0'
-  const ROLE = '00000000-0000-4000-8000-0000000053a1'
-  const USER = '00000000-0000-4000-8000-0000000053a2'
-  const PERIOD = '00000000-0000-4000-8000-0000000053a3'
-  const COMPANY = '00000000-0000-4000-8000-0000000053a4'
-  const BATCH = '00000000-0000-4000-8000-0000000053a5'
-  const ACCOUNT = '00000000-0000-4000-8000-0000000053a6'
-  const BANK_TX = '00000000-0000-4000-8000-0000000053a7'
-  const RECEIPT = '00000000-0000-4000-8000-0000000053a8'
-  const EXPORT = '00000000-0000-4000-8000-0000000053a9'
-  const BRAND = '00000000-0000-4000-8000-0000000053aa'
-  const LOG_EXPORT = '00000000-0000-4000-8000-0000000053b1'
-  const LOG_BRAND = '00000000-0000-4000-8000-0000000053b2'
-  const LOG_RECEIPT = '00000000-0000-4000-8000-0000000053b3'
-  const LOG_BANK_TX = '00000000-0000-4000-8000-0000000053b4'
+  const ORG = '00000000-0000-4000-8000-000000e515a0'
+  const ROLE = '00000000-0000-4000-8000-000000e515a1'
+  const USER = '00000000-0000-4000-8000-000000e515a2'
+  const PERIOD = '00000000-0000-4000-8000-000000e515a3'
+  const COMPANY = '00000000-0000-4000-8000-000000e515a4'
+  const BATCH = '00000000-0000-4000-8000-000000e515a5'
+  const ACCOUNT = '00000000-0000-4000-8000-000000e515a6'
+  const BANK_TX = '00000000-0000-4000-8000-000000e515a7'
+  const RECEIPT = '00000000-0000-4000-8000-000000e515a8'
+  const EXPORT = '00000000-0000-4000-8000-000000e515a9'
+  const BRAND = '00000000-0000-4000-8000-000000e515aa'
+  const LOG_EXPORT = '00000000-0000-4000-8000-000000e515b1'
+  const LOG_BRAND = '00000000-0000-4000-8000-000000e515b2'
+  const LOG_RECEIPT = '00000000-0000-4000-8000-000000e515b3'
+  const LOG_BANK_TX = '00000000-0000-4000-8000-000000e515b4'
   const lr5User = sessionUser({ id: USER, organizationId: ORG, roleId: ROLE })
 
   beforeAll(async () => {
     if (!url) return
     const tx = db()
     await tx.$executeRawUnsafe(`
-      INSERT INTO organizations (id, name, tax_id, address) VALUES ('${ORG}', 'LR5Test', '9999999995300', 'ที่อยู่ LR5')
+      INSERT INTO organizations (id, name, tax_id, address) VALUES ('${ORG}', 'LR5Test', '9999999995150', 'ที่อยู่ LR5')
       ON CONFLICT (id) DO NOTHING`)
     await tx.$executeRawUnsafe(`
       INSERT INTO roles (id, organization_id, name, role_group, is_seed)
@@ -332,7 +332,7 @@ suite('ทดสอบซ้ำ local LR5-01 — ชุดส่งบัญช�
       VALUES ('${PERIOD}', '${ORG}', 'ตุลาคม 2569', 2569, 10, '${USER}') ON CONFLICT (id) DO NOTHING`)
     await tx.$executeRawUnsafe(`
       INSERT INTO finance_companies (id, organization_id, name, short_name, tax_id, created_by)
-      VALUES ('${COMPANY}', '${ORG}', 'ไฟแนนซ์ LR5', 'LR5', '9999999995301', '${USER}') ON CONFLICT (id) DO NOTHING`)
+      VALUES ('${COMPANY}', '${ORG}', 'ไฟแนนซ์ LR5', 'LR5', '9999999995151', '${USER}') ON CONFLICT (id) DO NOTHING`)
     await tx.$executeRawUnsafe(`
       INSERT INTO billing_batches (id, organization_id, company_id, period, due_date, created_by, batch_number)
       VALUES ('${BATCH}', '${ORG}', '${COMPANY}', '2569-10', '2026-10-31', '${USER}', 'BL-2569-010') ON CONFLICT (id) DO NOTHING`)
