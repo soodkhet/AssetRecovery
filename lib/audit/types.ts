@@ -1,5 +1,6 @@
 import type { AuditAction } from '@/lib/generated/prisma/enums'
 import type { AuditJsonValue } from '@/lib/audit/diff'
+import type { AuditTargetType } from '@/lib/audit/target-refs'
 
 /**
  * โครงข้อมูล audit 9 fields บังคับ (`90` §13 · `02` §10 · Rule 03)
@@ -11,8 +12,11 @@ export interface AuditEntry {
   actorId: string | null
   actorRole: string | null
   action: AuditAction
-  /** ชื่อ**ตาราง**ปลายทาง (snake_case ตาม `02`) เช่น 'users' | 'cases' | 'expenses' */
-  targetType: string
+  /**
+   * ชื่อ**ตาราง**ปลายทาง (snake_case ตาม `02`) เช่น 'users' | 'cases' | 'expenses' — จำกัดเฉพาะชนิดที่บันทึกการใช้งาน
+   * แปลงเป็นชื่อที่อ่านได้ (`AuditTargetType` · mytester5 รีวิว H5-01 — ตรวจตอน compile)
+   */
+  targetType: AuditTargetType
   targetId: string | null
   /** snapshot ก่อน — ส่ง record ดิบจาก Prisma ได้เลย (Date/Decimal ถูกแปลงให้เอง) */
   before?: unknown

@@ -2,6 +2,7 @@ import type { Prisma } from '@/lib/generated/prisma/client'
 import { diffRecords, toAuditJson } from '@/lib/audit/diff'
 import type { AuditJsonValue } from '@/lib/audit/diff'
 import type { AuditEntry, AuditRecordData } from '@/lib/audit/types'
+import type { AuditTargetType } from '@/lib/audit/target-refs'
 import { validateAuditEntry } from '@/lib/audit/validate'
 import { getRequestMeta } from '@/lib/auth/request-meta'
 import { prisma } from '@/lib/prisma'
@@ -86,7 +87,7 @@ export interface DocumentExportAudit {
   readonly actor: ExportAuditActor
   /** request ของ endpoint ดาวน์โหลด — ใช้เก็บ ip/user-agent (ไม่ส่ง = null) */
   readonly request?: Request
-  readonly targetType: string
+  readonly targetType: AuditTargetType
   readonly targetId: string | null
   /** ชนิดเอกสาร/ไฟล์ เช่น `handover_note_pdf` — แยกได้ว่านำไฟล์อะไรออกไป */
   readonly document: string

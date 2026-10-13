@@ -12,7 +12,7 @@ import {
   type DocumentCounts,
 } from '@/lib/cases/case'
 import { CaseError } from '@/lib/cases/errors'
-import { calculateProjectedRevenue } from '@/lib/cases/projected-revenue'
+import { calculateProjectedRevenue, caseProjectedRevenue, caseServiceFeeSnapshotOf } from '@/lib/cases/projected-revenue'
 import {
   caseScopeWhere,
   detailSelect,
@@ -281,9 +281,15 @@ export async function changeCaseStatus(
       if (teamChanged) auditAfter.teamChangeReason = teamChangeReason
 
       // **snapshot ค่าบริการตอน approved** (`10` §9.2) — ตัวเลขจริงลงที่เคส ไม่ใช่แค่ template_id
-      Object.assign(data, serviceFeeSnapshotData(template))
+      const snapshot = serviceFeeSnapshotData(template)
+      Object.assign(data, snapshot)
       Object.assign(auditBefore, serviceFeeSnapshotAudit(row))
-      Object.assign(auditAfter, serviceFeeSnapshotData(template))
+      Object.assign(auditAfter, snapshot)
+      // mytester5 รีวิว B5-01 — ประมาณการที่เก็บไว้เขียนใหม่จาก snapshot (ตัวเดียวกับหน้าเคส/พอร์ทัล/รายงาน SLA)
+      const fromSnapshot = projectedRevenueFromSnapshot(snapshot, row.debtAmountSatang, projected)
+      data.projectedRevenueSatang = fromSnapshot.amountSatang
+      data.projectedRevenueSource = fromSnapshot.source
+      auditAfter.projectedRevenueSatang = fromSnapshot.amountSatang
       auditReason = joinAuditReasons(
         teamChanged ? `เปลี่ยนทีมจากที่ระบบเสนอ: ${teamChangeReason}` : null,
         auditReason ?? snapshotReason(template.templateName, template.templateVersion),
@@ -326,12 +332,15 @@ export async function changeCaseStatus(
     // แต่ละรอบคิดค่าบริการอิสระเสมอ (มติ PO U125 — ไม่มีสวิตช์แล้ว) ⇒ snapshot ใหม่ที่จุด approved ของรอบนี้
     // รอบใหม่ได้ Revenue ใบใหม่ของตัวเอง (unique ต่อ case + tracking_round) ไม่หักกลบกับรอบก่อน
     recycleTemplate = await loadCompanyTemplate(organizationId, row.companyId)
-    Object.assign(data, serviceFeeSnapshotData(recycleTemplate))
+    const recycleSnapshot = serviceFeeSnapshotData(recycleTemplate)
+    Object.assign(data, recycleSnapshot)
     Object.assign(auditBefore, serviceFeeSnapshotAudit(row))
-    Object.assign(auditAfter, serviceFeeSnapshotData(recycleTemplate))
-    const projected = calculateProjectedRevenue(recycleTemplate, {
-      debtAmountSatang: row.debtAmountSatang,
-    })
+    Object.assign(auditAfter, recycleSnapshot)
+    const projected = projectedRevenueFromSnapshot(
+      recycleSnapshot,
+      row.debtAmountSatang,
+      calculateProjectedRevenue(recycleTemplate, { debtAmountSatang: row.debtAmountSatang }),
+    )
     data.projectedRevenueSatang = projected.amountSatang
     data.projectedRevenueSource = projected.source
     auditReason = auditReason ?? snapshotReason(recycleTemplate.templateName, recycleTemplate.templateVersion)
@@ -457,6 +466,19 @@ function serviceFeeSnapshotData(template: CompanyTemplate) {
     serviceFeeBasisSnapshot: template.basis,
     serviceFeeFailFeeSatang: template.failFeeSatang,
   }
+}
+
+/** ประมาณการจาก snapshot ที่เพิ่งเขียน — `computed` = ผลจากเทมเพลตเดียวกัน (ยืมเวอร์ชันไว้แสดงในป้ายสูตร) */
+function projectedRevenueFromSnapshot(
+  snapshot: ReturnType<typeof serviceFeeSnapshotData>,
+  debtAmountSatang: number | null,
+  computed: { amountSatang: number | null; source: string },
+) {
+  return caseProjectedRevenue(
+    caseServiceFeeSnapshotOf(snapshot),
+    { debtAmountSatang },
+    { amountSatang: computed.amountSatang, source: computed.source },
+  )
 }
 
 function serviceFeeSnapshotAudit(row: CaseDetailRow) {

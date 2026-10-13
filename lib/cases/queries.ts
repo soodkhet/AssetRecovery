@@ -24,7 +24,8 @@ import {
 import { normalizeCaseRef } from '@/lib/cases/case-ref'
 import { CaseError } from '@/lib/cases/errors'
 import {
-  caseProjectedRevenueSatang,
+  caseProjectedRevenue,
+  caseServiceFeeSnapshotOf,
   parseProjectedRevenueSource,
   projectedRevenueSourceText,
 } from '@/lib/cases/projected-revenue'
@@ -472,6 +473,19 @@ function documentCounts(documents: CaseDetailRow['documents']): DocumentCounts {
   return countDocuments(documents)
 }
 
+function projectedRevenueFields(row: CaseDetailRow) {
+  const projected = caseProjectedRevenue(
+    caseServiceFeeSnapshotOf(row),
+    { debtAmountSatang: row.debtAmountSatang },
+    { amountSatang: row.projectedRevenueSatang, source: row.projectedRevenueSource },
+  )
+  return {
+    projectedRevenueSatang: projected.amountSatang,
+    projectedRevenueSource: projected.source,
+    projectedRevenueSourceLabel: projected.source === null ? null : projectedRevenueSourceText(projected.source, null),
+  }
+}
+
 export function toDetailDto(row: CaseDetailRow): CaseDetailDto {
   const assetImeiSerial = joinAssetIdentifier(row.imei, row.serialNo)
   return {
@@ -508,20 +522,9 @@ export function toDetailDto(row: CaseDetailRow): CaseDetailDto {
     assetIdentifierWarning: assetIdentifierWarning(row.serialNo),
     activeAssetImeiWarning: null,
     activeCaseImeiWarning: null,
-    // mytester5 B5-01 — เคสที่รับแล้วคิดจาก snapshot ค่าบริการของเคส (ไม่ใช่ยอดจากเทมเพลตก่อนรับเคส)
-    projectedRevenueSatang: caseProjectedRevenueSatang(
-      {
-        serviceFeeModelSnapshot: row.serviceFeeModelSnapshot,
-        serviceFeeBaseSatang: row.serviceFeeBaseSatang,
-        serviceFeeRatePct: row.serviceFeeRatePct === null ? null : Number(row.serviceFeeRatePct),
-        serviceFeeBasisSnapshot: row.serviceFeeBasisSnapshot,
-      },
-      { debtAmountSatang: row.debtAmountSatang },
-      row.projectedRevenueSatang,
-    ).amountSatang,
-    projectedRevenueSource: row.projectedRevenueSource,
-    projectedRevenueSourceLabel:
-      row.projectedRevenueSource === null ? null : projectedRevenueSourceText(row.projectedRevenueSource, null),
+    // mytester5 B5-01 (+ รีวิว) — เคสที่รับแล้ว: ยอด + ที่มา (ป้ายสูตร) มาจาก snapshot ค่าบริการของเคส
+    // ตัวเดียวกับที่เขียนตอนรับเคส/พอร์ทัล/รายงาน SLA · เคสเก่าที่รับก่อนแก้ก็คิดจาก snapshot ได้ (ไม่ต้องย้ายข้อมูล)
+    ...projectedRevenueFields(row),
     suggestedTeamId: row.suggestedTeamId,
     assignedTeamId: row.assignedTeamId,
     teamChangeReason: row.teamChangeReason,

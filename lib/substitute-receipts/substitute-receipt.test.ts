@@ -9,7 +9,9 @@ import {
   canViewSubstituteReceipt,
   DEFAULT_SUBSTITUTE_RECEIPT_MAX_PER_DOC_SATANG,
   DEFAULT_SUBSTITUTE_RECEIPT_MAX_PER_MONTH_SATANG,
+  hasActiveSubstituteReceipt,
   isSubstituteReceiptActive,
+  isSubstituteReceiptRefActive,
   requireSubstituteReceiptCancelReason,
   substituteReceiptBadgeText,
   substituteReceiptCancelProblem,
@@ -321,5 +323,26 @@ describe('มติ PO U117 ข้อ 1 — ฟอร์ม "ออกใบใ�
     expect(substituteLinesToDrafts([], '2026-10-06')).toEqual([
       { key: 'line-0', lineDate: '2026-10-06', description: '', amountBaht: '', note: '' },
     ])
+  })
+})
+
+describe('ใบรับรองแทนใบเสร็จที่ยังมีผลของรายการ (mytester5 รีวิว D-OUT5-01)', () => {
+  it('hasActiveSubstituteReceipt — ไม่นับใบที่ยกเลิก/ลบ', () => {
+    expect(hasActiveSubstituteReceipt([])).toBe(false)
+    expect(hasActiveSubstituteReceipt([{ status: 'cancelled', deletedAt: null }])).toBe(false)
+    expect(hasActiveSubstituteReceipt([{ status: 'pending_signature', deletedAt: new Date() }])).toBe(false)
+    expect(
+      hasActiveSubstituteReceipt([
+        { status: 'cancelled', deletedAt: null },
+        { status: 'signed', deletedAt: null },
+      ]),
+    ).toBe(true)
+    expect(hasActiveSubstituteReceipt([{ status: 'pending_signature' }])).toBe(true)
+  })
+
+  it('isSubstituteReceiptRefActive — ใบบนการ์ดที่ยกเลิกแล้ว = ไม่มีผล', () => {
+    expect(isSubstituteReceiptRefActive(null)).toBe(false)
+    expect(isSubstituteReceiptRefActive({ status: 'cancelled' })).toBe(false)
+    expect(isSubstituteReceiptRefActive({ status: 'pending_signature' })).toBe(true)
   })
 })

@@ -17,6 +17,7 @@ import {
 import { EXPENSE_RECEIPT_ACCEPT } from '@/lib/field/media-upload'
 import type { FieldExpenseDto } from '@/lib/field/types'
 import { FieldUploadError, uploadExpenseReceipt } from '@/lib/field/upload-client'
+import { isSubstituteReceiptRefActive } from '@/lib/substitute-receipts/substitute-receipt'
 import { fmtDate } from '@/lib/format/datetime'
 import { bahtInputError, fmtSatangSymbol, parseBahtInput, toBahtInput } from '@/lib/format/money'
 
@@ -41,6 +42,8 @@ export function ResubmitExpenseModal({
   const fileRef = useRef<HTMLInputElement>(null)
   const editable = isSeparateExpense(expense)
   const isHotel = expense.expenseType === 'hotel'
+  // mytester5 รีวิว D-OUT5-01 — ใช้ใบรับรองแทนใบเสร็จที่ยังมีผล = ไม่มีใบเสร็จจริง ⇒ ไม่มีช่อง "ใบเสร็จออกในนามบริษัท"
+  const showReceiptName = isHotel && !isSubstituteReceiptRefActive(expense.substituteReceipt)
   const [nightsText, setNightsText] = useState(() => String(expense.hotelNights))
   const [receiptInCompanyName, setReceiptInCompanyName] = useState(() => expense.receiptInCompanyName)
   const [amountBaht, setAmountBaht] = useState(() => toBahtInput(expense.grossSatang))
@@ -101,7 +104,7 @@ export function ResubmitExpenseModal({
         jsonRequest('POST', {
           ...(amountSatang === undefined ? {} : { amountSatang }),
           ...(hotelNights === undefined ? {} : { hotelNights }),
-          ...(isHotel ? { receiptInCompanyName } : {}),
+          ...(showReceiptName ? { receiptInCompanyName } : {}),
           ...(receiptFileUrl === undefined ? {} : { receiptFileUrl }),
           note: note.trim(),
         }),
@@ -203,7 +206,7 @@ export function ResubmitExpenseModal({
               />
             </Field>
 
-            {isHotel && (
+            {showReceiptName && (
               <ReceiptInCompanyNameCheckbox checked={receiptInCompanyName} onChange={setReceiptInCompanyName} />
             )}
           </>

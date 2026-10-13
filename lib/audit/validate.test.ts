@@ -29,7 +29,7 @@ describe('validateAuditEntry — 9 fields บังคับ (`90` §13)', () =>
   })
 
   it('target_type ว่าง → REQUIRED_MISSING', () => {
-    expectAuditError(() => validateAuditEntry({ ...base, targetType: '' }), 'REQUIRED_MISSING')
+    expectAuditError(() => validateAuditEntry({ ...base, targetType: '' as unknown as AuditEntry['targetType'] }), 'REQUIRED_MISSING')
   })
 
   it('entry ปกติผ่านและคืน reason = null', () => {

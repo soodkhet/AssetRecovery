@@ -54,6 +54,7 @@ import { prisma } from '@/lib/prisma'
 import { expenseReceiptRule } from '@/lib/uploads/rules'
 import { verifyUploadedFile } from '@/lib/uploads/verify'
 import { issueSubstituteReceipt, substituteReceiptRefOf, substituteReceiptsRelationSelect } from '@/lib/substitute-receipts/queries'
+import { hasActiveSubstituteReceipt } from '@/lib/substitute-receipts/substitute-receipt'
 
 /**
  * รายการเบิกของงานภาคสนาม (`41` §6.6 · §7.9 · §7.10 · §10.1) — ชั้น DB
@@ -1083,6 +1084,7 @@ export async function resubmitFieldExpense(
   // มติ PO 06/10/2569 U89 — ค่าที่พักที่ส่งใหม่ต้องไม่เกินเพดานของ snapshot เดิม (ใบเก่าที่ยังไม่มี snapshot → resolve ณ วันที่เข้าพัก)
   // มติ PO O50 — แก้จำนวนคืนได้ตอนส่งใหม่ (เฉพาะค่าที่พัก) · ตรวจเพดานด้วยจำนวนคืนหลังแก้
   const isHotel = current.expenseType === 'hotel'
+  const usesSubstituteReceipt = hasActiveSubstituteReceipt(current.substituteReceipts)
   const nextHotelNights = isHotel && input.hotelNights !== undefined ? input.hotelNights : current.hotelNights
   let hotelCap: HotelCapSnapshot | null = null
   if (isHotel) {
@@ -1134,9 +1136,12 @@ export async function resubmitFieldExpense(
         ...(editable && input.amountSatang !== undefined ? { grossSatang: input.amountSatang } : {}),
         ...(isHotel && input.hotelNights !== undefined ? { hotelNights: input.hotelNights } : {}),
         // มติ PO U96 #14 — แก้ช่อง "ใบเสร็จในนามบริษัท" ได้ตอนส่งใหม่ (เฉพาะค่าที่พัก)
-        ...(isHotel && input.receiptInCompanyName !== undefined
-          ? { receiptInCompanyName: input.receiptInCompanyName }
-          : {}),
+        // mytester5 รีวิว D-OUT5-01 — ใช้ใบรับรองแทนใบเสร็จที่ยังมีผล ⇒ ไม่มีใบเสร็จจริง บังคับ false (ไม่รับค่าจากผู้เรียก)
+        ...(isHotel && usesSubstituteReceipt
+          ? { receiptInCompanyName: false }
+          : isHotel && input.receiptInCompanyName !== undefined
+            ? { receiptInCompanyName: input.receiptInCompanyName }
+            : {}),
         // มติ PO U143 — ใบเสร็จใหม่ผ่านการตรวจแล้ว ⇒ ล้างเครื่องหมาย "ไม่ผ่านการตรวจ" ของข้อมูลเก่า
         ...(newReceiptPath !== null
           ? { receiptFileUrl: newReceiptPath, receiptFileHash: receiptHash, receiptFileUnverified: false }

@@ -19,6 +19,7 @@ import {
   signedAdjustmentDisplaySatang,
   vatRateRefLabel,
   auditOrgLevelTargetLabel,
+  UNLINKED_ID_DOCUMENT_TARGET_LABEL,
   auditTargetRef,
   auditValueRefs,
   bankAccountRefLabel,
@@ -145,6 +146,13 @@ describe('mytester5 A5-01 — รายการตั้งค่า + ค่�
     expect(auditOrgLevelTargetLabel({ targetType: 'organizations', targetId: ID }, ORG)).toBeNull()
     expect(auditOrgLevelTargetLabel({ targetType: 'cases', targetId: ORG }, ORG)).toBeNull()
     expect(auditOrgLevelTargetLabel({ targetType: 'organizations', targetId: null }, ORG)).toBeNull()
+    // mytester5 รีวิว H5-01 — เปิดดูเอกสารยืนยันตัวตนที่ยังไม่ผูกผู้รับ (ลงที่องค์กร) ⇒ ป้ายเฉพาะ ไม่ใช่ "ข้อมูลองค์กร"
+    const idDocView = { targetType: 'organizations', targetId: ORG, action: 'view', afterData: { kind: 'payee_id_document' } }
+    expect(auditOrgLevelTargetLabel(idDocView, ORG)).toBe(UNLINKED_ID_DOCUMENT_TARGET_LABEL)
+    expect(UNLINKED_ID_DOCUMENT_TARGET_LABEL).toBe('เอกสารยืนยันตัวตน (ยังไม่ผูกผู้รับ)')
+    expect(auditOrgLevelTargetLabel({ ...idDocView, action: 'update' }, ORG)).toBe('ข้อมูลองค์กร')
+    expect(auditOrgLevelTargetLabel({ ...idDocView, afterData: { kind: 'company_document' } }, ORG)).toBe('ข้อมูลองค์กร')
+    expect(auditOrgLevelTargetLabel({ ...idDocView, afterData: null }, ORG)).toBe('ข้อมูลองค์กร')
   })
 
   it('ค่าก่อน/หลังที่อ้างรายการตั้งค่า (tax_profile_id ฯลฯ) ถูกค้นชื่อด้วย', () => {

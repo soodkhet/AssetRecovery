@@ -78,12 +78,16 @@ export type AuditRefType = (typeof AUDIT_REF_TYPES)[number]
 const REF_TYPE_SET: ReadonlySet<string> = new Set(AUDIT_REF_TYPES)
 
 /** ชื่อเป้าหมายแบบเอกพจน์ที่บางโมดูลใช้ใน audit → ตารางจริง */
-const TARGET_TYPE_ALIAS: Readonly<Record<string, AuditRefType>> = {
+const TARGET_TYPE_ALIAS_MAP = {
   billing_batch: 'billing_batches',
   revenue: 'revenues',
   expense: 'expenses',
   payout_batch: 'payout_batches',
-}
+} as const satisfies Record<string, AuditRefType>
+
+export type AuditTargetTypeAlias = keyof typeof TARGET_TYPE_ALIAS_MAP
+
+const TARGET_TYPE_ALIAS: Readonly<Record<string, AuditRefType>> = TARGET_TYPE_ALIAS_MAP
 
 /** ชื่อเป้าหมายเอกพจน์ทั้งหมดที่รู้จัก (ใช้ในเทสต์ความครบ) */
 export const AUDIT_TARGET_TYPE_ALIASES: readonly string[] = Object.keys(TARGET_TYPE_ALIAS)
@@ -309,13 +313,17 @@ export function cashReceiptRefLabel(batchNumber: string, amountText: string): st
  * ให้แสดง (เดิมขึ้น "00000000") — ใช้ชื่อหมวดของค่าตั้งแทน
  * เกณฑ์ SLA เก็บในตาราง `assignment_policy_settings` (`13` §6.14 — คอลัมน์ `sla_alert_hours`) จึงใช้ป้ายรวมทั้งสองหน้าจอ
  */
-const ORG_LEVEL_TARGET_LABEL: Readonly<Record<string, string>> = {
+const ORG_LEVEL_TARGET_LABEL_MAP = {
   organizations: 'ข้อมูลองค์กร',
   finance_policy_settings: 'นโยบายการเงิน',
   assignment_policy_settings: 'นโยบายการมอบหมายงาน / SLA',
   data_retention_settings: 'ระยะเก็บเอกสารลูกหนี้',
   device_catalog_settings: 'ค่าตั้ง Model Phone',
-}
+} as const satisfies Record<string, string>
+
+export type AuditOrgLevelTargetType = keyof typeof ORG_LEVEL_TARGET_LABEL_MAP
+
+const ORG_LEVEL_TARGET_LABEL: Readonly<Record<string, string>> = ORG_LEVEL_TARGET_LABEL_MAP
 
 /** ชนิดค่าตั้งระดับองค์กรที่แสดงชื่อหมวดแทนชื่อรายการ (ใช้ในเทสต์ความครบ) */
 export const AUDIT_ORG_LEVEL_TARGET_TYPES: readonly string[] = Object.keys(ORG_LEVEL_TARGET_LABEL)
@@ -324,10 +332,22 @@ export const AUDIT_ORG_LEVEL_TARGET_TYPES: readonly string[] = Object.keys(ORG_L
  * mytester5 H5-01 — target_type ที่ **ตั้งใจไม่แปลงชื่อ** (แสดง id ย่อตามสเปก) พร้อมเหตุผล
  * เทสต์ความครบ (`target-refs.test.ts`) อนุญาตเฉพาะชุดนี้ — เพิ่มชนิดใหม่ใน audit ต้องมีตัวแปลงหรือเหตุผลที่นี่
  */
-export const AUDIT_TARGET_TYPES_WITHOUT_REF: Readonly<Record<string, string>> = {
+const TARGET_TYPES_WITHOUT_REF_MAP = {
   // `target_id` = id ที่ผู้ใช้พอร์ทัลส่งมา (สุ่ม/ของบริษัทอื่น) — ห้ามค้นชื่อ (ไม่ยืนยันว่ามีจริง) · ปกติเป็น null
   portal: 'ไม่ใช่ตาราง — การเข้าถึงพอร์ทัลที่ถูกปฏิเสธ',
-}
+} as const satisfies Record<string, string>
+
+export const AUDIT_TARGET_TYPES_WITHOUT_REF: Readonly<Record<string, string>> = TARGET_TYPES_WITHOUT_REF_MAP
+
+/**
+ * mytester5 รีวิว H5-01 — `target_type` ที่เขียนลงบันทึกการใช้งานได้ (ตรวจตอน compile ผ่าน `AuditEntry.targetType`):
+ * ชนิดที่มีตัวค้นชื่อ · ชื่อเอกพจน์ที่รู้จัก · ค่าตั้งระดับองค์กร · ชุดยกเว้นที่มีเหตุผล — เพิ่มชนิดใหม่ต้องเพิ่มตัวแปลงชื่อก่อน
+ */
+export type AuditTargetType =
+  | AuditRefType
+  | AuditTargetTypeAlias
+  | AuditOrgLevelTargetType
+  | keyof typeof TARGET_TYPES_WITHOUT_REF_MAP
 
 /**
  * mytester5 H5-01 — เป้าหมายที่แถวต้นทางถูกลบจริงหลังใช้งาน (ร่างปิดงานถูกลบเมื่อส่งปิดงาน) ⇒ ใช้ค่าอ้างอิงใน
@@ -356,12 +376,26 @@ export function auditRefKey(ref: AuditRef): string {
   return `${ref.type}:${ref.id.toLowerCase()}`
 }
 
+/**
+ * mytester5 รีวิว H5-01 — เปิดดูเอกสารยืนยันตัวตนที่ยังไม่ผูกผู้รับเงิน ลง audit ที่องค์กร (`buildPersonalFileViewAudit()`)
+ * ⇒ ป้ายเฉพาะแทน "ข้อมูลองค์กร" (ไม่ได้แตะข้อมูลองค์กรจริง)
+ */
+export const UNLINKED_ID_DOCUMENT_TARGET_LABEL = 'เอกสารยืนยันตัวตน (ยังไม่ผูกผู้รับ)'
+
+function isUnlinkedIdDocumentView(row: { targetType: string; action?: string; afterData?: unknown }): boolean {
+  if (row.targetType !== 'organizations' || row.action !== 'view') return false
+  const data = row.afterData
+  if (data === null || typeof data !== 'object' || Array.isArray(data)) return false
+  return (data as Record<string, unknown>).kind === 'payee_id_document'
+}
+
 /** ป้ายของค่าตั้งระดับองค์กร — `target_id` ไม่ใช่ id ขององค์กรผู้เรียก = `null` (ใช้ตัวแปลงปกติ) */
 export function auditOrgLevelTargetLabel(
-  row: { targetType: string; targetId: string | null },
+  row: { targetType: string; targetId: string | null; action?: string; afterData?: unknown },
   organizationId: string,
 ): string | null {
   if (row.targetId === null || row.targetId.toLowerCase() !== organizationId.toLowerCase()) return null
+  if (isUnlinkedIdDocumentView(row)) return UNLINKED_ID_DOCUMENT_TARGET_LABEL
   return ORG_LEVEL_TARGET_LABEL[row.targetType] ?? null
 }
 
