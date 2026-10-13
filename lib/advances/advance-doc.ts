@@ -49,6 +49,8 @@ export interface AdvanceDocSource {
   usedSatang: number
   returnSatang: number
   purpose: string
+  /** mytester DO-07 — เลขเคสที่อ้างอิง (ไม่บังคับ) · ไม่มี = ไม่แสดงแถว "อ้างอิงเคส" */
+  caseRef?: string | null
   dueClearDate: Date
   createdAt: Date
   approvedAt: Date | null
@@ -102,6 +104,7 @@ export function buildAdvanceRequestDoc(source: AdvanceDocSource, letterhead: Doc
       { label: 'กำหนดเคลียร์ยอด', value: fmtDate(source.dueClearDate) },
       { label: 'ทีม', value: source.teamName ?? '-' },
       { label: 'วันที่ขอเบิก', value: fmtDate(source.createdAt) },
+      ...(source.caseRef == null ? [] : [{ label: 'อ้างอิงเคส', value: source.caseRef }]),
     ],
     parties: [
       organizationDocParty('จ่ายโดย', letterhead),

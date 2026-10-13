@@ -84,7 +84,7 @@ export function AdvanceReviewModal({
       open
       onClose={close}
       title={mode === 'approve' ? 'อนุมัติคำขอเงินทดรองจ่าย' : 'ปฏิเสธคำขอเงินทดรองจ่าย'}
-      description={advance.purpose}
+      description={advance.caseRef === null ? advance.purpose : `${advance.purpose} · เคส ${advance.caseRef}`}
       footer={
         <>
           <Button variant="secondary" onClick={close}>

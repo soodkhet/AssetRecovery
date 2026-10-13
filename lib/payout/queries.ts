@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { advanceExcessItemLabel, advanceExcessSource } from '@/lib/advances/advance'
 import { assertPeriodOpenAt } from '@/lib/accounting/period-guard'
 import { loadMonthToDate } from '@/lib/payout/month-to-date-queries'
 import { lockOutstandingRecoveries, releasePayoutRecoveryOffsets } from '@/lib/payout/recoveries'
@@ -202,8 +203,9 @@ const itemSelect = {
       user: { select: { fullName: true, email: true, phone: true, team: { select: { name: true } } } },
     },
   },
-  expense: { select: { expenseType: true, case: { select: { caseRef: true } } } },
-  advance: { select: { purpose: true } },
+  // mytester DO-07 — หมายเหตุ (คำขอเบิกส่วนเกินเงินทดรองอ้างเลข ADV/เคสในหมายเหตุ) + เคสที่เงินทดรองอ้างอิง
+  expense: { select: { expenseType: true, revisionNote: true, case: { select: { caseRef: true } } } },
+  advance: { select: { purpose: true, case: { select: { caseRef: true } } } },
 } as const
 
 type ItemRow = Prisma.PayoutBatchItemGetPayload<{ select: typeof itemSelect }>
@@ -283,9 +285,15 @@ function toItemDto(row: ItemRow): PayoutBatchItemDto {
     teamName: row.payee.user.team?.name ?? null,
     description:
       source === 'expense'
-        ? (row.expense === null ? '' : EXPENSE_TYPE_LABEL[row.expense.expenseType])
+        ? (row.expense === null
+            ? ''
+            : (advanceExcessItemLabel(row.expense.revisionNote) ?? EXPENSE_TYPE_LABEL[row.expense.expenseType]))
         : (row.advance?.purpose ?? ''),
-    caseRef: row.expense?.case?.caseRef ?? null,
+    caseRef:
+      row.expense?.case?.caseRef ??
+      advanceExcessSource(row.expense?.revisionNote ?? null)?.caseRef ??
+      row.advance?.case?.caseRef ??
+      null,
     trackingRound: row.trackingRound,
     grossSatang: row.grossSatang,
     whtSatang: row.whtSatang,

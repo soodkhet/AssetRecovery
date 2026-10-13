@@ -1,13 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { usePermission } from '@/components/auth/permission-provider'
 import { OnBehalfPayeeSelect } from '@/components/payees/on-behalf-payee-select'
-import { Button, Field, InlineAlert, Input, Modal, Textarea, useToast } from '@/components/ui'
+import { Button, Field, InlineAlert, Input, Modal, Select, Textarea, useToast } from '@/components/ui'
 import { advanceCreateAccess, minDueClearInputDate } from '@/lib/advances/advance'
-import { advanceRequestErrorText } from '@/lib/advances/advance-ui'
+import { advanceCaseOptionLabel, advanceRequestErrorText } from '@/lib/advances/advance-ui'
 import { advanceCreateSchema } from '@/lib/advances/schemas'
-import type { AdvanceDto } from '@/lib/advances/types'
+import type { AdvanceCaseOptionDto, AdvanceDto } from '@/lib/advances/types'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { toFieldErrors } from '@/lib/api/validation'
 import { parseBahtInput } from '@/lib/format/money'
@@ -22,6 +22,8 @@ import { parseBahtInput } from '@/lib/format/money'
  * - มติ PO U153/U160 — ผู้ที่ขอแทนผู้อื่นได้ (`manage:approve_advance` หรือ Superadmin) เลือกผู้รับเงินได้
  *   · ถ้าขอให้ตัวเองไม่ได้ (ไม่ถือ `manage:request_advance` เช่น การเงิน) ช่องผู้รับ = บังคับเลือก
  *   · server ตรวจซ้ำ (ไม่มีสิทธิ์ตามกรณี = 403)
+ * - mytester DO-07 — ช่อง "อ้างอิงเคส (ไม่บังคับ)" เฉพาะการขอให้ตัวเอง: ตัวเลือก = เคสที่ตัวเองรับผิดชอบอยู่
+ *   (`GET /api/advances/case-options`) · ขอแทนผู้อื่นไม่แสดงช่องนี้ · server ตรวจ scope ของเคสซ้ำเสมอ
  */
 export function AdvanceFormModal({ open, onClose, onCreated }: {
   open: boolean
@@ -35,10 +37,29 @@ export function AdvanceFormModal({ open, onClose, onCreated }: {
   const [amount, setAmount] = useState('')
   const [purpose, setPurpose] = useState('')
   const [dueClearDate, setDueClearDate] = useState('')
+  const [caseId, setCaseId] = useState('')
+  // `null` = กำลังโหลด/โหลดไม่ได้ (ช่องยังใช้ได้ — เว้นว่าง = ไม่อ้างอิงเคส)
+  const [caseOptions, setCaseOptions] = useState<AdvanceCaseOptionDto[] | null>(null)
+  const [caseOptionsFailed, setCaseOptionsFailed] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
   // error จาก API ค้างบนฟอร์ม (UAT BUG-046) — toast หายเร็วเกินกว่าพนักงานบนมือถือจะอ่านทัน
   const [submitError, setSubmitError] = useState<{ title: string; message: string } | null>(null)
+
+  const forSelf = access.self && payeeId === ''
+
+  useEffect(() => {
+    if (!open || !access.self) return
+    let cancelled = false
+    void callApi<AdvanceCaseOptionDto[]>('/api/advances/case-options').then((result) => {
+      if (cancelled) return
+      setCaseOptions(result.data ?? null)
+      setCaseOptionsFailed(result.data === undefined)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [open, access.self])
 
   if (!open) return null
 
@@ -48,6 +69,8 @@ export function AdvanceFormModal({ open, onClose, onCreated }: {
       purpose: purpose.trim(),
       dueClearDate,
       payeeId: payeeId === '' ? null : payeeId,
+      // ขอแทนผู้อื่นไม่มีช่องเคส ⇒ ไม่ส่งค่าค้างจากตอนเลือกเป็นของตัวเอง
+      caseId: forSelf && caseId !== '' ? caseId : null,
     }
     const parsed = advanceCreateSchema.safeParse(payload)
     const needsPayee = !access.self && payload.payeeId === null
@@ -75,6 +98,7 @@ export function AdvanceFormModal({ open, onClose, onCreated }: {
     setPurpose('')
     setDueClearDate('')
     setPayeeId('')
+    setCaseId('')
     setErrors({})
     setSubmitError(null)
     if (result.data !== undefined) onCreated(result.data)
@@ -136,6 +160,29 @@ export function AdvanceFormModal({ open, onClose, onCreated }: {
             onChange={(event) => setPurpose(event.target.value)}
           />
         </Field>
+
+        {forSelf && (
+          <Field
+            label="อ้างอิงเคส (ไม่บังคับ)"
+            error={errors.caseId}
+            hint={
+              caseOptionsFailed
+                ? 'โหลดรายการเคสไม่สำเร็จ — ส่งคำขอโดยไม่อ้างอิงเคสได้'
+                : caseOptions !== null && caseOptions.length === 0
+                  ? 'ยังไม่มีเคสที่คุณรับผิดชอบอยู่'
+                  : 'เลือกได้เฉพาะเคสที่คุณรับผิดชอบอยู่'
+            }
+          >
+            <Select value={caseId} onChange={(event) => setCaseId(event.target.value)} disabled={caseOptions === null && !caseOptionsFailed}>
+              <option value="">{caseOptions === null && !caseOptionsFailed ? 'กำลังโหลดเคส...' : '— ไม่อ้างอิงเคส —'}</option>
+              {(caseOptions ?? []).map((option) => (
+                <option key={option.caseId} value={option.caseId}>
+                  {advanceCaseOptionLabel(option)}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        )}
 
         <Field label="กำหนดเคลียร์ยอด" required error={errors.dueClearDate}>
           <Input

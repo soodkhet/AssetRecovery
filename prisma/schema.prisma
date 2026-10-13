@@ -1989,6 +1989,8 @@ model Case {
   evidences      CaseEvidence[]
   travelOrigins  TravelOrigin[]
   closeCaseDraft CloseCaseDraft[]
+  /// mytester DO-07 — เงินทดรองที่อ้างอิงเคสนี้ (ไม่บังคับ)
+  advances       Advance[]
   assets         Asset[]
   expenses       Expense[]
   revenues       Revenue[]
@@ -2993,6 +2995,10 @@ model Advance {
   /// A4 (มติ PO 2026-08-12) — ขาจ่ายเงินทดรองผ่านรอบจ่าย (คู่กับ `payout_batch_items.advance_id`)
   payoutBatchItemId String? @map("payout_batch_item_id") @db.Uuid
 
+  /// mytester DO-07 (มติ 13/10/2569) — อ้างอิงเคส (ไม่บังคับ) · ต้องเป็นเคสที่ผู้รับเงินรับผิดชอบอยู่ตอนขอเบิก (ตรวจที่ service)
+  /// ข้อมูลอ้างอิงเท่านั้น — ไม่กระทบยอดเงิน/เกตรายได้ของเคส · migration `20261013100000_advance_case_ref`
+  caseId String? @map("case_id") @db.Uuid
+
   /// มติ PO 07/10/2569 U130 — snapshot หัวกระดาษองค์กรทั้งชุด ตอนอนุมัติ (ใบเบิกเงินทดรอง ADV) (โครงเดียวกับ `handover_lots.letterhead_snapshot`)
   /// NULL = ก่อน U130/ยังไม่ถึงจังหวะออก ⇒ พิมพ์ด้วยค่าปัจจุบัน · เขียนครั้งเดียว (trigger `document_letterhead_snapshot_write_once`)
   letterheadSnapshot Json? @map("letterhead_snapshot")
@@ -3005,6 +3011,7 @@ model Advance {
 
   organization        Organization @relation(fields: [organizationId], references: [id])
   payee               PayeeProfile @relation(fields: [payeeId], references: [id])
+  case                Case?        @relation(fields: [caseId], references: [id])
   approvedByUser      User?        @relation("advances_approved_by", fields: [approvedBy], references: [id])
   clearReviewedByUser User?        @relation("advances_clear_reviewed_by", fields: [clearReviewedBy], references: [id])
   createdByUser       User         @relation("advances_created_by", fields: [createdBy], references: [id])
@@ -3020,6 +3027,7 @@ model Advance {
   @@index([payeeId, status], map: "idx_advances_payee")
   @@index([organizationId, returnMethod, status], map: "idx_advances_org_return_method")
   @@index([organizationId, dueClearDate, status], map: "idx_advances_due")
+  @@index([organizationId, caseId], map: "idx_advances_org_case")
   @@map("advances")
 }
 

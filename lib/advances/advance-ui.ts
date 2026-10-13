@@ -224,3 +224,9 @@ export function advanceCardAmounts(advance: { requestedSatang: number; approvedS
     requestedNoteSatang: advance.approvedSatang === advance.requestedSatang ? null : advance.requestedSatang,
   }
 }
+
+/** mytester DO-07 — ข้อความตัวเลือกช่อง "อ้างอิงเคส" = เลขสัญญา · ชื่อลูกหนี้ (ไม่มีชื่อ = เลขสัญญาอย่างเดียว) */
+export function advanceCaseOptionLabel(option: { caseRef: string; debtorName: string | null }): string {
+  const name = option.debtorName?.trim() ?? ''
+  return name === '' ? option.caseRef : `${option.caseRef} · ${name}`
+}

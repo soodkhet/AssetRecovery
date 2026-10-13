@@ -1,5 +1,6 @@
 'use client'
 
+import { AdvanceCaseRef } from '@/components/finance/advance-case-ref'
 import { useState } from 'react'
 import { useUrlFilter } from '@/components/ui/use-url-filter'
 import { FINANCE_FILTER_PARAMS } from '@/lib/finance/operation-tabs'
@@ -55,14 +56,16 @@ import {
   bulkApproveSummary,
   claimStatusLabel,
   isResubmittedClaim,
+  claimRefLabel,
   claimSourceLabel,
+  claimTypeLabel,
   expenseRowActions,
   expenseRowHighlight,
   pendingClaimTotalSatang,
   type ClaimStatusFilter,
   whtAmountLabel,
 } from '@/lib/compensation/approval-ui'
-import { EXPENSE_TYPE_LABEL, expenseStatusBadgeGroup } from '@/lib/field/expense-ui'
+import { expenseStatusBadgeGroup } from '@/lib/field/expense-ui'
 import { fmtDate } from '@/lib/format/datetime'
 import { canViewFinanceTabSection } from '@/lib/finance/operation-tabs'
 import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
@@ -249,7 +252,7 @@ export function ApprovalTab() {
                       )}
                       <Td>
                         <p className="text-[11px] text-slate-400">{fmtDate(item.expenseDate)}</p>
-                        <RefText>{item.caseRef ?? '— ไม่ผูกเคส'}</RefText>
+                        <RefText>{claimRefLabel(item)}</RefText>
                         <p className="text-[10px] text-slate-400">{claimSourceLabel(item.calculationSource, item.note)}</p>
                         {/* มติ PO U103 — ป้าย "ใบรับรองแทนใบเสร็จ CRT-…" + สถานะฉบับเซ็น (ต้องเซ็นแล้วจึงอนุมัติได้) */}
                         {/* มติ PO U107 — การเงิน/ผู้บริหารยกเลิก/ออกใบใหม่แทนได้ก่อนอนุมัติจ่าย (server ตรวจซ้ำ) */}
@@ -264,7 +267,7 @@ export function ApprovalTab() {
                           </div>
                         )}
                       </Td>
-                      <Td>{EXPENSE_TYPE_LABEL[item.expenseType]}</Td>
+                      <Td>{claimTypeLabel(item)}</Td>
                       <Td>
                         <p className="font-semibold text-slate-900">{item.payeeName}</p>
                         {item.agentName !== null && <p className="text-[10px] text-slate-500">{item.agentName}</p>}
@@ -407,7 +410,10 @@ export function ApprovalTab() {
                         <p className="font-semibold text-slate-900">{advance.requesterName}</p>
                         {advance.teamName !== null && <p className="text-[10px] text-slate-500">{advance.teamName}</p>}
                       </Td>
-                      <Td className="max-w-[220px] text-xs text-slate-600">{advance.purpose}</Td>
+                      <Td className="max-w-[220px] text-xs text-slate-600">
+                        {advance.purpose}
+                        <AdvanceCaseRef caseRef={advance.caseRef} className="text-[10px]" />
+                      </Td>
                       <Td numeric>
                         <p>
                           ขอ:{' '}

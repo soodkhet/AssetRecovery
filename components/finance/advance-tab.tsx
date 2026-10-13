@@ -1,5 +1,6 @@
 'use client'
 
+import { AdvanceCaseRef } from '@/components/finance/advance-case-ref'
 import { useState } from 'react'
 import { useUrlFilter } from '@/components/ui/use-url-filter'
 import { FINANCE_FILTER_PARAMS } from '@/lib/finance/operation-tabs'
@@ -182,6 +183,7 @@ export function AdvanceTab() {
                     </Td>
                     <Td className="max-w-[136px] text-xs text-slate-600">
                       {advance.purpose}
+                      <AdvanceCaseRef caseRef={advance.caseRef} className="text-[10px]" />
                       {/* มติ PO U103 — ใบรับรองแทนใบเสร็จตอนเคลียร์ยอด (การเงินอัปโหลดฉบับเซ็นแทนได้) */}
                       {advance.substituteReceipt !== null && (
                         <SubstituteReceiptPanel

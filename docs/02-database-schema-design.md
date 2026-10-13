@@ -98,6 +98,7 @@
 | v4.71 | 11/10/2569 | **staging E-069 (มติ PO 10/10/2569)** — migration `20261011130000_period_readiness_result`: `accounting_periods` + `last_readiness_passed_count` / `last_readiness_total_count` (SMALLINT · CHECK `chk_accounting_periods_readiness_result`) — บันทึกผลทุกครั้งที่ตรวจความพร้อม (`POST /api/accounting/periods/:id/readiness`) |
 | v4.72 | 12/10/2569 | **มติผู้ใช้ 12/10/2569 I3-01 (mytester3)** — migration `20261012100000_case_client_reject_reason`: `cases` + `client_reject_reason TEXT` (nullable · additive ไม่แตะข้อมูลเดิม) = เหตุผลไม่รับเคสที่แจ้งบริษัทไฟแนนซ์ (บังคับตอน reject · ช่องเดียวที่พอร์ทัลแสดง) · `review_note` ของเคส `rejected` เปลี่ยนความหมายเป็น**หมายเหตุภายใน** (ไม่บังคับ · พนักงานเห็นเท่านั้น) — `need_info` ใช้ `review_note` เป็นข้อความถึงบริษัทตามเดิม · เคสที่ปฏิเสธก่อน migration (`client_reject_reason` NULL) ⇒ พอร์ทัลแสดงข้อความกลาง ไม่ใช้ `review_note` เดิม |
 | v4.73 | 12/10/2569 | **มติผู้ใช้ 12/10/2569 B3-02 (mytester3 — ลบเคสร่าง)** — migration `20261012110000_case_ref_unique_partial`: `UNIQUE(organization_id, company_id, case_ref, tracking_round)` และ `uniq_cases_company_case_ref` เปลี่ยนเป็น **partial `WHERE deleted_at IS NULL` ทั้งคู่** (แทนมติ v4.0 ที่ให้เคสที่ลบยังจองเลข — ตอนนั้นยังไม่มีทางลบเคส) ⇒ เคสร่างที่ลบแล้ว (soft delete) ไม่จองเลขที่สัญญา · index ใหม่หลวมกว่าเดิม ไม่กระทบข้อมูลเดิม · recycle ยังเพิ่ม `tracking_round` บนแถวเดิม · Prisma ประกาศ unique แบบ partial ไม่ได้ ⇒ ถอด `@@unique` ออกจาก schema.prisma (index อยู่ใน raw SQL) |
+| v4.74 | 13/10/2569 | **mytester DO-07 (มติ 13/10/2569 — Claude ตัดสินแทน PO)** — migration `20261013100000_advance_case_ref`: `advances` + `case_id UUID REFERENCES cases(id) ON DELETE SET NULL` (nullable · additive) + index `idx_advances_org_case(organization_id, case_id)` — ช่อง "อ้างอิงเคส (ไม่บังคับ)" ของฟอร์มขอเงินทดรอง (`15` §7.2 เดิมเขียน `case_ref` free text) · เลือกได้เฉพาะเคสที่ผู้รับเงินมีงานค้าง (`case_assignments` สถานะ active — ตรวจที่ service · ไม่ใช่ = `CASE_NOT_FOUND`) · ข้อมูลอ้างอิงเท่านั้น: ไม่กระทบยอด/สถานะ/เกตรายได้ของเคส · คำขอเบิกส่วนเกินตอนเคลียร์ยังไม่ผูก `expenses.case_id` (เลขเคสอยู่ในหมายเหตุ) · เงินทดรองเดิม = NULL |
 
 ขอบเขตเอกสารนี้: Full Production Database Schema — ทุก table, column, type, FK, index, unique constraint, enum, migration order และ seed data สรุปจาก spec ไฟล์ทั้งหมดไว้ในที่เดียว ใช้เป็น source of truth เดียวก่อนเขียน Prisma schema
 
@@ -1824,6 +1825,7 @@ CREATE TABLE advances (
   rejection_reason    TEXT,
   -- A4 (มติ PO 2026-08-12): เส้นทางจ่ายเงินทดรองออกผ่านรอบจ่าย (คู่กับ payout_batch_items.advance_id)
   payout_batch_item_id UUID,
+  case_id             UUID            REFERENCES cases(id) ON DELETE SET NULL,  -- v4.74 mytester DO-07 อ้างอิงเคส (ไม่บังคับ) · เคสที่ผู้รับเงินมีงานค้าง (ตรวจที่ service)
   letterhead_snapshot JSONB,  -- v4.54 (U130) หัวกระดาษองค์กร ตอนอนุมัติ (ใบเบิกเงินทดรอง) · NULL = ก่อน U130 ⇒ ค่าปัจจุบัน · เขียนครั้งเดียว (trigger)
   created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
   created_by          UUID            NOT NULL REFERENCES users(id),
@@ -1833,6 +1835,7 @@ CREATE TABLE advances (
 );
 CREATE INDEX idx_advances_payee  ON advances(payee_id, status);
 CREATE INDEX idx_advances_due    ON advances(organization_id, due_clear_date, status);
+CREATE INDEX idx_advances_org_case ON advances(organization_id, case_id);  -- v4.74 mytester DO-07
 -- ห้ามเบิกซ้อน: 1 payee ถือ Advance ค้าง (approved/overdue) ได้ครั้งละ 1 รายการเท่านั้น (ไฟล์ 15 §9.2 — DEC-006/D7)
 CREATE UNIQUE INDEX uniq_active_advance_per_payee
   ON advances(payee_id) WHERE status IN ('approved','overdue') AND deleted_at IS NULL;

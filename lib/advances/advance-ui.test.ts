@@ -48,6 +48,8 @@ function advance(overrides: Partial<AdvanceDto> = {}): AdvanceDto {
     excessSatang: 0,
     status: 'approved',
     purpose: 'สำรองค่าเดินทางภาคเหนือ',
+    caseId: null,
+    caseRef: null,
     dueClearDate: '2026-06-28',
     isPastDue: false,
     approvedByName: 'สมศรี การเงิน',

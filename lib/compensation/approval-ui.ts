@@ -2,10 +2,10 @@ import type { WhtRateOrigin } from '@/lib/finance/wht-calc'
 import type { ApiCallError } from '@/lib/api/types'
 import type { ApprovalHistoryEntry } from '@/lib/compensation/approval'
 import type { CompensationApprovalDto } from '@/lib/compensation/approval-types'
-import { advanceExcessSource } from '@/lib/advances/advance'
+import { advanceExcessItemLabel, advanceExcessSource } from '@/lib/advances/advance'
 import { isManualClaim } from '@/lib/claims/claim'
 import { canExpenseAction } from '@/lib/field/expense-status'
-import { EXPENSE_STATUS_LABEL } from '@/lib/field/expense-ui'
+import { EXPENSE_STATUS_LABEL, EXPENSE_TYPE_LABEL } from '@/lib/field/expense-ui'
 import { approvalRoleColumn } from '@/lib/settings/approval-matrix'
 import type { ExpenseStatus, ExpenseType } from '@/lib/generated/prisma/enums'
 import type { StatusBadgeGroup } from '@/lib/ui/status-badge'
@@ -103,6 +103,19 @@ export function claimSourceLabel(calculationSource: string | null, note: string 
   const excess = advanceExcessSource(note)
   if (excess !== null) return `↪ ส่วนเกินเงินทดรอง${excess.advanceNumber === null ? '' : ` ${excess.advanceNumber}`}`
   return isManualClaim(calculationSource) ? '✏️ บันทึกเอง' : '🤖 อัตโนมัติ'
+}
+
+/**
+ * mytester DO-07 — เลขอ้างอิงในคอลัมน์ "วันที่/อ้างอิง" ของคิวอนุมัติ (ผู้จัดการ/การเงิน)
+ * เคสของรายการ ⇒ คำขอเบิกส่วนเกินเงินทดรองที่เงินทดรองอ้างอิงเคส (อ่านจากหมายเหตุ — ไม่ผูก `case_id`) ⇒ "— ไม่ผูกเคส"
+ */
+export function claimRefLabel(item: { caseRef: string | null; note: string | null }): string {
+  return item.caseRef ?? advanceExcessSource(item.note)?.caseRef ?? '— ไม่ผูกเคส'
+}
+
+/** mytester DO-07 — ป้ายประเภทในคิวอนุมัติ: คำขอเบิกส่วนเกินเงินทดรอง = "ส่วนเกินเงินทดรอง ADV-…" แทน "รายการกรอกเอง" */
+export function claimTypeLabel(item: { expenseType: ExpenseType; note: string | null }): string {
+  return advanceExcessItemLabel(item.note) ?? EXPENSE_TYPE_LABEL[item.expenseType]
 }
 
 /** บรรทัดประวัติอนุมัติใน modal "ดูสูตร" (`16` §8) — เวลาแปลงเป็น พ.ศ. ที่ component */

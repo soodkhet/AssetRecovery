@@ -41,6 +41,14 @@ export const advanceCreateSchema = z.object({
     (value) => (typeof value === 'string' && value.trim() === '' ? null : value),
     uuidSchema.nullable().default(null),
   ),
+  /**
+   * mytester DO-07 (มติ 13/10/2569) — อ้างอิงเคส (ไม่บังคับ · `15` §7.2/§8) · เว้นว่าง = ไม่อ้างอิงเคส
+   * server ตรวจว่าเป็นเคสที่ผู้รับเงินรับผิดชอบอยู่ (`assertAdvanceCaseInScope()` ใน `queries.ts`) — ไม่ใช่ = 404 ไม่ leak
+   */
+  caseId: z.preprocess(
+    (value) => (value === undefined || (typeof value === 'string' && value.trim() === '') ? null : value),
+    uuidSchema.nullable().default(null),
+  ),
 })
 
 /** อนุมัติ — ปรับลดยอดได้ (`02` §5 แยก `approved_satang`) · เว้นว่าง = อนุมัติเต็มจำนวน */
@@ -137,7 +145,8 @@ export const advanceListQuerySchema = z.object({
   payeeId: uuidSchema.optional(),
 })
 
-export type AdvanceCreateInput = z.infer<typeof advanceCreateSchema>
+/** `caseId` ไม่ระบุ = ไม่อ้างอิงเคส (ผู้เรียกฝั่ง server/เทสต์/seed ที่ไม่ได้ผ่าน schema — mytester DO-07) */
+export type AdvanceCreateInput = Omit<z.infer<typeof advanceCreateSchema>, 'caseId'> & { caseId?: string | null }
 export type AdvanceApproveInput = z.infer<typeof advanceApproveSchema>
 export type AdvanceRejectInput = z.infer<typeof advanceRejectSchema>
 export type AdvanceClearReviewInput = z.infer<typeof advanceClearReviewSchema>

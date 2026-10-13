@@ -34,9 +34,17 @@ import type {
   AdvanceSeparateReturnInput,
   AdvanceSettleInput,
 } from '@/lib/advances/schemas'
-import type { AdvanceDto, AdvanceRejectResultDto, AdvanceReturnDto, AdvanceSettleResult } from '@/lib/advances/types'
+import type {
+  AdvanceCaseOptionDto,
+  AdvanceDto,
+  AdvanceRejectResultDto,
+  AdvanceReturnDto,
+  AdvanceSettleResult,
+} from '@/lib/advances/types'
+import { ACTIVE_ASSIGNMENT_STATUSES } from '@/lib/assignments/assignment'
 import { emitAudit } from '@/lib/audit/audit'
 import { AuthError } from '@/lib/auth/errors'
+import { CaseError } from '@/lib/cases/errors'
 import { hasCapability } from '@/lib/auth/permission'
 import type { RequestMeta } from '@/lib/auth/request-meta'
 import type { SessionUser } from '@/lib/auth/types'
@@ -99,6 +107,9 @@ const advanceSelect = {
   clearReviewedAt: true,
   clearReviewedByUser: { select: { fullName: true } },
   payoutBatchItemId: true,
+  // mytester DO-07 — อ้างอิงเคส (ไม่บังคับ)
+  caseId: true,
+  case: { select: { caseRef: true } },
   // มติ PO U74 — รอบจ่ายที่จ่ายเงินทดรองนี้ (ชี้ด้วย `payout_batch_item_id` · แถวของรอบที่ยกเลิกแล้วไม่ถูกชี้)
   payoutItems: { select: { id: true, payoutBatch: { select: { id: true, name: true, status: true } } } },
   createdAt: true,
@@ -197,6 +208,8 @@ function toDto(row: AdvanceRow, now: Date): AdvanceDto {
     excessSatang: settlement.excessSatang,
     status: row.status,
     purpose: row.purpose,
+    caseId: row.caseId,
+    caseRef: row.case?.caseRef ?? null,
     dueClearDate: row.dueClearDate.toISOString().slice(0, 10),
     isPastDue:
       UNCLEARED_ADVANCE_STATUSES.includes(row.status) && isAdvanceOverdue(row.dueClearDate, now),
@@ -327,6 +340,7 @@ export async function createAdvance(
 
   const created = await prisma.$transaction(async (tx) => {
     let payeeId: string
+    let payeeUserId: string | null
     if (input.payeeId !== null) {
       const payee = await assertPayeeInOrganization(tx as ExpenseTxClient, user.organizationId, input.payeeId)
       if (payee.userId === user.id && !canCreateAdvanceForSelf(user)) {
@@ -334,12 +348,20 @@ export async function createAdvance(
         throw new AuthError('PERMISSION_DENIED', `ขอเงินทดรองให้ตัวเองต้องมีสิทธิ์ขอเงินทดรอง user=${user.id}`)
       }
       payeeId = payee.id
+      payeeUserId = payee.userId
     } else {
       payeeId = await ensureAgentPayeeId(tx as ExpenseTxClient, {
         organizationId: user.organizationId,
         userId: user.id,
         actorId: user.id,
       })
+      payeeUserId = user.id
+    }
+
+    // mytester DO-07 — อ้างอิงเคสได้เฉพาะเคสที่ผู้รับเงินรับผิดชอบอยู่ (ตรวจที่ server เสมอ — UI แค่คัดตัวเลือก)
+    const caseId = input.caseId ?? null
+    if (caseId !== null) {
+      await assertAdvanceCaseInScope(tx as ExpenseTxClient, { organizationId: user.organizationId, payeeUserId, caseId })
     }
 
     // ชั้นที่ 1 — ตอบผู้ใช้ด้วยข้อความที่บอกได้ว่าติดรายการไหน (ชั้นที่ 2 คือ partial unique ของ DB)
@@ -360,6 +382,7 @@ export async function createAdvance(
         payeeId,
         requestedSatang: input.requestedSatang,
         purpose: input.purpose,
+        caseId,
         dueClearDate: input.dueClearDate,
         status: 'pending_approval',
         createdBy: user.id,
@@ -382,6 +405,7 @@ export async function createAdvance(
           on_behalf_of_user_id: row.payee.userId !== user.id ? row.payee.userId : null,
           requested_satang: row.requestedSatang,
           purpose: row.purpose,
+          case_id: row.caseId,
           due_clear_date: row.dueClearDate.toISOString().slice(0, 10),
           status: row.status,
         },
@@ -407,6 +431,61 @@ function rethrowDuplicateAdvance(error: unknown): never {
     throw new AdvanceError('ADVANCE_PENDING_SETTLEMENT', { detail: 'uniq_active_advance_per_payee' })
   }
   throw error
+}
+
+/**
+ * mytester DO-07 — เคสที่อ้างอิงได้ = เคสในองค์กร (ไม่ถูกลบ) ที่ผู้รับเงินมีงานค้างอยู่
+ * (`ACTIVE_ASSIGNMENT_STATUSES` ชุดเดียวกับแท็บงานของ Field Tracker) · ไม่ใช่ / ผู้รับไม่มีบัญชีผู้ใช้ = `CASE_NOT_FOUND`
+ * (404 ไม่ leak ว่าเคสมีอยู่ใน scope อื่นหรือไม่)
+ */
+async function assertAdvanceCaseInScope(
+  tx: ExpenseTxClient,
+  input: { organizationId: string; payeeUserId: string | null; caseId: string },
+): Promise<void> {
+  const assignment =
+    input.payeeUserId === null
+      ? null
+      : await tx.caseAssignment.findFirst({
+          where: advanceCaseAssignmentWhere(input.organizationId, input.payeeUserId, input.caseId),
+          select: { id: true },
+        })
+  if (assignment === null) {
+    throw new CaseError('CASE_NOT_FOUND', { detail: `advance case=${input.caseId} payee_user=${input.payeeUserId ?? 'none'}` })
+  }
+}
+
+function advanceCaseAssignmentWhere(
+  organizationId: string,
+  agentId: string,
+  caseId?: string,
+): Prisma.CaseAssignmentWhereInput {
+  return {
+    organizationId,
+    agentId,
+    status: { in: [...ACTIVE_ASSIGNMENT_STATUSES] },
+    case: { organizationId, deletedAt: null, ...(caseId === undefined ? {} : { id: caseId }) },
+  }
+}
+
+/**
+ * ตัวเลือกช่อง "อ้างอิงเคส" ของฟอร์มขอเงินทดรอง (mytester DO-07) — เคสที่ผู้ใช้รับผิดชอบอยู่ (ของตัวเองเท่านั้น)
+ * เรียงตามวันลงพื้นที่ใกล้สุดก่อน · เคสเดียวกันหลายรอบติดตามแสดงครั้งเดียว
+ */
+export async function listAdvanceCaseOptions(user: SessionUser): Promise<AdvanceCaseOptionDto[]> {
+  const rows = await prisma.caseAssignment.findMany({
+    where: advanceCaseAssignmentWhere(user.organizationId, user.id),
+    orderBy: [{ scheduledDate: { sort: 'asc', nulls: 'last' } }, { createdAt: 'desc' }],
+    take: 200,
+    select: { caseId: true, case: { select: { caseRef: true, debtorName: true } } },
+  })
+  const seen = new Set<string>()
+  const options: AdvanceCaseOptionDto[] = []
+  for (const row of rows) {
+    if (seen.has(row.caseId)) continue
+    seen.add(row.caseId)
+    options.push({ caseId: row.caseId, caseRef: row.case.caseRef, debtorName: row.case.debtorName })
+  }
+  return options
 }
 
 async function assertPayeeInOrganization(
@@ -693,6 +772,7 @@ export async function settleAdvance(
             approvedSatang: current.approvedSatang ?? 0,
             usedSatang: input.usedSatang,
             advanceNumber: current.advanceNumber,
+            caseRef: current.case?.caseRef ?? null,
           }),
           ...(await resolveTeamPlanSnapshot(tx as ExpenseTxClient, current.payeeId)),
         })

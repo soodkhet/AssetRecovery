@@ -1,5 +1,6 @@
 'use client'
 
+import { AdvanceCaseRef } from '@/components/finance/advance-case-ref'
 import { useState } from 'react'
 import { usePermission } from '@/components/auth/permission-provider'
 import { AdvanceFormModal } from '@/components/finance/advance-form-modal'
@@ -91,6 +92,7 @@ export function AdvancesTab() {
                     </p>
                   )}
                   <p className="text-[13px] text-slate-600">{advance.purpose}</p>
+                  <AdvanceCaseRef caseRef={advance.caseRef} />
                 </div>
                 <StatusBadge
                   status={advance.status}
