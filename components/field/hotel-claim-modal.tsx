@@ -56,6 +56,8 @@ export function HotelClaimModal({
   const [receiptInCompanyName, setReceiptInCompanyName] = useState(false)
   // มติ PO U103 — ไม่มีใบเสร็จ ⇒ กรอกรายการ แล้วระบบออกใบรับรองแทนใบเสร็จ (ยอดเบิก = ยอดรวมรายการ)
   const [noReceipt, setNoReceipt] = useState(false)
+  // known Q7/M2 (DO-02) — แผนของทีมบังคับใบเสร็จค่าที่พัก ⇒ ซ่อนตัวเลือก "ไม่มีใบเสร็จ" (server ตรวจซ้ำ)
+  const [receiptRequired, setReceiptRequired] = useState(false)
   const [substituteLines, setSubstituteLines] = useState<SubstituteLineDraft[]>(() => [
     emptySubstituteLine('line-0', expenseDate),
   ])
@@ -101,9 +103,15 @@ export function HotelClaimModal({
   useEffect(() => {
     let cancelled = false
     void (async () => {
-      const response = await callApi<{ items: FieldTeammateDto[] }>(apiPath('field.teammates'))
+      const response = await callApi<{ items: FieldTeammateDto[]; hotelReceiptRequired?: boolean }>(
+        apiPath('field.teammates'),
+      )
       if (cancelled) return
       setTeammates(response.data?.items ?? [])
+      if (response.data?.hotelReceiptRequired === true) {
+        setReceiptRequired(true)
+        setNoReceipt(false)
+      }
     })()
     return () => {
       cancelled = true
@@ -246,14 +254,20 @@ export function HotelClaimModal({
           </Select>
         </Field>
 
-        <NoReceiptToggle
-          checked={noReceipt}
-          onChange={(checked) => {
-            setNoReceipt(checked)
-            setError(null)
-          }}
-          hint="เรียกใบเสร็จจากผู้รับเงินไม่ได้ — กรอกรายการแล้วระบบออกใบรับรองแทนใบเสร็จรับเงินให้เซ็น"
-        />
+        {receiptRequired ? (
+          <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs text-slate-600">
+            แผนค่าตอบแทนของทีมบังคับแนบใบเสร็จค่าที่พัก — ใช้ใบรับรองแทนใบเสร็จไม่ได้
+          </p>
+        ) : (
+          <NoReceiptToggle
+            checked={noReceipt}
+            onChange={(checked) => {
+              setNoReceipt(checked)
+              setError(null)
+            }}
+            hint="เรียกใบเสร็จจากผู้รับเงินไม่ได้ — กรอกรายการแล้วระบบออกใบรับรองแทนใบเสร็จรับเงินให้เซ็น"
+          />
+        )}
 
         {noReceipt ? (
           <NoReceiptLinesEditor lines={substituteLines} onChange={setSubstituteLines} defaultDate={expenseDate} />

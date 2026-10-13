@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { FieldError } from '@/lib/field/errors'
 import {
   assertHotelClaimWithinCap,
+  assertHotelReceiptPolicy,
   hotelCapExceededMessage,
   hotelClaimCapSatang,
   isHotelClaimOverCap,
@@ -222,5 +223,22 @@ describe('ใบเสร็จค่าที่พักในนามบร�
   it('ป้ายแสดงผล', () => {
     expect(receiptInCompanyNameText(true)).toBe('ใบเสร็จในนามบริษัท')
     expect(receiptInCompanyNameText(false)).toBe('ใบเสร็จไม่ได้ออกในนามบริษัท')
+  })
+})
+
+describe('assertHotelReceiptPolicy (known Q7/M2 · DO-02)', () => {
+  it('แผนบังคับใบเสร็จ + ใช้ใบรับรองแทน หรือไม่แนบอะไร ⇒ HOTEL_CLAIM_FIELD_REQUIRED (ช่องใบเสร็จ)', () => {
+    for (const input of [
+      { hasReceiptFile: false, hasSubstituteReceipt: true, receiptRequired: true },
+      { hasReceiptFile: false, hasSubstituteReceipt: false, receiptRequired: true },
+    ]) {
+      expect(() => assertHotelReceiptPolicy(input)).toThrow(
+        expect.objectContaining({ code: 'HOTEL_CLAIM_FIELD_REQUIRED', context: expect.objectContaining({ missing: ['receiptFileUrl'] }) }),
+      )
+    }
+  })
+  it('แผนบังคับ + แนบใบเสร็จจริง ⇒ ผ่าน · แผนไม่บังคับ ⇒ ใช้ใบรับรองแทนได้ตามเดิม', () => {
+    expect(() => assertHotelReceiptPolicy({ hasReceiptFile: true, hasSubstituteReceipt: false, receiptRequired: true })).not.toThrow()
+    expect(() => assertHotelReceiptPolicy({ hasReceiptFile: false, hasSubstituteReceipt: true, receiptRequired: false })).not.toThrow()
   })
 })
