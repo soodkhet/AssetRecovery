@@ -1,4 +1,5 @@
 import { fmtDateTime } from '@/lib/format/datetime'
+import { auditFieldRefType } from '@/lib/audit/target-refs'
 import { fmtSatangSymbol } from '@/lib/format/money'
 import type { AuditAction } from '@/lib/generated/prisma/enums'
 import type { AuditLoginFailure } from '@/lib/audit/log-types'
@@ -321,8 +322,24 @@ const EXCEPTION_VALUE_LABEL: Readonly<Record<string, Readonly<Record<string, str
   level: { critical: 'ต้องแก้ก่อนปิดงวด', warning: 'ควรแก้ไข', info: 'ข้อมูลทั่วไป' },
 }
 
-/** `auditValueText()` + แปลค่า enum ของเป้าหมายที่รู้จัก (ตอนนี้: ข้อยกเว้น) */
-export function auditValueDisplay(value: unknown, field: string, targetType: string | null): string {
+/**
+ * known H-06 — id ในค่าก่อน/หลังที่ระบบหาชื่อได้ (`refLabels` จาก server) ⇒ ชื่อ/เลขเอกสาร · ไม่พบ = `null`
+ * (หน้าจอแสดง UUID ใน tooltip ของค่านั้น)
+ */
+export function auditRefLabel(value: unknown, field: string, refLabels: Readonly<Record<string, string>>): string | null {
+  if (typeof value !== 'string' || auditFieldRefType(field) === null) return null
+  return refLabels[value.toLowerCase()] ?? null
+}
+
+/** `auditValueText()` + แปลค่า enum ของเป้าหมายที่รู้จัก (ตอนนี้: ข้อยกเว้น) + ชื่อของ id ที่อ้างถึง (known H-06) */
+export function auditValueDisplay(
+  value: unknown,
+  field: string,
+  targetType: string | null,
+  refLabels: Readonly<Record<string, string>> = {},
+): string {
+  const refLabel = auditRefLabel(value, field, refLabels)
+  if (refLabel !== null) return refLabel
   if (targetType === 'exceptions' && typeof value === 'string') {
     const label = EXCEPTION_VALUE_LABEL[field]?.[value]
     if (label !== undefined) return label
