@@ -141,5 +141,8 @@ function Item({ label, children }: { label: string; children: React.ReactNode })
 
 /** known H-06 — ค่าที่แสดงเป็นชื่อแทน id ⇒ tooltip บอก UUID เดิม */
 function refTooltip(value: unknown, field: string, refLabels: Readonly<Record<string, string>>): string | undefined {
-  return auditRefLabel(value, field, refLabels) !== null && typeof value === 'string' ? value : undefined
+  if (auditRefLabel(value, field, refLabels) === null) return undefined
+  if (typeof value === 'string') return value
+  // ทดสอบซ้ำ local LR6-01 — รายการ id ⇒ tooltip บอก UUID ทุกตัว
+  return Array.isArray(value) ? value.join(', ') : undefined
 }

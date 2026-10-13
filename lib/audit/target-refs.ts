@@ -245,6 +245,9 @@ const FIELD_REF_TYPE: Readonly<Record<string, AuditRefType>> = {
   exceptionId: 'exceptions',
   handover_lot_id: 'handover_lots',
   handoverLotId: 'handover_lots',
+  // ทดสอบซ้ำ local LR6-01 — ผู้จัดการทีม (ใช้กับรายการ `manager_ids` ด้วย)
+  manager_id: 'users',
+  managerId: 'users',
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -271,13 +274,77 @@ export function auditTargetRef(row: { targetType: string; targetId: string | nul
   return type === null ? null : { type, id: row.targetId }
 }
 
-/** ค่าอ้างอิงใน before/after ระดับบนสุด (ฟิลด์ที่รู้จัก + ค่าเป็น UUID) */
+/**
+ * ทดสอบซ้ำ local LR6-01 — ฟิลด์ที่เก็บ **รายการ id** (`manager_ids`/`assetIds`/`approval_flow_role_ids`/
+ * `released_expense_ids` ฯลฯ) ⇒ ชนิดของ id ในรายการ จากชื่อเอกพจน์ (`*_ids` → `*_id` · `*Ids` → `*Id`)
+ * ถ้าชื่อเต็มไม่รู้จัก ลองตัดคำนำหน้าทีละคำ (`approval_flow_role_id` → `role_id` · `managedTeamId` → `teamId`)
+ */
+export function auditListFieldRefType(field: string): AuditRefType | null {
+  let singular: string
+  if (field.endsWith('_ids')) singular = field.slice(0, -1)
+  else if (/[a-z]Ids$/.test(field)) singular = field.slice(0, -1)
+  else return null
+  const direct = auditFieldRefType(singular)
+  if (direct !== null) return direct
+  if (singular.includes('_')) {
+    const parts = singular.split('_')
+    for (let start = 1; start < parts.length - 1; start += 1) {
+      const type = auditFieldRefType(parts.slice(start).join('_'))
+      if (type !== null) return type
+    }
+    return null
+  }
+  const words = singular.split(/(?=[A-Z])/)
+  for (let start = 1; start < words.length - 1; start += 1) {
+    const rest = words.slice(start).join('')
+    const type = auditFieldRefType(`${rest.charAt(0).toLowerCase()}${rest.slice(1)}`)
+    if (type !== null) return type
+  }
+  return null
+}
+
+/** ฟิลด์ id แบบ polymorphic — ชนิดอยู่ในฟิลด์ข้างกัน (`target_type`) เช่นค่าหลังของรายการปรับปรุง */
+const POLYMORPHIC_REF_FIELDS = [
+  { idField: 'target_id', typeField: 'target_type' },
+  { idField: 'targetId', typeField: 'targetType' },
+] as const
+
+export function isAuditPolymorphicRefField(field: string): boolean {
+  return POLYMORPHIC_REF_FIELDS.some((entry) => entry.idField === field)
+}
+
+/** จำนวนชื่อสูงสุดที่แสดงต่อรายการ — ที่เหลือย่อเป็น "+n รายการ" (ค้นชื่อเฉพาะที่แสดง) */
+export const AUDIT_LIST_REF_DISPLAY_LIMIT = 5
+
+/** ฟิลด์นี้แสดงเป็นชื่อได้ (ค่าเดี่ยว · รายการ id · id แบบ polymorphic) — ใช้ฝั่งหน้าจอ */
+export function isAuditRefField(field: string): boolean {
+  return auditFieldRefType(field) !== null || auditListFieldRefType(field) !== null || isAuditPolymorphicRefField(field)
+}
+
+/** ค่าอ้างอิงใน before/after ระดับบนสุด (ฟิลด์ที่รู้จัก + ค่าเป็น UUID · รายการ id · id แบบ polymorphic) */
 export function auditValueRefs(data: unknown): AuditRef[] {
   if (data === null || typeof data !== 'object' || Array.isArray(data)) return []
+  const record = data as Record<string, unknown>
   const refs: AuditRef[] = []
-  for (const [field, value] of Object.entries(data as Record<string, unknown>)) {
+  for (const [field, value] of Object.entries(record)) {
     const type = auditFieldRefType(field)
-    if (type !== null && typeof value === 'string' && UUID.test(value)) refs.push({ type, id: value })
+    if (type !== null && typeof value === 'string' && UUID.test(value)) {
+      refs.push({ type, id: value })
+      continue
+    }
+    const listType = Array.isArray(value) ? auditListFieldRefType(field) : null
+    if (listType !== null && Array.isArray(value)) {
+      for (const item of value.slice(0, AUDIT_LIST_REF_DISPLAY_LIMIT)) {
+        if (typeof item === 'string' && UUID.test(item)) refs.push({ type: listType, id: item })
+      }
+    }
+  }
+  for (const { idField, typeField } of POLYMORPHIC_REF_FIELDS) {
+    const id = record[idField]
+    const targetType = record[typeField]
+    if (typeof id !== 'string' || !UUID.test(id) || typeof targetType !== 'string') continue
+    const type = auditRefTypeOf(targetType)
+    if (type !== null) refs.push({ type, id })
   }
   return refs
 }

@@ -534,3 +534,78 @@ suite('mytester5 H5-01 — ธุรกรรม/ภาคสนามเป็�
     expect(await logs.getAuditLog(sessionUser({ id: EXEC_ID }), LOG_EXPENSE)).toBeNull()
   })
 })
+
+suite('ทดสอบซ้ำ local LR6-01 — target_id แบบ polymorphic + รายการ id ในค่าก่อน/หลังเป็นชื่อ', () => {
+  const ORG = '00000000-0000-4000-8000-000000e601a0'
+  const ROLE = '00000000-0000-4000-8000-000000e601a1'
+  const USER = '00000000-0000-4000-8000-000000e601a2'
+  const MANAGER = '00000000-0000-4000-8000-000000e601a3'
+  const COMPANY = '00000000-0000-4000-8000-000000e601a4'
+  const CASE = '00000000-0000-4000-8000-000000e601a5'
+  const BATCH = '00000000-0000-4000-8000-000000e601a6'
+  const ADJUSTMENT = '00000000-0000-4000-8000-000000e601a7'
+  const TEAM = '00000000-0000-4000-8000-000000e601a8'
+  const LOG_ADJUSTMENT = '00000000-0000-4000-8000-000000e601b1'
+  const LOG_LISTS = '00000000-0000-4000-8000-000000e601b2'
+  const lr6User = sessionUser({ id: USER, organizationId: ORG, roleId: ROLE })
+
+  beforeAll(async () => {
+    if (!url) return
+    const tx = db()
+    await tx.$executeRawUnsafe(`
+      INSERT INTO organizations (id, name, tax_id, address) VALUES ('${ORG}', 'LR601Test', '9999999996011', 'ที่อยู่ LR601')
+      ON CONFLICT (id) DO NOTHING`)
+    await tx.$executeRawUnsafe(`
+      INSERT INTO roles (id, organization_id, name, role_group, is_seed)
+      VALUES ('${ROLE}', '${ORG}', 'บริหาร LR601', 'system', false) ON CONFLICT (id) DO NOTHING`)
+    await tx.$executeRawUnsafe(`
+      INSERT INTO users (id, organization_id, role_id, email, full_name, status) VALUES
+        ('${USER}', '${ORG}', '${ROLE}', 'lr601@test.local', 'ผู้บริหาร LR601', 'active'),
+        ('${MANAGER}', '${ORG}', '${ROLE}', 'lr601-mgr@test.local', 'สมชาย LR601', 'active')
+      ON CONFLICT (id) DO NOTHING`)
+    await tx.$executeRawUnsafe(`
+      INSERT INTO finance_companies (id, organization_id, name, short_name, tax_id, created_by)
+      VALUES ('${COMPANY}', '${ORG}', 'ไฟแนนซ์ LR601', 'LR601', '9999999996012', '${USER}') ON CONFLICT (id) DO NOTHING`)
+    await tx.$executeRawUnsafe(`
+      INSERT INTO cases (id, organization_id, case_ref, case_ref_normalized, company_id, source, status, created_by)
+      VALUES ('${CASE}', '${ORG}', 'MTJ-LR601-01', 'MTJ-LR601-01', '${COMPANY}', 'manual', 'active', '${USER}')
+      ON CONFLICT (id) DO NOTHING`)
+    await tx.$executeRawUnsafe(`
+      INSERT INTO teams (id, organization_id, name, side, provinces, status, created_by)
+      VALUES ('${TEAM}', '${ORG}', 'ทีม LR601', 'inhouse', ARRAY['เชียงใหม่'], 'active', '${USER}') ON CONFLICT (id) DO NOTHING`)
+    await tx.$executeRawUnsafe(`
+      INSERT INTO billing_batches (id, organization_id, company_id, period, due_date, created_by, batch_number)
+      VALUES ('${BATCH}', '${ORG}', '${COMPANY}', '2569-10', '2026-10-31', '${USER}', 'BL-LR601-001') ON CONFLICT (id) DO NOTHING`)
+    await tx.$executeRawUnsafe(`
+      INSERT INTO adjustments (id, organization_id, adjustment_type, amount_satang, reason, status, billing_batch_id, created_by)
+      VALUES ('${ADJUSTMENT}', '${ORG}', 'decrease', 10000, 'ปรับลดทดสอบ LR601', 'pending_approval', '${BATCH}', '${USER}')
+      ON CONFLICT (id) DO NOTHING`)
+    // id ขององค์กรอื่น (ผู้ใช้ในชุดเทสต์แรก) ต้องไม่ถูกแปลงชื่อ
+    await tx.$executeRawUnsafe(`
+      INSERT INTO audit_logs (id, organization_id, actor_id, actor_role, action, target_type, target_id, before_data, after_data, reason, created_at) VALUES
+        ('${LOG_ADJUSTMENT}', '${ORG}', '${USER}', 'บริหาร LR601', 'create', 'adjustments', '${ADJUSTMENT}', NULL,
+         '{"target_type":"billing_batch","target_id":"${BATCH}","target_ref":"BL-LR601-001"}', 'ปรับลด', '2026-10-13T03:00:00Z'),
+        ('${LOG_LISTS}', '${ORG}', '${USER}', 'บริหาร LR601', 'update', 'teams', '${TEAM}',
+         '{"manager_ids":[]}',
+         '{"manager_ids":["${MANAGER}","${OTHER_USER_ID}"],"company_ids":["${COMPANY}"],"approval_flow_role_ids":["${ROLE}"],"caseIds":["${CASE}"]}',
+         NULL, '2026-10-13T03:01:00Z')
+      ON CONFLICT (id) DO NOTHING`)
+  })
+
+  it('รายการปรับปรุง: target_id ในค่าหลังแปลงตาม target_type ข้างกัน (รอบวางบิล)', async () => {
+    const detail = await logs.getAuditLog(lr6User, LOG_ADJUSTMENT)
+    expect(detail?.refLabels[BATCH]).toBe('BL-LR601-001')
+  })
+
+  it('รายการ id (ผู้จัดการ/บริษัท/สิทธิ์/เคส) แปลงเป็นชื่อในครั้งเดียว · id องค์กรอื่นไม่ถูกแปลง', async () => {
+    const detail = await logs.getAuditLog(lr6User, LOG_LISTS)
+    expect(detail?.targetRef).toBe('ทีม LR601')
+    expect(detail?.refLabels).toEqual({
+      [MANAGER]: 'สมชาย LR601',
+      [COMPANY]: 'ไฟแนนซ์ LR601',
+      [ROLE]: 'บริหาร LR601',
+      [CASE]: 'MTJ-LR601-01',
+    })
+    expect(detail?.refLabels[OTHER_USER_ID]).toBeUndefined()
+  })
+})

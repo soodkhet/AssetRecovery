@@ -35,6 +35,8 @@ import {
   cashReceiptRefLabel,
   exportRecordRefLabel,
   groupAuditRefs,
+  AUDIT_LIST_REF_DISPLAY_LIMIT,
+  auditListFieldRefType,
 } from '@/lib/audit/target-refs'
 
 /** known H-06 — เป้าหมาย/ค่าอ้างอิงในบันทึกการใช้งานเป็นชื่อที่อ่านได้ (ส่วน pure) */
@@ -292,5 +294,55 @@ describe('mytester5 H5-01 — ธุรกรรม/ภาคสนามเป�
     expect(deviceTacRefLabel('35391110', 'Apple', 'iPhone 15')).toBe('TAC 35391110 · Apple iPhone 15')
     expect(shortRefText('ยอด  ภ.ง.ด.3\nเดือนนี้')).toBe('ยอด ภ.ง.ด.3 เดือนนี้')
     expect(shortRefText('ก'.repeat(50), 10)).toBe(`${'ก'.repeat(9)}…`)
+  })
+})
+
+describe('ทดสอบซ้ำ local LR6-01 — target_id แบบ polymorphic + รายการ id', () => {
+  const ids = Array.from({ length: 7 }, (_, index) => `0a1b2c3d-0000-4000-8000-00000000060${index}`)
+
+  it('ชนิดของรายการ id จากชื่อเอกพจน์ (ตัดคำนำหน้าได้) · ชื่อที่ไม่รู้จัก = null', () => {
+    expect(auditListFieldRefType('manager_ids')).toBe('users')
+    expect(auditListFieldRefType('assetIds')).toBe('assets')
+    expect(auditListFieldRefType('caseIds')).toBe('cases')
+    expect(auditListFieldRefType('company_ids')).toBe('finance_companies')
+    expect(auditListFieldRefType('approval_flow_role_ids')).toBe('roles')
+    expect(auditListFieldRefType('expense_record_ids')).toBe('expense_records')
+    expect(auditListFieldRefType('released_expense_ids')).toBe('expenses')
+    expect(auditListFieldRefType('managedTeamIds')).toBe('teams')
+    expect(auditListFieldRefType('foo_ids')).toBeNull()
+    expect(auditListFieldRefType('case_id')).toBeNull()
+    expect(auditListFieldRefType('Ids')).toBeNull()
+  })
+
+  it('auditValueRefs: รายการ id (เฉพาะที่แสดง) + target_id ตาม target_type ข้างกัน', () => {
+    expect(
+      auditValueRefs({
+        manager_ids: [ids[0], 'not-uuid', 5],
+        assetIds: ids,
+        target_type: 'billing_batch',
+        target_id: ids[1],
+      }),
+    ).toEqual([
+      { type: 'users', id: ids[0] },
+      ...ids.slice(0, AUDIT_LIST_REF_DISPLAY_LIMIT).map((id) => ({ type: 'assets', id })),
+      { type: 'billing_batches', id: ids[1] },
+    ])
+    expect(auditValueRefs({ target_type: 'unknown_thing', target_id: ids[0] })).toEqual([])
+    expect(auditValueRefs({ target_id: ids[0] })).toEqual([])
+    expect(auditValueRefs({ targetType: 'revenue', targetId: ids[2] })).toEqual([{ type: 'revenues', id: ids[2] }])
+  })
+
+  it('หน้าจอ: รายการ id เป็นชื่อคั่น ", " · เกินย่อ "+n รายการ" · หาไม่พบแสดง id ย่อ · target_id ใช้ป้ายจาก server', () => {
+    const labels = Object.fromEntries(ids.map((id, index) => [id, `คน ${index + 1}`]))
+    expect(auditValueDisplay([ids[0], ids[1]], 'manager_ids', 'teams', labels)).toBe('คน 1, คน 2')
+    expect(auditValueDisplay(ids, 'assetIds', 'handover_lots', labels)).toBe('คน 1, คน 2, คน 3, คน 4, คน 5 +2 รายการ')
+    expect(auditValueDisplay([ids[0], ids[6]], 'company_ids', null, { [ids[0] ?? '']: 'ไฟแนนซ์ A' })).toBe(
+      `ไฟแนนซ์ A, ${ids[6]?.slice(0, 8)}`,
+    )
+    expect(auditValueDisplay([ids[0]], 'company_ids', null, {})).toBe(JSON.stringify([ids[0]]))
+    expect(auditValueDisplay([], 'company_ids', null, labels)).toBe('[]')
+    expect(auditRefLabel([ids[0]], 'tags', labels)).toBeNull()
+    expect(auditValueDisplay(ids[1], 'target_id', 'adjustments', { [ids[1] ?? '']: 'BL-2569-001' })).toBe('BL-2569-001')
+    expect(auditValueDisplay(ids[1], 'target_id', 'adjustments', {})).toBe(ids[1])
   })
 })

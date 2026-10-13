@@ -1,5 +1,5 @@
 import { fmtDate, fmtDateTime } from '@/lib/format/datetime'
-import { auditFieldRefType } from '@/lib/audit/target-refs'
+import { AUDIT_LIST_REF_DISPLAY_LIMIT, auditListFieldRefType, isAuditRefField } from '@/lib/audit/target-refs'
 import { fmtSatangSymbol } from '@/lib/format/money'
 import type { AuditAction } from '@/lib/generated/prisma/enums'
 import type { AuditLoginFailure } from '@/lib/audit/log-types'
@@ -342,8 +342,29 @@ const EXCEPTION_VALUE_LABEL: Readonly<Record<string, Readonly<Record<string, str
  * (หน้าจอแสดง UUID ใน tooltip ของค่านั้น)
  */
 export function auditRefLabel(value: unknown, field: string, refLabels: Readonly<Record<string, string>>): string | null {
-  if (typeof value !== 'string' || auditFieldRefType(field) === null) return null
+  if (Array.isArray(value)) return auditRefListLabel(value, field, refLabels)
+  // `target_id` แบบ polymorphic: server ใส่ป้ายให้เฉพาะเมื่อรู้ชนิดจาก `target_type` ข้างกัน (LR6-01)
+  if (typeof value !== 'string' || !isAuditRefField(field)) return null
   return refLabels[value.toLowerCase()] ?? null
+}
+
+/**
+ * ทดสอบซ้ำ local LR6-01 — รายการ id (`manager_ids` ฯลฯ) ⇒ ชื่อคั่นด้วย ", " · เกินที่แสดงย่อ "+n รายการ"
+ * id ที่หาชื่อไม่พบแสดง id ย่อ 8 ตัว · ไม่พบชื่อเลยสักตัว = `null` (แสดงค่าดิบเหมือนเดิม)
+ */
+function auditRefListLabel(
+  value: readonly unknown[],
+  field: string,
+  refLabels: Readonly<Record<string, string>>,
+): string | null {
+  if (auditListFieldRefType(field) === null || value.length === 0) return null
+  if (!value.every((item): item is string => typeof item === 'string')) return null
+  const shown = value.slice(0, AUDIT_LIST_REF_DISPLAY_LIMIT)
+  const labels = shown.map((id) => refLabels[id.toLowerCase()] ?? null)
+  if (labels.every((label) => label === null)) return null
+  const text = shown.map((id, index) => labels[index] ?? id.slice(0, 8)).join(', ')
+  const rest = value.length - shown.length
+  return rest > 0 ? `${text} +${rest} รายการ` : text
 }
 
 /** `auditValueText()` + แปลค่า enum ของเป้าหมายที่รู้จัก (ตอนนี้: ข้อยกเว้น) + ชื่อของ id ที่อ้างถึง (known H-06) */
