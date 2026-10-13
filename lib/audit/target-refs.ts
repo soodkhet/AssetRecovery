@@ -44,6 +44,33 @@ export const AUDIT_REF_TYPES = [
   'tax_document_template_settings',
   'device_models',
   'jobs',
+  // mytester5 H5-01 — ธุรกรรม/ภาคสนาม/ค่าตั้งที่เหลือ (ครอบทุก target_type ที่โค้ดเขียน audit — ล็อกด้วยเทสต์)
+  'expenses',
+  'expense_records',
+  'adjustments',
+  'advance_returns',
+  'customer_wht_certificates',
+  'sales_records',
+  'revenues',
+  'case_documents',
+  'case_evidences',
+  'check_ins',
+  'case_assignments',
+  'close_case_drafts',
+  'field_day_settlements',
+  'pending_reassignments',
+  'payee_recoveries',
+  'payee_recovery_collections',
+  'payout_batch_items',
+  'accountant_questions',
+  'wht_filing_summaries',
+  'wht_policy_history',
+  'vat_rate_history',
+  'setting_assumption_confirmations',
+  'device_tacs',
+  'roles',
+  'role_capabilities',
+  'push_subscriptions',
 ] as const
 
 export type AuditRefType = (typeof AUDIT_REF_TYPES)[number]
@@ -53,7 +80,13 @@ const REF_TYPE_SET: ReadonlySet<string> = new Set(AUDIT_REF_TYPES)
 /** ชื่อเป้าหมายแบบเอกพจน์ที่บางโมดูลใช้ใน audit → ตารางจริง */
 const TARGET_TYPE_ALIAS: Readonly<Record<string, AuditRefType>> = {
   billing_batch: 'billing_batches',
+  revenue: 'revenues',
+  expense: 'expenses',
+  payout_batch: 'payout_batches',
 }
+
+/** ชื่อเป้าหมายเอกพจน์ทั้งหมดที่รู้จัก (ใช้ในเทสต์ความครบ) */
+export const AUDIT_TARGET_TYPE_ALIASES: readonly string[] = Object.keys(TARGET_TYPE_ALIAS)
 
 /** ฟิลด์ใน before/after ที่เก็บ id ของตารางอื่น (ทั้ง snake_case และ camelCase ที่โมดูลต่าง ๆ ใช้) */
 const FIELD_REF_TYPE: Readonly<Record<string, AuditRefType>> = {
@@ -107,6 +140,107 @@ const FIELD_REF_TYPE: Readonly<Record<string, AuditRefType>> = {
   deviceModelId: 'device_models',
   payee_id: 'payee_profiles',
   payeeId: 'payee_profiles',
+  // mytester5 H5-01 — ฟิลด์อ้างอิงที่พบบ่อยในค่าก่อน/หลัง (เก็บจากข้อมูลจริงของบันทึกการใช้งาน)
+  plan_id: 'compensation_plans',
+  planId: 'compensation_plans',
+  comp_plan_id: 'compensation_plans',
+  compPlanId: 'compensation_plans',
+  compensation_plan_id: 'compensation_plans',
+  compensationPlanId: 'compensation_plans',
+  approval_matrix_id: 'approval_matrices',
+  approvalMatrixId: 'approval_matrices',
+  suggested_team_id: 'teams',
+  suggestedTeamId: 'teams',
+  assigned_team_id: 'teams',
+  assignedTeamId: 'teams',
+  finance_company_id: 'finance_companies',
+  financeCompanyId: 'finance_companies',
+  view_as_company_id: 'finance_companies',
+  user_id: 'users',
+  userId: 'users',
+  agent_id: 'users',
+  agentId: 'users',
+  from_agent_id: 'users',
+  fromAgentId: 'users',
+  new_agent_id: 'users',
+  newAgentId: 'users',
+  supervisor_id: 'users',
+  supervisorId: 'users',
+  shared_with_user_id: 'users',
+  sharedWithUserId: 'users',
+  on_behalf_of_user_id: 'users',
+  recorded_by: 'users',
+  verified_by: 'users',
+  approved_by: 'users',
+  approvedBy: 'users',
+  requested_by: 'users',
+  requestedBy: 'users',
+  created_by: 'users',
+  createdBy: 'users',
+  role_id: 'roles',
+  roleId: 'roles',
+  expense_id: 'expenses',
+  expenseId: 'expenses',
+  excess_claim_id: 'expenses',
+  superseded_by_expense_id: 'expenses',
+  supersededByExpenseId: 'expenses',
+  expense_record_id: 'expense_records',
+  expenseRecordId: 'expense_records',
+  adjustment_id: 'adjustments',
+  adjustmentId: 'adjustments',
+  revenue_id: 'revenues',
+  revenueId: 'revenues',
+  sales_record_id: 'sales_records',
+  salesRecordId: 'sales_records',
+  return_id: 'advance_returns',
+  returnId: 'advance_returns',
+  advance_return_id: 'advance_returns',
+  assignment_id: 'case_assignments',
+  assignmentId: 'case_assignments',
+  new_assignment_id: 'case_assignments',
+  newAssignmentId: 'case_assignments',
+  evidence_id: 'case_evidences',
+  evidenceId: 'case_evidences',
+  evidence_approved_id: 'case_evidences',
+  evidenceApprovedId: 'case_evidences',
+  field_day_settlement_id: 'field_day_settlements',
+  fieldDaySettlementId: 'field_day_settlements',
+  settlement_id: 'field_day_settlements',
+  settlementId: 'field_day_settlements',
+  recovery_id: 'payee_recoveries',
+  recoveryId: 'payee_recoveries',
+  payout_batch_item_id: 'payout_batch_items',
+  payoutBatchItemId: 'payout_batch_items',
+  matched_billing_id: 'billing_batches',
+  matchedBillingId: 'billing_batches',
+  matched_payout_id: 'payout_batches',
+  matchedPayoutId: 'payout_batches',
+  wht_certificate_id: 'wht_certificates',
+  whtCertificateId: 'wht_certificates',
+  replaces_certificate_id: 'wht_certificates',
+  replaces_tax_invoice_id: 'tax_invoices',
+  credit_note_id: 'credit_notes',
+  creditNoteId: 'credit_notes',
+  substitute_receipt_id: 'substitute_receipts',
+  substituteReceiptId: 'substitute_receipts',
+  replaces_receipt_id: 'substitute_receipts',
+  replaces_substitute_receipt_id: 'substitute_receipts',
+  replaces_document_id: 'finance_company_documents',
+  customer_wht_certificate_id: 'customer_wht_certificates',
+  summary_id: 'wht_filing_summaries',
+  wht_policy_id: 'wht_policy_history',
+  tax_profile_default_id: 'tax_profile_default_history',
+  billing_cycle_id: 'billing_payout_cycles',
+  billingCycleId: 'billing_payout_cycles',
+  bank_file_format_id: 'bank_file_formats',
+  job_id: 'jobs',
+  jobId: 'jobs',
+  question_id: 'accountant_questions',
+  questionId: 'accountant_questions',
+  exception_id: 'exceptions',
+  exceptionId: 'exceptions',
+  handover_lot_id: 'handover_lots',
+  handoverLotId: 'handover_lots',
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -183,6 +317,45 @@ const ORG_LEVEL_TARGET_LABEL: Readonly<Record<string, string>> = {
   device_catalog_settings: 'ค่าตั้ง Model Phone',
 }
 
+/** ชนิดค่าตั้งระดับองค์กรที่แสดงชื่อหมวดแทนชื่อรายการ (ใช้ในเทสต์ความครบ) */
+export const AUDIT_ORG_LEVEL_TARGET_TYPES: readonly string[] = Object.keys(ORG_LEVEL_TARGET_LABEL)
+
+/**
+ * mytester5 H5-01 — target_type ที่ **ตั้งใจไม่แปลงชื่อ** (แสดง id ย่อตามสเปก) พร้อมเหตุผล
+ * เทสต์ความครบ (`target-refs.test.ts`) อนุญาตเฉพาะชุดนี้ — เพิ่มชนิดใหม่ใน audit ต้องมีตัวแปลงหรือเหตุผลที่นี่
+ */
+export const AUDIT_TARGET_TYPES_WITHOUT_REF: Readonly<Record<string, string>> = {
+  // `target_id` = id ที่ผู้ใช้พอร์ทัลส่งมา (สุ่ม/ของบริษัทอื่น) — ห้ามค้นชื่อ (ไม่ยืนยันว่ามีจริง) · ปกติเป็น null
+  portal: 'ไม่ใช่ตาราง — การเข้าถึงพอร์ทัลที่ถูกปฏิเสธ',
+}
+
+/**
+ * mytester5 H5-01 — เป้าหมายที่แถวต้นทางถูกลบจริงหลังใช้งาน (ร่างปิดงานถูกลบเมื่อส่งปิดงาน) ⇒ ใช้ค่าอ้างอิงใน
+ * ค่าหลัง (เคสของร่าง) เป็นป้ายแทนเมื่อหาแถวเป้าหมายไม่พบ
+ */
+const TARGET_CONTEXT_FIELDS: Readonly<Partial<Record<AuditRefType, readonly string[]>>> = {
+  close_case_drafts: ['caseId', 'case_id'],
+}
+
+/** ค่าอ้างอิงสำรองของเป้าหมาย (จาก `after`) — ชนิดที่ไม่มีฟิลด์สำรอง/ไม่มีค่า = `null` */
+export function auditTargetContextRef(row: { targetType: string; afterData?: unknown }): AuditRef | null {
+  const type = auditRefTypeOf(row.targetType)
+  const fields = type === null ? undefined : TARGET_CONTEXT_FIELDS[type]
+  const data = row.afterData
+  if (fields === undefined || data === null || typeof data !== 'object' || Array.isArray(data)) return null
+  for (const field of fields) {
+    const value = (data as Record<string, unknown>)[field]
+    const refType = auditFieldRefType(field)
+    if (refType !== null && typeof value === 'string' && UUID.test(value)) return { type: refType, id: value }
+  }
+  return null
+}
+
+/** คีย์ของป้ายในผลค้น — แยกตามชนิด (id เดียวกันแปลงต่างกันได้ เช่น ผู้ใช้ กับ อุปกรณ์รับแจ้งเตือนของผู้ใช้) */
+export function auditRefKey(ref: AuditRef): string {
+  return `${ref.type}:${ref.id.toLowerCase()}`
+}
+
 /** ป้ายของค่าตั้งระดับองค์กร — `target_id` ไม่ใช่ id ขององค์กรผู้เรียก = `null` (ใช้ตัวแปลงปกติ) */
 export function auditOrgLevelTargetLabel(
   row: { targetType: string; targetId: string | null },
@@ -235,4 +408,74 @@ export function jobRefLabel(jobLabel: string, dateTimeText: string): string {
 /** ป้ายของเคส — รอบติดตามที่ 2 ขึ้นไปบอกรอบ */
 export function caseRefLabel(caseRef: string, trackingRound: number): string {
   return trackingRound > 1 ? `${caseRef} (รอบที่ ${trackingRound})` : caseRef
+}
+
+// ── mytester5 H5-01 — ป้ายของธุรกรรม/ภาคสนาม (pure — รับค่าที่จัดรูปแบบแล้ว) ─────────────────
+
+/** ข้อความสั้นของรายการ (ข้อซักถามนักบัญชี) — ยุบช่องว่าง · ยาวเกินตัดด้วย "…" */
+export function shortRefText(text: string, max = 40): string {
+  const flat = text.replace(/\s+/g, ' ').trim()
+  return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat
+}
+
+/** รายการเบิก — "ค่าน้ำมัน MTJ-2569-01 ฿72.36" (ไม่มีเคส = ชื่อผู้รับเงิน) */
+export function expenseRefLabel(typeLabel: string, owner: string, amountText: string): string {
+  return `${typeLabel} ${owner} ${amountText}`
+}
+
+/** ยอดปรับปรุงแบบมีทิศ (แสดงผลเท่านั้น) — ลดยอด = ติดลบ · ไม่ throw (หน้าบันทึกการใช้งานต้องไม่ล้ม) */
+export function signedAdjustmentDisplaySatang(adjustmentType: 'increase' | 'decrease', amountSatang: number): number {
+  return adjustmentType === 'decrease' ? -Math.abs(amountSatang) : Math.abs(amountSatang)
+}
+
+/** รายการปรับปรุง — "ลดยอด SPC-2569-0005 −฿100.00" (`signedAmountText` มีเครื่องหมายแล้ว) */
+export function adjustmentRefLabel(typeLabel: string, targetRef: string, signedAmountText: string): string {
+  return `${typeLabel} ${targetRef} ${signedAmountText}`
+}
+
+/** การมอบหมาย — "MTJ-2569-01 → อนันต์" */
+export function assignmentRefLabel(caseLabel: string, agentName: string): string {
+  return `${caseLabel} → ${agentName}`
+}
+
+/** คำขอเปลี่ยนผู้รับผิดชอบ — "MTJ-2569-01: สมชาย → อนันต์" */
+export function reassignmentRefLabel(caseLabel: string, fromName: string, toName: string): string {
+  return `${caseLabel}: ${fromName} → ${toName}`
+}
+
+/** รายการที่ผูกกับเคส — "MTJ-2569-01 · สำเนาสัญญา" */
+export function caseScopedRefLabel(caseLabel: string, detail: string): string {
+  return `${caseLabel} · ${detail}`
+}
+
+/** ค่าน้ำมันเหมา/เบี้ยเลี้ยงรายวัน — "อนันต์ 13/10/2569 ฿250.00" */
+export function fieldDaySettlementRefLabel(agentName: string, dateText: string, amountText: string): string {
+  return `${agentName} ${dateText} ${amountText}`
+}
+
+/** รายการที่ระบุด้วยผู้รับ + ยอด (+ ที่มา) — "สมชาย ฿500.00 · รอบจ่าย ต.ค. #1" */
+export function payeeAmountRefLabel(payeeName: string, amountText: string, source?: string | null): string {
+  const tail = source?.trim() ?? ''
+  return tail === '' ? `${payeeName} ${amountText}` : `${payeeName} ${amountText} · ${tail}`
+}
+
+/** 50 ทวิจากลูกค้า — "ไฟแนนซ์ A ฿30.00 (เลขที่ 001/2569)" */
+export function customerWhtRefLabel(companyName: string, amountText: string, certificateNumber: string | null): string {
+  const number = certificateNumber?.trim() ?? ''
+  return number === '' ? `${companyName} ${amountText}` : `${companyName} ${amountText} (เลขที่ ${number})`
+}
+
+/** อัตรา VAT — "7.00% ตั้งแต่ 01/01/2569" */
+export function vatRateRefLabel(rateText: string, effectiveFromText: string): string {
+  return `${rateText} ตั้งแต่ ${effectiveFromText}`
+}
+
+/** ฉบับของค่าตั้งที่มีผลตามวันที่ — "ฉบับมีผล 01/10/2569" */
+export function effectiveVersionRefLabel(effectiveFromText: string): string {
+  return `ฉบับมีผล ${effectiveFromText}`
+}
+
+/** TAC ของ Model Phone — "TAC 35391110 · Apple iPhone 15" */
+export function deviceTacRefLabel(tac: string, brandName: string, modelName: string): string {
+  return `TAC ${tac} · ${brandName} ${modelName}`
 }
