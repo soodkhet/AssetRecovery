@@ -54,13 +54,17 @@ import { loadPayeeInfoGaps } from '@/lib/payees/queries'
 import { prisma } from '@/lib/prisma'
 import { expenseReceiptRule } from '@/lib/uploads/rules'
 import { verifyUploadedFile } from '@/lib/uploads/verify'
-import { issueSubstituteReceipt, substituteReceiptRefOf, substituteReceiptsRelationSelect } from '@/lib/substitute-receipts/queries'
-import { SubstituteReceiptError } from '@/lib/substitute-receipts/errors'
 import {
-  hasActiveSubstituteReceipt,
-  isSubstituteReceiptActive,
-  substituteReceiptResubmitProblem,
-} from '@/lib/substitute-receipts/substitute-receipt'
+  cancelSubstituteReceiptInTx,
+  issueReplacementSubstituteReceiptInTx,
+  issueSubstituteReceipt,
+  loadExpenseSubstituteReceiptState,
+  substituteReceiptRefOf,
+  substituteReceiptsRelationSelect,
+} from '@/lib/substitute-receipts/queries'
+import { SubstituteReceiptError } from '@/lib/substitute-receipts/errors'
+import { resubmitEvidenceDecision, substituteReceiptTotalSatang } from '@/lib/substitute-receipts/substitute-receipt'
+import { FieldError } from '@/lib/field/errors'
 
 /**
  * รายการเบิกของงานภาคสนาม (`41` §6.6 · §7.9 · §7.10 · §10.1) — ชั้น DB
@@ -1090,30 +1094,69 @@ export async function resubmitFieldExpense(
   // มติ PO 06/10/2569 U89 — ค่าที่พักที่ส่งใหม่ต้องไม่เกินเพดานของ snapshot เดิม (ใบเก่าที่ยังไม่มี snapshot → resolve ณ วันที่เข้าพัก)
   // มติ PO O50 — แก้จำนวนคืนได้ตอนส่งใหม่ (เฉพาะค่าที่พัก) · ตรวจเพดานด้วยจำนวนคืนหลังแก้
   const isHotel = current.expenseType === 'hotel'
-  const usesSubstituteReceipt = hasActiveSubstituteReceipt(current.substituteReceipts)
   const nextAmountSatang = editable && input.amountSatang !== undefined ? input.amountSatang : current.grossSatang
-  // staging SV5-01 — ใบรับรองแทนใบเสร็จที่ใช้งานอยู่คือหลักฐานของยอดเบิก ⇒ ยอดที่ส่งใหม่ต้องเข้ากติกาเดียวกับยอดของใบ
-  // (ค่าที่พักต้องเท่ายอดใบ) และห้ามแนบใบเสร็จไฟล์ใหม่ทับ — เปลี่ยนยอด/ใช้ใบเสร็จจริงต้องยกเลิกใบรับรองก่อน
-  const activeSubstitute = current.substituteReceipts.find(
-    (entry) => entry.deletedAt === null && isSubstituteReceiptActive(entry.status),
-  )
-  if (activeSubstitute !== undefined) {
-    const problem = substituteReceiptResubmitProblem({
-      receiptNumber: activeSubstitute.receiptNumber,
-      receiptTotalSatang: activeSubstitute.totalSatang,
-      expenseType: current.expenseType,
-      amountSatang: nextAmountSatang,
-      replacesReceiptFile:
-        editable && input.receiptFileUrl !== undefined && input.receiptFileUrl !== current.receiptFileUrl,
-    })
-    if (problem !== null) {
-      throw new SubstituteReceiptError('SUBSTITUTE_RECEIPT_REISSUE_NOT_ALLOWED', {
-        title: 'ส่งใบเบิกใหม่ไม่ได้',
-        message: problem,
-        detail: `expense=${expenseId} resubmit substitute_receipt=${activeSubstitute.id}`,
+  // staging SV5-01 + มติ PO 14/10/2569 SV5-R2-01 (แนวทาง ก) — หลักฐานของยอดเบิกตอนส่งใหม่: ใช้ใบรับรองที่ใช้งานอยู่
+  // (ยอดต้องเข้ากติกาของใบ) · ออกใบรับรองใหม่ตามยอด · แนบใบเสร็จจริง — สองทางหลังยกเลิกใบที่ใช้งานอยู่ในทรานแซกชันเดียวกัน
+  // (เหตุผลบังคับ) · ค่าที่พักที่ไม่เหลือหลักฐานส่งใหม่ไม่ได้ (ไม่มีช่วงที่ใบเบิกอยู่ในคิวโดยไม่มีหลักฐาน)
+  const substituteState = await loadExpenseSubstituteReceiptState(prisma, user.organizationId, expenseId)
+  const newSubstituteLines = editable && input.substituteReceipt !== undefined ? input.substituteReceipt.lines : null
+  const replacesReceiptFile =
+    editable && input.receiptFileUrl !== undefined && input.receiptFileUrl !== current.receiptFileUrl
+  const evidence = resubmitEvidenceDecision({
+    expenseType: current.expenseType,
+    amountSatang: nextAmountSatang,
+    active: substituteState.active,
+    hasSubstituteHistory: substituteState.hasHistory,
+    hasReceiptFile: current.receiptFileUrl !== null,
+    receiptFileIsActiveSigned:
+      substituteState.active?.signedFilePath != null && substituteState.active.signedFilePath === current.receiptFileUrl,
+    replacesReceiptFile,
+    newSubstituteTotalSatang: newSubstituteLines === null ? null : substituteReceiptTotalSatang(newSubstituteLines),
+    cancelReason: input.cancelSubstituteReason,
+  })
+  if (!evidence.ok) {
+    const detail = `expense=${expenseId} resubmit evidence`
+    if (evidence.code === 'HOTEL_CLAIM_FIELD_REQUIRED') {
+      throw new FieldError('HOTEL_CLAIM_FIELD_REQUIRED', {
+        message: evidence.message,
+        detail,
+        context: { missing: ['receiptFileUrl'] },
       })
     }
+    throw new SubstituteReceiptError(evidence.code, {
+      title: 'ส่งใบเบิกใหม่ไม่ได้',
+      message: evidence.message,
+      detail,
+    })
   }
+  const cancelActive = evidence.cancelActive ? substituteState.active : null
+  const replacesForNew = cancelActive ?? substituteState.replaceable
+  if (evidence.issueNew && replacesForNew === null) {
+    throw new SubstituteReceiptError('SUBSTITUTE_RECEIPT_REISSUE_NOT_ALLOWED', {
+      title: 'ส่งใบเบิกใหม่ไม่ได้',
+      message: 'ไม่พบใบรับรองแทนใบเสร็จเดิมที่จะออกใบใหม่แทน — แนบใบเสร็จจริงแทน',
+      detail: `expense=${expenseId} resubmit no_replaceable`,
+    })
+  }
+  const evidenceAt = new Date()
+  if (cancelActive !== null) {
+    await assertPeriodOpenAt({
+      organizationId: user.organizationId,
+      at: cancelActive.issueDate,
+      targetType: 'substitute_receipts',
+      targetId: cancelActive.id,
+    })
+  }
+  if (evidence.issueNew && replacesForNew !== null) {
+    await assertPeriodOpenAt({
+      organizationId: user.organizationId,
+      at: evidenceAt,
+      targetType: 'substitute_receipts',
+      targetId: replacesForNew.id,
+    })
+  }
+  // ใบเบิกยังใช้ใบรับรองแทนใบเสร็จหลังส่งใหม่ (ใบเดิมที่ไม่ยกเลิก หรือใบใหม่) ⇒ ไม่มีใบเสร็จจริง
+  const usesSubstituteReceipt = evidence.issueNew || (substituteState.active !== null && cancelActive === null)
   const nextHotelNights = isHotel && input.hotelNights !== undefined ? input.hotelNights : current.hotelNights
   let hotelCap: HotelCapSnapshot | null = null
   if (isHotel) {
@@ -1158,6 +1201,27 @@ export async function resubmitFieldExpense(
       actorId: user.id,
     })
 
+    // SV5-R2-01 — ล็อกใบเบิกแล้วอ่านสถานะใบรับรองซ้ำ: ถ้าใบเปลี่ยนระหว่างตรวจกับเขียน (เช่น ยกเลิก/ออกใบจากการ์ดอีกหน้าจอ)
+    // ⇒ ปฏิเสธ ไม่ส่งใบเบิกเข้าคิวด้วยหลักฐานที่ตัดสินจากข้อมูลเก่า
+    await tx.$queryRaw`SELECT id FROM expenses WHERE id = ${expenseId}::uuid FOR UPDATE`
+    const lockedState = await loadExpenseSubstituteReceiptState(tx as ExpenseTxClient, user.organizationId, expenseId)
+    if (
+      (lockedState.active?.id ?? null) !== (substituteState.active?.id ?? null) ||
+      (lockedState.active?.status ?? null) !== (substituteState.active?.status ?? null) ||
+      (lockedState.replaceable?.id ?? null) !== (substituteState.replaceable?.id ?? null)
+    ) {
+      throw new SubstituteReceiptError('SUBSTITUTE_RECEIPT_REISSUE_NOT_ALLOWED', {
+        title: 'ส่งใบเบิกใหม่ไม่ได้',
+        message: 'ใบรับรองแทนใบเสร็จของรายการนี้เพิ่งถูกเปลี่ยน — ปิดฟอร์มแล้วเปิดใหม่เพื่อดูสถานะล่าสุดก่อนส่ง',
+        detail: `expense=${expenseId} resubmit substitute_state_changed`,
+      })
+    }
+
+    // SV5-R2-01 — ยกเลิกใบรับรองที่ใช้งานอยู่ก่อน (ล็อกใบเบิก · ล้างช่องใบเสร็จที่เป็นฉบับเซ็น · audit พร้อมเหตุผล)
+    if (cancelActive !== null && evidence.cancelReason !== null) {
+      await cancelSubstituteReceiptInTx(tx as ExpenseTxClient, context, cancelActive, evidence.cancelReason, evidenceAt)
+    }
+
     const row = await tx.expense.update({
       where: { id: expenseId },
       data: {
@@ -1188,6 +1252,19 @@ export async function resubmitFieldExpense(
       select: expenseSelect,
     })
 
+    // SV5-R2-01 — ออกใบรับรองใหม่ตามยอดที่ส่ง (เลข CRT จองในทรานแซกชันนี้ — fail ข้อใด rollback ทั้งหมด ไม่ทิ้งเลขขาด)
+    const issuedSubstitute =
+      evidence.issueNew && newSubstituteLines !== null && replacesForNew !== null
+        ? await issueReplacementSubstituteReceiptInTx(tx as ExpenseTxClient, context, {
+            organizationId: user.organizationId,
+            payeeId: current.payeeId,
+            link: { kind: 'expense', expenseId },
+            lines: newSubstituteLines,
+            at: evidenceAt,
+            replaces: { id: replacesForNew.id, receiptNumber: replacesForNew.receiptNumber },
+          })
+        : null
+
     await emitAudit(
       {
         organizationId: user.organizationId,
@@ -1214,6 +1291,8 @@ export async function resubmitFieldExpense(
           receiptFileHash: row.receiptFileHash,
           note: row.revisionNote,
           resubmitNote: row.resubmitNote,
+          ...(cancelActive !== null ? { substituteReceiptCancelled: cancelActive.receiptNumber } : {}),
+          ...(issuedSubstitute !== null ? { substituteReceiptIssued: issuedSubstitute.receiptNumber } : {}),
           events: ['expense.resubmitted'],
         },
         reason: input.note ?? 'แก้ไขเอกสารตามที่ผู้อนุมัติจ่ายตีกลับ',
@@ -1224,7 +1303,10 @@ export async function resubmitFieldExpense(
       tx as ExpenseTxClient,
     )
 
-    return row
+    // ยกเลิก/ออกใบใหม่เปลี่ยนใบเสร็จ/ใบรับรองของแถว ⇒ อ่านซ้ำให้ DTO ตรงสภาพหลังทรานแซกชัน
+    return cancelActive !== null || issuedSubstitute !== null
+      ? tx.expense.findUniqueOrThrow({ where: { id: expenseId }, select: expenseSelect })
+      : row
   })
 
   // มติ PO U29 — ส่งกลับหลังแก้ = เริ่มขั้น 1 ใหม่ (`16` §9) ⇒ แจ้งผู้อนุมัติขั้น 1 อีกรอบ (คีย์ใหม่ตาม history)

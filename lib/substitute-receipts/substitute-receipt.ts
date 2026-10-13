@@ -314,5 +314,139 @@ export function substituteReceiptResubmitProblem(input: {
     input.receiptTotalSatang,
   )
   if (totalProblem === null) return null
-  return `${totalProblem} (ใบรับรองแทนใบเสร็จ ${input.receiptNumber} ยอด ${fmtSatangSymbol(input.receiptTotalSatang)}) — ถ้าต้องเปลี่ยนยอด ให้ยกเลิกใบรับรองก่อน แล้วออกใบใหม่แทนหรือแนบใบเสร็จจริง`
+  return `${totalProblem} (ใบรับรองแทนใบเสร็จ ${input.receiptNumber} ยอด ${fmtSatangSymbol(input.receiptTotalSatang)}) — ถ้าต้องเปลี่ยนยอด ให้เลือก “ออกใบรับรองแทนใบเสร็จใหม่ตามยอดที่กรอก” หรือ “แนบใบเสร็จจริง” ในฟอร์มส่งใหม่ (ระบบยกเลิกใบเดิมให้พร้อมการส่ง)`
+}
+
+/**
+ * หลักฐานรายจ่ายตอนส่งใบเบิกที่ถูกตีกลับใหม่ (มติ PO 14/10/2569 SV5-R2-01 แนวทาง ก) — pure ใช้ร่วม FE/BE
+ *
+ * ผู้เบิกเลือกหลักฐานได้ในฟอร์มส่งใหม่ฟอร์มเดียว ไม่มีช่วงที่ใบเบิกกลับเข้าคิวโดยไม่มีหลักฐาน:
+ * - **ใช้ใบรับรองที่ใช้งานอยู่** — ยอดต้องเข้ากติกายอดของใบ (`substituteReceiptResubmitProblem()`)
+ * - **ออกใบรับรองใหม่ตามยอด** — เฉพาะรายการที่เคยใช้ใบรับรองแทนใบเสร็จ (ออกแทนใบเดิม) · มีใบที่ใช้งานอยู่
+ *   ⇒ ยกเลิกใบนั้นในขั้นตอนเดียวกัน (เหตุผลบังคับ) · ยอดรวมของใบใหม่ตามกติกาเดียวกับการออกใบใหม่แทน
+ * - **แนบใบเสร็จจริง** — มีใบรับรองที่ใช้งานอยู่ ⇒ ยกเลิกใบนั้นในขั้นตอนเดียวกัน (เหตุผลบังคับ)
+ * - ค่าที่พัก/รายการที่เคยใช้ใบรับรอง ที่ไม่เหลือหลักฐานใดเลย (ไม่มีไฟล์ใบเสร็จ · ไม่มีใบที่ใช้งานอยู่ · ไม่ออกใหม่) ⇒ ส่งใหม่ไม่ได้
+ * - มีใบเสร็จจริงอยู่แล้ว ⇒ ออกใบรับรองใหม่ซ้อนไม่ได้
+ */
+export type ResubmitEvidenceProblemCode =
+  | 'SUBSTITUTE_RECEIPT_REISSUE_NOT_ALLOWED'
+  | 'SUBSTITUTE_RECEIPT_NOT_CANCELLABLE'
+  | 'CANCEL_REQUIRES_REASON'
+  | 'HOTEL_CLAIM_FIELD_REQUIRED'
+
+export type ResubmitEvidenceDecision =
+  | { ok: true; cancelActive: boolean; cancelReason: string | null; issueNew: boolean }
+  | { ok: false; code: ResubmitEvidenceProblemCode; message: string }
+
+export interface ResubmitEvidenceInput {
+  expenseType: ExpenseType
+  /** ยอดเบิกหลังส่งใหม่ (ไม่แก้ = ยอดเดิม) */
+  amountSatang: number
+  /** ใบรับรองที่ใช้งานอยู่ของใบเบิก (ไม่มี = `null`) */
+  active: { receiptNumber: string; totalSatang: number } | null
+  /** ใบเบิกนี้เคยมีใบรับรองแทนใบเสร็จ (รวมใบที่ยกเลิกแล้ว) */
+  hasSubstituteHistory: boolean
+  /** ไฟล์ใบเสร็จปัจจุบันของใบเบิก (ก่อนส่งใหม่) */
+  hasReceiptFile: boolean
+  /** ไฟล์ใบเสร็จปัจจุบันคือฉบับเซ็นของใบรับรองที่ใช้งานอยู่ (ยกเลิกใบ ⇒ ไฟล์ถูกล้าง) */
+  receiptFileIsActiveSigned: boolean
+  /** แนบไฟล์ใบเสร็จใหม่ที่ต่างจากไฟล์เดิม */
+  replacesReceiptFile: boolean
+  /** ยอดรวมของใบรับรองใหม่ที่ขอออกพร้อมส่งใหม่ (ไม่ขอ = `null`) */
+  newSubstituteTotalSatang: number | null
+  /** เหตุผลยกเลิกใบที่ใช้งานอยู่ (ดิบจากผู้เรียก) */
+  cancelReason: string | null | undefined
+}
+
+export function resubmitEvidenceDecision(input: ResubmitEvidenceInput): ResubmitEvidenceDecision {
+  const issueNew = input.newSubstituteTotalSatang !== null
+  const rawReason = (input.cancelReason ?? '').trim()
+  if (issueNew && input.replacesReceiptFile) {
+    return {
+      ok: false,
+      code: 'SUBSTITUTE_RECEIPT_REISSUE_NOT_ALLOWED',
+      message: 'เลือกหลักฐานได้อย่างใดอย่างหนึ่ง — ออกใบรับรองแทนใบเสร็จใหม่ หรือแนบใบเสร็จจริง',
+    }
+  }
+  if (issueNew && !input.hasSubstituteHistory) {
+    return {
+      ok: false,
+      code: 'SUBSTITUTE_RECEIPT_REISSUE_NOT_ALLOWED',
+      message: 'รายการนี้ไม่ได้ใช้ใบรับรองแทนใบเสร็จ — แนบใบเสร็จจริงแทน',
+    }
+  }
+
+  // มีใบเสร็จจริงอยู่แล้ว (ไม่ใช่ฉบับเซ็นของใบที่ใช้งานอยู่) ⇒ ออกใบรับรองซ้อนไม่ได้ (หลักฐานซ้อน · ยามอนุมัติถือว่ามีใบเสร็จแล้ว)
+  if (issueNew && input.hasReceiptFile && !input.receiptFileIsActiveSigned) {
+    return {
+      ok: false,
+      code: 'SUBSTITUTE_RECEIPT_REISSUE_NOT_ALLOWED',
+      message: 'รายการนี้มีใบเสร็จจริงแนบอยู่แล้ว — ใช้ใบเสร็จเดิมหรือแนบใบเสร็จใหม่แทน',
+    }
+  }
+
+  let cancelActive = false
+  if (input.active !== null) {
+    if (issueNew || input.replacesReceiptFile) {
+      if (rawReason.length < SUBSTITUTE_RECEIPT_CANCEL_REASON_MIN) {
+        return {
+          ok: false,
+          code: 'CANCEL_REQUIRES_REASON',
+          message: `ต้องยกเลิกใบรับรอง ${input.active.receiptNumber} ก่อนใช้หลักฐานใหม่ — กรอกเหตุผลการยกเลิกอย่างน้อย ${SUBSTITUTE_RECEIPT_CANCEL_REASON_MIN} ตัวอักษร`,
+        }
+      }
+      cancelActive = true
+    } else {
+      if (rawReason !== '') {
+        return {
+          ok: false,
+          code: 'SUBSTITUTE_RECEIPT_NOT_CANCELLABLE',
+          message: `ยกเลิกใบรับรอง ${input.active.receiptNumber} พร้อมส่งใหม่ได้เมื่อออกใบรับรองใหม่หรือแนบใบเสร็จจริงแทนเท่านั้น`,
+        }
+      }
+      const problem = substituteReceiptResubmitProblem({
+        receiptNumber: input.active.receiptNumber,
+        receiptTotalSatang: input.active.totalSatang,
+        expenseType: input.expenseType,
+        amountSatang: input.amountSatang,
+        replacesReceiptFile: false,
+      })
+      if (problem !== null) return { ok: false, code: 'SUBSTITUTE_RECEIPT_REISSUE_NOT_ALLOWED', message: problem }
+    }
+  }
+
+  if (issueNew) {
+    const totalProblem = substituteReceiptReissueTotalProblem(
+      {
+        kind: 'expense',
+        expenseType: input.expenseType,
+        expenseGrossSatang: input.amountSatang,
+        expenseStatus: 'needs_revision',
+        inCompletedPayout: false,
+      },
+      input.newSubstituteTotalSatang ?? 0,
+    )
+    if (totalProblem !== null) {
+      return {
+        ok: false,
+        code: 'SUBSTITUTE_RECEIPT_REISSUE_NOT_ALLOWED',
+        message: `${totalProblem} (ยอดเบิก ${fmtSatangSymbol(input.amountSatang)} · ยอดใบใหม่ ${fmtSatangSymbol(input.newSubstituteTotalSatang ?? 0)})`,
+      }
+    }
+  }
+
+  // ค่าที่พักบังคับหลักฐานเสมอ · ชนิดอื่นที่เคยใช้ใบรับรองแทนใบเสร็จต้องคงหลักฐานไว้ (กติกาเดียวกับฟอร์ม)
+  if (input.expenseType === 'hotel' || input.hasSubstituteHistory) {
+    const keepsReceiptFile = input.hasReceiptFile && !(cancelActive && input.receiptFileIsActiveSigned)
+    const keepsActive = input.active !== null && !cancelActive
+    if (!issueNew && !input.replacesReceiptFile && !keepsReceiptFile && !keepsActive) {
+      return {
+        ok: false,
+        code: 'HOTEL_CLAIM_FIELD_REQUIRED',
+        message: 'รายการเบิกนี้ยังไม่มีหลักฐานรายจ่าย — ออกใบรับรองแทนใบเสร็จใหม่ตามยอด หรือแนบใบเสร็จจริงก่อนส่งใหม่',
+      }
+    }
+  }
+
+  return { ok: true, cancelActive, cancelReason: cancelActive ? rawReason : null, issueNew }
 }

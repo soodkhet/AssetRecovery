@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { substituteDraftPayload, substituteLinesToDrafts } from '@/lib/substitute-receipts/form'
+import { fitSubstituteLinesToTotal, substituteDraftPayload, substituteLinesToDrafts } from '@/lib/substitute-receipts/form'
+import { resubmitExpenseSchema } from '@/lib/field/schemas'
 import { SubstituteReceiptError } from '@/lib/substitute-receipts/errors'
 import { substituteReceiptDraftSchema, substituteReceiptLineSchema } from '@/lib/substitute-receipts/schemas'
 import {
@@ -13,6 +14,8 @@ import {
   isSubstituteReceiptActive,
   isSubstituteReceiptRefActive,
   requireSubstituteReceiptCancelReason,
+  resubmitEvidenceDecision,
+  type ResubmitEvidenceInput,
   substituteReceiptBadgeText,
   substituteReceiptCancelProblem,
   substituteReceiptCancelProblemMessage,
@@ -366,5 +369,138 @@ describe('ใบรับรองแทนใบเสร็จที่ยั�
     expect(isSubstituteReceiptRefActive(null)).toBe(false)
     expect(isSubstituteReceiptRefActive({ status: 'cancelled' })).toBe(false)
     expect(isSubstituteReceiptRefActive({ status: 'pending_signature' })).toBe(true)
+  })
+})
+
+describe('ตรวจซ้ำ staging SV5-R2-01 — หลักฐานตอนส่งใหม่ (มติ PO 14/10/2569 แนวทาง ก)', () => {
+  const ACTIVE = { receiptNumber: 'CRT-2569-0007', totalSatang: 34_550 }
+  const base: ResubmitEvidenceInput = {
+    expenseType: 'hotel',
+    amountSatang: 34_550,
+    active: ACTIVE,
+    hasSubstituteHistory: true,
+    hasReceiptFile: false,
+    receiptFileIsActiveSigned: false,
+    replacesReceiptFile: false,
+    newSubstituteTotalSatang: null,
+    cancelReason: null,
+  }
+
+  it('ใช้ใบเดิม: ยอดเท่ายอดใบผ่าน · ยอดไม่เท่าชี้ทางออกใบใหม่ในฟอร์ม · ส่งเหตุผลยกเลิกโดยไม่มีหลักฐานใหม่ไม่ได้', () => {
+    expect(resubmitEvidenceDecision(base)).toEqual({ ok: true, cancelActive: false, cancelReason: null, issueNew: false })
+    const mismatch = resubmitEvidenceDecision({ ...base, amountSatang: 29_825 })
+    expect(mismatch).toMatchObject({ ok: false, code: 'SUBSTITUTE_RECEIPT_REISSUE_NOT_ALLOWED' })
+    expect(mismatch.ok ? '' : mismatch.message).toContain('ออกใบรับรองแทนใบเสร็จใหม่ตามยอดที่กรอก')
+    expect(resubmitEvidenceDecision({ ...base, cancelReason: 'ยกเลิกเฉย ๆ' })).toMatchObject({
+      ok: false,
+      code: 'SUBSTITUTE_RECEIPT_NOT_CANCELLABLE',
+    })
+  })
+
+  it('มีใบที่ใช้งานอยู่ + ออกใบใหม่/แนบใบเสร็จจริง ⇒ ต้องมีเหตุผลยกเลิก ≥ 5 ตัวอักษร แล้วยกเลิกพร้อมการส่ง', () => {
+    const issue = { ...base, amountSatang: 29_825, newSubstituteTotalSatang: 29_825 }
+    expect(resubmitEvidenceDecision(issue)).toMatchObject({ ok: false, code: 'CANCEL_REQUIRES_REASON' })
+    expect(resubmitEvidenceDecision({ ...issue, cancelReason: ' สั้น ' })).toMatchObject({ ok: false, code: 'CANCEL_REQUIRES_REASON' })
+    expect(resubmitEvidenceDecision({ ...issue, cancelReason: '  แก้ยอดตามจริง  ' })).toEqual({
+      ok: true,
+      cancelActive: true,
+      cancelReason: 'แก้ยอดตามจริง',
+      issueNew: true,
+    })
+    expect(
+      resubmitEvidenceDecision({ ...base, replacesReceiptFile: true, cancelReason: 'ได้ใบเสร็จจริงแล้ว' }),
+    ).toEqual({ ok: true, cancelActive: true, cancelReason: 'ได้ใบเสร็จจริงแล้ว', issueNew: false })
+  })
+
+  it('ใบใหม่: ค่าที่พักยอดต้องเท่ายอดเบิก · ชนิดอื่นไม่เกิน · เลือกทั้งใบใหม่และใบเสร็จไม่ได้ · ไม่เคยใช้ใบรับรอง = ไม่ได้', () => {
+    const noActive = { ...base, active: null }
+    expect(resubmitEvidenceDecision({ ...noActive, amountSatang: 29_825, newSubstituteTotalSatang: 29_825 })).toMatchObject({
+      ok: true,
+      issueNew: true,
+      cancelActive: false,
+    })
+    const wrong = resubmitEvidenceDecision({ ...noActive, amountSatang: 29_825, newSubstituteTotalSatang: 34_550 })
+    expect(wrong).toMatchObject({ ok: false, code: 'SUBSTITUTE_RECEIPT_REISSUE_NOT_ALLOWED' })
+    expect(wrong.ok ? '' : wrong.message).toContain('฿298.25')
+    expect(wrong.ok ? '' : wrong.message).not.toMatch(/§|ไฟล์ \d/)
+    const other = { ...noActive, expenseType: 'receipt' as const, amountSatang: 30_000 }
+    expect(resubmitEvidenceDecision({ ...other, newSubstituteTotalSatang: 20_000 })).toMatchObject({ ok: true })
+    expect(resubmitEvidenceDecision({ ...other, newSubstituteTotalSatang: 30_001 })).toMatchObject({ ok: false })
+    expect(
+      resubmitEvidenceDecision({ ...noActive, newSubstituteTotalSatang: 34_550, replacesReceiptFile: true }),
+    ).toMatchObject({ ok: false, code: 'SUBSTITUTE_RECEIPT_REISSUE_NOT_ALLOWED' })
+    expect(
+      resubmitEvidenceDecision({ ...noActive, hasSubstituteHistory: false, hasReceiptFile: true, newSubstituteTotalSatang: 34_550 }),
+    ).toMatchObject({ ok: false, code: 'SUBSTITUTE_RECEIPT_REISSUE_NOT_ALLOWED' })
+  })
+
+  it('มีใบเสร็จจริงแนบอยู่แล้ว ⇒ ออกใบรับรองซ้อนไม่ได้ · ไฟล์ที่เป็นฉบับเซ็นของใบที่ใช้งานอยู่ = ออกใหม่ได้ (ยกเลิกพร้อมการส่ง)', () => {
+    expect(
+      resubmitEvidenceDecision({ ...base, active: null, hasReceiptFile: true, newSubstituteTotalSatang: 34_550 }),
+    ).toMatchObject({ ok: false, code: 'SUBSTITUTE_RECEIPT_REISSUE_NOT_ALLOWED' })
+    expect(
+      resubmitEvidenceDecision({
+        ...base,
+        hasReceiptFile: true,
+        receiptFileIsActiveSigned: true,
+        newSubstituteTotalSatang: 34_550,
+        cancelReason: 'ออกใบใหม่ตามยอด',
+      }),
+    ).toMatchObject({ ok: true, cancelActive: true, issueNew: true })
+  })
+
+  it('ค่าที่พักที่ไม่เหลือหลักฐาน ⇒ HOTEL_CLAIM_FIELD_REQUIRED · ใบเสร็จจริงเดิม/ใบรับรองเดิม = ผ่าน · ชนิดอื่นไม่บังคับ', () => {
+    const cancelledOnly = { ...base, active: null }
+    expect(resubmitEvidenceDecision(cancelledOnly)).toMatchObject({ ok: false, code: 'HOTEL_CLAIM_FIELD_REQUIRED' })
+    expect(resubmitEvidenceDecision({ ...cancelledOnly, hasReceiptFile: true })).toMatchObject({ ok: true })
+    expect(resubmitEvidenceDecision({ ...cancelledOnly, replacesReceiptFile: true })).toMatchObject({ ok: true })
+    // ชนิดอื่น: เคยใช้ใบรับรองแล้วไม่เหลือหลักฐาน ⇒ ไม่ได้ (กติกาเดียวกับฟอร์ม) · ไม่เคยใช้ใบรับรอง ⇒ ไม่บังคับ
+    expect(resubmitEvidenceDecision({ ...cancelledOnly, expenseType: 'receipt' })).toMatchObject({
+      ok: false,
+      code: 'HOTEL_CLAIM_FIELD_REQUIRED',
+    })
+    expect(
+      resubmitEvidenceDecision({ ...cancelledOnly, expenseType: 'receipt', hasSubstituteHistory: false }),
+    ).toMatchObject({ ok: true })
+    // ไฟล์ปัจจุบันคือฉบับเซ็นของใบที่ยกเลิกพร้อมการส่ง — ไม่นับเป็นหลักฐาน แต่แนบใบเสร็จใหม่แล้วจึงผ่าน
+    expect(
+      resubmitEvidenceDecision({
+        ...base,
+        hasReceiptFile: true,
+        receiptFileIsActiveSigned: true,
+        replacesReceiptFile: true,
+        cancelReason: 'ได้ใบเสร็จจริงแล้ว',
+      }),
+    ).toMatchObject({ ok: true, cancelActive: true })
+  })
+
+  it('ฟอร์มออกใบใหม่ตั้งต้นยอดรวม = ยอดเบิกปัจจุบัน (ไม่ใช่ยอดใบที่ยกเลิก)', () => {
+    const one = [{ lineDate: '2026-10-08', description: 'ค่าห้องพัก', amountSatang: 34_550, note: null }]
+    expect(fitSubstituteLinesToTotal(one, 29_825).map((entry) => entry.amountSatang)).toEqual([29_825])
+    const two = [
+      { lineDate: '2026-10-08', description: 'ค่าห้องพัก คืนที่ 1', amountSatang: 20_000, note: null },
+      { lineDate: '2026-10-09', description: 'ค่าห้องพัก คืนที่ 2', amountSatang: 14_550, note: null },
+    ]
+    expect(fitSubstituteLinesToTotal(two, 29_825).map((entry) => entry.amountSatang)).toEqual([20_000, 9_825])
+    // ปรับบรรทัดสุดท้ายแล้วติดลบ ⇒ คงเดิมให้ผู้ใช้แก้เอง
+    expect(fitSubstituteLinesToTotal(two, 10_000).map((entry) => entry.amountSatang)).toEqual([20_000, 14_550])
+    expect(fitSubstituteLinesToTotal([], 29_825, '2026-10-08')).toEqual([
+      { lineDate: '2026-10-08', description: '', amountSatang: 29_825, note: null },
+    ])
+    expect(substituteLinesToDrafts(one, '', 29_825)[0]?.amountBaht).toBe('298.25')
+    expect(substituteLinesToDrafts(one)[0]?.amountBaht).toBe('345.50')
+  })
+
+  it('schema ส่งใหม่: รับรายการใบใหม่ + เหตุผลยกเลิก · ใบใหม่คู่กับไฟล์ใบเสร็จไม่ได้', () => {
+    const lines = [{ lineDate: '2026-10-08', description: 'ค่าห้องพัก 1 คืน', amountSatang: 29_825, note: null }]
+    expect(
+      resubmitExpenseSchema.safeParse({ substituteReceipt: { lines }, cancelSubstituteReason: 'แก้ยอด', note: 'x' }).success,
+    ).toBe(true)
+    expect(
+      resubmitExpenseSchema.safeParse({
+        substituteReceipt: { lines },
+        receiptFileUrl: 'expense-receipts/u/66666666-6666-4666-8666-666666666666.jpg',
+      }).success,
+    ).toBe(false)
   })
 })

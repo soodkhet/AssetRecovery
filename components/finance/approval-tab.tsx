@@ -264,6 +264,7 @@ export function ApprovalTab() {
                               compact
                               canCancel={canManageSubstituteReceipts && item.status !== 'approved'}
                               variant={noReceiptVariantOf(item.expenseType)}
+                              requiredTotalSatang={item.expenseType === 'hotel' ? item.grossSatang : undefined}
                               onChanged={() => void claims.reload()}
                             />
                           </div>

@@ -634,6 +634,158 @@ export function toSubstituteReceiptDocSource(row: SubstituteReceiptSourceRow): S
 
 // ── ยกเลิก / ออกใบใหม่แทน (มติ PO 06/10/2569 U107 · `23` §6.17) ─────────────────────
 
+/** ใบที่จะยกเลิก — ฟิลด์ที่การยกเลิกในทรานแซกชันต้องใช้ */
+export interface CancellableSubstituteReceipt {
+  id: string
+  receiptNumber: string
+  status: SubstituteReceiptSourceRow['status']
+  signedFilePath: string | null
+  expenseId: string | null
+  advanceId: string | null
+  totalSatang: number
+}
+
+/**
+ * ยกเลิกใบ **ภายในทรานแซกชันของผู้เรียก** (ผู้เรียกตรวจสิทธิ์/เหตุผล/Period Lock มาแล้ว) — ผูกสถานะเดิม
+ * (แข่งกันได้ผลคำขอเดียว) · ล็อกใบเบิกแล้วตรวจซ้ำว่ายังไม่อนุมัติ · ล้างช่องใบเสร็จที่เป็นฉบับเซ็นของใบนี้ · audit
+ * ใช้ร่วม `cancelSubstituteReceipt()` และการส่งใบเบิกใหม่พร้อมออกใบใหม่ (SV5-R2-01)
+ */
+export async function cancelSubstituteReceiptInTx(
+  tx: ExpenseTxClient,
+  context: SubstituteReceiptMutationContext,
+  current: CancellableSubstituteReceipt,
+  reason: string,
+  at: Date,
+): Promise<void> {
+  const user = context.actor
+  const id = current.id
+  // ผูกสถานะเดิม — ยกเลิกพร้อมกัน/แข่งกับการอัปโหลดฉบับเซ็นได้ผลแค่คำขอเดียว
+  const claimed = await tx.substituteReceipt.updateMany({
+    where: { id, organizationId: user.organizationId, status: current.status, deletedAt: null },
+    data: { status: 'cancelled', cancelledAt: at, cancelledBy: user.id, cancelReason: reason, updatedBy: user.id },
+  })
+  if (claimed.count !== 1) {
+    throw new SubstituteReceiptError('SUBSTITUTE_RECEIPT_NOT_CANCELLABLE', {
+      message: substituteReceiptCancelProblemMessage('already_cancelled', current.receiptNumber),
+      detail: `substitute_receipt=${id} changed concurrently`,
+    })
+  }
+  if (current.expenseId !== null) {
+    // ล็อกใบเบิกแล้วตรวจซ้ำ — กันแข่งกับการอนุมัติที่เกิดหลังอ่านครั้งแรก
+    await tx.$queryRaw`SELECT id FROM expenses WHERE id = ${current.expenseId}::uuid FOR UPDATE`
+    const expense = await tx.expense.findUniqueOrThrow({
+      where: { id: current.expenseId },
+      select: { status: true, receiptFileUrl: true, receiptFileHash: true },
+    })
+    if (expense.status === 'approved') {
+      throw new SubstituteReceiptError('SUBSTITUTE_RECEIPT_NOT_CANCELLABLE', {
+        message: substituteReceiptCancelProblemMessage('linked_paid', current.receiptNumber),
+        detail: `substitute_receipt=${id} expense approved concurrently`,
+      })
+    }
+    if (current.signedFilePath !== null && expense.receiptFileUrl === current.signedFilePath) {
+      await tx.expense.update({
+        where: { id: current.expenseId },
+        data: { receiptFileUrl: null, receiptFileHash: null, receiptFileUnverified: false, updatedBy: user.id },
+      })
+      await emitAudit(
+        {
+          organizationId: user.organizationId,
+          actorId: user.id,
+          actorRole: user.roleName,
+          action: 'update',
+          targetType: 'expenses',
+          targetId: current.expenseId,
+          before: { receipt_file_url: expense.receiptFileUrl, receipt_file_hash: expense.receiptFileHash },
+          after: { receipt_file_url: null, receipt_file_hash: null, substitute_receipt_number: current.receiptNumber },
+          reason: `ยกเลิกใบรับรองแทนใบเสร็จ ${current.receiptNumber} — ${reason}`,
+          ipAddress: context.meta.ipAddress,
+          userAgent: context.meta.userAgent,
+          diffOnly: false,
+        },
+        tx,
+      )
+    }
+  }
+
+  await emitAudit(
+    {
+      organizationId: user.organizationId,
+      actorId: user.id,
+      actorRole: user.roleName,
+      action: 'status_change',
+      targetType: TARGET,
+      targetId: id,
+      before: { status: current.status },
+      after: {
+        status: 'cancelled',
+        receipt_number: current.receiptNumber,
+        cancelled_at: at.toISOString(),
+        expense_id: current.expenseId,
+        advance_id: current.advanceId,
+        total_satang: current.totalSatang,
+        events: ['substitute_receipt.cancelled'],
+      },
+      reason,
+      ipAddress: context.meta.ipAddress,
+      userAgent: context.meta.userAgent,
+      diffOnly: false,
+    },
+    tx,
+  )
+}
+
+/** สถานะใบรับรองของใบเบิกหนึ่งใบ ณ ตอนส่งใหม่ (SV5-R2-01) */
+export interface ExpenseSubstituteReceiptState {
+  /** ใบที่ใช้งานอยู่ (ไม่เกิน 1 — partial unique) */
+  active: (CancellableSubstituteReceipt & { issueDate: Date }) | null
+  /** ใบที่ยกเลิกแล้วล่าสุดซึ่งยังไม่ถูกออกแทน — ใบใหม่ที่ออกตอนส่งใหม่ (ไม่มีใบที่ใช้งานอยู่) ออกแทนใบนี้ */
+  replaceable: { id: string; receiptNumber: string } | null
+  /** ใบเบิกนี้เคยใช้ใบรับรองแทนใบเสร็จ (รวมใบที่ยกเลิก) */
+  hasHistory: boolean
+}
+
+export async function loadExpenseSubstituteReceiptState(
+  client: Pick<ExpenseTxClient, 'substituteReceipt'>,
+  organizationId: string,
+  expenseId: string,
+): Promise<ExpenseSubstituteReceiptState> {
+  const rows = await client.substituteReceipt.findMany({
+    where: { organizationId, expenseId, deletedAt: null },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      receiptNumber: true,
+      status: true,
+      signedFilePath: true,
+      expenseId: true,
+      advanceId: true,
+      totalSatang: true,
+      issueDate: true,
+      replacedBy: { select: { id: true }, take: 1 },
+    },
+  })
+  const activeRow = rows.find((row) => row.status !== 'cancelled') ?? null
+  const replaceableRow = rows.find((row) => row.status === 'cancelled' && row.replacedBy.length === 0) ?? null
+  return {
+    active:
+      activeRow === null
+        ? null
+        : {
+            id: activeRow.id,
+            receiptNumber: activeRow.receiptNumber,
+            status: activeRow.status,
+            signedFilePath: activeRow.signedFilePath,
+            expenseId: activeRow.expenseId,
+            advanceId: activeRow.advanceId,
+            totalSatang: activeRow.totalSatang,
+            issueDate: activeRow.issueDate,
+          },
+    replaceable: replaceableRow === null ? null : { id: replaceableRow.id, receiptNumber: replaceableRow.receiptNumber },
+    hasHistory: rows.length > 0,
+  }
+}
+
 /**
  * `POST /api/substitute-receipts/:id/cancel` — ยกเลิกใบ (terminal · ครั้งเดียว) พร้อมเหตุผลบังคับ + audit
  *
@@ -662,87 +814,55 @@ export async function cancelSubstituteReceipt(
   const at = new Date()
 
   const updated = await prisma.$transaction(async (tx) => {
-    // ผูกสถานะเดิม — ยกเลิกพร้อมกัน/แข่งกับการอัปโหลดฉบับเซ็นได้ผลแค่คำขอเดียว
-    const claimed = await tx.substituteReceipt.updateMany({
-      where: { id, organizationId: user.organizationId, status: current.status, deletedAt: null },
-      data: { status: 'cancelled', cancelledAt: at, cancelledBy: user.id, cancelReason: reason, updatedBy: user.id },
-    })
-    if (claimed.count !== 1) {
-      throw new SubstituteReceiptError('SUBSTITUTE_RECEIPT_NOT_CANCELLABLE', {
-        message: substituteReceiptCancelProblemMessage('already_cancelled', current.receiptNumber),
-        detail: `substitute_receipt=${id} changed concurrently`,
-      })
-    }
-    if (current.expenseId !== null) {
-      // ล็อกใบเบิกแล้วตรวจซ้ำ — กันแข่งกับการอนุมัติที่เกิดหลังอ่านครั้งแรก
-      await tx.$queryRaw`SELECT id FROM expenses WHERE id = ${current.expenseId}::uuid FOR UPDATE`
-      const expense = await tx.expense.findUniqueOrThrow({
-        where: { id: current.expenseId },
-        select: { status: true, receiptFileUrl: true, receiptFileHash: true },
-      })
-      if (expense.status === 'approved') {
-        throw new SubstituteReceiptError('SUBSTITUTE_RECEIPT_NOT_CANCELLABLE', {
-          message: substituteReceiptCancelProblemMessage('linked_paid', current.receiptNumber),
-          detail: `substitute_receipt=${id} expense approved concurrently`,
-        })
-      }
-      if (current.signedFilePath !== null && expense.receiptFileUrl === current.signedFilePath) {
-        await tx.expense.update({
-          where: { id: current.expenseId },
-          data: { receiptFileUrl: null, receiptFileHash: null, receiptFileUnverified: false, updatedBy: user.id },
-        })
-        await emitAudit(
-          {
-            organizationId: user.organizationId,
-            actorId: user.id,
-            actorRole: user.roleName,
-            action: 'update',
-            targetType: 'expenses',
-            targetId: current.expenseId,
-            before: { receipt_file_url: expense.receiptFileUrl, receipt_file_hash: expense.receiptFileHash },
-            after: { receipt_file_url: null, receipt_file_hash: null, substitute_receipt_number: current.receiptNumber },
-            reason: `ยกเลิกใบรับรองแทนใบเสร็จ ${current.receiptNumber} — ${reason}`,
-            ipAddress: context.meta.ipAddress,
-            userAgent: context.meta.userAgent,
-            diffOnly: false,
-          },
-          tx,
-        )
-      }
-    }
-
-    await emitAudit(
-      {
-        organizationId: user.organizationId,
-        actorId: user.id,
-        actorRole: user.roleName,
-        action: 'status_change',
-        targetType: TARGET,
-        targetId: id,
-        before: { status: current.status },
-        after: {
-          status: 'cancelled',
-          receipt_number: current.receiptNumber,
-          cancelled_at: at.toISOString(),
-          expense_id: current.expenseId,
-          advance_id: current.advanceId,
-          total_satang: current.totalSatang,
-          events: ['substitute_receipt.cancelled'],
-        },
-        reason,
-        ipAddress: context.meta.ipAddress,
-        userAgent: context.meta.userAgent,
-        diffOnly: false,
-      },
-      tx,
-    )
-
+    await cancelSubstituteReceiptInTx(tx as ExpenseTxClient, context, current, reason, at)
     return tx.substituteReceipt.findUniqueOrThrow({ where: { id }, select: substituteReceiptRefSelect })
   })
 
   const ref = substituteReceiptRefOf([updated])
   if (ref === null) throw new SubstituteReceiptError('SUBSTITUTE_RECEIPT_NOT_FOUND', { detail: `substitute_receipt=${id}` })
   return ref
+}
+
+/**
+ * ออกใบใหม่แทนใบที่ยกเลิก **ภายในทรานแซกชันของผู้เรียก** (เลข CRT ใหม่จากตัวจองเลขในทรานแซกชันเดียวกัน ⇒ rollback
+ * ไม่ทิ้งเลขขาด) + audit `substitute_receipt.reissued` · ผู้เรียกตรวจสิทธิ์/ยอด/Period Lock มาแล้ว
+ * ใช้ร่วม `reissueSubstituteReceipt()` และการส่งใบเบิกใหม่พร้อมออกใบใหม่ (SV5-R2-01)
+ */
+export async function issueReplacementSubstituteReceiptInTx(
+  tx: ExpenseTxClient,
+  context: SubstituteReceiptMutationContext,
+  input: Omit<IssueSubstituteReceiptInput, 'replacesReceiptId'> & { replaces: { id: string; receiptNumber: string } },
+): Promise<IssuedSubstituteReceipt> {
+  const created = await issueSubstituteReceipt(tx, context, {
+    organizationId: input.organizationId,
+    payeeId: input.payeeId,
+    link: input.link,
+    lines: input.lines,
+    at: input.at,
+    replacesReceiptId: input.replaces.id,
+  })
+  await emitAudit(
+    {
+      organizationId: input.organizationId,
+      actorId: context.actor.id,
+      actorRole: context.actor.roleName,
+      action: 'update',
+      targetType: TARGET,
+      targetId: created.id,
+      after: {
+        receipt_number: created.receiptNumber,
+        replaces_receipt_number: input.replaces.receiptNumber,
+        replaces_substitute_receipt_id: input.replaces.id,
+        events: ['substitute_receipt.reissued'],
+      },
+      reason: `ออกใบรับรองแทนใบเสร็จ ${created.receiptNumber} แทนใบ ${input.replaces.receiptNumber} ที่ยกเลิก`,
+      ipAddress: context.meta.ipAddress,
+      userAgent: context.meta.userAgent,
+      diffOnly: false,
+    },
+    tx,
+  )
+  return created
 }
 
 /**
@@ -798,35 +918,14 @@ export async function reissueSubstituteReceipt(
       : { kind: 'advance', advanceId: current.advanceId ?? '' }
 
   const issued = await prisma.$transaction(async (tx) => {
-    const created = await issueSubstituteReceipt(tx as ExpenseTxClient, context, {
+    await issueReplacementSubstituteReceiptInTx(tx as ExpenseTxClient, context, {
       organizationId: user.organizationId,
       payeeId: current.payee.id,
       link: newLink,
       lines,
       at,
-      replacesReceiptId: current.id,
+      replaces: { id: current.id, receiptNumber: current.receiptNumber },
     })
-    await emitAudit(
-      {
-        organizationId: user.organizationId,
-        actorId: user.id,
-        actorRole: user.roleName,
-        action: 'update',
-        targetType: TARGET,
-        targetId: created.id,
-        after: {
-          receipt_number: created.receiptNumber,
-          replaces_receipt_number: current.receiptNumber,
-          replaces_substitute_receipt_id: current.id,
-          events: ['substitute_receipt.reissued'],
-        },
-        reason: `ออกใบรับรองแทนใบเสร็จ ${created.receiptNumber} แทนใบ ${current.receiptNumber} ที่ยกเลิก`,
-        ipAddress: context.meta.ipAddress,
-        userAgent: context.meta.userAgent,
-        diffOnly: false,
-      },
-      tx as ExpenseTxClient,
-    )
     // U117 — คืนทุกใบของรายการเดียวกัน ⇒ การ์ดเห็นใบใหม่คู่กับใบที่ยกเลิก
     return tx.substituteReceipt.findMany({
       where: { organizationId: user.organizationId, deletedAt: null, ...linkWhere },

@@ -223,6 +223,8 @@ function NeedsRevisionBlock({
                   canUpload
                   canCancel
                   variant={noReceiptVariantOf(item.expenseType)}
+                  // ตรวจซ้ำ staging SV5-R2-01 — ใบใหม่ของค่าที่พักตั้งต้นยอด = ยอดเบิกปัจจุบัน
+                  requiredTotalSatang={item.expenseType === 'hotel' ? item.grossSatang : undefined}
                   onSigned={onReceiptChanged}
                   onChanged={onReceiptChanged}
                 />
@@ -422,6 +424,8 @@ export function ExpensesTab({ initialView = 'caseBound' }: { initialView?: Expen
                             // มติ PO U107 — เจ้าของยกเลิก/ออกใบใหม่แทนได้ก่อนอนุมัติ
                             canCancel={item.status !== 'approved'}
                             variant={noReceiptVariantOf(item.expenseType)}
+                            // ตรวจซ้ำ staging SV5-R2-01 — ใบใหม่ของค่าที่พักตั้งต้นยอด = ยอดเบิกปัจจุบัน
+                            requiredTotalSatang={item.expenseType === 'hotel' ? item.grossSatang : undefined}
                             onSigned={() => void load(view)}
                             onChanged={() => void load(view)}
                           />

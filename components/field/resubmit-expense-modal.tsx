@@ -1,9 +1,11 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { IconFile } from '@/components/field/field-icons'
 import { ReceiptInCompanyNameCheckbox } from '@/components/field/hotel-claim-modal'
+import { NoReceiptLinesEditor } from '@/components/substitute-receipts/no-receipt-lines'
 import { Button, Field, InlineAlert, Input, Modal, Textarea, useToast } from '@/components/ui'
+import { REASON_MAX } from '@/lib/api/validation'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { EXPENSE_TYPE_ICON, expenseTypeLabel, isSeparateExpense } from '@/lib/field/expense-ui'
@@ -15,10 +17,28 @@ import {
   parseHotelNightsInput,
 } from '@/lib/field/hotel-claim'
 import { EXPENSE_RECEIPT_ACCEPT } from '@/lib/field/media-upload'
+import {
+  defaultResubmitEvidenceMode,
+  hasRealReceiptFile,
+  resubmitEvidenceModes,
+  resubmitReceiptFileRequired,
+  resubmitReceiptPickerText,
+  type ResubmitEvidenceMode,
+} from '@/lib/field/resubmit-evidence'
 import type { FieldExpenseDto } from '@/lib/field/types'
 import { FieldUploadError, uploadExpenseReceipt } from '@/lib/field/upload-client'
-import { isSubstituteReceiptRefActive } from '@/lib/substitute-receipts/substitute-receipt'
-import { fmtDate } from '@/lib/format/datetime'
+import {
+  substituteDraftPayload,
+  substituteDraftTotalSatang,
+  substituteLinesToDrafts,
+  type SubstituteLineDraft,
+} from '@/lib/substitute-receipts/form'
+import {
+  isSubstituteReceiptRefActive,
+  SUBSTITUTE_RECEIPT_CANCEL_REASON_MIN,
+} from '@/lib/substitute-receipts/substitute-receipt'
+import type { SubstituteReceiptDetailDto } from '@/lib/substitute-receipts/types'
+import { fmtDate, toInputDate } from '@/lib/format/datetime'
 import { bahtInputError, fmtSatangSymbol, parseBahtInput, toBahtInput } from '@/lib/format/money'
 
 /**
@@ -28,6 +48,9 @@ import { bahtInputError, fmtSatangSymbol, parseBahtInput, toBahtInput } from '@/
  * - รายการกลุ่ม "ผูกกับเคส" ระบบคำนวณยอดให้ ⇒ แก้ได้แค่หมายเหตุ (ช่องยอด/ใบเสร็จซ่อนไว้)
  * - ค่าที่พักแก้ "จำนวนคืน" ได้ด้วย (มติ PO O50) — BE ตรวจเพดานด้วยจำนวนคืนหลังแก้
  * - ส่งใหม่แล้วกลับเข้า `pending_approval` — **ไม่ผ่านขั้นรอคลังซ้ำ** (`41` §6.6)
+ * - มติ PO 14/10/2569 SV5-R2-01 (แนวทาง ก): รายการที่เคยใช้ใบรับรองแทนใบเสร็จเลือกหลักฐานในฟอร์มนี้ได้เลย — ใช้ใบเดิม /
+ *   ออกใบใหม่ตามยอด (ค่าเริ่มต้นเมื่อใบเดิมถูกยกเลิก) / แนบใบเสร็จจริง · ใบที่ใช้งานอยู่ถูกยกเลิกพร้อมการส่ง (เหตุผลบังคับ)
+ *   server ทำทั้งหมดในทรานแซกชันเดียว ⇒ ไม่มีช่วงที่ใบเบิกอยู่ในคิวโดยไม่มีหลักฐาน
  */
 export function ResubmitExpenseModal({
   expense,
@@ -42,11 +65,34 @@ export function ResubmitExpenseModal({
   const fileRef = useRef<HTMLInputElement>(null)
   const editable = isSeparateExpense(expense)
   const isHotel = expense.expenseType === 'hotel'
-  // mytester5 รีวิว D-OUT5-01 — ใช้ใบรับรองแทนใบเสร็จที่ยังมีผล = ไม่มีใบเสร็จจริง ⇒ ไม่มีช่อง "ใบเสร็จออกในนามบริษัท"
-  const activeSubstitute = isSubstituteReceiptRefActive(expense.substituteReceipt) ? expense.substituteReceipt : null
-  const showReceiptName = isHotel && activeSubstitute === null
-  // staging SV5-01 — ค่าที่พักที่ใช้ใบรับรองแทนใบเสร็จ: ยอดเบิกต้องเท่ายอดใบ ⇒ ล็อกช่องยอด (BE ตรวจซ้ำ)
-  const amountLocked = isHotel && activeSubstitute !== null
+  // ใบรับรองแทนใบเสร็จที่แสดงบนรายการ (ใบที่ใช้งานอยู่ หรือใบที่ยกเลิกล่าสุด)
+  const substitute = expense.substituteReceipt
+  const activeSubstitute = isSubstituteReceiptRefActive(substitute) ? substitute : null
+  // มติ PO 14/10/2569 SV5-R2-01 (แนวทาง ก) — เลือกหลักฐานในฟอร์มนี้: ใช้ใบรับรองเดิม · ออกใบรับรองใหม่ตามยอด · แนบใบเสร็จจริง
+  const evidenceState = {
+    hasActiveSubstitute: activeSubstitute !== null,
+    hasSubstituteHistory: substitute !== null,
+    hasRealReceipt: hasRealReceiptFile({ receiptFileUrl: expense.receiptFileUrl, hasActiveSubstitute: activeSubstitute !== null }),
+  }
+  const evidenceModes = editable ? resubmitEvidenceModes(evidenceState) : []
+  const [mode, setMode] = useState<ResubmitEvidenceMode>(() => defaultResubmitEvidenceMode(evidenceState))
+  const [lines, setLines] = useState<SubstituteLineDraft[]>([])
+  // เปิดฟอร์มมาที่ "ออกใบใหม่" (ใบเดิมถูกยกเลิกแล้ว) ⇒ เริ่มโหลดรายการทันที
+  const initialLoad = editable && substitute !== null && defaultResubmitEvidenceMode(evidenceState) === 'new_substitute'
+  const [loadingLines, setLoadingLines] = useState(initialLoad)
+  const linesRequestedRef = useRef(false)
+  const [cancelReason, setCancelReason] = useState('')
+  const lineDate = toInputDate(expense.expenseDate)
+  const newSubstitute = editable && mode === 'new_substitute'
+  const keepSubstitute = mode === 'keep_substitute' && activeSubstitute !== null
+  // ยกเลิกใบที่ใช้งานอยู่ในขั้นตอนเดียวกัน (เหตุผลบังคับ) เมื่อเลือกหลักฐานใหม่แทน
+  const cancelsActive = activeSubstitute !== null && editable && mode !== 'keep_substitute'
+  // mytester5 รีวิว D-OUT5-01 — ใช้ใบรับรองแทนใบเสร็จ = ไม่มีใบเสร็จจริง ⇒ ไม่มีช่อง "ใบเสร็จออกในนามบริษัท"
+  const showReceiptName = isHotel && mode === 'receipt'
+  // ค่าที่พัก + ใบรับรอง: ยอดเบิก = ยอดรวมใบ ⇒ ใช้ใบเดิมล็อกช่องยอด · ออกใบใหม่ใช้ยอดรวมรายการ (BE ตรวจซ้ำ)
+  const amountLocked = isHotel && (keepSubstitute || newSubstitute)
+  const linesTotal = substituteDraftTotalSatang(lines)
+  const receiptRequired = resubmitReceiptFileRequired({ ...evidenceState, mode, isHotel })
   const [nightsText, setNightsText] = useState(() => String(expense.hotelNights))
   const [receiptInCompanyName, setReceiptInCompanyName] = useState(() => expense.receiptInCompanyName)
   const [amountBaht, setAmountBaht] = useState(() => toBahtInput(expense.grossSatang))
@@ -57,8 +103,50 @@ export function ResubmitExpenseModal({
   // อัปโหลดใบเสร็จใหม่ยกเลิกได้จริง — ปิด modal ระหว่างอัปโหลด = abort request ที่ค้าง (preship R3-026)
   const [uploading, setUploading] = useState(false)
   const uploadAbortRef = useRef<AbortController | null>(null)
+  const unmountedRef = useRef(false)
 
   useEffect(() => () => uploadAbortRef.current?.abort(), [])
+
+  // ตั้งต้นรายการของใบใหม่จากใบเดิม ปรับยอดรวมให้เท่ายอดเบิกปัจจุบัน — โหลดครั้งแรกที่เลือกออกใบใหม่
+  // (setState เฉพาะใน callback ของ promise — สถานะ "กำลังโหลด" ตั้งโดยผู้เรียก)
+  const substituteId = substitute?.id ?? null
+  // ค่าที่พัก: ยอดใบ = ยอดเบิก ⇒ ตั้งต้นยอดรวม = ยอดเบิกปัจจุบัน · ชนิดอื่นใบครอบเฉพาะส่วนที่ไม่มีใบเสร็จ ⇒ ตั้งต้นตามใบเดิม
+  const targetTotalSatang = isHotel ? expense.grossSatang : undefined
+  const fetchLines = useCallback((): void => {
+    if (substituteId === null || linesRequestedRef.current) return
+    linesRequestedRef.current = true
+    void callApi<SubstituteReceiptDetailDto>(`/api/substitute-receipts/${substituteId}`)
+      .then((result) => {
+        if (unmountedRef.current) return
+        setLines(substituteLinesToDrafts(result.data?.lines ?? [], lineDate, targetTotalSatang))
+        if (result.error !== undefined) setError('ดึงรายการจากใบเดิมไม่ได้ — กรอกรายการใหม่')
+      })
+      .catch(() => {
+        if (unmountedRef.current) return
+        setLines(substituteLinesToDrafts([], lineDate, targetTotalSatang))
+        setError('ดึงรายการจากใบเดิมไม่ได้ — กรอกรายการใหม่')
+      })
+      .finally(() => {
+        if (!unmountedRef.current) setLoadingLines(false)
+      })
+  }, [substituteId, lineDate, targetTotalSatang])
+
+  useEffect(() => {
+    unmountedRef.current = false
+    if (initialLoad) fetchLines()
+    return () => {
+      unmountedRef.current = true
+    }
+  }, [initialLoad, fetchLines])
+
+  function chooseMode(next: ResubmitEvidenceMode): void {
+    setMode(next)
+    setError(null)
+    if (next === 'new_substitute' && !linesRequestedRef.current && substituteId !== null) {
+      setLoadingLines(true)
+      fetchLines()
+    }
+  }
 
   async function uploadReceipt(file: File): Promise<string> {
     const controller = new AbortController()
@@ -78,14 +166,40 @@ export function ResubmitExpenseModal({
       return
     }
 
+    let substituteLines: ReturnType<typeof substituteDraftPayload>['payload'] = null
+    if (newSubstitute) {
+      const draft = substituteDraftPayload(lines)
+      if (draft.payload === null) {
+        setError(draft.error)
+        return
+      }
+      substituteLines = draft.payload
+    }
+
     let amountSatang: number | undefined
-    if (editable && !amountLocked) {
+    if (editable && newSubstitute && isHotel) {
+      // ค่าที่พัก: ยอดเบิก = ยอดรวมรายการของใบรับรองใหม่
+      amountSatang = linesTotal
+    } else if (editable && !amountLocked) {
       const parsed = parseBahtInput(amountBaht)
       if (parsed === null || Number.isNaN(parsed) || parsed <= 0) {
         setError(bahtInputError(amountBaht, 'จำนวนเงิน') ?? 'จำนวนเงินต้องมากกว่า 0')
         return
       }
+      if (newSubstitute && linesTotal > parsed) {
+        setError(`ยอดรวมรายการของใบรับรอง (${fmtSatangSymbol(linesTotal)}) ต้องไม่เกินจำนวนเงินที่เบิก`)
+        return
+      }
       amountSatang = parsed
+    }
+
+    if (receiptRequired && receipt === null) {
+      setError('แนบไฟล์ใบเสร็จก่อนส่ง')
+      return
+    }
+    if (cancelsActive && cancelReason.trim().length < SUBSTITUTE_RECEIPT_CANCEL_REASON_MIN) {
+      setError(`กรอกเหตุผลการยกเลิกใบรับรองเดิมอย่างน้อย ${SUBSTITUTE_RECEIPT_CANCEL_REASON_MIN} ตัวอักษร`)
+      return
     }
 
     let hotelNights: number | undefined
@@ -101,7 +215,7 @@ export function ResubmitExpenseModal({
     setSubmitting(true)
     setError(null)
     try {
-      const receiptFileUrl = receipt === null ? undefined : await uploadReceipt(receipt)
+      const receiptFileUrl = mode !== 'receipt' || receipt === null ? undefined : await uploadReceipt(receipt)
       const response = await callApi<FieldExpenseDto>(
         apiPath('field.resubmitExpense', { id: expense.id }),
         jsonRequest('POST', {
@@ -109,6 +223,8 @@ export function ResubmitExpenseModal({
           ...(hotelNights === undefined ? {} : { hotelNights }),
           ...(showReceiptName ? { receiptInCompanyName } : {}),
           ...(receiptFileUrl === undefined ? {} : { receiptFileUrl }),
+          ...(substituteLines === null ? {} : { substituteReceipt: substituteLines }),
+          ...(cancelsActive ? { cancelSubstituteReason: cancelReason.trim() } : {}),
           note: note.trim(),
         }),
       )
@@ -116,7 +232,14 @@ export function ResubmitExpenseModal({
         showToast({ tone: 'error', title: response.error.title, description: response.error.message })
         return
       }
-      showToast({ tone: 'success', title: 'ส่งรายการเบิกกลับเข้าคิวอนุมัติแล้ว' })
+      const issued = substituteLines !== null && response.data !== undefined ? response.data.substituteReceipt : null
+      showToast({
+        tone: 'success',
+        title: 'ส่งรายการเบิกกลับเข้าคิวอนุมัติแล้ว',
+        ...(issued !== null
+          ? { description: `ออกใบรับรอง ${issued.receiptNumber} แล้ว — ดาวน์โหลดไปเซ็นแล้วอัปโหลดฉบับเซ็นจากรายการเบิก` }
+          : {}),
+      })
       onDone()
     } catch (uploadError) {
       setError(uploadError instanceof FieldUploadError ? uploadError.message : 'อัปโหลดใบเสร็จไม่สำเร็จ')
@@ -144,7 +267,12 @@ export function ResubmitExpenseModal({
             </Button>
           </div>
         ) : (
-          <Button onClick={() => void submit()} loading={submitting} className="w-full justify-center py-3">
+          <Button
+            onClick={() => void submit()}
+            loading={submitting}
+            disabled={loadingLines}
+            className="w-full justify-center py-3"
+          >
             {submitting ? 'กำลังส่ง...' : 'ส่งกลับเข้าคิวอนุมัติ'}
           </Button>
         )
@@ -166,12 +294,18 @@ export function ResubmitExpenseModal({
             {amountLocked ? (
               <Field label="จำนวนเงิน (บาท)">
                 <p className="rounded-xl bg-slate-50 p-3 text-sm font-semibold text-slate-700">
-                  {fmtSatangSymbol(expense.grossSatang)}
+                  {fmtSatangSymbol(newSubstitute ? linesTotal : expense.grossSatang)}
                 </p>
-                {activeSubstitute !== null && activeSubstitute.totalSatang !== expense.grossSatang && (
-                  <p className="mt-1 text-xs text-amber-700">
-                    ยอดเบิกไม่ตรงยอดใบรับรอง ({fmtSatangSymbol(activeSubstitute.totalSatang)}) — ปิดหน้านี้ แล้วกด “ยกเลิกใบรับรอง” ที่การ์ดรายการที่ถูกตีกลับก่อน จากนั้นจึงแก้ยอดแล้วส่งใหม่
-                  </p>
+                {newSubstitute ? (
+                  <p className="mt-1 text-xs text-slate-500">ยอดเบิกค่าที่พัก = ยอดรวมรายการของใบรับรองใบใหม่ด้านล่าง</p>
+                ) : (
+                  activeSubstitute !== null &&
+                  activeSubstitute.totalSatang !== expense.grossSatang && (
+                    <p className="mt-1 text-xs text-amber-700">
+                      ยอดเบิกไม่ตรงยอดใบรับรอง ({fmtSatangSymbol(activeSubstitute.totalSatang)}) — เลือก “ออกใบรับรองใหม่ตามยอด”
+                      ด้านล่างเพื่อแก้ยอดและออกใบใหม่ในการส่งครั้งนี้
+                    </p>
+                  )
                 )}
               </Field>
             ) : (
@@ -179,9 +313,11 @@ export function ResubmitExpenseModal({
                 label="จำนวนเงิน (บาท)"
                 required
                 hint={
-                  activeSubstitute === null
-                    ? undefined
-                    : `ต้องไม่น้อยกว่ายอดใบรับรองแทนใบเสร็จ ${fmtSatangSymbol(activeSubstitute.totalSatang)}`
+                  newSubstitute
+                    ? `ต้องไม่น้อยกว่ายอดรวมรายการของใบรับรองใบใหม่ (${fmtSatangSymbol(linesTotal)})`
+                    : keepSubstitute
+                      ? `ต้องไม่น้อยกว่ายอดใบรับรองแทนใบเสร็จ ${fmtSatangSymbol(activeSubstitute.totalSatang)}`
+                      : undefined
                 }
               >
                 <Input
@@ -210,16 +346,87 @@ export function ResubmitExpenseModal({
               </Field>
             )}
 
-            {activeSubstitute !== null ? (
-              // ไม่มีใบเสร็จจริง — ใช้ใบรับรองเลขเดิม · เปลี่ยนยอด/แนบใบเสร็จจริงต้องยกเลิกใบรับรองก่อน (BE ปฏิเสธไฟล์ใหม่)
-              <p className="rounded-xl bg-slate-50 p-3 text-xs text-slate-500">
-                ใช้ใบรับรองแทนใบเสร็จเลขเดิม{' '}
-                <span className="font-mono font-semibold text-slate-700">{activeSubstitute.receiptNumber}</span> (ยอด{' '}
-                {fmtSatangSymbol(activeSubstitute.totalSatang)}) — ถ้าต้องเปลี่ยนยอดหรือแนบใบเสร็จจริง
-                ให้ปิดหน้านี้แล้วกด “ยกเลิกใบรับรอง” ที่การ์ดรายการที่ถูกตีกลับก่อน
-              </p>
-            ) : (
-              <Field label="แนบใบเสร็จใหม่ (ถ้าต้องเปลี่ยน)">
+            {evidenceModes.length > 0 && substitute !== null && (
+              <Field label="หลักฐานรายจ่าย" required>
+                <div className="space-y-2">
+                  {evidenceModes.map((option) => (
+                    <label
+                      key={option}
+                      className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-slate-200 px-3 py-2.5 text-sm text-slate-700 pointer-coarse:min-h-11"
+                    >
+                      <input
+                        type="radio"
+                        name={`resubmit-evidence-${expense.id}`}
+                        className="focus-ring mt-0.5 h-5 w-5 shrink-0"
+                        checked={mode === option}
+                        onChange={() => chooseMode(option)}
+                      />
+                      <span>
+                        <span className="font-semibold">
+                          {option === 'keep_substitute'
+                            ? 'ใช้ใบรับรองแทนใบเสร็จเดิม'
+                            : option === 'new_substitute'
+                              ? 'ออกใบรับรองแทนใบเสร็จใหม่ตามยอดที่กรอก'
+                              : 'แนบใบเสร็จจริง'}
+                        </span>
+                        <span className="mt-0.5 block text-xs text-slate-500">
+                          {option === 'keep_substitute' ? (
+                            <>
+                              เลขที่ <span className="font-mono">{substitute.receiptNumber}</span> ยอด{' '}
+                              {fmtSatangSymbol(substitute.totalSatang)}
+                              {isHotel ? ' — ยอดเบิกต้องเท่ายอดใบ' : ''}
+                            </>
+                          ) : option === 'new_substitute' ? (
+                            activeSubstitute !== null ? (
+                              <>
+                                ระบบยกเลิกใบ <span className="font-mono">{activeSubstitute.receiptNumber}</span> แล้วออกใบใหม่ให้พร้อมการส่งครั้งนี้
+                                — จากนั้นดาวน์โหลดไปเซ็นแล้วอัปโหลดฉบับเซ็นจากรายการเบิก
+                              </>
+                            ) : (
+                              <>
+                                ออกใบใหม่แทนใบ <span className="font-mono">{substitute.receiptNumber}</span> ที่ยกเลิกแล้ว พร้อมการส่งครั้งนี้
+                                — จากนั้นดาวน์โหลดไปเซ็นแล้วอัปโหลดฉบับเซ็นจากรายการเบิก
+                              </>
+                            )
+                          ) : activeSubstitute !== null ? (
+                            <>
+                              ระบบยกเลิกใบ <span className="font-mono">{activeSubstitute.receiptNumber}</span> พร้อมการส่งครั้งนี้
+                            </>
+                          ) : (
+                            'แนบรูปหรือ PDF ของใบเสร็จที่ได้รับจริง'
+                          )}
+                        </span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </Field>
+            )}
+
+            {newSubstitute &&
+              (loadingLines ? (
+                <p className="text-xs text-slate-500">กำลังดึงรายการจากใบเดิม...</p>
+              ) : (
+                <NoReceiptLinesEditor lines={lines} onChange={setLines} defaultDate={lineDate} variant={isHotel ? 'hotel' : 'general'} />
+              ))}
+
+            {cancelsActive && activeSubstitute !== null && (
+              <Field label={`เหตุผลการยกเลิกใบรับรอง ${activeSubstitute.receiptNumber}`} required>
+                <Textarea
+                  rows={2}
+                  maxLength={REASON_MAX}
+                  value={cancelReason}
+                  onChange={(event) => setCancelReason(event.target.value)}
+                  placeholder="เช่น แก้ยอดตามที่ผู้อนุมัติแจ้ง / ได้ใบเสร็จจริงมาแล้ว"
+                />
+              </Field>
+            )}
+
+            {mode === 'receipt' && (
+              <Field
+                label={evidenceState.hasRealReceipt ? 'แนบใบเสร็จใหม่ (ถ้าต้องเปลี่ยน)' : 'แนบใบเสร็จ'}
+                required={receiptRequired}
+              >
                 <button
                   type="button"
                   onClick={() => fileRef.current?.click()}
@@ -227,7 +434,10 @@ export function ResubmitExpenseModal({
                 >
                   <IconFile className="h-6 w-6" />
                   <span className="text-xs font-semibold">
-                    {receipt === null ? 'ใช้ใบเสร็จเดิม — แตะเพื่อเปลี่ยน' : receipt.name}
+                    {resubmitReceiptPickerText({
+                      hasExistingReceipt: evidenceState.hasRealReceipt,
+                      fileName: receipt === null ? null : receipt.name,
+                    })}
                   </span>
                 </button>
                 <input

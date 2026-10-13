@@ -31,6 +31,7 @@
 | v1.16 | 12/10/2569 | **มติผู้ใช้ 12/10/2569 I3-01 (mytester3)** — §6.1 `PATCH /api/cases/:id/status` action `reject` รับ `internalNote` (ไม่บังคับ · หมายเหตุภายใน) เพิ่มจาก `reason` (= เหตุผลที่แจ้งบริษัทไฟแนนซ์ · บังคับ) — ไม่มี endpoint ใหม่ |
 | v1.17 | 12/10/2569 | **มติผู้ใช้ 12/10/2569 B3-02 (mytester3)** — §6.1 เติม `DELETE /api/cases/:id` ลบเคสร่าง: soft delete (`deleted_at`) เฉพาะ `draft` (นอกนั้น `CASE_INVALID_STATUS_TRANSITION`) · body `{ reason }` บังคับ · สิทธิ์ `record_admin_data` + scope เดียวกับสร้างเคส · audit `delete` · unique ของเลขที่สัญญาเป็น partial ⇒ สร้างเลขเดิมใหม่ได้ · ไม่ลบไฟล์ใน Storage |
 | v1.18 | 13/10/2569 | **known Q9 (Claude ตัดสินแทน PO รอยืนยัน)** — §6.5 เติม `DELETE /api/handover-lots/:id` ลบล็อตว่าง (ยังไม่ยืนยัน · ไม่มีเครื่องเหลือ) แบบ soft delete · เหตุผลบังคับ · audit `delete` · สิทธิ์ `create_handover_lot` · ไม่เพิ่มสถานะใน `handover_lot_status` |
+| v1.19 | 14/10/2569 | **มติ PO 14/10/2569 SV5-R2-01 แนวทาง ก** — §6.3 `POST /api/field/expenses/:id/resubmit` body เพิ่ม `substituteReceipt: { lines }` (ออกใบรับรองแทนใบเสร็จใหม่ตามยอดพร้อมการส่ง) + `cancelSubstituteReason` (ยกเลิกใบที่ใช้งานอยู่) — ทรานแซกชันเดียว (`41` v2.36) |
 
 ขอบเขตเอกสารนี้: รวม API Endpoint ทั้งหมดของโมดูล Case Workflow (รับเคส/มอบหมาย/ภาคสนาม) และ Warehouse (คลังสินค้า) เป็นรายการเดียว จัดกลุ่มตาม resource เพื่อให้ backend implement ตาม REST convention เดียวกันทั้งระบบ — คู่กันกับ `27-finance-api-contracts.md` ที่รวม endpoint ฝั่ง Finance/Accounting
 
@@ -95,7 +96,7 @@ POST   /api/field/cases/:id/checkin                   บันทึกเช�
 POST   /api/field/cases/:id/close-draft               บันทึก Draft ปิดงาน
 POST   /api/field/cases/:id/close                     ยืนยันปิดงาน (body: outcome, evidence)
 POST   /api/field/cases/:id/resubmit-close            ส่งกลับยืนยันอีกครั้งหลังถูกตีกลับ needs_revision (ไฟล์ 41 §8 resubmit_close_case)
-POST   /api/field/expenses/:id/resubmit               แก้ไขรายการเบิกที่ถูกตีกลับแล้วส่งใหม่ (ไฟล์ 41 §8 resubmit_expense)
+POST   /api/field/expenses/:id/resubmit               แก้ไขรายการเบิกที่ถูกตีกลับแล้วส่งใหม่ (ไฟล์ 41 §8 resubmit_expense) · v1.19: ออกใบรับรองใหม่/ยกเลิกใบเดิมพร้อมการส่งได้
 POST   /api/field/expenses/:id/reject                 ตีกลับรายการเบิก (body: reason) — ผู้อนุมัติจ่าย ไฟล์ 16/17 (ไฟล์ 41 §8 reject_expense · เพิ่ม 14/08/2569 Phase 2.9)
 POST   /api/field/push/subscribe                      ลงทะเบียนอุปกรณ์รับ Web Push (body: endpoint, keys) — ไฟล์ 41 §15 (เพิ่ม 14/08/2569 Phase 2.9)
 DELETE /api/field/push/subscribe                      ยกเลิกการรับ Web Push ของอุปกรณ์นั้น (body: endpoint) — ไฟล์ 41 §15 (เพิ่ม 14/08/2569 Phase 2.9)

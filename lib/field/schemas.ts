@@ -212,6 +212,24 @@ export const resubmitExpenseSchema = z.object({
   receiptInCompanyName: z.boolean().optional(),
   receiptFileUrl: fileUrl.optional(),
   note: trimmedText.max(1000).nullish(),
+  /**
+   * มติ PO 14/10/2569 SV5-R2-01 (แนวทาง ก) — ออกใบรับรองแทนใบเสร็จใหม่ตามยอดในขั้นตอนส่งใหม่ (ทรานแซกชันเดียว)
+   * เฉพาะรายการที่เคยใช้ใบรับรองแทนใบเสร็จ · ยอดรวมของบรรทัดตามกติกาเดิม (ค่าที่พัก = ยอดเบิก) — server ตรวจ
+   */
+  substituteReceipt: substituteReceiptDraftSchema.optional(),
+  /**
+   * เหตุผลยกเลิกใบรับรองที่ใช้งานอยู่ — ส่งเมื่อออกใบใหม่/แนบใบเสร็จจริงแทนใบนั้นในขั้นตอนเดียวกัน
+   * (ขาด/สั้น ⇒ `CANCEL_REQUIRES_REASON` ที่ server · ไม่ trim ที่ schema ให้แยกกรณีไม่กรอกได้)
+   */
+  cancelSubstituteReason: z.string().max(500, 'เหตุผลยาวเกิน 500 ตัวอักษร').nullish(),
+}).superRefine((value, ctx) => {
+  if (value.substituteReceipt !== undefined && value.receiptFileUrl !== undefined) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['substituteReceipt'],
+      message: 'เลือกหลักฐานได้อย่างใดอย่างหนึ่ง — ออกใบรับรองแทนใบเสร็จใหม่ หรือแนบใบเสร็จจริง',
+    })
+  }
 })
 
 export type ResubmitExpenseInput = z.infer<typeof resubmitExpenseSchema>

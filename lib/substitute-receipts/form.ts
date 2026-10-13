@@ -63,13 +63,36 @@ export function substituteDraftPayload(
 export function substituteLinesToDrafts(
   lines: readonly SubstituteReceiptLineDto[],
   fallbackDate = '',
+  targetTotalSatang?: number,
 ): SubstituteLineDraft[] {
-  if (lines.length === 0) return [emptySubstituteLine('line-0', fallbackDate)]
-  return lines.map((line, index) => ({
+  const fitted = targetTotalSatang === undefined ? lines : fitSubstituteLinesToTotal(lines, targetTotalSatang, fallbackDate)
+  if (fitted.length === 0) return [emptySubstituteLine('line-0', fallbackDate)]
+  return fitted.map((line, index) => ({
     key: `line-${index}`,
     lineDate: line.lineDate,
     description: line.description,
     amountBaht: toBahtInput(line.amountSatang),
     note: line.note ?? '',
   }))
+}
+
+/**
+ * ตรวจซ้ำ staging SV5-R2-01 — ตั้งต้นบรรทัดของใบใหม่ให้ยอดรวมเท่ากับยอดเบิกปัจจุบัน (ค่าที่พัก: ยอดใบต้องเท่ายอดเบิก)
+ * แทนยอดของใบที่ยกเลิก: ไม่มีบรรทัด ⇒ 1 บรรทัดยอดเต็ม · บรรทัดเดียว ⇒ ปรับยอดบรรทัดนั้น · หลายบรรทัด ⇒ ปรับส่วนต่าง
+ * ที่บรรทัดสุดท้าย (ถ้ายังมากกว่า 0 — ไม่งั้นคงเดิมให้ผู้ใช้แก้เอง) · เป็นแค่ค่าตั้งต้น server ตรวจยอดซ้ำเสมอ
+ */
+export function fitSubstituteLinesToTotal(
+  lines: readonly SubstituteReceiptLineDto[],
+  targetTotalSatang: number,
+  fallbackDate = '',
+): SubstituteReceiptLineDto[] {
+  if (!Number.isInteger(targetTotalSatang) || targetTotalSatang <= 0) return [...lines]
+  if (lines.length === 0) return [{ lineDate: fallbackDate, description: '', amountSatang: targetTotalSatang, note: null }]
+  const total = lines.reduce((sum, line) => sum + line.amountSatang, 0)
+  const diff = targetTotalSatang - total
+  if (diff === 0) return [...lines]
+  const lastIndex = lines.length - 1
+  const last = lines[lastIndex]
+  if (last === undefined || last.amountSatang + diff <= 0) return [...lines]
+  return lines.map((line, index) => (index === lastIndex ? { ...line, amountSatang: line.amountSatang + diff } : line))
 }

@@ -8,7 +8,12 @@ import { REASON_MAX } from '@/lib/api/validation'
 import { EXPENSE_RECEIPT_ACCEPT } from '@/lib/field/media-upload'
 import { fmtDateTime } from '@/lib/format/datetime'
 import { fmtSatangSymbol } from '@/lib/format/money'
-import { substituteDraftPayload, substituteLinesToDrafts, type SubstituteLineDraft } from '@/lib/substitute-receipts/form'
+import {
+  substituteDraftPayload,
+  substituteDraftTotalSatang,
+  substituteLinesToDrafts,
+  type SubstituteLineDraft,
+} from '@/lib/substitute-receipts/form'
 import {
   SUBSTITUTE_RECEIPT_CANCEL_REASON_MIN,
   SUBSTITUTE_RECEIPT_STATUS_LABEL,
@@ -33,6 +38,7 @@ export function SubstituteReceiptPanel({
   compact = false,
   defaultLineDate,
   variant = 'general',
+  requiredTotalSatang,
   onSigned,
   onChanged,
 }: {
@@ -46,6 +52,11 @@ export function SubstituteReceiptPanel({
   defaultLineDate?: string
   /** ตัวอย่างในฟอร์ม "ออกใบใหม่แทน" ตามชนิดรายจ่าย (ค่าที่พัก ⇒ ค่าห้องพัก — ตรวจซ้ำ staging SV5-R-04) */
   variant?: NoReceiptLinesVariant
+  /**
+   * ยอดรวมที่ใบใหม่ต้องเท่ากับ (ใบเบิกค่าที่พัก = ยอดเบิกปัจจุบัน — ตรวจซ้ำ staging SV5-R2-01) · ฟอร์ม "ออกใบใหม่แทน"
+   * ตั้งต้นบรรทัดให้ยอดรวมเท่านี้ และเตือนก่อนส่งถ้าไม่เท่า (server ตรวจซ้ำเสมอ) · ไม่ส่ง = ตั้งต้นตามใบที่ยกเลิก
+   */
+  requiredTotalSatang?: number
   onSigned?: (receipt: SubstituteReceiptRefDto) => void
   /** หลังยกเลิก/ออกใบใหม่สำเร็จ — ผู้เรียกโหลดรายการใหม่ */
   onChanged?: (receipt: SubstituteReceiptRefDto) => void
@@ -122,7 +133,7 @@ export function SubstituteReceiptPanel({
     setReissueOpen(true)
     try {
       const result = await callApi<SubstituteReceiptDetailDto>(`/api/substitute-receipts/${receipt.id}`)
-      setReissueLines(substituteLinesToDrafts(result.data?.lines ?? [], lineDate))
+      setReissueLines(substituteLinesToDrafts(result.data?.lines ?? [], lineDate, requiredTotalSatang))
       if (result.error !== undefined) setReissueError(`ดึงรายการจากใบเดิมไม่ได้ — กรอกรายการใหม่ (${result.error.message})`)
     } finally {
       setLoadingLines(false)
@@ -133,6 +144,10 @@ export function SubstituteReceiptPanel({
     const draft = substituteDraftPayload(reissueLines)
     if (draft.payload === null) {
       setReissueError(draft.error)
+      return
+    }
+    if (requiredTotalSatang !== undefined && substituteDraftTotalSatang(reissueLines) !== requiredTotalSatang) {
+      setReissueError(`ยอดรวมของใบใหม่ต้องเท่ากับยอดเบิก ${fmtSatangSymbol(requiredTotalSatang)}`)
       return
     }
     setReissueError(null)
@@ -319,6 +334,12 @@ export function SubstituteReceiptPanel({
       >
         <div className="space-y-3">
           {reissueError !== null && <InlineAlert tone="error" title={reissueError} />}
+          {requiredTotalSatang !== undefined && (
+            <p className="text-xs text-slate-600">
+              ยอดรวมของใบใหม่ต้องเท่ากับยอดเบิกปัจจุบัน{' '}
+              <span className="font-semibold">{fmtSatangSymbol(requiredTotalSatang)}</span>
+            </p>
+          )}
           {loadingLines ? (
             <p className="text-xs text-slate-500">กำลังดึงรายการจากใบ {receipt.receiptNumber}...</p>
           ) : (

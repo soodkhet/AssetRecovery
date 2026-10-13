@@ -402,7 +402,8 @@ suite('ใบเบิกค่าที่พัก "ไม่มีใบเ�
           { receiptFileUrl: `expense-receipts/${agent.id}/66666666-6666-4666-8666-666666666666.jpg`, note: 'แนบใบเสร็จ' },
           { actor: agent, meta },
         ),
-      'SUBSTITUTE_RECEIPT_REISSUE_NOT_ALLOWED',
+      // SV5-R2-01 — แนบใบเสร็จจริงแทนใบที่ใช้งานอยู่ได้ในขั้นตอนเดียว แต่ต้องให้เหตุผลยกเลิกใบเดิม
+      'CANCEL_REQUIRES_REASON',
     )
     const unchanged = await db().expense.findUniqueOrThrow({ where: { id: created.id } })
     expect(unchanged).toMatchObject({ status: 'needs_revision', grossSatang: 3_200, receiptFileUrl: null })
@@ -420,13 +421,25 @@ suite('ใบเบิกค่าที่พัก "ไม่มีใบเ�
     await toRevision()
     const crtId = resubmitted.substituteReceipt?.id ?? ''
     await receipts.cancelSubstituteReceipt({ actor: agent, meta }, crtId, { reason: 'ยอดผิด ต้องออกใหม่' })
+    // SV5-R2-01 — ค่าที่พักที่ไม่เหลือหลักฐานส่งใหม่ไม่ได้ ต้องออกใบใหม่ตามยอด (หรือแนบใบเสร็จจริง) พร้อมการส่ง
+    await expectCode(
+      () =>
+        fieldExpenses.resubmitFieldExpense(
+          agent,
+          created.id,
+          { amountSatang: 3_000, note: 'แก้ยอดหลังยกเลิกใบรับรอง' },
+          { actor: agent, meta },
+        ),
+      'HOTEL_CLAIM_FIELD_REQUIRED',
+    )
     const changed = await fieldExpenses.resubmitFieldExpense(
       agent,
       created.id,
-      { amountSatang: 3_000, note: 'แก้ยอดหลังยกเลิกใบรับรอง' },
+      { amountSatang: 3_000, substituteReceipt: { lines: [line(3_000)] }, note: 'แก้ยอดหลังยกเลิกใบรับรอง' },
       { actor: agent, meta },
     )
     expect(changed.grossSatang).toBe(3_000)
+    expect(changed.substituteReceipt).toMatchObject({ status: 'pending_signature', totalSatang: 3_000 })
   })
 
   it('ตรวจซ้ำ staging SV5-R-01: ใบเบิกค่าที่พักถูกตีกลับ ยอดไม่ตรงใบ ⇒ เจ้าของยกเลิกใบ (เหตุผลบังคับ + audit) · ออกใบใหม่ตามยอด · ส่งใหม่ได้ · คนอื่นยกเลิกไม่ได้', async () => {
@@ -481,6 +494,208 @@ suite('ใบเบิกค่าที่พัก "ไม่มีใบเ�
       { actor: agent, meta },
     )
     expect(resubmitted).toMatchObject({ status: 'pending_approval', grossSatang: 3_500 })
+  })
+
+  async function rejectedHotelClaim(amountSatang = 3_200) {
+    const created = await fieldExpenses.submitHotelClaim(
+      agent,
+      {
+        expenseDate: new Date('2026-10-08T00:00:00Z'),
+        amountSatang,
+        receiptFileUrl: null,
+        substituteReceipt: { lines: [line(amountSatang)] },
+        sharedWithUserId: null,
+        note: null,
+      },
+      { actor: agent, meta },
+    )
+    await db().expense.update({ where: { id: created.id }, data: { status: 'needs_revision', rejectionReason: 'แก้ยอด' } })
+    return { expenseId: created.id, crtId: created.substituteReceipt?.id ?? '', crtNumber: created.substituteReceipt?.receiptNumber ?? '' }
+  }
+
+  function seqOf(receiptNumber: string): number {
+    return Number(receiptNumber.split('-').at(-1))
+  }
+
+  it('ตรวจซ้ำ staging SV5-R2-01: ใบรับรองถูกยกเลิกแล้ว ⇒ ส่งใหม่พร้อมออกใบใหม่ตามยอดในขั้นตอนเดียว (ออกแทนใบเดิม · audit ครบ)', async () => {
+    const { expenseId, crtId, crtNumber } = await rejectedHotelClaim()
+    await receipts.cancelSubstituteReceipt({ actor: agent, meta }, crtId, { reason: 'ยอดผิด ต้องออกใหม่' })
+    const startedAt = new Date()
+
+    const resubmitted = await fieldExpenses.resubmitFieldExpense(
+      agent,
+      expenseId,
+      { amountSatang: 2_983, substituteReceipt: { lines: [line(2_983, 'ค่าห้องพัก 1 คืน')] }, note: 'แก้ยอดตามจริง' },
+      { actor: agent, meta },
+    )
+    expect(resubmitted).toMatchObject({ status: 'pending_approval', grossSatang: 2_983 })
+    expect(resubmitted.substituteReceipt).toMatchObject({
+      status: 'pending_signature',
+      totalSatang: 2_983,
+      replacesReceiptNumber: crtNumber,
+    })
+    expect(seqOf(resubmitted.substituteReceipt?.receiptNumber ?? '')).toBe(seqOf(crtNumber) + 1)
+
+    const audits = await db().auditLog.findMany({
+      where: { organizationId: ORG_ID, createdAt: { gte: startedAt } },
+      select: { targetType: true, action: true, afterData: true, reason: true },
+    })
+    const events = audits.flatMap((entry) => ((entry.afterData as { events?: string[] } | null)?.events ?? []))
+    expect(events).toEqual(expect.arrayContaining(['substitute_receipt.issued', 'substitute_receipt.reissued', 'expense.resubmitted']))
+    const resubmitAudit = audits.find((entry) => entry.targetType === 'expenses' && entry.action === 'status_change')
+    expect(resubmitAudit?.afterData).toMatchObject({ substituteReceiptIssued: resubmitted.substituteReceipt?.receiptNumber })
+  })
+
+  it('ตรวจซ้ำ staging SV5-R2-01: ใบที่ใช้งานอยู่ยอดไม่ตรง ⇒ ยกเลิก + ออกใหม่ + ส่งใหม่ในครั้งเดียว (เหตุผลบังคับ · คนอื่นทำไม่ได้)', async () => {
+    const { expenseId, crtId, crtNumber } = await rejectedHotelClaim()
+    const input = { amountSatang: 3_500, substituteReceipt: { lines: [line(3_500, 'ค่าห้องพัก 1 คืน')] }, note: 'แก้ยอด' }
+
+    // ไม่ให้เหตุผลยกเลิกใบเดิม ⇒ ปฏิเสธ
+    await expectCode(
+      () => fieldExpenses.resubmitFieldExpense(agent, expenseId, input, { actor: agent, meta }),
+      'CANCEL_REQUIRES_REASON',
+    )
+    // คนอื่น (แม้ส่งเหตุผล) ⇒ ไม่พบรายการ (ไม่ leak)
+    await expectCode(
+      () =>
+        fieldExpenses.resubmitFieldExpense(
+          otherAgent,
+          expenseId,
+          { ...input, cancelSubstituteReason: 'คนอื่นขอยกเลิก' },
+          { actor: otherAgent, meta },
+        ),
+      'EXPENSE_NOT_FOUND',
+    )
+    expect(await db().substituteReceipt.findUniqueOrThrow({ where: { id: crtId } })).toMatchObject({ status: 'pending_signature' })
+
+    const startedAt = new Date()
+    const resubmitted = await fieldExpenses.resubmitFieldExpense(
+      agent,
+      expenseId,
+      { ...input, cancelSubstituteReason: 'ยอดใบไม่ตรงยอดเบิก' },
+      { actor: agent, meta },
+    )
+    expect(resubmitted).toMatchObject({ status: 'pending_approval', grossSatang: 3_500 })
+    expect(resubmitted.substituteReceipt).toMatchObject({ totalSatang: 3_500, replacesReceiptNumber: crtNumber })
+    expect(resubmitted.substituteReceipt?.cancelledHistory.map((entry) => entry.receiptNumber)).toEqual([crtNumber])
+    expect(await db().substituteReceipt.findUniqueOrThrow({ where: { id: crtId } })).toMatchObject({
+      status: 'cancelled',
+      cancelReason: 'ยอดใบไม่ตรงยอดเบิก',
+      cancelledBy: agent.id,
+    })
+    const cancelAudit = await db().auditLog.findFirstOrThrow({
+      where: { organizationId: ORG_ID, targetType: 'substitute_receipts', targetId: crtId, createdAt: { gte: startedAt } },
+      select: { actorId: true, reason: true },
+    })
+    expect(cancelAudit).toMatchObject({ actorId: agent.id, reason: 'ยอดใบไม่ตรงยอดเบิก' })
+  })
+
+  it('ตรวจซ้ำ staging SV5-R2-01: ยอดผิดกติกา/เกินเพดาน ⇒ ปฏิเสธ · rollback ทั้งหมด (ใบเดิมยังใช้งาน · ไม่มีใบใหม่ค้าง · เลขไม่ขาด)', async () => {
+    const { expenseId, crtId, crtNumber } = await rejectedHotelClaim()
+    const before = await db().expense.findUniqueOrThrow({ where: { id: expenseId } })
+
+    // ค่าที่พัก: ยอดรวมใบใหม่ไม่เท่ายอดเบิก ⇒ ปฏิเสธก่อนเริ่มทรานแซกชัน
+    await expectCode(
+      () =>
+        fieldExpenses.resubmitFieldExpense(
+          agent,
+          expenseId,
+          {
+            amountSatang: 3_500,
+            substituteReceipt: { lines: [line(3_400)] },
+            cancelSubstituteReason: 'ยอดใบไม่ตรงยอดเบิก',
+            note: 'แก้ยอด',
+          },
+          { actor: agent, meta },
+        ),
+      'SUBSTITUTE_RECEIPT_REISSUE_NOT_ALLOWED',
+    )
+    // เกินเพดานต่อใบ — ปฏิเสธระหว่างทรานแซกชัน (หลังยกเลิกใบเดิมแล้ว) ⇒ rollback ทั้งหมด
+    await expectCode(
+      () =>
+        fieldExpenses.resubmitFieldExpense(
+          agent,
+          expenseId,
+          {
+            amountSatang: 50_001,
+            substituteReceipt: { lines: [line(50_001)] },
+            cancelSubstituteReason: 'ยอดใบไม่ตรงยอดเบิก',
+            note: 'แก้ยอด',
+          },
+          { actor: agent, meta },
+        ),
+      'SUBSTITUTE_RECEIPT_EXCEEDS_LIMIT',
+    )
+    const rows = await db().substituteReceipt.findMany({ where: { organizationId: ORG_ID, expenseId } })
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ id: crtId, status: 'pending_signature', cancelledAt: null })
+    const after = await db().expense.findUniqueOrThrow({ where: { id: expenseId } })
+    expect(after).toMatchObject({ status: 'needs_revision', grossSatang: before.grossSatang, resubmitNote: before.resubmitNote })
+
+    // ครั้งถัดไปที่สำเร็จได้เลขถัดจากใบเดิมพอดี (ตัวจองเลขถูก rollback ด้วย)
+    const ok = await fieldExpenses.resubmitFieldExpense(
+      agent,
+      expenseId,
+      {
+        amountSatang: 3_500,
+        substituteReceipt: { lines: [line(3_500)] },
+        cancelSubstituteReason: 'ยอดใบไม่ตรงยอดเบิก',
+        note: 'แก้ยอด',
+      },
+      { actor: agent, meta },
+    )
+    expect(seqOf(ok.substituteReceipt?.receiptNumber ?? '')).toBe(seqOf(crtNumber) + 1)
+  })
+
+  it('ตรวจซ้ำ staging SV5-R2-01: ใบรับรองถูกยกเลิก → ส่งใหม่ด้วยใบเสร็จจริง → ถูกตีกลับอีก ⇒ ออกใบรับรองซ้อนใบเสร็จไม่ได้', async () => {
+    const { expenseId, crtId } = await rejectedHotelClaim()
+    await receipts.cancelSubstituteReceipt({ actor: agent, meta }, crtId, { reason: 'ได้ใบเสร็จจริงมาแล้ว' })
+    await fieldExpenses.resubmitFieldExpense(
+      agent,
+      expenseId,
+      { receiptFileUrl: `expense-receipts/${agent.id}/88888888-8888-4888-8888-888888888888.jpg`, note: 'แนบใบเสร็จจริง' },
+      { actor: agent, meta },
+    )
+    await db().expense.update({ where: { id: expenseId }, data: { status: 'needs_revision', rejectionReason: 'ตรวจอีกครั้ง' } })
+    await expectCode(
+      () =>
+        fieldExpenses.resubmitFieldExpense(
+          agent,
+          expenseId,
+          { amountSatang: 3_200, substituteReceipt: { lines: [line(3_200)] }, note: 'ออกใบรับรองซ้อน' },
+          { actor: agent, meta },
+        ),
+      'SUBSTITUTE_RECEIPT_REISSUE_NOT_ALLOWED',
+    )
+    expect(
+      await db().substituteReceipt.count({ where: { organizationId: ORG_ID, expenseId, status: { not: 'cancelled' } } }),
+    ).toBe(0)
+    // ใช้ใบเสร็จเดิมส่งใหม่ได้ตามปกติ
+    await expect(
+      fieldExpenses.resubmitFieldExpense(agent, expenseId, { note: 'ใช้ใบเสร็จเดิม' }, { actor: agent, meta }),
+    ).resolves.toMatchObject({ status: 'pending_approval' })
+  })
+
+  it('ตรวจซ้ำ staging SV5-R2-01: รายการที่ไม่เคยใช้ใบรับรอง ออกใบใหม่ในขั้นตอนส่งใหม่ไม่ได้', async () => {
+    const expenseId = await seedHotelExpense(PAYEE_ID, 'needs_revision')
+    await db().expense.update({
+      where: { id: expenseId },
+      data: {
+        receiptFileUrl: `expense-receipts/${agent.id}/77777777-7777-4777-8777-777777777777.jpg`,
+        receiptFileHash: 'a'.repeat(64),
+      },
+    })
+    await expectCode(
+      () =>
+        fieldExpenses.resubmitFieldExpense(
+          agent,
+          expenseId,
+          { amountSatang: 10_000, substituteReceipt: { lines: [line(10_000)] }, note: 'ไม่มีใบเสร็จ' },
+          { actor: agent, meta },
+        ),
+      'SUBSTITUTE_RECEIPT_REISSUE_NOT_ALLOWED',
+    )
+    expect(await db().substituteReceipt.count({ where: { organizationId: ORG_ID, expenseId } })).toBe(0)
   })
 
   it('ไม่มีทั้งใบเสร็จและรายการ = HOTEL_CLAIM_FIELD_REQUIRED', async () => {
