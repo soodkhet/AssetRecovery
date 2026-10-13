@@ -170,7 +170,7 @@ export function ResubmitExpenseModal({
                 </p>
                 {activeSubstitute !== null && activeSubstitute.totalSatang !== expense.grossSatang && (
                   <p className="mt-1 text-xs text-amber-700">
-                    ยอดเบิกไม่ตรงยอดใบรับรอง ({fmtSatangSymbol(activeSubstitute.totalSatang)}) — ยกเลิกใบรับรองแล้วออกใบใหม่ตามยอดที่ถูกต้องก่อนส่ง
+                    ยอดเบิกไม่ตรงยอดใบรับรอง ({fmtSatangSymbol(activeSubstitute.totalSatang)}) — ปิดหน้านี้ แล้วกด “ยกเลิกใบรับรอง” ที่การ์ดรายการที่ถูกตีกลับก่อน จากนั้นจึงแก้ยอดแล้วส่งใหม่
                   </p>
                 )}
               </Field>
@@ -216,7 +216,7 @@ export function ResubmitExpenseModal({
                 ใช้ใบรับรองแทนใบเสร็จเลขเดิม{' '}
                 <span className="font-mono font-semibold text-slate-700">{activeSubstitute.receiptNumber}</span> (ยอด{' '}
                 {fmtSatangSymbol(activeSubstitute.totalSatang)}) — ถ้าต้องเปลี่ยนยอดหรือแนบใบเสร็จจริง
-                ให้ยกเลิกใบรับรองที่รายการเบิกก่อน
+                ให้ปิดหน้านี้แล้วกด “ยกเลิกใบรับรอง” ที่การ์ดรายการที่ถูกตีกลับก่อน
               </p>
             ) : (
               <Field label="แนบใบเสร็จใหม่ (ถ้าต้องเปลี่ยน)">

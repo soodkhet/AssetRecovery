@@ -429,6 +429,60 @@ suite('ใบเบิกค่าที่พัก "ไม่มีใบเ�
     expect(changed.grossSatang).toBe(3_000)
   })
 
+  it('ตรวจซ้ำ staging SV5-R-01: ใบเบิกค่าที่พักถูกตีกลับ ยอดไม่ตรงใบ ⇒ เจ้าของยกเลิกใบ (เหตุผลบังคับ + audit) · ออกใบใหม่ตามยอด · ส่งใหม่ได้ · คนอื่นยกเลิกไม่ได้', async () => {
+    const created = await fieldExpenses.submitHotelClaim(
+      agent,
+      {
+        expenseDate: new Date('2026-10-08T00:00:00Z'),
+        amountSatang: 3_200,
+        receiptFileUrl: null,
+        substituteReceipt: { lines: [line(3_200)] },
+        sharedWithUserId: null,
+        note: null,
+      },
+      { actor: agent, meta },
+    )
+    const crtId = created.substituteReceipt?.id ?? ''
+    // ข้อมูลก่อนแก้บน staging — ยอดเบิกไม่เท่ายอดใบรับรอง แล้วถูกตีกลับ
+    await db().expense.update({
+      where: { id: created.id },
+      data: { status: 'needs_revision', grossSatang: 3_500, rejectionReason: 'ยอดไม่ตรงใบ' },
+    })
+    await expectCode(
+      () => fieldExpenses.resubmitFieldExpense(agent, created.id, { note: 'ส่งใหม่' }, { actor: agent, meta }),
+      'SUBSTITUTE_RECEIPT_REISSUE_NOT_ALLOWED',
+    )
+
+    // คนอื่น ⇒ 404 ไม่ leak · เจ้าของไม่ให้เหตุผล ⇒ CANCEL_REQUIRES_REASON
+    await expectCode(
+      () => receipts.cancelSubstituteReceipt({ actor: otherAgent, meta }, crtId, { reason: 'คนอื่นขอยกเลิก' }),
+      'SUBSTITUTE_RECEIPT_NOT_FOUND',
+    )
+    await expectCode(() => receipts.cancelSubstituteReceipt({ actor: agent, meta }, crtId, { reason: '  ' }), 'CANCEL_REQUIRES_REASON')
+
+    const startedAt = new Date()
+    await expect(
+      receipts.cancelSubstituteReceipt({ actor: agent, meta }, crtId, { reason: 'ยอดใบไม่ตรงยอดเบิก ออกใบใหม่' }),
+    ).resolves.toMatchObject({ status: 'cancelled' })
+    const audit = await db().auditLog.findFirstOrThrow({
+      where: { organizationId: ORG_ID, targetType: 'substitute_receipts', targetId: crtId, createdAt: { gte: startedAt } },
+      select: { actorId: true, reason: true },
+    })
+    expect(audit.actorId).toBe(agent.id)
+    expect(audit.reason).toContain('ยอดใบไม่ตรงยอดเบิก ออกใบใหม่')
+
+    // ออกใบใหม่แทนตามยอดเบิกได้ขณะยังถูกตีกลับ ⇒ ส่งใหม่ผ่าน
+    const reissued = await receipts.reissueSubstituteReceipt({ actor: agent, meta }, crtId, [line(3_500)])
+    expect(reissued).toMatchObject({ status: 'pending_signature', totalSatang: 3_500 })
+    const resubmitted = await fieldExpenses.resubmitFieldExpense(
+      agent,
+      created.id,
+      { note: 'ออกใบรับรองใหม่ตามยอดแล้ว' },
+      { actor: agent, meta },
+    )
+    expect(resubmitted).toMatchObject({ status: 'pending_approval', grossSatang: 3_500 })
+  })
+
   it('ไม่มีทั้งใบเสร็จและรายการ = HOTEL_CLAIM_FIELD_REQUIRED', async () => {
     await expectCode(
       () =>

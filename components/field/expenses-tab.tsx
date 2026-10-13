@@ -177,10 +177,13 @@ function NeedsRevisionBlock({
   items,
   onFix,
   onViewReceipt,
+  onReceiptChanged,
 }: {
   items: readonly FieldExpenseDto[]
   onFix: (item: FieldExpenseDto) => void
   onViewReceipt: (file: ExpenseReceiptFile) => void
+  /** หลังอัปโหลดฉบับเซ็น/ยกเลิก/ออกใบรับรองใหม่แทน — โหลดรายการใหม่ */
+  onReceiptChanged: () => void
 }) {
   if (items.length === 0) return null
 
@@ -209,6 +212,19 @@ function NeedsRevisionBlock({
                 <div className="mt-0.5 truncate text-xs text-slate-500">ชี้แจงครั้งก่อน: {item.resubmitNote}</div>
               )}
               <ReceiptButton item={item} onView={onViewReceipt} />
+              {/*
+                ตรวจซ้ำ staging SV5-R-01 — รายการที่ถูกตีกลับไม่อยู่ในรายการหลัก ⇒ แถบใบรับรองต้องอยู่ที่การ์ดนี้
+                ให้เจ้าของยกเลิก/ออกใบใหม่แทนได้ก่อนส่งใหม่ (มติ PO U107 — server ตรวจเจ้าของ + สถานะซ้ำ)
+              */}
+              {item.substituteReceipt !== null && (
+                <SubstituteReceiptPanel
+                  receipt={item.substituteReceipt}
+                  canUpload
+                  canCancel
+                  onSigned={onReceiptChanged}
+                  onChanged={onReceiptChanged}
+                />
+              )}
             </div>
             <Button onClick={() => onFix(item)}>แก้ไขและส่งใหม่</Button>
           </div>
@@ -317,7 +333,12 @@ export function ExpensesTab({ initialView = 'caseBound' }: { initialView?: Expen
         />
       ) : (
         <div className="space-y-3">
-          <NeedsRevisionBlock items={needsRevision} onFix={setFixing} onViewReceipt={setViewingReceipt} />
+          <NeedsRevisionBlock
+            items={needsRevision}
+            onFix={setFixing}
+            onViewReceipt={setViewingReceipt}
+            onReceiptChanged={() => void load(view)}
+          />
 
           {view === 'caseBound' ? (
             <>
