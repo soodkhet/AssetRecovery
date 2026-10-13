@@ -887,6 +887,8 @@ export async function swapAssignment(
         acceptedAt: null,
         newAssignmentId: replacement.id,
         resolution: input.resolution,
+        // ผู้ส่งคำขอ = ผู้เปลี่ยนผู้รับผิดชอบ (ประวัติเคสแสดงเป็นผู้ทำ — mytester5 C5-01) · actor = ผู้กดยินยอม/ระบบ
+        requestedBy: input.requestedBy,
         events: input.events,
       },
       reason: input.auditReason ?? input.reason,
