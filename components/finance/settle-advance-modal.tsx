@@ -6,7 +6,7 @@ import type { AdvanceDto, AdvanceSettleResult } from '@/lib/advances/types'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { advanceSettlement } from '@/lib/finance/advance-calc'
 import { settleUsedField } from '@/lib/advances/advance-ui'
-import { settleFormIssues, type SettleFormIssues } from '@/lib/advances/settle-form'
+import { settleApiIssues, settleFormIssues, type SettleFormIssues } from '@/lib/advances/settle-form'
 import { ADVANCE_RETURN_METHOD_LABEL, DEFAULT_ADVANCE_RETURN_METHOD } from '@/lib/advances/advance'
 import type { AdvanceReturnMethod } from '@/lib/generated/prisma/enums'
 import { fmtSatangSymbol } from '@/lib/format/money'
@@ -155,6 +155,8 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
     )
     setSaving(false)
     if (result.error !== undefined) {
+      // ข้อผิดจาก API ค้างที่ footer ติดจอ + ผูกช่องที่ server ระบุ (เดิมขึ้นแค่ toast — SV5-J1-03)
+      showIssues(settleApiIssues(result.error.fields, substituteLines), result.error.message)
       showToast({ tone: 'error', title: result.error.title, description: result.error.message })
       return
     }

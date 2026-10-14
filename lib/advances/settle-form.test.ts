@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   SETTLE_RECEIPT_REQUIRED_MESSAGE,
+  settleApiIssues,
   settleFormIssues,
   settleLinesOverUsedMessage,
 } from '@/lib/advances/settle-form'
@@ -48,5 +49,37 @@ describe('settleFormIssues (SV5-J1-02/03)', () => {
 
   it('ข้อความยอดเกินไม่มีตัวเลข ⇒ ข้อความกลาง', () => {
     expect(settleLinesOverUsedMessage(null, 1)).toBe('ยอดรวมรายการที่ไม่มีใบเสร็จต้องไม่เกินยอดที่ใช้จริง')
+  })
+})
+
+describe('settleApiIssues (SV5-J1-03)', () => {
+  const drafts = [line('a', '100'), line('b', '200')]
+
+  it('substituteReceipt (ยอดรวมเกิน) ⇒ ช่องยอดที่ใช้จริง', () => {
+    const issues = settleApiIssues({ substituteReceipt: 'ยอดรวมรายการที่ไม่มีใบเสร็จต้องไม่เกินยอดที่ใช้จริง' }, drafts)
+    expect(issues.errors.usedSatang).toBeDefined()
+    expect(issues.first?.field).toBe('usedSatang')
+  })
+
+  it('ช่องในแถว ⇒ แถว+ช่องจริง (ตัด prefix substituteReceipt.)', () => {
+    const issues = settleApiIssues({ 'substituteReceipt.lines.1.amountSatang': 'จำนวนเงินต้องมากกว่า 0' }, drafts)
+    expect(issues.lines?.at).toMatchObject({ lineIndex: 1, lineKey: 'b', field: 'amount' })
+    expect(issues.first?.field).toBe('substituteReceipt')
+  })
+
+  it('เรียงข้อแรกตามลำดับบนจอ ไม่ใช่ลำดับ key', () => {
+    const issues = settleApiIssues({ note: 'ยาวเกิน', receiptFileUrl: 'ไฟล์ไม่ถูกต้อง' }, drafts)
+    expect(issues.first).toEqual({ field: 'receiptFileUrl', message: 'ไฟล์ไม่ถูกต้อง' })
+    expect(issues.errors.note).toBe('ยาวเกิน')
+  })
+
+  it('ไม่มี fields / key ไม่รู้จัก ⇒ ไม่ผูกช่อง', () => {
+    expect(settleApiIssues(undefined, drafts).first).toBeNull()
+    expect(settleApiIssues({ _: 'x', foo: 'y' }, drafts).first).toBeNull()
+  })
+
+  it('ผิดระดับทั้งตาราง ⇒ lines.at = null', () => {
+    const issues = settleApiIssues({ 'substituteReceipt.lines': 'ต้องมีอย่างน้อย 1 รายการ' }, drafts)
+    expect(issues.lines).toEqual({ message: 'ต้องมีอย่างน้อย 1 รายการ', at: null })
   })
 })

@@ -2,6 +2,7 @@ import { fmtSatangSymbol } from '@/lib/format/money'
 import {
   substituteDraftPayload,
   substituteDraftTotalSatang,
+  substituteLineAtFromFields,
   type SubstituteDraftPayload,
   type SubstituteLineDraft,
   type SubstituteLineIssueAt,
@@ -74,4 +75,35 @@ export function settleFormIssues(input: {
   }
   const issues = withFirst(errors, lines)
   return { ...issues, payload: issues.first === null ? payload : null }
+}
+
+/**
+ * ข้อผิดจาก API (`fields` ของ error — path แบบ `usedSatang`, `substituteReceipt.lines.0.amountSatang`) → ช่องบนจอ
+ * · `substituteReceipt` (ยอดรวมเกิน) ⇒ ช่องยอดที่ใช้จริง แบบเดียวกับฝั่งหน้าจอ · key อื่นที่ไม่รู้จัก ⇒ ไม่ผูกช่อง
+ * (ข้อความเต็มยังขึ้น footer จาก `message` ของ error เสมอ)
+ */
+export function settleApiIssues(
+  fields: Readonly<Record<string, string>> | undefined,
+  drafts: readonly SubstituteLineDraft[],
+): SettleFormIssues {
+  const errors: SettleFormIssues['errors'] = {}
+  let lines: SettleFormIssues['lines'] = null
+  const lineFields: Record<string, string> = {}
+  for (const [path, message] of Object.entries(fields ?? {})) {
+    if (path === 'usedSatang' || path === 'returnMethod' || path === 'receiptFileUrl' || path === 'note') {
+      errors[path] ??= message
+    } else if (path === 'substituteReceipt') {
+      errors.usedSatang ??= message
+    } else if (path.startsWith('substituteReceipt.')) {
+      const rest = path.slice('substituteReceipt.'.length)
+      if (/^lines\.\d+\.\w+$/.test(rest)) lineFields[rest] = message
+      else lines ??= { message, at: null }
+    }
+  }
+  const row = substituteLineAtFromFields(lineFields, drafts)
+  if (row !== null) {
+    const { message, ...at } = row
+    lines = { message, at }
+  }
+  return withFirst(errors, lines)
 }
