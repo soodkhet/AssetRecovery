@@ -376,13 +376,20 @@ export function IntakeModal({
 
         {/* ── ขั้น 2/3: บันทึกสภาพ ───────────────────────────────── */}
         <section>
-          <StepTitle step={2} label="บันทึกสภาพเครื่อง" />
-          <div className="grid grid-cols-3 gap-2">
+          <StepTitle id={`${fieldId}-condition-label`} step={2} label="บันทึกสภาพเครื่อง" />
+          {/* กลุ่มเลือกแบบ radio ผูกชื่อกับหัวข้อขั้น (ตรวจซ้ำ staging SV5-A11Y-A2-03) */}
+          <div
+            role="radiogroup"
+            aria-labelledby={`${fieldId}-condition-label`}
+            aria-required
+            className="grid grid-cols-3 gap-2"
+          >
             {ASSET_CONDITIONS.map((value) => (
               <button
                 key={value}
                 type="button"
-                aria-pressed={condition === value}
+                role="radio"
+                aria-checked={condition === value}
                 onClick={() => setCondition(value)}
                 className={cn(
                   'focus-ring rounded-xl border-2 py-3 text-xs font-bold transition-colors',
@@ -474,13 +481,15 @@ export function IntakeModal({
   )
 }
 
-function StepTitle({ step, label }: { step: number; label: string }) {
+function StepTitle({ id, step, label }: { id?: string; step: number; label: string }) {
   return (
     <div className="mb-3 flex items-center gap-2">
       <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-900 text-[10px] font-bold text-white">
         {step}
       </span>
-      <span className="text-xs font-bold tracking-wider text-slate-500 uppercase">{label}</span>
+      <span id={id} className="text-xs font-bold tracking-wider text-slate-500 uppercase">
+        {label}
+      </span>
     </div>
   )
 }

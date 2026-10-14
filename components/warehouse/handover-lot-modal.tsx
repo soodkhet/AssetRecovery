@@ -151,15 +151,22 @@ export function HandoverLotModal({
 
           {/* ── รูปแบบการส่งมอบ (`44` §6.3) ───────────────────────── */}
           <section>
-            <div className="mb-2 text-xs font-bold text-slate-700">
+            {/* กลุ่มเลือกแบบ radio ผูกชื่อกับหัวข้อ (ตรวจซ้ำ staging SV5-A11Y-A2-03) */}
+            <div id={`${fieldId}-handover-type-label`} className="mb-2 text-xs font-bold text-slate-700">
               รูปแบบการส่งมอบ <span className="text-red-500">*</span>
             </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div
+              role="radiogroup"
+              aria-labelledby={`${fieldId}-handover-type-label`}
+              aria-required
+              className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+            >
               {HANDOVER_TYPES.map((value) => (
                 <button
                   key={value}
                   type="button"
-                  aria-pressed={type === value}
+                  role="radio"
+                  aria-checked={type === value}
                   onClick={() => chooseType(value)}
                   className={cn(
                     'focus-ring rounded-xl border-2 p-4 text-left transition-colors',
