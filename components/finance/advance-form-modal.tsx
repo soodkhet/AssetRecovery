@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { usePermission } from '@/components/auth/permission-provider'
 import { OnBehalfPayeeSelect } from '@/components/payees/on-behalf-payee-select'
-import { Button, Field, InlineAlert, Input, Modal, Select, Textarea, useToast } from '@/components/ui'
+import { Button, Field, InlineAlert, Input, Modal, Select, Textarea, useClearOnClose, useToast } from '@/components/ui'
 import { advanceCreateAccess, minDueClearInputDate } from '@/lib/advances/advance'
 import { advanceCaseOptionLabel, advanceRequestErrorText } from '@/lib/advances/advance-ui'
 import { advanceCreateSchema } from '@/lib/advances/schemas'
@@ -60,6 +60,11 @@ export function AdvanceFormModal({ open, onClose, onCreated }: {
       cancelled = true
     }
   }, [open, access.self])
+  // ปิดฟอร์ม ⇒ ล้างข้อผิดจากการกดส่งครั้งก่อน — ร่างที่กรอกไว้ยังอยู่ (ตรวจซ้ำ staging SV5-R6-01)
+  useClearOnClose(open, () => {
+    setErrors({})
+    setSubmitError(null)
+  })
 
   if (!open) return null
 

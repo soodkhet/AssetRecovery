@@ -5,7 +5,7 @@ import { usePermission } from '@/components/auth/permission-provider'
 import { OnBehalfPayeeSelect } from '@/components/payees/on-behalf-payee-select'
 import { NoReceiptLinesEditor, NoReceiptToggle } from '@/components/substitute-receipts/no-receipt-lines'
 import { StagedFileInput } from '@/components/uploads/staged-file-input'
-import { Button, Field, FieldErrorText, FormSubmitFooter, InlineAlert, Input, Modal, Select, Textarea, useRevealFieldError, useToast } from '@/components/ui'
+import { Button, Field, FieldErrorText, FormSubmitFooter, InlineAlert, Input, Modal, Select, Textarea, useClearOnClose, useRevealFieldError, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { toFieldErrors } from '@/lib/api/validation'
 import { MANUAL_CLAIM_TYPES } from '@/lib/claims/claim'
@@ -76,6 +76,12 @@ export function ManualClaimModal({
     if (!open) uploadAbortRef.current?.abort()
   }, [open])
   useEffect(() => () => uploadAbortRef.current?.abort(), [])
+  // ปิดฟอร์ม (ยกเลิก/X/ส่งสำเร็จ) ⇒ ล้างข้อผิดจากการกดส่งครั้งก่อน — ร่างที่กรอกไว้ยังอยู่ (ตรวจซ้ำ staging SV5-R6-01)
+  useClearOnClose(open, () => {
+    setErrors({})
+    setSubstituteAt(null)
+    setSubmitError(null)
+  })
 
   // mytester5 F5-01 — ค่าที่พัก: ถาม server ว่าแผนทีมของผู้รับเงิน ณ วันที่เกิดรายการบังคับใบเสร็จไหม (มติ Q7/Q7-R)
   // บังคับ ⇒ ซ่อน "ไม่มีใบเสร็จ" ตั้งแต่ก่อนกรอก · การบังคับจริงอยู่ที่ server ตอนบันทึก

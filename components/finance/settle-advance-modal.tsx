@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Button, Field, FieldErrorText, InlineAlert, Input, Modal, Textarea, useRevealFieldError, useToast } from '@/components/ui'
+import { Button, Field, FieldErrorText, InlineAlert, Input, Modal, Textarea, useClearOnClose, useRevealFieldError, useToast } from '@/components/ui'
 import type { AdvanceDto, AdvanceSettleResult } from '@/lib/advances/types'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { advanceSettlement } from '@/lib/finance/advance-calc'
@@ -64,6 +64,12 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
     if (!open) uploadAbortRef.current?.abort()
   }, [open])
   useEffect(() => () => uploadAbortRef.current?.abort(), [])
+  // ปิดฟอร์ม (ยกเลิก/X/บันทึกสำเร็จ) ⇒ ล้างข้อผิดจากการกดบันทึกครั้งก่อน — ร่างที่กรอกไว้ยังอยู่ (ตรวจซ้ำ staging SV5-R6-01)
+  useClearOnClose(open, () => {
+    setReceiptError(null)
+    setSubstituteError(null)
+    setSubstituteAt(null)
+  })
 
   if (advance === null) return null
 
