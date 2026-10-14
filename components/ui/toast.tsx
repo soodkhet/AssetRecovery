@@ -12,9 +12,9 @@ import {
   type ReactNode,
 } from 'react'
 import { cn } from '@/components/ui/cn'
-import { hasOpenModal, subscribeModalStack } from '@/components/ui/modal-stack'
+import { subscribeModalStack, topModalToastPlacement } from '@/components/ui/modal-stack'
 import { findDuplicateToast } from '@/components/ui/toast-dedupe'
-import { toastViewportPositionClass } from '@/components/ui/toast-position'
+import { TOAST_DISMISS_BUTTON_CLASS, toastViewportPositionClass } from '@/components/ui/toast-position'
 import { SESSION_EXPIRED_EVENT } from '@/lib/api/session-expiry'
 
 /**
@@ -138,8 +138,9 @@ function ToastViewport({
   onDismiss: (id: number) => void
   aboveBottomNav: boolean
 }) {
-  // modal เปิดอยู่ ⇒ toast ขึ้นมุมบน ไม่ทับปุ่มท้าย modal (mytester2 G2-02)
-  const modalOpen = useSyncExternalStore(subscribeModalStack, hasOpenModal, () => false)
+  // modal กลางเปิด ⇒ toast ขึ้นมุมบน ไม่ทับปุ่มท้าย modal (mytester2 G2-02) · เมนู/ลิ้นชักเต็มความสูง ⇒ คงมุมล่าง
+  // ไม่ทับหัว+ปุ่มปิดของแผง (SV5-D3-01)
+  const modalPlacement = useSyncExternalStore(subscribeModalStack, topModalToastPlacement, () => null)
 
   if (toasts.length === 0) return null
 
@@ -148,7 +149,7 @@ function ToastViewport({
     <div
       className={cn(
         'pointer-events-none fixed right-4 left-4 z-[60] flex flex-col gap-2 sm:left-auto sm:w-full sm:max-w-sm',
-        toastViewportPositionClass({ modalOpen, aboveBottomNav }),
+        toastViewportPositionClass({ modalPlacement, aboveBottomNav }),
       )}
     >
       {toasts.map((toast) => (
@@ -168,7 +169,7 @@ function ToastViewport({
             type="button"
             onClick={() => onDismiss(toast.id)}
             aria-label="ปิดการแจ้งเตือน"
-            className="focus-ring rounded p-0.5 opacity-60 hover:opacity-100"
+            className={TOAST_DISMISS_BUTTON_CLASS}
           >
             <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />

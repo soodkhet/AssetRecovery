@@ -265,7 +265,8 @@ function HamburgerDrawer({
 
   useEffect(() => {
     // ลงชั้น modal + กักโฟกัสในเมนู คืนโฟกัสให้ปุ่มเปิดเมนูเมื่อปิด (ตรวจ a11y staging SV5-C1-01)
-    const token = registerModal()
+    // เมนูเต็มความสูง หัว+ปุ่ม X อยู่บนสุดของจอ ⇒ toast คงมุมล่าง ไม่เด้งขึ้นทับ (SV5-D3-01)
+    const token = registerModal({ toastPlacement: 'bottom' })
     function handleKey(event: KeyboardEvent) {
       if (event.key === 'Escape' && isTopModal(token)) onCloseRef.current()
     }

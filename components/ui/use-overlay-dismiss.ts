@@ -27,7 +27,8 @@ export function useOverlayDismiss(onClose: () => void): {
   const navigateToRef = useRef<string | null>(null)
 
   useEffect(() => {
-    const token = registerModal()
+    // เมนู/ลิ้นชักเต็มความสูง หัว+ปุ่มปิดอยู่บนสุดของจอ ⇒ toast คงมุมล่าง (SV5-D3-01)
+    const token = registerModal({ toastPlacement: 'bottom' })
     function handleKey(event: KeyboardEvent) {
       if (event.key === 'Escape' && isTopModal(token)) onCloseRef.current()
     }

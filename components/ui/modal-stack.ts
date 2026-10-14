@@ -6,7 +6,20 @@
  * — module-level state ฝั่ง client เท่านั้น (ทั้งแท็บมีชั้น modal ชุดเดียว)
  */
 
-const stack: symbol[] = []
+/**
+ * toast ควรหลบไปทางไหนเมื่อชั้นนี้อยู่บนสุด (SV5-D3-01)
+ * - `top` (ค่าเริ่มต้น) = modal กลาง ปุ่มหลักอยู่ท้ายหน้าต่างชิดขวาล่าง ⇒ toast ขึ้นมุมบน (mytester2 G2-02)
+ * - `bottom` = เมนู/ลิ้นชักเต็มความสูง หรือตัวดูรูปเต็มจอ ที่หัว+ปุ่มปิดอยู่บนสุดของจอ ⇒ toast อยู่ล่างตามปกติ
+ *   (เดิมเมนู Field Tracker ลงชั้นแล้ว toast เด้งขึ้นบนทับการ์ดผู้ใช้ + ปุ่ม X "ปิดเมนู" นาน 6 วินาที)
+ */
+export type ModalToastPlacement = 'top' | 'bottom'
+
+interface ModalEntry {
+  token: symbol
+  toastPlacement: ModalToastPlacement
+}
+
+const stack: ModalEntry[] = []
 const listeners = new Set<() => void>()
 
 function notify(): void {
@@ -14,16 +27,17 @@ function notify(): void {
 }
 
 /** ลงทะเบียน modal ที่เพิ่งเปิด — คืน token ไว้ถาม `isTopModal()` และถอนด้วย `unregisterModal()` */
-export function registerModal(): symbol {
+export function registerModal({ toastPlacement = 'top' }: { toastPlacement?: ModalToastPlacement } = {}): symbol {
   const token = Symbol('modal')
-  stack.push(token)
+  stack.push({ token, toastPlacement })
   notify()
   return token
 }
 
 /** ถอน modal ที่ปิด/unmount แล้ว — ถอนตัวที่อยู่กลางกองได้ (ปิดไม่เรียงลำดับ) */
 export function unregisterModal(token: symbol): void {
-  const index = stack.lastIndexOf(token)
+  let index = stack.length - 1
+  while (index >= 0 && stack[index]?.token !== token) index -= 1
   if (index !== -1) {
     stack.splice(index, 1)
     notify()
@@ -31,12 +45,20 @@ export function unregisterModal(token: symbol): void {
 }
 
 export function isTopModal(token: symbol): boolean {
-  return stack.length > 0 && stack[stack.length - 1] === token
+  return stack.length > 0 && stack[stack.length - 1]?.token === token
 }
 
-/** มี modal เปิดอยู่อย่างน้อยหนึ่งตัวไหม — ใช้กับ `useSyncExternalStore` (toast หลบปุ่มท้าย modal — mytester2 G2-02) */
+/** มี modal เปิดอยู่อย่างน้อยหนึ่งตัวไหม */
 export function hasOpenModal(): boolean {
   return stack.length > 0
+}
+
+/**
+ * ทิศที่ toast ควรหลบตามชั้นบนสุด — `null` = ไม่มี modal เปิด · ใช้กับ `useSyncExternalStore` (คืนค่า primitive คงที่)
+ * (mytester2 G2-02 · SV5-D3-01)
+ */
+export function topModalToastPlacement(): ModalToastPlacement | null {
+  return stack[stack.length - 1]?.toastPlacement ?? null
 }
 
 /** ฟังการเปิด/ปิด modal — คืนฟังก์ชันเลิกฟัง */

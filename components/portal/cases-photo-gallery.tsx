@@ -125,7 +125,8 @@ function PhotoLightbox({
   }, [index, count, onChange, onClose])
 
   useEffect(() => {
-    const token = registerModal()
+    // ตัวดูรูปเต็มจอ ปุ่มปิดอยู่มุมบน ⇒ toast คงมุมล่าง (SV5-D3-01)
+    const token = registerModal({ toastPlacement: 'bottom' })
     function handleKey(event: KeyboardEvent) {
       if (!isTopModal(token)) return
       const current = latest.current
