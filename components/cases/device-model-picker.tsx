@@ -191,19 +191,20 @@ export function DeviceModelPicker({ id, assetKind, value, identifier, invalid = 
     if (input !== null && document.activeElement === input) input.blur()
   })
 
-  function afterPick(input: ComboboxPickInput): void {
+  function afterPick(input: ComboboxPickInput, choice: 'option' | 'manual'): void {
     const coarsePointer = window.matchMedia?.('(pointer: coarse)').matches ?? false
-    focusAfterRender.current = focusAfterPick({ input, coarsePointer })
+    focusAfterRender.current = focusAfterPick({ input, coarsePointer, choice })
   }
 
   function pick(option: DeviceModelOptionDto, input: ComboboxPickInput): void {
-    afterPick(input)
+    afterPick(input, 'option')
     onChange({ deviceModelId: option.id, text: option.label })
     setOpen(false)
   }
 
   function chooseManual(input: ComboboxPickInput): void {
-    afterPick(input)
+    // "ระบุเอง" = จะพิมพ์ต่อ ⇒ โฟกัสช่องพิมพ์ใหม่ทุกชนิด input (คีย์บอร์ดขึ้น)
+    afterPick(input, 'manual')
     setManual(true)
     setOpen(false)
     onChange({ deviceModelId: null, text: value.text })

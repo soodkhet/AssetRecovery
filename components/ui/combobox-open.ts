@@ -56,7 +56,8 @@ export type ComboboxPickInput = 'keyboard' | 'mouse' | 'touch' | 'pen' | ''
 /**
  * เลือกตัวเลือกแล้วโฟกัสไปไหน (มติผู้ใช้ 15/10/2569 — มือถือแตะเลือกแล้วคีย์บอร์ดเสมือนค้าง/เด้งบังฟอร์ม)
  *
- * - `input` = คืนโฟกัสช่องพิมพ์ (APG combobox) — Enter / เมาส์
+ * - `input` = คืนโฟกัสช่องพิมพ์ (APG combobox) — Enter / เมาส์ · เลือก "ระบุเอง" (`choice: 'manual'`) ทุกชนิด input
+ *   (ผู้ใช้จะพิมพ์เองต่อ ⇒ คีย์บอร์ดขึ้นได้ เหมือนปุ่ม "เลือกจากรายการแทน" — มติผู้ใช้ 15/10/2569)
  * - `park` = ไม่โฟกัสช่องพิมพ์ (blur ถ้าโฟกัสอยู่ แม้กำลังพิมพ์กรอง) ให้คีย์บอร์ดยุบ — ผู้เรียกจอดโฟกัสในโมดัล ไม่ให้หลุดไป body
  *   · แตะ (`touch`) / ปากกา (`pen` — แท็บเล็ตก็เด้งคีย์บอร์ดเสมือน)
  *   · ไม่ทราบชนิด ⇒ ตัดสินจาก `(pointer: coarse)` แบบเดียวกับโฟกัสแรกของ focus trap
@@ -64,10 +65,14 @@ export type ComboboxPickInput = 'keyboard' | 'mouse' | 'touch' | 'pen' | ''
 export function focusAfterPick({
   input,
   coarsePointer,
+  choice = 'option',
 }: {
   input: ComboboxPickInput
   coarsePointer: boolean
+  /** `option` = เลือกตัวเลือกจากรายการ · `manual` = เลือกพิมพ์เอง */
+  choice?: 'option' | 'manual'
 }): 'input' | 'park' {
+  if (choice === 'manual') return 'input'
   switch (input) {
     case 'keyboard':
     case 'mouse':

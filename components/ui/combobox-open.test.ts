@@ -85,6 +85,13 @@ describe('focusAfterPick (มติผู้ใช้ 15/10/2569 — มือ�
     expect(focusAfterPick({ input: 'touch', coarsePointer: false })).toBe('park')
     expect(focusAfterPick({ input: 'pen', coarsePointer: false })).toBe('park')
   })
+  it('เลือก "ระบุเอง" ⇒ โฟกัสช่องพิมพ์ทุกชนิด input (จะพิมพ์ต่อ) · เลือกจากรายการยังจอดตามเดิม', () => {
+    for (const input of ['keyboard', 'mouse', 'touch', 'pen', ''] as const) {
+      expect(focusAfterPick({ input, coarsePointer: true, choice: 'manual' })).toBe('input')
+      expect(focusAfterPick({ input, coarsePointer: false, choice: 'manual' })).toBe('input')
+    }
+    expect(focusAfterPick({ input: 'touch', coarsePointer: true, choice: 'option' })).toBe('park')
+  })
   it('ไม่ทราบชนิด ⇒ ตาม (pointer: coarse)', () => {
     expect(focusAfterPick({ input: '', coarsePointer: true })).toBe('park')
     expect(focusAfterPick({ input: '', coarsePointer: false })).toBe('input')
