@@ -9,7 +9,7 @@ import { TOUCH_TARGET_CLASS } from '@/components/ui/button'
 import { cn } from '@/components/ui/cn'
 import { installFocusTrap } from '@/components/ui/focus-trap'
 import { guardModalHistory } from '@/components/ui/modal-history'
-import { isTopModal, registerModal, unregisterModal } from '@/components/ui/modal-stack'
+import { isDismissEscape, isTopModal, registerModal, unregisterModal } from '@/components/ui/modal-stack'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
 import {
@@ -81,7 +81,7 @@ export function CalendarPickerModal({
     if (!confirmOpen) return
     const token = registerModal()
     function handleKey(event: KeyboardEvent) {
-      if (event.key === 'Escape' && isTopModal(token)) setPickedDate(null)
+      if (isDismissEscape(event) && isTopModal(token)) setPickedDate(null)
     }
     // ปุ่ม Back ของมือถือ = ปิดเฉพาะกล่องนี้ (เดิมกล่องไม่ลงชั้น ⇒ Back ปิดทั้งปฏิทิน)
     const releaseHistory = guardModalHistory({

@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useRef, type MouseEvent, type RefObject } from 'react'
 import { installFocusTrap } from '@/components/ui/focus-trap'
 import { afterModalHistorySettled, guardModalHistory } from '@/components/ui/modal-history'
-import { isTopModal, registerModal, unregisterModal } from '@/components/ui/modal-stack'
+import { isDismissEscape, isTopModal, registerModal, unregisterModal } from '@/components/ui/modal-stack'
 
 /**
  * staging E-075 — พฤติกรรมกลางของเมนู/ลิ้นชักที่ทับหน้า (แบบเดียวกับเมนู Field Tracker):
@@ -30,7 +30,7 @@ export function useOverlayDismiss(onClose: () => void): {
     // เมนู/ลิ้นชักเต็มความสูง หัว+ปุ่มปิดอยู่บนสุดของจอ ⇒ toast คงมุมล่าง (SV5-D3-01)
     const token = registerModal({ toastPlacement: 'bottom' })
     function handleKey(event: KeyboardEvent) {
-      if (event.key === 'Escape' && isTopModal(token)) onCloseRef.current()
+      if (isDismissEscape(event) && isTopModal(token)) onCloseRef.current()
     }
     const releaseHistory = guardModalHistory({
       onBack: () => (isTopModal(token) ? 'close' : 'stay'),

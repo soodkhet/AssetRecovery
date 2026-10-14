@@ -91,3 +91,16 @@ export function subscribeModalStack(listener: () => void): () => void {
     listeners.delete(listener)
   }
 }
+
+/**
+ * Esc ที่ชั้น modal/overlay ควรใช้ปิดตัวเอง — **ตัวจัดการ Esc ของ modal/overlay ทุกตัวต้องผ่านฟังก์ชันนี้** (ตรวจซ้ำ staging SV5-G1-01)
+ *
+ * สัญญา: ตัวควบคุมข้างในแผงที่ใช้ Esc ไปแล้ว (เช่น combobox ปิดรายการแนะนำ) เรียก `event.preventDefault()`
+ * ⇒ modal ข้าม ไม่ปิดตามไปด้วย · ใช้ `stopPropagation()` แทนไม่ได้ เพราะ React (App Router) ผูก root ไว้ที่ `document`
+ * ซึ่งเป็น node เดียวกับที่ modal ฟัง keydown — ผู้ฟังบน node เดียวกันยังได้รับ event ทุกตัว
+ * (React ลงทะเบียนผู้ฟังตอน hydrate ก่อน effect ของ modal เสมอ ⇒ handler ของ React รันก่อน เห็น `defaultPrevented` ทัน)
+ * ⇒ ตัวจัดการ Esc ของ modal/overlay ต้องฟังแบบ bubble เท่านั้น ห้าม `addEventListener('keydown', …, true)` (capture รันก่อน React — สัญญานี้พัง)
+ */
+export function isDismissEscape(event: Pick<KeyboardEvent, 'key' | 'defaultPrevented'>): boolean {
+  return event.key === 'Escape' && !event.defaultPrevented
+}

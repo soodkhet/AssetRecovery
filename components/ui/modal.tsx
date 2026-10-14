@@ -6,7 +6,7 @@ import { cn } from '@/components/ui/cn'
 import { installFocusTrap } from '@/components/ui/focus-trap'
 import { busyElementLocksModal, decideModalClose } from '@/components/ui/modal-close-guard'
 import { guardModalHistory } from '@/components/ui/modal-history'
-import { isTopModal, registerModal, unregisterModal } from '@/components/ui/modal-stack'
+import { isDismissEscape, isTopModal, registerModal, unregisterModal } from '@/components/ui/modal-stack'
 
 /**
  * Modal — centered + backdrop ตาม `04` §8/§10
@@ -121,7 +121,7 @@ export function Modal({
     const token = registerModal({ getPanel: () => panel })
 
     function handleKey(event: KeyboardEvent) {
-      if (event.key !== 'Escape' || !isTopModal(token)) return
+      if (!isDismissEscape(event) || !isTopModal(token)) return
       if (guardRef.current.confirming) setConfirming(false)
       else requestCloseRef.current()
     }

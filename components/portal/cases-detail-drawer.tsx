@@ -9,7 +9,7 @@ import { Button, ErrorState, LoadingState, RefText } from '@/components/ui'
 import { TOUCH_TARGET_CLASS } from '@/components/ui/button'
 import { installFocusTrap } from '@/components/ui/focus-trap'
 import { guardModalHistory } from '@/components/ui/modal-history'
-import { isTopModal, registerModal, unregisterModal } from '@/components/ui/modal-stack'
+import { isDismissEscape, isTopModal, registerModal, unregisterModal } from '@/components/ui/modal-stack'
 import { fmtDate } from '@/lib/format/datetime'
 import { portalCaseDetailApiPath, portalServiceFeeEmptyText, portalServiceFeeRows } from '@/lib/portal/cases-view'
 import type { PortalCaseDetailDto } from '@/lib/portal/serializers'
@@ -43,7 +43,7 @@ export function PortalCaseDetailDrawer({
     // ลิ้นชักขวาเต็มความสูง (จอกว้าง) หัว+ปุ่ม X ชิดขอบบน ⇒ toast คงมุมล่าง ยกพ้นปุ่ม "ปิด" ท้ายลิ้นชัก (SV5-D3-01)
     const token = registerModal({ toastPlacement: 'bottom' })
     function handleKey(event: KeyboardEvent) {
-      if (event.key === 'Escape' && isTopModal(token)) onCloseRef.current()
+      if (isDismissEscape(event) && isTopModal(token)) onCloseRef.current()
     }
     // ปุ่ม Back ของ browser = ปิด drawer อยู่หน้ารายการเดิม (ตัวกรอง/หน้าไม่หาย) แบบเดียวกับ Modal กลาง — preship R5-009
     const releaseHistory = guardModalHistory({

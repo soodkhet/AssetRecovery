@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useToast } from '@/components/ui/toast'
 import { TOUCH_TARGET_CLASS } from '@/components/ui/button'
 import { cn } from '@/components/ui/cn'
+import { isDismissEscape } from '@/components/ui/modal-stack'
 import { IconBell, IconClose } from '@/components/notifications/notification-icons'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { notificationHref, unreadBadgeText } from '@/lib/field/push-client'
@@ -115,7 +116,7 @@ export function NotificationBell({
   useEffect(() => {
     if (!open) return
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false)
+      if (isDismissEscape(event)) setOpen(false)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)

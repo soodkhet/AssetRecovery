@@ -7,7 +7,7 @@ import { InlineAlert } from '@/components/ui'
 import { TOUCH_TARGET_CLASS } from '@/components/ui/button'
 import { installFocusTrap } from '@/components/ui/focus-trap'
 import { guardModalHistory } from '@/components/ui/modal-history'
-import { isTopModal, registerModal, unregisterModal } from '@/components/ui/modal-stack'
+import { isDismissEscape, isTopModal, registerModal, unregisterModal } from '@/components/ui/modal-stack'
 import { portalAssetPhotoPath, portalPhotoLabel as photoLabel, wrapPhotoIndex } from '@/lib/portal/cases-view'
 
 /**
@@ -131,7 +131,7 @@ function PhotoLightbox({
     function handleKey(event: KeyboardEvent) {
       if (!isTopModal(token)) return
       const current = latest.current
-      if (event.key === 'Escape') current.onClose()
+      if (isDismissEscape(event)) current.onClose()
       else if (event.key === 'ArrowRight') current.onChange(wrapPhotoIndex(current.index + 1, current.count))
       else if (event.key === 'ArrowLeft') current.onChange(wrapPhotoIndex(current.index - 1, current.count))
     }

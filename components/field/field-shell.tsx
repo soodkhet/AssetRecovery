@@ -29,7 +29,7 @@ import { SessionExpiredDialog } from '@/components/auth/session-expired-dialog'
 import { ToastProvider } from '@/components/ui'
 import { installFocusTrap } from '@/components/ui/focus-trap'
 import { afterModalHistorySettled, guardModalHistory } from '@/components/ui/modal-history'
-import { isTopModal, registerModal, unregisterModal } from '@/components/ui/modal-stack'
+import { isDismissEscape, isTopModal, registerModal, unregisterModal } from '@/components/ui/modal-stack'
 import { requestLogout } from '@/lib/auth/logout-client'
 import { LOGIN_PATH } from '@/lib/auth/constants'
 import type { ClientSession } from '@/lib/auth/types'
@@ -268,7 +268,7 @@ function HamburgerDrawer({
     // เมนูเต็มความสูง หัว+ปุ่ม X อยู่บนสุดของจอ ⇒ toast คงมุมล่าง ไม่เด้งขึ้นทับ (SV5-D3-01)
     const token = registerModal({ toastPlacement: 'bottom' })
     function handleKey(event: KeyboardEvent) {
-      if (event.key === 'Escape' && isTopModal(token)) onCloseRef.current()
+      if (isDismissEscape(event) && isTopModal(token)) onCloseRef.current()
     }
     // ปุ่ม Back / ปัดย้อนกลับของมือถือ = ปิดเมนู อยู่หน้าเดิม (แบบเดียวกับ Modal กลาง — preship R5-009)
     const releaseHistory = guardModalHistory({

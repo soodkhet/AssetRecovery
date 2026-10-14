@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { Input, cn } from '@/components/ui'
-import { comboboxOpenAction, type ComboboxTrigger } from '@/components/ui/combobox-open'
+import { comboboxOpenAction, consumeComboboxToggleKey, type ComboboxTrigger } from '@/components/ui/combobox-open'
 import { callApi } from '@/lib/api/types'
 import type { DeviceAssetKind } from '@/lib/device-catalog/catalog'
 import type { DeviceModelOptionDto, DeviceTacLookupDto } from '@/lib/device-catalog/types'
@@ -148,7 +148,10 @@ export function DeviceModelPicker({ id, assetKind, value, identifier, invalid = 
 
   /** เปิด/ปิดรายการตามการกระทำของผู้ใช้เท่านั้น (pure `comboboxOpenAction`) */
   function apply(trigger: ComboboxTrigger): void {
-    const action = comboboxOpenAction(trigger, open)
+    setToggle(comboboxOpenAction(trigger, open))
+  }
+
+  function setToggle(action: 'open' | 'close' | null): void {
     if (action === 'open') {
       setLoading(true)
       setOpen(true)
@@ -157,12 +160,25 @@ export function DeviceModelPicker({ id, assetKind, value, identifier, invalid = 
     }
   }
 
+  // เลือกแล้วโฟกัสกลับช่องพิมพ์ (APG combobox — SV5-G1-01 ข้อสังเกต) · "ระบุเอง" สลับไปช่องใหม่ ⇒ โฟกัสหลัง render
+  // ได้โฟกัสอย่างเดียวไม่เปิดรายการซ้ำ (comboboxOpenAction — ไม่มี onFocus)
+  const refocusAfterPick = useRef(false)
+  // layout effect: โฟกัสก่อน focus trap (MutationObserver) จะดึงโฟกัสที่ตกไป body ไปช่องแรกของแผง
+  useLayoutEffect(() => {
+    if (!refocusAfterPick.current) return
+    refocusAfterPick.current = false
+    const input = document.getElementById(id)
+    if (input !== null && document.activeElement !== input) input.focus()
+  })
+
   function pick(option: DeviceModelOptionDto): void {
+    refocusAfterPick.current = true
     onChange({ deviceModelId: option.id, text: option.label })
     setOpen(false)
   }
 
   function chooseManual(): void {
+    refocusAfterPick.current = true
     setManual(true)
     setOpen(false)
     onChange({ deviceModelId: null, text: value.text })
@@ -192,6 +208,7 @@ export function DeviceModelPicker({ id, assetKind, value, identifier, invalid = 
           type="button"
           className="text-xs font-medium text-emerald-700 hover:underline"
           onClick={() => {
+            refocusAfterPick.current = true
             setManual(false)
             apply({ type: 'click' })
           }}
@@ -231,13 +248,11 @@ export function DeviceModelPicker({ id, assetKind, value, identifier, invalid = 
           apply({ type: 'input' })
         }}
         onKeyDown={(event) => {
-          const trigger: ComboboxTrigger = { type: 'keydown', key: event.key, altKey: event.altKey }
-          const action = comboboxOpenAction(trigger, open)
+          // Esc ปิดแค่รายการ: preventDefault ⇒ โมดัลที่ครอบอยู่ข้าม (isDismissEscape) — stopPropagation ใช้ไม่ได้
+          // เพราะ React root กับโมดัลฟังที่ document เดียวกัน (SV5-G1-01)
+          const action = consumeComboboxToggleKey(event, open)
           if (action !== null) {
-            if (event.key !== 'Escape') event.preventDefault() // ลูกศรไม่เลื่อนเคอร์เซอร์/หน้า
-            // Esc ปิดแค่รายการ — ไม่ไหลไปปิดโมดัลที่ครอบอยู่ (โมดัลฟัง keydown ที่ document)
-            if (action === 'close') event.stopPropagation()
-            apply(trigger)
+            setToggle(action)
             return
           }
           if (!open || event.altKey) return
@@ -264,8 +279,9 @@ export function DeviceModelPicker({ id, assetKind, value, identifier, invalid = 
           id={listId}
           role="listbox"
           className="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-lg border border-slate-200 bg-white py-1 text-sm shadow-lg"
-          onMouseDown={() => {
-            // กันช่องค้นหาปิดรายการก่อนคลิกเลือก
+          onMouseDown={(event) => {
+            // คงโฟกัสที่ช่องพิมพ์ — คลิก <li> (โฟกัสไม่ได้) ไม่ดึงโฟกัสไปแผงโมดัล และช่องไม่ blur ปิดรายการก่อนคลิกเลือก
+            event.preventDefault()
             if (blurTimer.current !== null) clearTimeout(blurTimer.current)
           }}
         >

@@ -33,3 +33,19 @@ export function comboboxOpenAction(trigger: ComboboxTrigger, open: boolean): 'op
       return trigger.key === 'ArrowDown' ? 'open' : null
   }
 }
+
+/**
+ * keydown ที่ช่อง combobox ใช้เปิด/ปิดรายการ ⇒ `preventDefault()` แล้วคืน action ให้ผู้เรียกเปลี่ยนสถานะ (ตรวจซ้ำ staging SV5-G1-01)
+ *
+ * - ลูกศรไม่เลื่อนเคอร์เซอร์/หน้า
+ * - **Esc ที่ใช้ปิดรายการ** ⇒ `defaultPrevented` บอก modal/overlay ที่ครอบอยู่ว่าใช้ไปแล้ว (`isDismissEscape` ข้าม) — โมดัลไม่ปิดตาม
+ * - รายการปิดอยู่ Esc คืน `null` ไม่แตะ event ⇒ Esc ถัดไปปิดโมดัลตามเดิม
+ */
+export function consumeComboboxToggleKey(
+  event: { key: string; altKey: boolean; preventDefault: () => void },
+  open: boolean,
+): 'open' | 'close' | null {
+  const action = comboboxOpenAction({ type: 'keydown', key: event.key, altKey: event.altKey }, open)
+  if (action !== null) event.preventDefault()
+  return action
+}
