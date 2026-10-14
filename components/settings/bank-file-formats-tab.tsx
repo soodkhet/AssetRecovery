@@ -559,8 +559,8 @@ export function BankFileFormatsTab() {
             </div>
           )}
 
-          <Field id="bank-file-columns" label="คอลัมน์ (ตามลำดับในไฟล์)" required error={errors.columnMapping}>
-            <div id="bank-file-columns" className="space-y-2">
+          <Field id="bank-file-columns" group label="คอลัมน์ (ตามลำดับในไฟล์)" required error={errors.columnMapping}>
+            <div id="bank-file-columns" role="group" aria-labelledby="bank-file-columns-label" className="space-y-2">
               {form.columns.map((column, index) => (
                 <div key={index} className="flex items-center gap-2">
                   <span className="w-14 shrink-0 font-mono text-[10px] font-semibold text-slate-500">ลำดับ {index + 1}</span>

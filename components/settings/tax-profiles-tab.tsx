@@ -411,7 +411,7 @@ export function TaxProfilesTab() {
             </Field>
             {/* แบบนำส่งไม่ได้มาจาก Tax Profile แล้ว (มติ O57 · U96 · U7 — `filingFormOf()` ตัดสินจากชนิดผู้รับ + ประเภทเงินได้)
                 เดิมเป็นตัวเลือกที่บันทึกได้แต่ไม่มีผล ⇒ แสดงกติกาแทน · ค่าเดิมในฐานข้อมูลคงไว้ไม่แตะ (Final ด่าน 5) */}
-            <Field id="tax-filing-form" label="แบบนำส่ง">
+            <Field id="tax-filing-form" group label="แบบนำส่ง">
               <p id="tax-filing-form" className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
                 ระบบกำหนดให้อัตโนมัติตามผู้รับ — นิติบุคคล: ภ.ง.ด.53 · บุคคลธรรมดาเงินได้ 40(1)/40(2): ภ.ง.ด.1 ·
                 บุคคลธรรมดาอื่น ๆ: ภ.ง.ด.3

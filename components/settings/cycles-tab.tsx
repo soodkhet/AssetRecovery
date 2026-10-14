@@ -482,8 +482,8 @@ export function CyclesTab() {
 
           {/* ซ่อนจริงตามชนิดที่เลือก — ค่าของอีกโหมดถูกส่งเป็น []/'' เสมอตอนบันทึก */}
           {form.cutoffRuleType === 'fixed_dates' && (
-            <Field id="cycle-cutoff-dates" label="วันที่ตัดรอบ (เลือกได้หลายวัน)" required error={errors.cutoffDates}>
-              <div id="cycle-cutoff-dates" className="flex flex-wrap gap-1.5">
+            <Field id="cycle-cutoff-dates" group label="วันที่ตัดรอบ (เลือกได้หลายวัน)" required error={errors.cutoffDates}>
+              <div id="cycle-cutoff-dates" role="group" aria-labelledby="cycle-cutoff-dates-label" className="flex flex-wrap gap-1.5">
                 {CUTOFF_DAYS.map((day) => {
                   const selected = form.cutoffDates.includes(day)
                   return (
@@ -577,9 +577,11 @@ export function CyclesTab() {
           </Field>
 
           {form.type === 'AR' && form.scopeKind === 'selected_companies' && (
-            <Field id="cycle-companies" label="บริษัทที่ใช้รอบนี้" required error={errors.companyIds}>
+            <Field id="cycle-companies" group label="บริษัทที่ใช้รอบนี้" required error={errors.companyIds}>
               <div
                 id="cycle-companies"
+                role="group"
+                aria-labelledby="cycle-companies-label"
                 className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-slate-200 p-2"
               >
                 {companies.length === 0 && <p className="text-xs text-slate-400">กำลังโหลดรายชื่อบริษัท…</p>}

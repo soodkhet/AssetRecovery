@@ -231,7 +231,7 @@ export function ServiceFeeFormModal({
             </Field>
 
             {/* มติ PO U126 — ฐานคำนวณมีแบบเดียว (ยอดหนี้คงเหลือ) จึงแสดงเป็นข้อความ ไม่ให้เลือก */}
-            <Field id="sf-basis" label="ฐานคำนวณ" error={errors.basis}>
+            <Field id="sf-basis" group label="ฐานคำนวณ" error={errors.basis}>
               <p id="sf-basis" className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
                 {SERVICE_FEE_BASIS_LABEL[form.basis]}
               </p>

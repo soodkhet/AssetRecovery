@@ -69,6 +69,7 @@ export function PayeeIdDocumentField({
           </div>
         )}
         <StagedFileInput
+          id="payee-id-document"
           fileName={uploading ? 'กำลังอัปโหลด…' : null}
           accept={PAYEE_ID_DOCUMENT_ACCEPT}
           placeholder={hasFile ? 'แตะเพื่อแนบไฟล์ใหม่แทน' : 'แตะเพื่อเลือกไฟล์เอกสาร'}

@@ -430,8 +430,8 @@ export function ApprovalMatrixTab() {
             />
           </Field>
 
-          <Field id="approval-flow" label="ลำดับขั้นอนุมัติ" required error={errors.approvalFlowRoleIds}>
-            <div id="approval-flow" className="space-y-2">
+          <Field id="approval-flow" group label="ลำดับขั้นอนุมัติ" required error={errors.approvalFlowRoleIds}>
+            <div id="approval-flow" role="group" aria-labelledby="approval-flow-label" className="space-y-2">
               {form.approvalFlow.map((role, index) => (
                 <div key={index} className="flex items-center gap-2">
                   <span className="w-12 shrink-0 font-mono text-[10px] font-semibold text-slate-500">ขั้น {index + 1}</span>
