@@ -47,6 +47,17 @@ describe('settleFormIssues (SV5-J1-02/03)', () => {
     expect(settleFormIssues({ usedSatang: 0, hasReceipt: false, noReceipt: false, lines: [] }).first).toBeNull()
   })
 
+  it('ยอดใช้จริง 0 + ติ๊กไม่มีใบเสร็จ มีรายการ ⇒ ผิดที่ช่องยอดที่ใช้จริง', () => {
+    const issues = settleFormIssues({ usedSatang: 0, hasReceipt: false, noReceipt: true, lines: [line('a', '1')] })
+    expect(issues.first?.field).toBe('usedSatang')
+  })
+
+  it('แนบใบเสร็จ + ติ๊กไม่มีใบเสร็จพร้อมกัน ⇒ ผ่าน ส่งรายการไปด้วย', () => {
+    const issues = settleFormIssues({ usedSatang: 100_025, hasReceipt: true, noReceipt: true, lines: [line('a', '500')] })
+    expect(issues.first).toBeNull()
+    expect(issues.payload?.lines).toHaveLength(1)
+  })
+
   it('ข้อความยอดเกินไม่มีตัวเลข ⇒ ข้อความกลาง', () => {
     expect(settleLinesOverUsedMessage(null, 1)).toBe('ยอดรวมรายการที่ไม่มีใบเสร็จต้องไม่เกินยอดที่ใช้จริง')
   })

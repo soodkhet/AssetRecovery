@@ -78,6 +78,15 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
     setSubstituteAt(null)
     setFirstError(null)
   }
+  /**
+   * ผู้ใช้แก้ช่องที่ผิดแล้ว ⇒ ล้างข้อความใต้ช่อง + footer (ถ้าเป็นข้อความเดียวกัน) — ไม่ค้างตัวเลขเก่า (รีวิว SV5-J1-02)
+   */
+  function clearFieldError(field: keyof SettleFormIssues['errors']): void {
+    const message = errors[field]
+    if (message === undefined) return
+    setErrors(({ [field]: _cleared, ...rest }) => rest)
+    setFirstError((current) => (current === message ? null : current))
+  }
   /** แสดงผลตรวจ: ใต้ช่อง/แถว + ข้อแรกที่ footer (`footer` = ข้อความเต็มจาก API ถ้ามี) แล้วเลื่อน/โฟกัสช่องแรกที่ผิด */
   function showIssues(issues: SettleFormIssues, footer: string | null): void {
     setErrors(issues.errors)
@@ -233,7 +242,10 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
             inputMode="decimal"
             placeholder="0.00"
             value={used}
-            onChange={(event) => setUsed(event.target.value)}
+            onChange={(event) => {
+              setUsed(event.target.value)
+              clearFieldError('usedSatang')
+            }}
           />
         </Field>
 
@@ -295,7 +307,7 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
             disabled={saving}
             onPick={(file) => {
               setReceipt(file)
-              setErrors(({ receiptFileUrl: _picked, ...rest }) => rest)
+              clearFieldError('receiptFileUrl')
             }}
             onClear={() => setReceipt(null)}
           />
@@ -306,8 +318,10 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
           onChange={(checked) => {
             setNoReceipt(checked)
             setSubstituteError(null)
+            setSubstituteAt(null)
+            if (substituteError !== null) setFirstError((current) => (current === substituteError ? null : current))
             // ข้อความ "ต้องแนบใบเสร็จ…" เก่าค้างเหนือตาราง ⇒ reveal ครั้งถัดไปโฟกัสผิดช่อง (รีวิว SV5-R4-01)
-            setErrors(({ receiptFileUrl: _stale, ...rest }) => rest)
+            clearFieldError('receiptFileUrl')
           }}
           hint="มีรายจ่ายบางรายการที่เรียกใบเสร็จไม่ได้ — กรอกรายการแล้วระบบออกใบรับรองแทนใบเสร็จรับเงินให้เซ็น"
         />
@@ -316,7 +330,11 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
           <div>
             <NoReceiptLinesEditor
               lines={substituteLines}
-              onChange={setSubstituteLines}
+              onChange={(next) => {
+                setSubstituteLines(next)
+                // ยอดรวมรายการเปลี่ยน ⇒ ข้อความ "ยอดรวมเกินยอดที่ใช้จริง" ใต้ช่องยอดที่ใช้จริงไม่จริงแล้ว
+                clearFieldError('usedSatang')
+              }}
               defaultDate={toInputDate(new Date())}
               error={substituteRowError}
             />
@@ -325,7 +343,10 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
         )}
 
         <Field id={`${fieldId}-note`} label="หมายเหตุ (ถ้ามี)" error={errors.note ?? null}>
-          <Textarea id={`${fieldId}-note`} rows={2} maxLength={500} value={note} onChange={(event) => setNote(event.target.value)} />
+          <Textarea id={`${fieldId}-note`} rows={2} maxLength={500} value={note} onChange={(event) => {
+              setNote(event.target.value)
+              clearFieldError('note')
+            }} />
         </Field>
       </div>
       </fieldset>
