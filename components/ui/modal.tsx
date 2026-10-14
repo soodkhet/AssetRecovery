@@ -1,10 +1,10 @@
 'use client'
 
-import { useEffect, useId, useRef, useState, type ReactNode, type SyntheticEvent } from 'react'
+import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode, type SyntheticEvent } from 'react'
 import { Button, type ButtonVariant } from '@/components/ui/button'
 import { cn } from '@/components/ui/cn'
 import { installFocusTrap } from '@/components/ui/focus-trap'
-import { busyElementLocksModal, decideModalClose } from '@/components/ui/modal-close-guard'
+import { busyElementLocksModal, decideModalClose, discardAndClose } from '@/components/ui/modal-close-guard'
 import { guardModalHistory } from '@/components/ui/modal-history'
 import { isDismissEscape, isTopModal, registerModal, unregisterModal } from '@/components/ui/modal-stack'
 
@@ -22,6 +22,9 @@ import { isDismissEscape, isTopModal, registerModal, unregisterModal } from '@/c
 const BACKDROP_CLICK_GRACE_MS = 400
 
 export type ModalSize = 'sm' | 'md' | 'lg' | 'xl'
+
+/** สั่งปิดแบบผู้ใช้ (ผ่าน guard เดียวกับ Esc/X) — ให้ `<ModalCancelButton>` ใน footer/body ใช้ */
+const ModalRequestCloseContext = createContext<(() => void) | null>(null)
 
 const SIZE_CLASS: Readonly<Record<ModalSize, string>> = {
   sm: 'max-w-sm',
@@ -42,6 +45,7 @@ export function Modal({
   busy = false,
   lockClose = false,
   confirmDiscard = true,
+  onDiscard,
 }: {
   open: boolean
   onClose: () => void
@@ -59,6 +63,11 @@ export function Modal({
   lockClose?: boolean
   /** ถามยืนยันก่อนปิดเมื่อผู้ใช้กรอก/เปลี่ยนค่าใน modal แล้ว — ปิดได้สำหรับ modal ที่ช่องกรอกเป็นแค่ตัวกรอง */
   confirmDiscard?: boolean
+  /**
+   * ผู้ใช้กด "ทิ้งข้อมูล" ในกล่องยืนยัน ⇒ ล้างร่างก่อนปิด — **ฟอร์มที่ค้าง mount/เก็บร่างไว้ต้องส่ง**
+   * (เช่นเคลียร์เงินทดรอง/ขอเงินทดรอง/เบิกเอง) ไม่งั้นเปิดใหม่ร่างยังอยู่ ขัดกับข้อความในกล่อง (ตรวจซ้ำ staging SV5-J1-01)
+   */
+  onDiscard?: () => void
 }) {
   const panelRef = useRef<HTMLDivElement>(null)
   const titleId = useId()
@@ -86,8 +95,12 @@ export function Modal({
   useEffect(() => {
     onCloseRef.current = onClose
   }, [onClose])
+  const onDiscardRef = useRef(onDiscard)
+  useEffect(() => {
+    onDiscardRef.current = onDiscard
+  }, [onDiscard])
 
-  /** ปิดตามคำสั่งผู้ใช้ (Esc / backdrop / X) — ผ่าน guard ก่อนเสมอ */
+  /** ปิดตามคำสั่งผู้ใช้ (Esc / backdrop / X / `<ModalCancelButton>`) — ผ่าน guard ก่อนเสมอ */
   function requestClose() {
     const { closeLocked: busyNow, confirmDiscard: confirmNow } = guardRef.current
     const decision = decideModalClose({ busy: busyNow, dirty: dirtyRef.current, confirmDiscard: confirmNow })
@@ -204,6 +217,7 @@ export function Modal({
   if (!open) return null
 
   return (
+    <ModalRequestCloseContext.Provider value={requestClose}>
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div
         className="absolute inset-0 bg-slate-900/40"
@@ -296,7 +310,7 @@ export function Modal({
                   variant="danger"
                   onClick={() => {
                     setConfirming(false)
-                    onCloseRef.current()
+                    discardAndClose({ onDiscard: onDiscardRef.current, onClose: onCloseRef.current })
                   }}
                 >
                   ทิ้งข้อมูล
@@ -307,6 +321,20 @@ export function Modal({
         )}
       </div>
     </div>
+    </ModalRequestCloseContext.Provider>
+  )
+}
+
+/**
+ * ปุ่ม "ยกเลิก" ของฟอร์มใน modal ที่ปิด**ผ่านกติกาเดียวกับ Esc/X** — กรอกแล้วถามยืนยันทิ้งก่อน · "ทิ้งข้อมูล" ล้างร่าง
+ * (`onDiscard` ของ `<Modal>`) · ใช้กับฟอร์มที่เก็บร่าง (ตรวจซ้ำ staging SV5-J1-01) · นอก `<Modal>` ⇒ เรียก `onClose` ตรง
+ */
+export function ModalCancelButton({ onClose, children = 'ยกเลิก' }: { onClose: () => void; children?: ReactNode }) {
+  const requestClose = useContext(ModalRequestCloseContext)
+  return (
+    <Button variant="secondary" onClick={requestClose ?? onClose}>
+      {children}
+    </Button>
   )
 }
 

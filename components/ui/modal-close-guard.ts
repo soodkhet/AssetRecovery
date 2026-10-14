@@ -4,7 +4,8 @@
  * - ระหว่างบันทึก (busy) ห้ามปิด: ถ้าปิดได้ ฟอร์มที่ mount เฉพาะตอนเปิดจะเสีย state `saving`
  *   แล้วเปิดใหม่ได้ปุ่มบันทึกที่กดได้ ทั้งที่ request แรกยังไม่จบ ⇒ ส่งคำขอซ้ำ
  * - ผู้ใช้กรอกข้อมูลไปแล้ว (dirty) ต้องยืนยันก่อนทิ้ง — คลิกพลาดครั้งเดียวไม่ควรทำให้ฟอร์มยาวหาย
- * การปิดที่โค้ดสั่งเอง (บันทึกสำเร็จแล้วตั้ง `open=false`) และปุ่ม "ยกเลิก" ของฟอร์มไม่ผ่านตัวนี้
+ * การปิดที่โค้ดสั่งเอง (บันทึกสำเร็จแล้วตั้ง `open=false`) ไม่ผ่านตัวนี้ · ปุ่ม "ยกเลิก" ปกติก็ไม่ผ่าน ยกเว้น
+ * `<ModalCancelButton>` (ฟอร์มที่เก็บร่าง — ตรวจซ้ำ staging SV5-J1-01: ทุกทางปิดใช้กติกาเดียว)
  */
 
 export type ModalCloseDecision = 'ignore' | 'confirm-discard' | 'close'
@@ -34,3 +35,12 @@ export function busyElementLocksModal({ optedOut }: { optedOut: boolean }): bool
 
 /** แอตทริบิวต์บนปุ่มย่อยใน modal ที่หมุนได้โดยไม่ล็อกทั้ง modal — `<Button {...MODAL_BUSY_IGNORE}>` */
 export const MODAL_BUSY_IGNORE = { 'data-modal-busy': 'ignore' } as const
+
+/**
+ * ผู้ใช้ยืนยัน "ทิ้งข้อมูล" ⇒ ล้างร่างก่อน (ถ้าฟอร์มส่ง `onDiscard`) แล้วจึงปิด — ตรวจซ้ำ staging SV5-J1-01
+ * (เดิมแค่ปิด ฟอร์มที่ค้าง mount เปิดใหม่แล้วร่างยังอยู่ ขัดกับข้อความ "ข้อมูลจะหายไป")
+ */
+export function discardAndClose({ onDiscard, onClose }: { onDiscard: (() => void) | undefined; onClose: () => void }): void {
+  onDiscard?.()
+  onClose()
+}

@@ -3,7 +3,7 @@
 import { useEffect, useId, useState } from 'react'
 import { usePermission } from '@/components/auth/permission-provider'
 import { OnBehalfPayeeSelect } from '@/components/payees/on-behalf-payee-select'
-import { Button, Field, FormSubmitFooter, InlineAlert, Input, Modal, Select, Textarea, useClearOnClose, useRevealFieldError, useToast } from '@/components/ui'
+import { Button, Field, FormSubmitFooter, InlineAlert, Input, Modal, ModalCancelButton, Select, Textarea, useClearOnClose, useRevealFieldError, useToast } from '@/components/ui'
 import { advanceCreateAccess, minDueClearInputDate } from '@/lib/advances/advance'
 import { advanceFormIssues } from '@/lib/advances/advance-form'
 import { advanceCaseOptionLabel, advanceRequestErrorText } from '@/lib/advances/advance-ui'
@@ -76,6 +76,18 @@ export function AdvanceFormModal({ open, onClose, onCreated }: {
 
   if (!open) return null
 
+  /** ล้างร่าง + ข้อผิด — หลังส่งสำเร็จ และเมื่อผู้ใช้ยืนยัน "ทิ้งข้อมูล" (ตรวจซ้ำ staging SV5-J1-01) */
+  function resetDraft(): void {
+    setAmount('')
+    setPurpose('')
+    setDueClearDate('')
+    setPayeeId('')
+    setCaseId('')
+    setErrors({})
+    setSubmitError(null)
+    setFirstError(null)
+  }
+
   async function submit(): Promise<void> {
     const payload = {
       requestedSatang: parseBahtInput(amount) ?? Number.NaN,
@@ -115,14 +127,7 @@ export function AdvanceFormModal({ open, onClose, onCreated }: {
       return
     }
     showToast({ tone: 'success', title: 'ส่งคำขอแล้ว', description: 'รอการเงินอนุมัติก่อนรับเงิน' })
-    setAmount('')
-    setPurpose('')
-    setDueClearDate('')
-    setPayeeId('')
-    setCaseId('')
-    setErrors({})
-    setSubmitError(null)
-    setFirstError(null)
+    resetDraft()
     if (result.data !== undefined) onCreated(result.data)
     onClose()
   }
@@ -132,11 +137,10 @@ export function AdvanceFormModal({ open, onClose, onCreated }: {
       open
       onClose={onClose}
       title="ขอเบิกเงินทดรองจ่าย"
+      onDiscard={resetDraft}
       footer={
         <FormSubmitFooter message={firstError} tick={submitTick}>
-          <Button variant="secondary" onClick={onClose}>
-            ยกเลิก
-          </Button>
+          <ModalCancelButton onClose={onClose} />
           <Button loading={saving} onClick={() => void submit()}>
             ส่งคำขออนุมัติ
           </Button>

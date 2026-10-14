@@ -2,7 +2,7 @@
 
 import { useId, useState } from 'react'
 import { StagedFileInput } from '@/components/uploads/staged-file-input'
-import { Button, Field, InlineAlert, Input, Modal, Select, Textarea, useResetOnRecordChange, useToast } from '@/components/ui'
+import { Button, Field, InlineAlert, Input, Modal, ModalCancelButton, Select, Textarea, useResetOnRecordChange, useToast } from '@/components/ui'
 import { ADVANCE_RETURN_METHOD_LABEL } from '@/lib/advances/advance'
 import type { AdvanceDto } from '@/lib/advances/types'
 import { callApi, jsonRequest } from '@/lib/api/types'
@@ -63,12 +63,12 @@ export function ChangeReturnMethodModal({
       open
       onClose={onClose}
       title={`เปลี่ยนวิธีคืนยอด ${advance.ref}`}
+      // "ทิ้งข้อมูล" ⇒ ล้างเหตุผลที่กรอก · ปุ่มยกเลิกถามแบบเดียวกับ Esc/X (ตรวจซ้ำ staging SV5-J1-01)
+      onDiscard={() => setReason('')}
       description={`${advance.payeeName} · ยอดคืนค้าง ${fmtSatangSymbol(advance.returnOutstandingSatang)}`}
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>
-            ยกเลิก
-          </Button>
+          <ModalCancelButton onClose={onClose} />
           <Button loading={saving} disabled={!reasonOk} onClick={() => void submit()}>
             เปลี่ยนเป็น{ADVANCE_RETURN_METHOD_LABEL[target]}
           </Button>
@@ -160,12 +160,11 @@ export function RecordSeparateReturnModal({
       open
       onClose={onClose}
       title={`บันทึกรับคืนเงินทดรอง ${advance.ref}`}
+      onDiscard={resetDraft}
       description={`${advance.payeeName} · ยอดคืนค้าง ${fmtSatangSymbol(advance.returnOutstandingSatang)}`}
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>
-            ยกเลิก
-          </Button>
+          <ModalCancelButton onClose={onClose} />
           <Button loading={saving} disabled={!canSubmit} onClick={() => void submit()}>
             บันทึกรับคืน
           </Button>

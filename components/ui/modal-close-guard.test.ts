@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { busyElementLocksModal, decideModalClose, MODAL_BUSY_IGNORE } from '@/components/ui/modal-close-guard'
+import { busyElementLocksModal, decideModalClose, discardAndClose, MODAL_BUSY_IGNORE } from '@/components/ui/modal-close-guard'
 
 describe('decideModalClose', () => {
   it('ระหว่างบันทึก ปิดไม่ได้เลย แม้กรอกข้อมูลไว้หรือปิดการยืนยันทิ้ง', () => {
@@ -29,5 +29,19 @@ describe('busyElementLocksModal (R3-002 → R4-006)', () => {
   it('ปุ่มย่อยที่ติด data-modal-busy="ignore" (ค้นหา) ไม่ล็อกทั้ง modal', () => {
     expect(busyElementLocksModal({ optedOut: true })).toBe(false)
     expect(MODAL_BUSY_IGNORE).toEqual({ 'data-modal-busy': 'ignore' })
+  })
+})
+
+describe('discardAndClose (SV5-J1-01)', () => {
+  it('มี onDiscard ⇒ ล้างร่างก่อนแล้วจึงปิด', () => {
+    const calls: string[] = []
+    discardAndClose({ onDiscard: () => calls.push('discard'), onClose: () => calls.push('close') })
+    expect(calls).toEqual(['discard', 'close'])
+  })
+
+  it('ไม่มี onDiscard ⇒ ปิดอย่างเดียว', () => {
+    const calls: string[] = []
+    discardAndClose({ onDiscard: undefined, onClose: () => calls.push('close') })
+    expect(calls).toEqual(['close'])
   })
 })

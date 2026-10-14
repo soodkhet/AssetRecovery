@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useId, useRef, useState } from 'react'
-import { Button, Field, FieldErrorText, FieldGroupBox, InlineAlert, Input, Modal, Textarea, useClearOnClose, useResetOnRecordChange, useRevealFieldError, useToast } from '@/components/ui'
+import { Button, Field, FieldErrorText, FieldGroupBox, InlineAlert, Input, Modal, ModalCancelButton, Textarea, useClearOnClose, useResetOnRecordChange, useRevealFieldError, useToast } from '@/components/ui'
 import type { AdvanceDto, AdvanceSettleResult } from '@/lib/advances/types'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { advanceSettlement } from '@/lib/finance/advance-calc'
@@ -186,6 +186,8 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
       open
       onClose={onClose}
       title="เคลียร์เงินทดรองจ่าย"
+      // "ทิ้งข้อมูล" ⇒ ล้างร่างจริง · ปุ่มยกเลิกถามแบบเดียวกับ Esc/X (ตรวจซ้ำ staging SV5-J1-01)
+      onDiscard={resetDraft}
       description={advance.purpose}
       // ระหว่างอัปโหลดไม่ใช้ `loading` (ซึ่งล็อกทั้ง footer) — ให้ปุ่ม "ยกเลิกการอัปโหลด" กดได้ (R3-026)
       lockClose={uploading}
@@ -199,9 +201,7 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
           </>
         ) : (
           <>
-            <Button variant="secondary" onClick={onClose}>
-              ยกเลิก
-            </Button>
+            <ModalCancelButton onClose={onClose} />
             <Button loading={saving} disabled={!validUsed} onClick={() => void submit()}>
               บันทึกการเคลียร์ยอด
             </Button>

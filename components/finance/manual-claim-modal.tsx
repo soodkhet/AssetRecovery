@@ -5,7 +5,7 @@ import { usePermission } from '@/components/auth/permission-provider'
 import { OnBehalfPayeeSelect } from '@/components/payees/on-behalf-payee-select'
 import { NoReceiptLinesEditor, NoReceiptToggle } from '@/components/substitute-receipts/no-receipt-lines'
 import { StagedFileInput } from '@/components/uploads/staged-file-input'
-import { Button, Field, FieldErrorText, FormSubmitFooter, InlineAlert, Input, Modal, Select, Textarea, useClearOnClose, useRevealFieldError, useToast } from '@/components/ui'
+import { Button, Field, FieldErrorText, FormSubmitFooter, InlineAlert, Input, Modal, ModalCancelButton, Select, Textarea, useClearOnClose, useRevealFieldError, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { toFieldErrors } from '@/lib/api/validation'
 import { MANUAL_CLAIM_TYPES } from '@/lib/claims/claim'
@@ -235,6 +235,8 @@ export function ManualClaimModal({
       open
       onClose={onClose}
       title="สร้างรายการเบิกด้วยตนเอง (Manual Claim)"
+      // "ทิ้งข้อมูล" ⇒ ล้างร่างจริง (ตรวจซ้ำ staging SV5-J1-01)
+      onDiscard={reset}
       // ระหว่างอัปโหลดไม่ใช้ `loading` (ซึ่งล็อกทั้ง footer) — ให้ปุ่ม "ยกเลิกการอัปโหลด" กดได้ (R3-026)
       lockClose={uploading}
       footer={
@@ -248,9 +250,7 @@ export function ManualClaimModal({
             </>
           ) : (
             <>
-              <Button variant="secondary" onClick={onClose}>
-                ยกเลิก
-              </Button>
+              <ModalCancelButton onClose={onClose} />
               <Button loading={saving} onClick={() => void submit()}>
                 ส่งเข้าคิวอนุมัติ
               </Button>
