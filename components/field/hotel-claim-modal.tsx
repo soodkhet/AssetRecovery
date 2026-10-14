@@ -2,15 +2,16 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { IconFile } from '@/components/field/field-icons'
-import { Button, Field, Input, Modal, Select, Textarea, useToast } from '@/components/ui'
+import { Button, Field, FieldErrorText, FormSubmitError, Input, Modal, Select, Textarea, revealFirstFieldError, useToast } from '@/components/ui'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import {
   HOTEL_CLAIM_NOTE_MAX_LENGTH,
   HOTEL_NIGHTS_MAX,
   HOTEL_NIGHTS_MIN,
-  hotelClaimFormError,
+  hotelClaimFormIssue,
   parseHotelNightsInput,
+  type HotelClaimFormField,
 } from '@/lib/field/hotel-claim'
 import { checkExpenseReceiptCandidate, EXPENSE_RECEIPT_ACCEPT } from '@/lib/field/media-upload'
 import type { FieldExpenseDto, FieldTeammateDto } from '@/lib/field/types'
@@ -61,7 +62,17 @@ export function HotelClaimModal({
   const [substituteLines, setSubstituteLines] = useState<SubstituteLineDraft[]>(() => [
     emptySubstituteLine('line-0', expenseDate),
   ])
-  const [error, setError] = useState<string | null>(null)
+  // ข้อผิดพลาด + ช่องที่ชี้ไป (`field: null` = ของทั้งฟอร์ม เช่นอัปโหลดล้ม) — แสดงที่ช่องนั้น + ใน footer ติดจอ
+  const [error, setErrorState] = useState<{ message: string; field: HotelClaimFormField | 'lines' | null } | null>(null)
+  function setError(message: string | null, field: HotelClaimFormField | 'lines' | null = null): void {
+    setErrorState(message === null ? null : { message, field })
+  }
+  const bodyRef = useRef<HTMLDivElement>(null)
+  // ตรวจซ้ำ staging SV5-R3-01: ข้อความเคยอยู่ท้ายฟอร์มนอกจอ ⇒ หลังกดส่งแล้วไม่ผ่าน เลื่อน+โฟกัสไปช่องที่ผิด
+  const [revealTick, setRevealTick] = useState(0)
+  useEffect(() => {
+    if (revealTick > 0) revealFirstFieldError(bodyRef.current)
+  }, [revealTick])
   // error รายช่องจาก server (เช่นหมายเหตุยาวเกิน) — เดิมเห็นแค่ "ข้อมูลไม่ครบ" ไม่รู้ว่าช่องไหน (preship R2-025)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [submitting, setSubmitting] = useState(false)
@@ -122,7 +133,7 @@ export function HotelClaimModal({
 
   async function submit(): Promise<void> {
     const effectiveAmountBaht = noReceipt ? toBahtInput(substituteTotal) : amountBaht
-    const formError = hotelClaimFormError({
+    const formIssue = hotelClaimFormIssue({
       expenseDate,
       amountBaht: effectiveAmountBaht,
       hasReceipt: noReceipt || receipt !== null,
@@ -131,16 +142,23 @@ export function HotelClaimModal({
     const amountSatang = parseBahtInput(effectiveAmountBaht)
     const hotelNights = parseHotelNightsInput(nightsText)
     const substitute = noReceipt ? substituteDraftPayload(substituteLines) : null
-    if (formError !== null || amountSatang === null || Number.isNaN(amountSatang) || hotelNights === null) {
-      setError(formError ?? 'กรุณากรอกข้อมูลให้ครบ')
+    const linesIssue =
+      substitute !== null && substitute.error !== null ? { field: 'lines' as const, message: substitute.error } : null
+    // ไม่มีใบเสร็จ: ยอดเงิน = ยอดรวมรายการ (ช่องยอดถูกล็อก) ⇒ ยอดผิดชี้ไปที่รายการแทน
+    const amountFromLines = noReceipt && formIssue !== null && formIssue.field === 'amount'
+    const issue =
+      linesIssue !== null && (formIssue === null || amountFromLines)
+        ? linesIssue
+        : amountFromLines
+          ? { field: 'lines' as const, message: formIssue.message }
+          : formIssue
+    if (issue !== null) {
+      setError(issue.message, issue.field)
+      setRevealTick((tick) => tick + 1)
       return
     }
-    if (substitute !== null && substitute.error !== null) {
-      setError(substitute.error)
-      return
-    }
-    if (!noReceipt && receipt === null) {
-      setError('ต้องแนบใบเสร็จก่อนส่งคำขอเบิก')
+    if (amountSatang === null || Number.isNaN(amountSatang) || hotelNights === null) {
+      setError('กรุณากรอกข้อมูลให้ครบ')
       return
     }
 
@@ -189,6 +207,11 @@ export function HotelClaimModal({
     }
   }
 
+  /** ข้อความผิดพลาดของช่อง `field` — ใส่ `data-field-error` ให้ `revealFirstFieldError()` หาเจอ */
+  function fieldError(field: HotelClaimFormField | 'lines'): string | undefined {
+    return error !== null && error.field === field ? error.message : undefined
+  }
+
   return (
     <Modal
       open
@@ -197,7 +220,9 @@ export function HotelClaimModal({
       // ระหว่างอัปโหลดไม่ใช้ `loading` (ซึ่งล็อกทั้ง footer) — ให้ปุ่ม "ยกเลิกการอัปโหลด" กดได้ (R3-026)
       lockClose={uploading}
       footer={
-        uploading ? (
+        <div className="flex w-full flex-col gap-2">
+        <FormSubmitError key={revealTick} message={error === null ? null : error.message} />
+        {uploading ? (
           <div className="flex w-full gap-2">
             <Button variant="secondary" onClick={() => uploadAbortRef.current?.abort()} className="justify-center py-3">
               ยกเลิกการอัปโหลด
@@ -210,17 +235,18 @@ export function HotelClaimModal({
           <Button onClick={() => void submit()} loading={submitting} className="w-full justify-center py-3">
             {submitting ? 'กำลังส่งคำขอ...' : 'ส่งคำขอเบิก'}
           </Button>
-        )
+        )}
+        </div>
       }
     >
       {/* ล็อกช่องกรอกระหว่างอัปโหลด — ค่าที่ส่งคือค่าตอนกดส่ง แก้ระหว่างนี้จะไม่ถูกส่ง */}
       <fieldset disabled={uploading} className="m-0 min-w-0 border-0 p-0">
-      <div className="space-y-3">
-        <Field label="วันที่เข้าพัก" required>
+      <div ref={bodyRef} className="space-y-3">
+        <Field label="วันที่เข้าพัก" required error={fieldError('expenseDate')}>
           <Input type="date" value={expenseDate} onChange={(event) => changeExpenseDate(event.target.value)} />
         </Field>
 
-        <Field label="จำนวนคืน" hint="ใบเสร็จใบเดียวครอบหลายคืนได้ — ไม่กรอก = 1 คืน">
+        <Field label="จำนวนคืน" error={fieldError('nights')} hint="ใบเสร็จใบเดียวครอบหลายคืนได้ — ไม่กรอก = 1 คืน">
           <Input
             type="number"
             inputMode="numeric"
@@ -232,7 +258,7 @@ export function HotelClaimModal({
           />
         </Field>
 
-        <Field label="จำนวนเงิน (บาท)" required hint={noReceipt ? 'ไม่มีใบเสร็จ — ใช้ยอดรวมของรายการด้านล่าง' : undefined}>
+        <Field label="จำนวนเงิน (บาท)" required error={fieldError('amount')} hint={noReceipt ? 'ไม่มีใบเสร็จ — ใช้ยอดรวมของรายการด้านล่าง' : undefined}>
           <Input
             numeric
             inputMode="decimal"
@@ -270,14 +296,19 @@ export function HotelClaimModal({
         )}
 
         {noReceipt ? (
-          <NoReceiptLinesEditor
-            lines={substituteLines}
-            onChange={setSubstituteLines}
-            defaultDate={expenseDate}
-            variant="hotel"
-          />
+          <div>
+            <NoReceiptLinesEditor
+              lines={substituteLines}
+              onChange={setSubstituteLines}
+              defaultDate={expenseDate}
+              variant="hotel"
+            />
+            {fieldError('lines') !== undefined && (
+              <FieldErrorText>{fieldError('lines')}</FieldErrorText>
+            )}
+          </div>
         ) : (
-        <Field label="แนบใบเสร็จ" required>
+        <Field label="แนบใบเสร็จ" required error={fieldError('receipt')}>
           <button
             type="button"
             onClick={() => fileRef.current?.click()}
@@ -319,8 +350,6 @@ export function HotelClaimModal({
         <p className="text-[13px] text-slate-500">
           ระบบจะจับคู่กับเคสที่มีกำหนดวันอยู่ในช่วงวันที่พักนี้โดยอัตโนมัติ เพื่อใช้ตรวจสอบเท่านั้น
         </p>
-
-        {error !== null && <p className="text-xs font-semibold text-red-600">{error}</p>}
       </div>
       </fieldset>
     </Modal>

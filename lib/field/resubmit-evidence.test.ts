@@ -3,6 +3,7 @@ import {
   defaultResubmitEvidenceMode,
   hasRealReceiptFile,
   resubmitEvidenceModes,
+  resubmitFormIssue,
   resubmitReceiptFileRequired,
   resubmitReceiptPickerText,
 } from '@/lib/field/resubmit-evidence'
@@ -46,5 +47,54 @@ describe('หลักฐานในฟอร์มแก้ไขรายก�
     expect(
       resubmitReceiptFileRequired({ hasActiveSubstitute: false, hasSubstituteHistory: false, hasRealReceipt: false, mode: 'receipt', isHotel: false }),
     ).toBe(false)
+  })
+})
+
+/** ตรวจซ้ำ staging SV5-R3-01 — ข้อผิดพลาดฝั่ง client บอกช่องที่ผิด (ให้ฟอร์มเลื่อน/โฟกัสไปช่องนั้นได้) */
+describe('resubmitFormIssue — ตรวจฟอร์มส่งใหม่ก่อนส่ง', () => {
+  const ok = {
+    amountEditable: true,
+    amountBaht: '500',
+    isHotel: true,
+    nightsText: '1',
+    newSubstitute: false,
+    linesError: null,
+    linesTotalSatang: 0,
+    cancelsActive: false,
+    cancelReason: '',
+    receiptMissing: false,
+    note: 'แก้ยอดตามที่แจ้ง',
+  }
+
+  it('กรอกครบ ⇒ ผ่าน', () => {
+    expect(resubmitFormIssue(ok)).toBeNull()
+  })
+
+  it('เลือกแนบใบเสร็จจริงแต่ไม่แนบไฟล์ ⇒ ชี้ไปช่องแนบใบเสร็จ', () => {
+    expect(resubmitFormIssue({ ...ok, receiptMissing: true })).toEqual({ field: 'receipt', message: 'แนบไฟล์ใบเสร็จก่อนส่ง' })
+  })
+
+  it('แต่ละข้อชี้ไปช่องของตัวเอง', () => {
+    expect(resubmitFormIssue({ ...ok, amountBaht: '0' })?.field).toBe('amount')
+    expect(resubmitFormIssue({ ...ok, amountBaht: 'abc' })?.field).toBe('amount')
+    expect(resubmitFormIssue({ ...ok, nightsText: '0' })?.field).toBe('nights')
+    expect(resubmitFormIssue({ ...ok, newSubstitute: true, linesError: 'รายการที่ 1: กรอกรายละเอียด' })).toEqual({
+      field: 'lines',
+      message: 'รายการที่ 1: กรอกรายละเอียด',
+    })
+    expect(resubmitFormIssue({ ...ok, newSubstitute: true, linesTotalSatang: 60_000 })?.field).toBe('amount')
+    expect(resubmitFormIssue({ ...ok, cancelsActive: true, cancelReason: 'ส' })?.field).toBe('cancelReason')
+    expect(resubmitFormIssue({ ...ok, note: '   ' })).toEqual({ field: 'note', message: 'ต้องระบุสิ่งที่แก้ไขให้ผู้อนุมัติทราบ' })
+  })
+
+  it('ไล่ตามลำดับช่องบนฟอร์มจากบนลงล่าง — ช่องบนสุดที่ผิดมาก่อน', () => {
+    expect(resubmitFormIssue({ ...ok, amountBaht: '', receiptMissing: true, note: '' })?.field).toBe('amount')
+    expect(resubmitFormIssue({ ...ok, receiptMissing: true, note: '' })?.field).toBe('receipt')
+  })
+
+  it('ช่องยอดถูกล็อก / ไม่ใช่ค่าที่พัก ⇒ ไม่ตรวจยอดและจำนวนคืน', () => {
+    expect(resubmitFormIssue({ ...ok, amountEditable: false, amountBaht: '', isHotel: false, nightsText: 'x' })).toBeNull()
+    // ยอดล็อก ⇒ ไม่เทียบยอดรวมรายการกับยอดเบิก
+    expect(resubmitFormIssue({ ...ok, amountEditable: false, newSubstitute: true, linesTotalSatang: 99_999_00 })).toBeNull()
   })
 })

@@ -152,24 +152,36 @@ export function hotelNightsCapText(nights: number, maxPerNightSatang: number | n
  * "กรุณากรอกวันที่และจำนวนเงิน" ทำให้เข้าใจว่าวันที่ว่าง) · คืน `null` = ผ่าน
  * ⚠️ UX guard ฝั่งฟอร์ม — ตัวบังคับจริงคือ `assertHotelClaimFields()` + Zod ฝั่ง BE
  */
-export function hotelClaimFormError(input: {
+export function hotelClaimFormError(input: HotelClaimFormInput): string | null {
+  return hotelClaimFormIssue(input)?.message ?? null
+}
+
+export interface HotelClaimFormInput {
   expenseDate: string
   amountBaht: string
   hasReceipt: boolean
   /** ช่อง "จำนวนคืน" (ไม่บังคับ — ไม่ส่ง/ว่าง = 1) */
   nightsText?: string
-}): string | null {
-  if (input.expenseDate.trim() === '') return 'กรุณาเลือกวันที่เข้าพัก'
+}
+
+/** ช่องในฟอร์มเบิกที่พักที่ข้อความผิดพลาดชี้ไป — ใช้เลื่อน/โฟกัสไปช่องนั้น (ตรวจซ้ำ staging SV5-R3-01) */
+export type HotelClaimFormField = 'expenseDate' | 'nights' | 'amount' | 'receipt'
+
+/** เหมือน `hotelClaimFormError()` แต่บอกช่องที่ผิดด้วย */
+export function hotelClaimFormIssue(input: HotelClaimFormInput): { field: HotelClaimFormField; message: string } | null {
+  if (input.expenseDate.trim() === '') return { field: 'expenseDate', message: 'กรุณาเลือกวันที่เข้าพัก' }
   if (input.nightsText !== undefined && parseHotelNightsInput(input.nightsText) === null) {
-    return HOTEL_NIGHTS_RANGE_MESSAGE
+    return { field: 'nights', message: HOTEL_NIGHTS_RANGE_MESSAGE }
   }
   const amountSatang = parseBahtInput(input.amountBaht)
-  if (amountSatang === null) return 'กรุณากรอกจำนวนเงิน'
+  if (amountSatang === null) return { field: 'amount', message: 'กรุณากรอกจำนวนเงิน' }
   const formatError = bahtInputError(input.amountBaht, 'จำนวนเงิน')
-  if (formatError !== null) return formatError
-  if (Number.isNaN(amountSatang)) return 'จำนวนเงินต้องเป็นตัวเลข'
-  if (amountSatang <= 0) return 'จำนวนเงินต้องมากกว่า 0'
-  if (!input.hasReceipt) return 'ต้องแนบใบเสร็จ (หรือติ๊ก "ไม่มีใบเสร็จ" แล้วกรอกรายการ) ก่อนส่งคำขอเบิก'
+  if (formatError !== null) return { field: 'amount', message: formatError }
+  if (Number.isNaN(amountSatang)) return { field: 'amount', message: 'จำนวนเงินต้องเป็นตัวเลข' }
+  if (amountSatang <= 0) return { field: 'amount', message: 'จำนวนเงินต้องมากกว่า 0' }
+  if (!input.hasReceipt) {
+    return { field: 'receipt', message: 'ต้องแนบใบเสร็จ (หรือติ๊ก "ไม่มีใบเสร็จ" แล้วกรอกรายการ) ก่อนส่งคำขอเบิก' }
+  }
   return null
 }
 

@@ -4,26 +4,22 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { IconFile } from '@/components/field/field-icons'
 import { ReceiptInCompanyNameCheckbox } from '@/components/field/hotel-claim-modal'
 import { NoReceiptLinesEditor } from '@/components/substitute-receipts/no-receipt-lines'
-import { Button, Field, InlineAlert, Input, Modal, Textarea, useToast } from '@/components/ui'
+import { Button, Field, FieldErrorText, FormSubmitError, InlineAlert, Input, Modal, Textarea, revealFirstFieldError, useToast } from '@/components/ui'
 import { REASON_MAX } from '@/lib/api/validation'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { EXPENSE_TYPE_ICON, expenseTypeLabel, isSeparateExpense } from '@/lib/field/expense-ui'
-import {
-  HOTEL_NIGHTS_MAX,
-  HOTEL_NIGHTS_MIN,
-  HOTEL_NIGHTS_RANGE_MESSAGE,
-  hotelNightsCapText,
-  parseHotelNightsInput,
-} from '@/lib/field/hotel-claim'
+import { HOTEL_NIGHTS_MAX, HOTEL_NIGHTS_MIN, hotelNightsCapText, parseHotelNightsInput } from '@/lib/field/hotel-claim'
 import { EXPENSE_RECEIPT_ACCEPT } from '@/lib/field/media-upload'
 import {
   defaultResubmitEvidenceMode,
   hasRealReceiptFile,
   resubmitEvidenceModes,
+  resubmitFormIssue,
   resubmitReceiptFileRequired,
   resubmitReceiptPickerText,
   type ResubmitEvidenceMode,
+  type ResubmitFormField,
 } from '@/lib/field/resubmit-evidence'
 import type { FieldExpenseDto } from '@/lib/field/types'
 import { FieldUploadError, uploadExpenseReceipt } from '@/lib/field/upload-client'
@@ -33,13 +29,10 @@ import {
   substituteLinesToDrafts,
   type SubstituteLineDraft,
 } from '@/lib/substitute-receipts/form'
-import {
-  isSubstituteReceiptRefActive,
-  SUBSTITUTE_RECEIPT_CANCEL_REASON_MIN,
-} from '@/lib/substitute-receipts/substitute-receipt'
+import { isSubstituteReceiptRefActive } from '@/lib/substitute-receipts/substitute-receipt'
 import type { SubstituteReceiptDetailDto } from '@/lib/substitute-receipts/types'
 import { fmtDate, toInputDate } from '@/lib/format/datetime'
-import { bahtInputError, fmtSatangSymbol, parseBahtInput, toBahtInput } from '@/lib/format/money'
+import { fmtSatangSymbol, parseBahtInput, toBahtInput } from '@/lib/format/money'
 
 /**
  * แก้ไขรายการเบิกที่ถูกตีกลับแล้วส่งใหม่ (`41` §6.6 · §8 `resubmit_expense`)
@@ -98,7 +91,18 @@ export function ResubmitExpenseModal({
   const [amountBaht, setAmountBaht] = useState(() => toBahtInput(expense.grossSatang))
   const [note, setNote] = useState('')
   const [receipt, setReceipt] = useState<File | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  // ข้อผิดพลาด + ช่องที่ชี้ไป (`field: null` = ของทั้งฟอร์ม เช่นอัปโหลดล้ม) — แสดงที่ช่องนั้น + ใน footer ติดจอ
+  const [error, setErrorState] = useState<{ message: string; field: ResubmitFormField | null } | null>(null)
+  function setError(message: string | null, field: ResubmitFormField | null = null): void {
+    setErrorState(message === null ? null : { message, field })
+  }
+  const bodyRef = useRef<HTMLDivElement>(null)
+  // ตรวจซ้ำ staging SV5-R3-01: ข้อความเคยอยู่ท้ายฟอร์มนอกจอ กดส่งแล้วเหมือนไม่มีอะไรเกิดขึ้น ⇒ หลังกดส่งแล้วไม่ผ่าน
+  // เลื่อน+โฟกัสไปช่องที่ผิด (นับครั้งที่กด ไม่ผูกกับข้อความตรง ๆ — แบบเดียวกับ team-form-modal)
+  const [revealTick, setRevealTick] = useState(0)
+  useEffect(() => {
+    if (revealTick > 0) revealFirstFieldError(bodyRef.current)
+  }, [revealTick])
   const [submitting, setSubmitting] = useState(false)
   // อัปโหลดใบเสร็จใหม่ยกเลิกได้จริง — ปิด modal ระหว่างอัปโหลด = abort request ที่ค้าง (preship R3-026)
   const [uploading, setUploading] = useState(false)
@@ -119,12 +123,12 @@ export function ResubmitExpenseModal({
       .then((result) => {
         if (unmountedRef.current) return
         setLines(substituteLinesToDrafts(result.data?.lines ?? [], lineDate, targetTotalSatang))
-        if (result.error !== undefined) setError('ดึงรายการจากใบเดิมไม่ได้ — กรอกรายการใหม่')
+        if (result.error !== undefined) setErrorState({ message: 'ดึงรายการจากใบเดิมไม่ได้ — กรอกรายการใหม่', field: null })
       })
       .catch(() => {
         if (unmountedRef.current) return
         setLines(substituteLinesToDrafts([], lineDate, targetTotalSatang))
-        setError('ดึงรายการจากใบเดิมไม่ได้ — กรอกรายการใหม่')
+        setErrorState({ message: 'ดึงรายการจากใบเดิมไม่ได้ — กรอกรายการใหม่', field: null })
       })
       .finally(() => {
         if (!unmountedRef.current) setLoadingLines(false)
@@ -161,56 +165,35 @@ export function ResubmitExpenseModal({
   }
 
   async function submit(): Promise<void> {
-    if (note.trim() === '') {
-      setError('ต้องระบุสิ่งที่แก้ไขให้ผู้อนุมัติทราบ')
+    const draft = newSubstitute ? substituteDraftPayload(lines) : null
+    const issue = resubmitFormIssue({
+      amountEditable: editable && !amountLocked,
+      amountBaht,
+      isHotel,
+      nightsText,
+      newSubstitute,
+      linesError: draft === null ? null : draft.error,
+      linesTotalSatang: linesTotal,
+      cancelsActive,
+      cancelReason,
+      receiptMissing: receiptRequired && receipt === null,
+      note,
+    })
+    if (issue !== null) {
+      setError(issue.message, issue.field)
+      setRevealTick((tick) => tick + 1)
       return
     }
-
-    let substituteLines: ReturnType<typeof substituteDraftPayload>['payload'] = null
-    if (newSubstitute) {
-      const draft = substituteDraftPayload(lines)
-      if (draft.payload === null) {
-        setError(draft.error)
-        return
-      }
-      substituteLines = draft.payload
-    }
-
+    // ผ่าน `resubmitFormIssue()` แล้ว ⇒ ค่าด้านล่าง parse ได้แน่นอน
+    const substituteLines = draft === null ? null : draft.payload
     let amountSatang: number | undefined
     if (editable && newSubstitute && isHotel) {
       // ค่าที่พัก: ยอดเบิก = ยอดรวมรายการของใบรับรองใหม่
       amountSatang = linesTotal
     } else if (editable && !amountLocked) {
-      const parsed = parseBahtInput(amountBaht)
-      if (parsed === null || Number.isNaN(parsed) || parsed <= 0) {
-        setError(bahtInputError(amountBaht, 'จำนวนเงิน') ?? 'จำนวนเงินต้องมากกว่า 0')
-        return
-      }
-      if (newSubstitute && linesTotal > parsed) {
-        setError(`ยอดรวมรายการของใบรับรอง (${fmtSatangSymbol(linesTotal)}) ต้องไม่เกินจำนวนเงินที่เบิก`)
-        return
-      }
-      amountSatang = parsed
+      amountSatang = parseBahtInput(amountBaht) ?? undefined
     }
-
-    if (receiptRequired && receipt === null) {
-      setError('แนบไฟล์ใบเสร็จก่อนส่ง')
-      return
-    }
-    if (cancelsActive && cancelReason.trim().length < SUBSTITUTE_RECEIPT_CANCEL_REASON_MIN) {
-      setError(`กรอกเหตุผลการยกเลิกใบรับรองเดิมอย่างน้อย ${SUBSTITUTE_RECEIPT_CANCEL_REASON_MIN} ตัวอักษร`)
-      return
-    }
-
-    let hotelNights: number | undefined
-    if (isHotel) {
-      const parsedNights = parseHotelNightsInput(nightsText)
-      if (parsedNights === null) {
-        setError(HOTEL_NIGHTS_RANGE_MESSAGE)
-        return
-      }
-      hotelNights = parsedNights
-    }
+    const hotelNights = isHotel ? (parseHotelNightsInput(nightsText) ?? undefined) : undefined
 
     setSubmitting(true)
     setError(null)
@@ -248,6 +231,11 @@ export function ResubmitExpenseModal({
     }
   }
 
+  /** ข้อความผิดพลาดของช่อง `field` (ข้อความเดียวกับใน footer) — ใส่ `data-field-error` ให้ `revealFirstFieldError()` หาเจอ */
+  function fieldError(field: ResubmitFormField): string | undefined {
+    return error !== null && error.field === field ? error.message : undefined
+  }
+
   return (
     <Modal
       open
@@ -257,7 +245,9 @@ export function ResubmitExpenseModal({
       // ระหว่างอัปโหลดไม่ใช้ `loading` (ซึ่งล็อกทั้ง footer) — ให้ปุ่ม "ยกเลิกการอัปโหลด" กดได้ (R3-026)
       lockClose={uploading}
       footer={
-        uploading ? (
+        <div className="flex w-full flex-col gap-2">
+        <FormSubmitError key={revealTick} message={error === null ? null : error.message} />
+        {uploading ? (
           <div className="flex w-full gap-2">
             <Button variant="secondary" onClick={() => uploadAbortRef.current?.abort()} className="justify-center py-3">
               ยกเลิกการอัปโหลด
@@ -275,12 +265,13 @@ export function ResubmitExpenseModal({
           >
             {submitting ? 'กำลังส่ง...' : 'ส่งกลับเข้าคิวอนุมัติ'}
           </Button>
-        )
+        )}
+        </div>
       }
     >
       {/* ล็อกช่องกรอกระหว่างอัปโหลด — ค่าที่ส่งคือค่าตอนกดส่ง */}
       <fieldset disabled={uploading} className="m-0 min-w-0 border-0 p-0">
-      <div className="space-y-3">
+      <div ref={bodyRef} className="space-y-3">
         {expense.rejectReason !== null && (
           <InlineAlert tone="warning" title="เหตุผลที่ถูกตีกลับ">
             {expense.rejectReason}
@@ -312,6 +303,7 @@ export function ResubmitExpenseModal({
               <Field
                 label="จำนวนเงิน (บาท)"
                 required
+                error={fieldError('amount')}
                 hint={
                   newSubstitute
                     ? `ต้องไม่น้อยกว่ายอดรวมรายการของใบรับรองใบใหม่ (${fmtSatangSymbol(linesTotal)})`
@@ -332,6 +324,7 @@ export function ResubmitExpenseModal({
             {isHotel && (
               <Field
                 label="จำนวนคืน"
+                error={fieldError('nights')}
                 hint={`เดิม ${hotelNightsCapText(expense.hotelNights, expense.hotelMaxPerNightSatang)} — ไม่กรอก = 1 คืน`}
               >
                 <Input
@@ -407,11 +400,20 @@ export function ResubmitExpenseModal({
               (loadingLines ? (
                 <p className="text-xs text-slate-500">กำลังดึงรายการจากใบเดิม...</p>
               ) : (
-                <NoReceiptLinesEditor lines={lines} onChange={setLines} defaultDate={lineDate} variant={isHotel ? 'hotel' : 'general'} />
+                <div>
+                  <NoReceiptLinesEditor lines={lines} onChange={setLines} defaultDate={lineDate} variant={isHotel ? 'hotel' : 'general'} />
+                  {fieldError('lines') !== undefined && (
+                    <FieldErrorText>{fieldError('lines')}</FieldErrorText>
+                  )}
+                </div>
               ))}
 
             {cancelsActive && activeSubstitute !== null && (
-              <Field label={`เหตุผลการยกเลิกใบรับรอง ${activeSubstitute.receiptNumber}`} required>
+              <Field
+                label={`เหตุผลการยกเลิกใบรับรอง ${activeSubstitute.receiptNumber}`}
+                required
+                error={fieldError('cancelReason')}
+              >
                 <Textarea
                   rows={2}
                   maxLength={REASON_MAX}
@@ -426,6 +428,7 @@ export function ResubmitExpenseModal({
               <Field
                 label={evidenceState.hasRealReceipt ? 'แนบใบเสร็จใหม่ (ถ้าต้องเปลี่ยน)' : 'แนบใบเสร็จ'}
                 required={receiptRequired}
+                error={fieldError('receipt')}
               >
                 <button
                   type="button"
@@ -460,11 +463,9 @@ export function ResubmitExpenseModal({
           </p>
         )}
 
-        <Field label="สิ่งที่แก้ไข / ชี้แจง" required>
+        <Field label="สิ่งที่แก้ไข / ชี้แจง" required error={fieldError('note')}>
           <Textarea rows={3} maxLength={1000} value={note} onChange={(event) => setNote(event.target.value)} />
         </Field>
-
-        {error !== null && <p className="text-xs font-semibold text-red-600">{error}</p>}
       </div>
       </fieldset>
     </Modal>

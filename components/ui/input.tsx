@@ -43,9 +43,35 @@ export function revealFirstFieldError(root: HTMLElement | null): boolean {
   const message = root?.querySelector<HTMLElement>('[data-field-error]')
   if (!message) return false
   message.scrollIntoView({ block: 'center', behavior: 'smooth' })
-  const control = message.parentElement?.querySelector<HTMLElement>('input:not([type=hidden]), select, textarea')
+  const scope = message.parentElement
+  // ช่องกรอกก่อน · ไม่มีช่องกรอกที่ focus ได้ (เช่นปุ่มเลือกไฟล์ที่ซ่อน `<input type=file>` ไว้) ⇒ ปุ่มในช่องนั้น (SV5-R3-01)
+  const control =
+    scope?.querySelector<HTMLElement>('input:not([type=hidden]):not([type=file]), select, textarea') ??
+    scope?.querySelector<HTMLElement>('button')
   control?.focus({ preventScroll: true })
   return true
+}
+
+/**
+ * ข้อความผิดพลาดตอนกดส่งฟอร์ม — วางใน footer ของ modal (ติดจออยู่เสมอ) เหนือปุ่มส่ง
+ * ⇒ ผู้ใช้เห็นทันทีแม้ช่องที่ผิดอยู่นอกจอ (ตรวจซ้ำ staging SV5-R3-01) · ใช้คู่กับ `revealFirstFieldError()`
+ */
+export function FormSubmitError({ message }: { message: string | null }) {
+  if (message === null) return null
+  return (
+    <p role="alert" aria-live="assertive" className="w-full text-xs font-semibold text-red-600">
+      {message}
+    </p>
+  )
+}
+
+/** ข้อความ error ใต้ช่อง — `data-field-error` ให้ `revealFirstFieldError()` หาเจอ · ใช้ตรงเมื่อช่องไม่ได้ห่อด้วย `<Field>` */
+export function FieldErrorText({ children }: { children: ReactNode }) {
+  return (
+    <p data-field-error className="mt-1 text-[11px] font-semibold text-red-600">
+      {children}
+    </p>
+  )
 }
 
 /** ห่อ label + field + inline error ให้ครบชุดในที่เดียว */
@@ -73,7 +99,7 @@ export function Field({
       </Label>
       {children}
       {error ? (
-        <p data-field-error className="mt-1 text-[11px] font-semibold text-red-600">{error}</p>
+        <FieldErrorText>{error}</FieldErrorText>
       ) : (
         hint !== undefined && <p className="mt-1 text-[11px] text-slate-400">{hint}</p>
       )}

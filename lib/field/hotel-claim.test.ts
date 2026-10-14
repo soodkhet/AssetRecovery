@@ -9,6 +9,7 @@ import {
   assertHotelClaimFields,
   assertSharedAgentInTeam,
   hotelClaimFormError,
+  hotelClaimFormIssue,
   hotelNightsCapText,
   hotelStayDateKeys,
   isValidHotelNights,
@@ -252,5 +253,22 @@ describe('assertHotelReceiptPolicy (known Q7/M2 · DO-02)', () => {
   it('แผนบังคับ + แนบใบเสร็จจริง ⇒ ผ่าน · แผนไม่บังคับ ⇒ ใช้ใบรับรองแทนได้ตามเดิม', () => {
     expect(() => assertHotelReceiptPolicy({ hasReceiptFile: true, hasSubstituteReceipt: false, receiptRequired: true })).not.toThrow()
     expect(() => assertHotelReceiptPolicy({ hasReceiptFile: false, hasSubstituteReceipt: true, receiptRequired: false })).not.toThrow()
+  })
+})
+
+/** ตรวจซ้ำ staging SV5-R3-01 — ข้อผิดพลาดบอกช่องที่ผิด ให้ฟอร์มเลื่อน/โฟกัสไปช่องนั้น */
+describe('hotelClaimFormIssue — ช่องที่ผิด', () => {
+  const ok = { expenseDate: '2026-10-03', amountBaht: '600', hasReceipt: true, nightsText: '1' }
+
+  it('ผ่าน ⇒ null · ข้อความตรงกับ hotelClaimFormError', () => {
+    expect(hotelClaimFormIssue(ok)).toBeNull()
+    expect(hotelClaimFormIssue({ ...ok, amountBaht: '0' })?.message).toBe(hotelClaimFormError({ ...ok, amountBaht: '0' }))
+  })
+
+  it('แต่ละข้อชี้ไปช่องของตัวเอง', () => {
+    expect(hotelClaimFormIssue({ ...ok, expenseDate: '' })?.field).toBe('expenseDate')
+    expect(hotelClaimFormIssue({ ...ok, nightsText: '0' })?.field).toBe('nights')
+    expect(hotelClaimFormIssue({ ...ok, amountBaht: '' })?.field).toBe('amount')
+    expect(hotelClaimFormIssue({ ...ok, hasReceipt: false })?.field).toBe('receipt')
   })
 })

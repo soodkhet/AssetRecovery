@@ -1,3 +1,7 @@
+import { HOTEL_NIGHTS_RANGE_MESSAGE, parseHotelNightsInput } from '@/lib/field/hotel-claim'
+import { bahtInputError, fmtSatangSymbol, parseBahtInput } from '@/lib/format/money'
+import { SUBSTITUTE_RECEIPT_CANCEL_REASON_MIN } from '@/lib/substitute-receipts/substitute-receipt'
+
 /**
  * หลักฐานรายจ่ายในฟอร์ม "แก้ไขรายการเบิกที่ถูกตีกลับ" — pure (มติ PO 14/10/2569 SV5-R2-01 แนวทาง ก)
  *
@@ -53,4 +57,65 @@ export function resubmitReceiptPickerText(input: { hasExistingReceipt: boolean; 
 export function resubmitReceiptFileRequired(input: ResubmitEvidenceState & { mode: ResubmitEvidenceMode; isHotel: boolean }): boolean {
   if (input.mode !== 'receipt' || input.hasRealReceipt) return false
   return input.hasSubstituteHistory || input.isHotel
+}
+
+/** ช่องในฟอร์มส่งใหม่ที่ข้อความผิดพลาดชี้ไป — ใช้เลื่อน/โฟกัสไปช่องนั้น (ตรวจซ้ำ staging SV5-R3-01) */
+export type ResubmitFormField = 'amount' | 'nights' | 'lines' | 'cancelReason' | 'receipt' | 'note'
+
+export interface ResubmitFormIssue {
+  field: ResubmitFormField
+  message: string
+}
+
+/**
+ * ตรวจฟอร์มส่งใหม่ฝั่ง client ก่อนส่ง — คืนข้อผิดพลาดข้อแรก (ไล่ตามลำดับช่องบนฟอร์มจากบนลงล่าง) หรือ `null` = ผ่าน
+ * ⚠️ UX guard เท่านั้น — server ตรวจซ้ำทุกข้อ
+ */
+export function resubmitFormIssue(input: {
+  /** ช่องยอดเงินแก้ได้ (รายการแยก และยอดไม่ถูกล็อกตามใบรับรอง) */
+  amountEditable: boolean
+  amountBaht: string
+  /** ค่าที่พัก ⇒ ตรวจช่องจำนวนคืน */
+  isHotel: boolean
+  nightsText: string
+  /** ออกใบรับรองใหม่ — `linesError` = ผลตรวจรายการของใบ (`null` = ผ่าน) · `linesTotalSatang` = ยอดรวมรายการ */
+  newSubstitute: boolean
+  linesError: string | null
+  linesTotalSatang: number
+  /** ยกเลิกใบรับรองที่ใช้งานอยู่พร้อมการส่ง ⇒ เหตุผลบังคับ */
+  cancelsActive: boolean
+  cancelReason: string
+  /** ต้องแนบไฟล์ใบเสร็จใหม่แต่ยังไม่ได้เลือกไฟล์ */
+  receiptMissing: boolean
+  note: string
+}): ResubmitFormIssue | null {
+  let amountSatang: number | null = null
+  if (input.amountEditable) {
+    const parsed = parseBahtInput(input.amountBaht)
+    if (parsed === null || Number.isNaN(parsed) || parsed <= 0) {
+      return { field: 'amount', message: bahtInputError(input.amountBaht, 'จำนวนเงิน') ?? 'จำนวนเงินต้องมากกว่า 0' }
+    }
+    amountSatang = parsed
+  }
+  if (input.isHotel && parseHotelNightsInput(input.nightsText) === null) {
+    return { field: 'nights', message: HOTEL_NIGHTS_RANGE_MESSAGE }
+  }
+  if (input.newSubstitute) {
+    if (input.linesError !== null) return { field: 'lines', message: input.linesError }
+    if (amountSatang !== null && input.linesTotalSatang > amountSatang) {
+      return {
+        field: 'amount',
+        message: `ยอดรวมรายการของใบรับรอง (${fmtSatangSymbol(input.linesTotalSatang)}) ต้องไม่เกินจำนวนเงินที่เบิก`,
+      }
+    }
+  }
+  if (input.cancelsActive && input.cancelReason.trim().length < SUBSTITUTE_RECEIPT_CANCEL_REASON_MIN) {
+    return {
+      field: 'cancelReason',
+      message: `กรอกเหตุผลการยกเลิกใบรับรองเดิมอย่างน้อย ${SUBSTITUTE_RECEIPT_CANCEL_REASON_MIN} ตัวอักษร`,
+    }
+  }
+  if (input.receiptMissing) return { field: 'receipt', message: 'แนบไฟล์ใบเสร็จก่อนส่ง' }
+  if (input.note.trim() === '') return { field: 'note', message: 'ต้องระบุสิ่งที่แก้ไขให้ผู้อนุมัติทราบ' }
+  return null
 }
