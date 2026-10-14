@@ -18,18 +18,20 @@ const FIELD_CLASS =
 const ERROR_CLASS = 'border-red-300 bg-red-50'
 
 export function Label({
+  id,
   htmlFor,
   children,
   required = false,
   className,
 }: {
+  id?: string
   htmlFor?: string
   children: ReactNode
   required?: boolean
   className?: string
 }) {
   return (
-    <label htmlFor={htmlFor} className={cn('mb-1 block text-xs font-bold text-slate-700', className)}>
+    <label id={id} htmlFor={htmlFor} className={cn('mb-1 block text-xs font-bold text-slate-700', className)}>
       {children}
       {required && <span className="ml-0.5 text-red-500">*</span>}
     </label>
@@ -130,8 +132,11 @@ interface FieldControlState {
 
 const FieldControlContext = createContext<FieldControlState | null>(null)
 
-/** รวม aria-invalid/aria-describedby ของช่องกรอก: ค่าที่ส่งตรง + ค่าจาก `<Field>` ที่ห่อ (เมื่อ id ตรงกัน) */
-function useFieldControl(id: string | undefined, invalid: boolean, describedBy: string | undefined) {
+/**
+ * รวม aria-invalid/aria-describedby ของช่องกรอก: ค่าที่ส่งตรง + ค่าจาก `<Field>` ที่ห่อ (เมื่อ id ตรงกัน)
+ * export ให้ช่องกรอกแบบประกอบเอง (เช่น `<StagedFileInput>`) ผูกกับ `<Field id>` ได้แบบเดียวกับ `<Input>`
+ */
+export function useFieldControl(id: string | undefined, invalid: boolean, describedBy: string | undefined) {
   const field = useContext(FieldControlContext)
   const bound = field !== null && id !== undefined && field.controlId === id
   const isInvalid = invalid || (bound && field.invalid)
@@ -149,10 +154,12 @@ function useFieldControl(id: string | undefined, invalid: boolean, describedBy: 
  * ห่อ label + field + inline error ให้ครบชุดในที่เดียว
  * `id` = id ของช่องกรอกข้างใน (ส่ง `id` เดียวกันให้ `<Input>`/`<Select>`/`<Textarea>`) ⇒ label ผูกช่อง (`htmlFor`)
  * · ช่องได้ `aria-invalid` + `aria-describedby` ชี้ข้อความใต้ช่องเอง · `revealFirstFieldError()` โฟกัสช่องจาก id นี้
- * (ตรวจซ้ำ staging SV5-R7-01)
+ * (ตรวจซ้ำ staging SV5-R7-01) · label มี id `<id>-label` · กลุ่มตัวเลือก (radio) = `<Field id group>` ⇒ label ไม่ใส่ `for`
+ * (ผูกได้เฉพาะช่องเดี่ยว) ใส่ `id` ที่กล่อง `role="radiogroup"` แล้วตั้งชื่อด้วย `aria-labelledby="<id>-label"` (SV5-R9-01)
  */
 export function Field({
   id,
+  group = false,
   label,
   required = false,
   error,
@@ -161,6 +168,8 @@ export function Field({
   className,
 }: {
   id?: string
+  /** กล่องกลุ่มตัวเลือก (radio) — label ไม่ผูก `for` · กล่องใช้ `aria-labelledby="<id>-label"` แทน */
+  group?: boolean
   label: ReactNode
   required?: boolean
   error?: string | null
@@ -176,7 +185,7 @@ export function Field({
     id === undefined ? null : { controlId: id, invalid: hasError, describedBy: errorId ?? hintId }
   return (
     <div className={className}>
-      <Label htmlFor={id} required={required}>
+      <Label id={id === undefined ? undefined : `${id}-label`} htmlFor={group ? undefined : id} required={required}>
         {label}
       </Label>
       <FieldControlContext.Provider value={control}>{children}</FieldControlContext.Provider>
@@ -193,6 +202,23 @@ export function Field({
       )}
     </div>
   )
+}
+
+/**
+ * aria ของช่องกรอก native (`<input>`/ปุ่มเลือกไฟล์ที่เขียนเองในฟอร์ม) ที่ห่อด้วย `<Field id>` — ใช้ชื่อ id
+ * ชุดเดียวกับ `<Field>` (`<id>-error` เมื่อผิด · `<id>-hint` เมื่อ `<Field>` มี hint) · `describedBy` = คำอธิบายเพิ่มของช่อง (เช่นชื่อไฟล์ในปุ่ม) · ช่องจาก UI Kit ไม่ต้องใช้ (ได้จาก `<Field>` เอง)
+ */
+export function fieldControlAria(
+  id: string,
+  { error, hasHint = false, describedBy }: { error?: string | null; hasHint?: boolean; describedBy?: string } = {},
+) {
+  const hasError = typeof error === 'string' && error !== ''
+  const fieldDescribedBy = hasError ? `${id}-error` : hasHint ? `${id}-hint` : undefined
+  const ids = [describedBy, fieldDescribedBy].filter((value) => value !== undefined && value !== '')
+  return {
+    'aria-invalid': hasError || undefined,
+    'aria-describedby': ids.length > 0 ? ids.join(' ') : undefined,
+  }
 }
 
 export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {

@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import { Field, Input, Select, Textarea, fieldErrorControl } from '@/components/ui'
+import { StagedFileInput } from '@/components/uploads/staged-file-input'
+import { Field, Input, Select, Textarea, fieldControlAria, fieldErrorControl } from '@/components/ui'
 
 /** ตรวจซ้ำ staging SV5-R7-01 — `<Field id>` ผูก label ↔ ช่อง + ช่องที่ผิดมี aria-invalid/aria-describedby */
 describe('<Field id> ผูกช่องกรอก', () => {
@@ -141,5 +142,71 @@ describe('fieldErrorControl()', () => {
     const fileBox = node('div', '', [button])
     const fileRoot = node('div', '', [fileBox])
     expect(fieldErrorControl(el(fileRoot), message(undefined, fileBox, fileRoot))).toBe(el(button))
+  })
+})
+
+/** ตรวจซ้ำ staging SV5-R9-01 — ช่องแนบไฟล์ / ช่อง native / กลุ่มตัวเลือก ผูกกับ `<Field id>` ได้ครบ */
+describe('ช่องแนบไฟล์ + ช่อง native ใน <Field id>', () => {
+  it('<StagedFileInput id> ⇒ label for=ปุ่มเลือกไฟล์ · ผิด ⇒ aria-invalid + describedby ชื่อไฟล์และข้อความ + กรอบแดง', () => {
+    const html = renderToStaticMarkup(
+      <Field id="rcpt" label="แนบใบเสร็จ" required error="กรุณาแนบใบเสร็จ">
+        <StagedFileInput id="rcpt" fileName={null} accept="image/*" placeholder="แตะเพื่อเลือกไฟล์" onPick={() => undefined} />
+      </Field>,
+    )
+    expect(html).toContain('for="rcpt"')
+    expect(html).toMatch(/<button[^>]*id="rcpt"/)
+    expect(html).toMatch(/<button[^>]*aria-invalid="true"/)
+    expect(html).toMatch(/<button[^>]*aria-describedby="rcpt-file-name rcpt-error"/)
+    expect(html).toContain('id="rcpt-file-name"')
+    expect(html).toMatch(/<button[^>]*border-red-300/)
+  })
+
+  it('<StagedFileInput id> ไม่มีข้อผิด ⇒ ไม่มี aria-invalid · hint อยู่ใน describedby', () => {
+    const html = renderToStaticMarkup(
+      <Field id="doc" label="หลักฐาน" hint="PDF หรือรูป">
+        <StagedFileInput id="doc" fileName="slip.pdf" accept="image/*" placeholder="—" onPick={() => undefined} />
+      </Field>,
+    )
+    expect(html).not.toContain('aria-invalid')
+    expect(html).toMatch(/<button[^>]*aria-describedby="doc-file-name doc-hint"/)
+    expect(html).toContain('slip.pdf')
+  })
+
+  it('<StagedFileInput> ไม่ส่ง id ⇒ คงหน้าตา/พฤติกรรมเดิม (ไม่มี id/aria)', () => {
+    const html = renderToStaticMarkup(
+      <StagedFileInput fileName={null} accept="image/*" placeholder="แตะเพื่อเลือกไฟล์" onPick={() => undefined} />,
+    )
+    expect(html).not.toContain('aria-invalid')
+    expect(html).not.toContain('aria-describedby')
+    expect(html).not.toMatch(/<button[^>]* id=/)
+  })
+
+  it('fieldControlAria() ใช้ชื่อ id ชุดเดียวกับ <Field> · ข้อผิดชนะ hint · รวม describedBy เพิ่ม', () => {
+    expect(fieldControlAria('x')).toEqual({ 'aria-invalid': undefined, 'aria-describedby': undefined })
+    expect(fieldControlAria('x', { hasHint: true })).toEqual({ 'aria-invalid': undefined, 'aria-describedby': 'x-hint' })
+    expect(fieldControlAria('x', { error: 'ผิด', hasHint: true })).toEqual({ 'aria-invalid': true, 'aria-describedby': 'x-error' })
+    expect(fieldControlAria('x', { error: '', describedBy: 'x-name' })).toEqual({ 'aria-invalid': undefined, 'aria-describedby': 'x-name' })
+    expect(fieldControlAria('x', { error: 'ผิด', describedBy: 'x-name' })['aria-describedby']).toBe('x-name x-error')
+  })
+
+  it('<Field id group> ⇒ label มี id แต่ไม่ใส่ for (กล่อง radiogroup ใช้ aria-labelledby)', () => {
+    const html = renderToStaticMarkup(
+      <Field id="method" group label="วิธีคืนยอด">
+        <div id="method" role="radiogroup" aria-labelledby="method-label">
+          <input type="radio" name="m" />
+        </div>
+      </Field>,
+    )
+    expect(html).toMatch(/<label id="method-label"/)
+    expect(html).not.toContain('for="method"')
+  })
+
+  it('<Field id> ปกติ ⇒ label มี id `<id>-label` และ for=id', () => {
+    const html = renderToStaticMarkup(
+      <Field id="n" label="ชื่อ">
+        <Input id="n" />
+      </Field>,
+    )
+    expect(html).toMatch(/<label id="n-label" for="n"/)
   })
 })
