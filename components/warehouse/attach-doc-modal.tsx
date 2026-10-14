@@ -275,7 +275,7 @@ function Row({ label, value }: { label: string; value: ReactNode }) {
   )
 }
 
-function DocumentSlotField({
+export function DocumentSlotField({
   slot,
   uploading,
   disabled,
@@ -288,10 +288,12 @@ function DocumentSlotField({
   onPick: (files: FileList | null) => void
   onView: () => void
 }) {
+  // ชื่อช่องไฟล์ = ชื่อเอกสาร + คำบนปุ่ม (ไม่ซ้ำกันเมื่อมีหลายช่อง) · คำแนะนำเป็นคำอธิบาย (ตรวจซ้ำ staging SV5-A11Y-A2-04)
+  const slotId = useId()
   return (
     <div>
       <div className="mb-1 text-xs font-bold text-slate-700">
-        {slot.ordinal} {slot.label} <span className="text-red-500">*</span>
+        {slot.ordinal} <span id={`${slotId}-name`}>{slot.label}</span> <span className="text-red-500">*</span>
       </div>
       <div
         className={cn(
@@ -299,12 +301,17 @@ function DocumentSlotField({
           slot.attached ? 'border-emerald-300 bg-emerald-50' : 'border-slate-300 hover:bg-slate-50',
         )}
       >
-        <div className="text-xs text-slate-500">{slot.hint}</div>
+        <div id={`${slotId}-hint`} className="text-xs text-slate-500">
+          {slot.hint}
+        </div>
         <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
           <label className={buttonClass('secondary', 'sm', 'cursor-pointer')}>
-            {uploading ? 'กำลังอัปโหลด...' : slot.attached ? 'แนบไฟล์ใหม่แทน' : 'เลือกไฟล์'}
+            <span id={`${slotId}-action`}>{uploading ? 'กำลังอัปโหลด...' : slot.attached ? 'แนบไฟล์ใหม่แทน' : 'เลือกไฟล์'}</span>
             <input
               type="file"
+              aria-labelledby={`${slotId}-name ${slotId}-action`}
+              aria-describedby={`${slotId}-hint`}
+              aria-required
               accept={LOT_DOCUMENT_ACCEPT}
               className="sr-only"
               disabled={disabled || uploading}
