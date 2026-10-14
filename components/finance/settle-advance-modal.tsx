@@ -1,11 +1,12 @@
 'use client'
 
 import { useEffect, useId, useRef, useState } from 'react'
-import { Button, Field, FieldErrorText, FieldGroupBox, InlineAlert, Input, Modal, ModalCancelButton, Textarea, useClearOnClose, useResetOnRecordChange, useRevealFieldError, useToast } from '@/components/ui'
+import { Button, Field, FieldErrorText, FieldGroupBox, FormSubmitFooter, InlineAlert, Input, Modal, ModalCancelButton, Textarea, useClearOnClose, useResetOnRecordChange, useRevealFieldError, useToast } from '@/components/ui'
 import type { AdvanceDto, AdvanceSettleResult } from '@/lib/advances/types'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { advanceSettlement } from '@/lib/finance/advance-calc'
 import { settleUsedField } from '@/lib/advances/advance-ui'
+import { settleFormIssues, type SettleFormIssues } from '@/lib/advances/settle-form'
 import { ADVANCE_RETURN_METHOD_LABEL, DEFAULT_ADVANCE_RETURN_METHOD } from '@/lib/advances/advance'
 import type { AdvanceReturnMethod } from '@/lib/generated/prisma/enums'
 import { fmtSatangSymbol } from '@/lib/format/money'
@@ -16,8 +17,6 @@ import { FieldUploadError, uploadExpenseReceipt } from '@/lib/field/upload-clien
 import { toInputDate } from '@/lib/format/datetime'
 import {
   emptySubstituteLine,
-  substituteDraftPayload,
-  substituteDraftTotalSatang,
   substituteLineRowError,
   type SubstituteLineDraft,
   type SubstituteLineIssueAt,
@@ -45,7 +44,8 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
   const { showToast } = useToast()
   const [used, setUsed] = useState('')
   const [receipt, setReceipt] = useState<File | null>(null)
-  const [receiptError, setReceiptError] = useState<string | null>(null)
+  // ข้อผิดจากการกดบันทึก/API รายช่อง (ยอดที่ใช้จริง/วิธีคืน/ใบเสร็จ/หมายเหตุ) — ใต้ช่อง + aria-invalid (SV5-J1-02/03)
+  const [errors, setErrors] = useState<SettleFormIssues['errors']>({})
   const [note, setNote] = useState('')
   const [returnMethod, setReturnMethod] = useState<AdvanceReturnMethod>(DEFAULT_ADVANCE_RETURN_METHOD)
   const [saving, setSaving] = useState(false)
@@ -57,6 +57,9 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
   const [substituteError, setSubstituteError] = useState<string | null>(null)
   // แถว/ช่องที่ผิดในตารางรายการ + เลื่อน/โฟกัสช่องที่ผิดหลังกดบันทึก (ตรวจซ้ำ staging SV5-R4-01)
   const [substituteAt, setSubstituteAt] = useState<SubstituteLineIssueAt | null>(null)
+  // ข้อผิดข้อแรกตามลำดับบนจอ (รวมข้อผิดจาก API) — footer ติดจอเหนือปุ่ม role=alert (ตรวจซ้ำ staging SV5-J1-03)
+  const [firstError, setFirstError] = useState<string | null>(null)
+  const [submitTick, setSubmitTick] = useState(0)
   const { ref: bodyRef, reveal: revealError } = useRevealFieldError()
   // อัปโหลดใบเสร็จยกเลิกได้จริง — ปิด modal/ออกจากหน้า = abort request ที่ค้าง (preship R3-026)
   const [uploading, setUploading] = useState(false)
@@ -67,23 +70,33 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
   }, [open])
   useEffect(() => () => uploadAbortRef.current?.abort(), [])
   // ปิดฟอร์ม (ยกเลิก/X/บันทึกสำเร็จ) ⇒ ล้างข้อผิดจากการกดบันทึกครั้งก่อน — ร่างที่กรอกไว้ยังอยู่ (ตรวจซ้ำ staging SV5-R6-01)
-  useClearOnClose(open, () => {
-    setReceiptError(null)
+  useClearOnClose(open, clearErrors)
+  /** ล้างข้อผิดทั้งหมด (ช่อง + แถวในตาราง + footer) */
+  function clearErrors(): void {
+    setErrors({})
     setSubstituteError(null)
     setSubstituteAt(null)
-  })
+    setFirstError(null)
+  }
+  /** แสดงผลตรวจ: ใต้ช่อง/แถว + ข้อแรกที่ footer (`footer` = ข้อความเต็มจาก API ถ้ามี) แล้วเลื่อน/โฟกัสช่องแรกที่ผิด */
+  function showIssues(issues: SettleFormIssues, footer: string | null): void {
+    setErrors(issues.errors)
+    setSubstituteError(issues.lines?.message ?? null)
+    setSubstituteAt(issues.lines?.at ?? null)
+    setFirstError(footer ?? issues.first?.message ?? null)
+    setSubmitTick((tick) => tick + 1)
+    revealError()
+  }
   // เปิดให้เงินทดรองคนละรายการกับร่างที่ค้าง ⇒ ล้างร่าง (ยอดที่ใช้จริง/ไฟล์/รายการ/หมายเหตุ) · เปิดรายการเดิมคงร่างไว้
   // (มติผู้ใช้ 14/10/2569)
   function resetDraft(): void {
     setUsed('')
     setReceipt(null)
-    setReceiptError(null)
     setNote('')
     setReturnMethod(DEFAULT_ADVANCE_RETURN_METHOD)
     setNoReceipt(false)
     setSubstituteLines([emptySubstituteLine('line-0', toInputDate(new Date()))])
-    setSubstituteError(null)
-    setSubstituteAt(null)
+    clearErrors()
   }
   useResetOnRecordChange(advance?.id ?? null, resetDraft)
 
@@ -105,28 +118,14 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
 
   async function submit(): Promise<void> {
     if (advance === null || !validUsed) return
-    const substitute = noReceipt ? substituteDraftPayload(substituteLines) : null
-    if (substitute !== null && substitute.error !== null) {
-      setSubstituteError(substitute.error)
-      setSubstituteAt(substitute.at)
-      setReceiptError(null)
-      revealError()
+    // ตรวจทุกข้อพร้อมกัน แล้วชี้ข้อแรกตามลำดับบนจอ — ยอดรวมรายการเกินยอดใช้จริง ⇒ ช่องยอดที่ใช้จริง (SV5-J1-02)
+    const issues = settleFormIssues({ usedSatang, hasReceipt: receipt !== null, noReceipt, lines: substituteLines })
+    if (issues.first !== null) {
+      showIssues(issues, null)
       return
     }
-    if (substitute !== null && substituteDraftTotalSatang(substituteLines) > usedSatang) {
-      setSubstituteError('ยอดรวมรายการที่ไม่มีใบเสร็จต้องไม่เกินยอดที่ใช้จริง')
-      setSubstituteAt(null)
-      setReceiptError(null)
-      revealError()
-      return
-    }
-    setSubstituteError(null)
-    if (usedSatang > 0 && receipt === null && substitute === null) {
-      setReceiptError('ต้องแนบใบเสร็จ หรือติ๊ก "ไม่มีใบเสร็จ" แล้วกรอกรายการ')
-      revealError()
-      return
-    }
-    setReceiptError(null)
+    const substitute = issues.payload
+    clearErrors()
     let receiptFileUrl: string | null = null
     if (receipt !== null) {
       const controller = new AbortController()
@@ -135,7 +134,8 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
       try {
         receiptFileUrl = await uploadExpenseReceipt(receipt, { signal: controller.signal })
       } catch (uploadError) {
-        setReceiptError(uploadError instanceof FieldUploadError ? uploadError.message : 'อัปโหลดใบเสร็จไม่สำเร็จ')
+        const message = uploadError instanceof FieldUploadError ? uploadError.message : 'อัปโหลดใบเสร็จไม่สำเร็จ'
+        showIssues({ errors: { receiptFileUrl: message }, lines: null, first: { field: 'receiptFileUrl', message } }, null)
         return
       } finally {
         uploadAbortRef.current = null
@@ -150,7 +150,7 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
         returnMethod,
         receiptFileUrl,
         note: note.trim(),
-        substituteReceipt: substitute === null ? null : substitute.payload,
+        substituteReceipt: substitute,
       }),
     )
     setSaving(false)
@@ -192,21 +192,23 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
       // ระหว่างอัปโหลดไม่ใช้ `loading` (ซึ่งล็อกทั้ง footer) — ให้ปุ่ม "ยกเลิกการอัปโหลด" กดได้ (R3-026)
       lockClose={uploading}
       footer={
-        uploading ? (
-          <>
-            <Button variant="secondary" onClick={() => uploadAbortRef.current?.abort()}>
-              ยกเลิกการอัปโหลด
-            </Button>
-            <Button disabled>กำลังอัปโหลดใบเสร็จ...</Button>
-          </>
-        ) : (
-          <>
-            <ModalCancelButton onClose={onClose} />
-            <Button loading={saving} disabled={!validUsed} onClick={() => void submit()}>
-              บันทึกการเคลียร์ยอด
-            </Button>
-          </>
-        )
+        <FormSubmitFooter message={firstError} tick={submitTick}>
+          {uploading ? (
+            <>
+              <Button variant="secondary" onClick={() => uploadAbortRef.current?.abort()}>
+                ยกเลิกการอัปโหลด
+              </Button>
+              <Button disabled>กำลังอัปโหลดใบเสร็จ...</Button>
+            </>
+          ) : (
+            <>
+              <ModalCancelButton onClose={onClose} />
+              <Button loading={saving} disabled={!validUsed} onClick={() => void submit()}>
+                บันทึกการเคลียร์ยอด
+              </Button>
+            </>
+          )}
+        </FormSubmitFooter>
       }
     >
       {/* ล็อกช่องกรอกระหว่างอัปโหลด — ค่าที่ส่งคือค่าตอนกดบันทึก */}
@@ -222,13 +224,12 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
           />
         </div>
 
-        <Field id={`${fieldId}-used`} label="ยอดที่ใช้จริง (บาท)" required error={usedError}>
+        <Field id={`${fieldId}-used`} label="ยอดที่ใช้จริง (บาท)" required error={usedError ?? errors.usedSatang ?? null}>
           <Input
             id={`${fieldId}-used`}
             numeric
             inputMode="decimal"
             placeholder="0.00"
-            invalid={usedError !== null}
             value={used}
             onChange={(event) => setUsed(event.target.value)}
           />
@@ -247,7 +248,13 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
 
         {/* มติ PO U30 — มียอดคืน ⇒ ผู้เคลียร์เลือกวิธีคืน (ค่าเริ่มต้นหักกลบในรอบจ่ายถัดไป) */}
         {preview !== null && preview.returnSatang > 0 && (
-          <Field id={`${fieldId}-return-method`} group label={`วิธีคืนยอด ${fmtSatangSymbol(preview.returnSatang)}`} required>
+          <Field
+            id={`${fieldId}-return-method`}
+            group
+            label={`วิธีคืนยอด ${fmtSatangSymbol(preview.returnSatang)}`}
+            required
+            error={errors.returnMethod ?? null}
+          >
             <FieldGroupBox role="radiogroup" aria-required className="space-y-2">
               {(['payout_offset', 'separate'] as const).map((method) => (
                 <label key={method} className="flex items-start gap-2 text-sm text-slate-700">
@@ -275,7 +282,7 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
         <Field
           id={`${fieldId}-file`}
           label="แนบใบเสร็จ"
-          error={receiptError}
+          error={errors.receiptFileUrl ?? null}
           hint={'รูปภาพหรือ PDF ไม่เกิน 10 MB — รายจ่ายที่ไม่มีใบเสร็จให้ติ๊ก "ไม่มีใบเสร็จ" ด้านล่าง'}
         >
           <StagedFileInput
@@ -286,7 +293,7 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
             disabled={saving}
             onPick={(file) => {
               setReceipt(file)
-              setReceiptError(null)
+              setErrors(({ receiptFileUrl: _picked, ...rest }) => rest)
             }}
             onClear={() => setReceipt(null)}
           />
@@ -298,7 +305,7 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
             setNoReceipt(checked)
             setSubstituteError(null)
             // ข้อความ "ต้องแนบใบเสร็จ…" เก่าค้างเหนือตาราง ⇒ reveal ครั้งถัดไปโฟกัสผิดช่อง (รีวิว SV5-R4-01)
-            setReceiptError(null)
+            setErrors(({ receiptFileUrl: _stale, ...rest }) => rest)
           }}
           hint="มีรายจ่ายบางรายการที่เรียกใบเสร็จไม่ได้ — กรอกรายการแล้วระบบออกใบรับรองแทนใบเสร็จรับเงินให้เซ็น"
         />
@@ -315,7 +322,7 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
           </div>
         )}
 
-        <Field id={`${fieldId}-note`} label="หมายเหตุ (ถ้ามี)">
+        <Field id={`${fieldId}-note`} label="หมายเหตุ (ถ้ามี)" error={errors.note ?? null}>
           <Textarea id={`${fieldId}-note`} rows={2} maxLength={500} value={note} onChange={(event) => setNote(event.target.value)} />
         </Field>
       </div>
