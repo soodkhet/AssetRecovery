@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { Button, Field, InlineAlert, Input, Modal, useToast } from '@/components/ui'
+import { useId, useState } from 'react'
+import { Button, Field, InlineAlert, Input, Modal, fieldControlAria, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { refundSuspenseInputProblem } from '@/lib/bank-recon/schemas'
 import type { BankTransactionDto } from '@/lib/bank-recon/types'
@@ -27,6 +27,8 @@ export function SuspenseModal({
   onClose: () => void
   onDone: () => void
 }) {
+  // id ผูก label ↔ ช่อง + aria-invalid/aria-describedby ผ่าน `<Field id>` (ตรวจซ้ำ staging SV5-R9-01)
+  const fieldId = useId()
   const { showToast } = useToast()
   const [reason, setReason] = useState('')
   const [refundDate, setRefundDate] = useState(toInputDate(new Date()))
@@ -132,16 +134,19 @@ export function SuspenseModal({
 
         {isRefund && (
           <>
-            <Field label="วันที่โอนคืน" required>
+            <Field id={`${fieldId}-refund-date`} label="วันที่โอนคืน" required>
               <Input
+                id={`${fieldId}-refund-date`}
                 type="date"
                 value={refundDate}
                 max={toInputDate(new Date())}
                 onChange={(event) => setRefundDate(event.target.value)}
               />
             </Field>
-            <Field label="หลักฐานการโอนคืน" required hint="PDF หรือรูปภาพ (สลิปโอนคืน/หนังสือแจ้ง) ไม่เกิน 10 MB">
+            <Field id={`${fieldId}-file`} label="หลักฐานการโอนคืน" required hint="PDF หรือรูปภาพ (สลิปโอนคืน/หนังสือแจ้ง) ไม่เกิน 10 MB">
               <input
+                id={`${fieldId}-file`}
+                {...fieldControlAria(`${fieldId}-file`, { hasHint: true })}
                 type="file"
                 accept="application/pdf,image/*"
                 className="block w-full text-xs text-slate-600"
@@ -151,8 +156,9 @@ export function SuspenseModal({
           </>
         )}
 
-        <Field label={isRefund ? 'เหตุผลที่คืนเงิน' : 'เหตุผล'} required hint="บังคับกรอกเสมอ — บันทึกไว้ในประวัติการใช้งาน">
+        <Field id={`${fieldId}-reason`} label={isRefund ? 'เหตุผลที่คืนเงิน' : 'เหตุผล'} required hint="บังคับกรอกเสมอ — บันทึกไว้ในประวัติการใช้งาน">
           <Input
+            id={`${fieldId}-reason`}
             value={reason}
             onChange={(event) => setReason(event.target.value)}
             placeholder={

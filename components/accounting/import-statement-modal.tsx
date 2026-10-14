@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { ImportTemplateHelp } from '@/components/imports/import-template-help'
 import { Button, Field, InlineAlert, Modal, Select, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
@@ -30,6 +30,8 @@ export function ImportStatementModal({
   onClose: () => void
   onImported: () => void
 }) {
+  // id ผูก label ↔ ช่อง + aria-invalid/aria-describedby ผ่าน `<Field id>` (ตรวจซ้ำ staging SV5-R9-01)
+  const fieldId = useId()
   const { showToast } = useToast()
   const inputRef = useRef<HTMLInputElement>(null)
   const [accounts, setAccounts] = useState<readonly BankAccountDto[]>([])
@@ -136,8 +138,8 @@ export function ImportStatementModal({
       }
     >
       <div className="space-y-4">
-        <Field label="บัญชีธนาคาร" required>
-          <Select value={bankAccountId} onChange={(event) => setBankAccountId(event.target.value)}>
+        <Field id={`${fieldId}-bank-account-id`} label="บัญชีธนาคาร" required>
+          <Select id={`${fieldId}-bank-account-id`} value={bankAccountId} onChange={(event) => setBankAccountId(event.target.value)}>
             <option value="">— เลือกบัญชีธนาคาร —</option>
             {accounts.map((account) => (
               <option key={account.id} value={account.id}>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { JobDetailModal } from '@/components/jobs/job-detail-modal'
 import { EMPTY_JOB_FILTERS, useJobs, type JobFilters } from '@/components/jobs/use-jobs'
 import {
@@ -44,6 +44,8 @@ const STATUS_OPTIONS: readonly JobViewStatus[] = [
 ]
 
 export function JobsManager({ devToolsEnabled = false }: { devToolsEnabled?: boolean } = {}) {
+  // id ผูก label ↔ ช่อง + aria-invalid/aria-describedby ผ่าน `<Field id>` (ตรวจซ้ำ staging SV5-R9-01)
+  const fieldId = useId()
   const [filters, setFilters] = useState<JobFilters>(EMPTY_JOB_FILTERS)
   const [offset, setOffset] = useState(0)
   const [openedId, setOpenedId] = useState<string | null>(null)
@@ -70,8 +72,9 @@ export function JobsManager({ devToolsEnabled = false }: { devToolsEnabled?: boo
 
       <Card>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Field label="ประเภทงาน">
+          <Field id={`${fieldId}-job-type`} label="ประเภทงาน">
             <Select
+              id={`${fieldId}-job-type`}
               value={filters.jobType}
               onChange={(event) => update({ jobType: event.target.value as JobFilters['jobType'] })}
             >
@@ -83,8 +86,9 @@ export function JobsManager({ devToolsEnabled = false }: { devToolsEnabled?: boo
               ))}
             </Select>
           </Field>
-          <Field label="สถานะ">
+          <Field id={`${fieldId}-status`} label="สถานะ">
             <Select
+              id={`${fieldId}-status`}
               value={filters.status}
               onChange={(event) => update({ status: event.target.value as JobFilters['status'] })}
             >
@@ -97,11 +101,11 @@ export function JobsManager({ devToolsEnabled = false }: { devToolsEnabled?: boo
             </Select>
           </Field>
           {/* `<input type="date">` = ข้อยกเว้นเดียวที่ใช้ ค.ศ. (DEC-005) — ช่วงวันถูกตีความเป็นวันไทยที่ backend */}
-          <Field label="ตั้งแต่วันที่">
-            <Input type="date" value={filters.dateFrom} onChange={(event) => update({ dateFrom: event.target.value })} />
+          <Field id={`${fieldId}-date-from`} label="ตั้งแต่วันที่">
+            <Input id={`${fieldId}-date-from`} type="date" value={filters.dateFrom} onChange={(event) => update({ dateFrom: event.target.value })} />
           </Field>
-          <Field label="ถึงวันที่">
-            <Input type="date" value={filters.dateTo} onChange={(event) => update({ dateTo: event.target.value })} />
+          <Field id={`${fieldId}-date-to`} label="ถึงวันที่">
+            <Input id={`${fieldId}-date-to`} type="date" value={filters.dateTo} onChange={(event) => update({ dateTo: event.target.value })} />
           </Field>
         </div>
 

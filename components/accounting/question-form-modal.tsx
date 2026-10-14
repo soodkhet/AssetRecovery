@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { Button, Field, Modal, Textarea, useToast } from '@/components/ui'
 import type { AccountantQuestionDto } from '@/lib/accounting/types'
 import { callApi, jsonRequest } from '@/lib/api/types'
@@ -20,6 +20,8 @@ export function QuestionFormModal({
   onClose: () => void
   onCreated: () => void
 }) {
+  // id ผูก label ↔ ช่อง + aria-invalid/aria-describedby ผ่าน `<Field id>` (ตรวจซ้ำ staging SV5-R9-01)
+  const fieldId = useId()
   const { showToast } = useToast()
   const [questionText, setQuestionText] = useState('')
   const [saving, setSaving] = useState(false)
@@ -64,8 +66,9 @@ export function QuestionFormModal({
         </>
       }
     >
-      <Field label="คำถาม / ข้อสงสัย" required hint="ระบุให้ครบว่าถามถึงรายการไหน เพื่อให้ตามกลับได้ภายหลัง">
+      <Field id={`${fieldId}-question-text`} label="คำถาม / ข้อสงสัย" required hint="ระบุให้ครบว่าถามถึงรายการไหน เพื่อให้ตามกลับได้ภายหลัง">
         <Textarea
+          id={`${fieldId}-question-text`}
           maxLength={2000}
           rows={5}
           value={questionText}

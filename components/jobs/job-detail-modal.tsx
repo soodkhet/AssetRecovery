@@ -1,7 +1,7 @@
 'use client'
 
 import { buttonClass } from '@/components/ui/button'
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { useSession } from '@/components/auth/permission-provider'
 import { requestJobRetry, useJobDetail } from '@/components/jobs/use-jobs'
 import { Button, Field, InlineAlert, LoadingState, Modal, RefText, StatusBadge, Textarea } from '@/components/ui'
@@ -24,6 +24,8 @@ export function JobDetailModal({
   onClose: () => void
   onRetried: () => void
 }) {
+  // id ผูก label ↔ ช่อง + aria-invalid/aria-describedby ผ่าน `<Field id>` (ตรวจซ้ำ staging SV5-R9-01)
+  const fieldId = useId()
   const session = useSession()
   const [refreshToken, setRefreshToken] = useState(0)
   const [reason, setReason] = useState('')
@@ -135,8 +137,9 @@ export function JobDetailModal({
                   {retryError.message}
                 </InlineAlert>
               )}
-              <Field label="เหตุผล">
+              <Field id={`${fieldId}-reason`} label="เหตุผล">
                 <Textarea
+                  id={`${fieldId}-reason`}
                   maxLength={500}
                   rows={2}
                   value={reason}

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { Button, Field, InlineAlert, Modal, Textarea, useToast } from '@/components/ui'
 import type { AccountantQuestionDto } from '@/lib/accounting/types'
 import { callApi, jsonRequest } from '@/lib/api/types'
@@ -20,6 +20,8 @@ export function AnswerQuestionModal({
   onClose: () => void
   onAnswered: () => void
 }) {
+  // id ผูก label ↔ ช่อง + aria-invalid/aria-describedby ผ่าน `<Field id>` (ตรวจซ้ำ staging SV5-R9-01)
+  const fieldId = useId()
   const { showToast } = useToast()
   const [answerText, setAnswerText] = useState('')
   const [saving, setSaving] = useState(false)
@@ -88,8 +90,9 @@ export function AnswerQuestionModal({
           </div>
         ) : (
           <>
-            <Field label="พิมพ์คำตอบ / ชี้แจง" required hint="ตอบให้ครบถ้วน รวมถึงอ้างอิงเอกสารที่แก้ไขแล้วถ้ามี">
+            <Field id={`${fieldId}-answer-text`} label="พิมพ์คำตอบ / ชี้แจง" required hint="ตอบให้ครบถ้วน รวมถึงอ้างอิงเอกสารที่แก้ไขแล้วถ้ามี">
               <Textarea
+                id={`${fieldId}-answer-text`}
                 maxLength={2000}
                 rows={5}
                 value={answerText}

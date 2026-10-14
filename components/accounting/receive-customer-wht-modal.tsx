@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { Button, Field, InlineAlert, Input, Modal, Textarea, useToast } from '@/components/ui'
+import { useId, useState } from 'react'
+import { Button, Field, InlineAlert, Input, Modal, Textarea, fieldControlAria, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import type { CustomerWhtDto, CustomerWhtReceiveResultDto } from '@/lib/customer-wht/types'
 import { fmtDate, toInputDate } from '@/lib/format/datetime'
@@ -23,6 +23,8 @@ export function ReceiveCustomerWhtModal({
   onClose: () => void
   onReceived: () => void
 }) {
+  // id ผูก label ↔ ช่อง + aria-invalid/aria-describedby ผ่าน `<Field id>` (ตรวจซ้ำ staging SV5-R9-01)
+  const fieldId = useId()
   const { showToast } = useToast()
   const [certificateNumber, setCertificateNumber] = useState('')
   const [certificateDate, setCertificateDate] = useState(toInputDate(new Date()))
@@ -131,17 +133,17 @@ export function ReceiveCustomerWhtModal({
         </div>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Field label="เลขที่หนังสือ" required>
-            <Input value={certificateNumber} onChange={(event) => setCertificateNumber(event.target.value)} />
+          <Field id={`${fieldId}-certificate-number`} label="เลขที่หนังสือ" required>
+            <Input id={`${fieldId}-certificate-number`} value={certificateNumber} onChange={(event) => setCertificateNumber(event.target.value)} />
           </Field>
-          <Field label="วันที่ในหนังสือ" required>
-            <Input type="date" value={certificateDate} onChange={(event) => setCertificateDate(event.target.value)} />
+          <Field id={`${fieldId}-certificate-date`} label="วันที่ในหนังสือ" required>
+            <Input id={`${fieldId}-certificate-date`} type="date" value={certificateDate} onChange={(event) => setCertificateDate(event.target.value)} />
           </Field>
-          <Field label="ยอดภาษีที่หักตามหนังสือ (บาท)" required error={whtError ?? undefined}>
-            <Input inputMode="decimal" value={whtText} onChange={(event) => setWhtText(event.target.value)} />
+          <Field id={`${fieldId}-wht-text`} label="ยอดภาษีที่หักตามหนังสือ (บาท)" required error={whtError ?? undefined}>
+            <Input id={`${fieldId}-wht-text`} inputMode="decimal" value={whtText} onChange={(event) => setWhtText(event.target.value)} />
           </Field>
-          <Field label="ยอดเงินได้ตามหนังสือ (บาท)" hint="ไม่บังคับ" error={grossError ?? undefined}>
-            <Input inputMode="decimal" value={grossText} onChange={(event) => setGrossText(event.target.value)} />
+          <Field id={`${fieldId}-gross-text`} label="ยอดเงินได้ตามหนังสือ (บาท)" hint="ไม่บังคับ" error={grossError ?? undefined}>
+            <Input id={`${fieldId}-gross-text`} inputMode="decimal" value={grossText} onChange={(event) => setGrossText(event.target.value)} />
           </Field>
         </div>
 
@@ -151,8 +153,10 @@ export function ReceiveCustomerWhtModal({
           </InlineAlert>
         )}
 
-        <Field label="ไฟล์สแกนหนังสือรับรอง" required hint="PDF หรือรูปภาพ ไม่เกิน 10 MB">
+        <Field id={`${fieldId}-file`} label="ไฟล์สแกนหนังสือรับรอง" required hint="PDF หรือรูปภาพ ไม่เกิน 10 MB">
           <input
+            id={`${fieldId}-file`}
+            {...fieldControlAria(`${fieldId}-file`, { hasHint: true })}
             type="file"
             accept="application/pdf,image/*"
             className="block w-full text-xs text-slate-600"
@@ -160,8 +164,8 @@ export function ReceiveCustomerWhtModal({
           />
         </Field>
 
-        <Field label="หมายเหตุ" hint="ไม่บังคับ">
-          <Textarea maxLength={1000} rows={2} value={note} onChange={(event) => setNote(event.target.value)} />
+        <Field id={`${fieldId}-note`} label="หมายเหตุ" hint="ไม่บังคับ">
+          <Textarea id={`${fieldId}-note`} maxLength={1000} rows={2} value={note} onChange={(event) => setNote(event.target.value)} />
         </Field>
       </div>
     </Modal>

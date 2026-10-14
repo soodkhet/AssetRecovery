@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState, type ReactNode } from 'react'
+import { type ReactNode, useId, useRef, useState } from 'react'
 import { Button, ConfirmModal, Field, InlineAlert, Input, Modal, useToast } from '@/components/ui'
 import { buttonClass } from '@/components/ui/button'
 import { cn } from '@/components/ui/cn'
@@ -48,6 +48,8 @@ export function AttachDocModal({
   /** มีคน/อีกแท็บยืนยันล็อตนี้ไปก่อน — ผู้เรียกปิดหน้าต่างแล้วรีเฟรชรายการ (mytester WH-03) */
   onConfirmedElsewhere: () => void
 }) {
+  // id ผูก label ↔ ช่อง + aria-invalid/aria-describedby ผ่าน `<Field id>` (ตรวจซ้ำ staging SV5-R9-01)
+  const fieldId = useId()
   const { showToast } = useToast()
 
   const [urls, setUrls] = useState<Readonly<Record<LotDocument, string | null>>>({
@@ -220,12 +222,14 @@ export function AttachDocModal({
           ))}
 
           <Field
+            id={`${fieldId}-delivered-local`}
             label={`วันเวลาที่${isPickup ? 'ผู้รับมารับ' : 'ส่งมอบ'}จริง`}
             required
             error={dateError}
             hint="เวลาไทย — ค่าตั้งต้นคือตอนนี้ แก้ให้ตรงกับที่เกิดขึ้นจริงได้"
           >
             <Input
+              id={`${fieldId}-delivered-local`}
               type="datetime-local"
               // เลือกเวลาในอนาคตไม่ได้ (staging E-007) — ช่องนี้เป็นข้อยกเว้นเดียวที่ใช้ปี ค.ศ. (Rule 01)
               max={toInputDateTime(new Date())}

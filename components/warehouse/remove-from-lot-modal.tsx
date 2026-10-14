@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { AssetSummaryHeader } from '@/components/warehouse/asset-summary-header'
 import { Button, Field, InlineAlert, Modal, Textarea, useToast } from '@/components/ui'
 import { apiPath } from '@/lib/api/contract'
@@ -28,6 +28,8 @@ export function RemoveFromLotModal({
   onClose: () => void
   onDone: (lot: LotDetailDto) => void
 }) {
+  // id ผูก label ↔ ช่อง + aria-invalid/aria-describedby ผ่าน `<Field id>` (ตรวจซ้ำ staging SV5-R9-01)
+  const fieldId = useId()
   const { showToast } = useToast()
   const [reason, setReason] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -87,8 +89,9 @@ export function RemoveFromLotModal({
           </InlineAlert>
         )}
 
-        <Field label="เหตุผลที่นำออกจากล็อต" required hint="บันทึกลงประวัติการใช้งาน">
+        <Field id={`${fieldId}-reason`} label="เหตุผลที่นำออกจากล็อต" required hint="บันทึกลงประวัติการใช้งาน">
           <Textarea
+            id={`${fieldId}-reason`}
             rows={3}
             value={reason}
             maxLength={LOT_REMOVE_ASSET_REASON_MAX}

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { Button, Field, InlineAlert, Modal, Select, Textarea, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import type { AccountingPeriodDto } from '@/lib/accounting/types'
@@ -29,6 +29,8 @@ export function ExportPackModal({
   onClose: () => void
   onExported: (record: ExportRecordDto) => void
 }) {
+  // id ผูก label ↔ ช่อง + aria-invalid/aria-describedby ผ่าน `<Field id>` (ตรวจซ้ำ staging SV5-R9-01)
+  const fieldId = useId()
   const { showToast } = useToast()
   const [periodId, setPeriodId] = useState('')
   const [note, setNote] = useState('')
@@ -93,8 +95,8 @@ export function ExportPackModal({
       }
     >
       <div className="space-y-4 text-sm">
-        <Field label="รอบบัญชี" required>
-          <Select value={targetId} onChange={(event) => setPeriodId(event.target.value)}>
+        <Field id={`${fieldId}-target-id`} label="รอบบัญชี" required>
+          <Select id={`${fieldId}-target-id`} value={targetId} onChange={(event) => setPeriodId(event.target.value)}>
             {periods.map((period) => (
               <option key={period.id} value={period.id}>
                 {period.periodLabel} · {period.statusLabel}
@@ -152,8 +154,9 @@ export function ExportPackModal({
           </div>
         </div>
 
-        <Field label="บันทึกช่วยจำ" hint="ไม่บังคับ — เก็บไว้ในประวัติการใช้งานคู่กับรายชื่อไฟล์และเวอร์ชัน">
+        <Field id={`${fieldId}-note`} label="บันทึกช่วยจำ" hint="ไม่บังคับ — เก็บไว้ในประวัติการใช้งานคู่กับรายชื่อไฟล์และเวอร์ชัน">
           <Textarea
+            id={`${fieldId}-note`}
             maxLength={1000}
             rows={2}
             value={note}

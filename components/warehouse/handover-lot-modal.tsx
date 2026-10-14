@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { Badge, Button, Field, InlineAlert, Input, Modal, RefText, Textarea, useToast } from '@/components/ui'
 import { cn } from '@/components/ui/cn'
 import { HandoverNotePreview } from '@/components/warehouse/handover-note-preview'
@@ -41,6 +41,8 @@ export function HandoverLotModal({
   onClose: () => void
   onCreated: (lot: LotDetailDto) => void
 }) {
+  // id ผูก label ↔ ช่อง + aria-invalid/aria-describedby ผ่าน `<Field id>` (ตรวจซ้ำ staging SV5-R9-01)
+  const fieldId = useId()
   const { showToast } = useToast()
 
   const [type, setType] = useState<HandoverType | null>(null)
@@ -185,12 +187,14 @@ export function HandoverLotModal({
             <section className="space-y-4 border-t border-slate-100 pt-4">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Field
+                  id={`${fieldId}-scheduled-local`}
                   label={isPickup ? 'วันเวลานัดรับ' : 'กำหนดวันเวลาจัดส่ง'}
                   required
                   error={fieldErrors.scheduledAt ?? null}
                   hint="เวลาไทย"
                 >
                   <Input
+                    id={`${fieldId}-scheduled-local`}
                     type="datetime-local"
                     value={scheduledLocal}
                     invalid={fieldErrors.scheduledAt !== undefined}
@@ -199,8 +203,9 @@ export function HandoverLotModal({
                 </Field>
 
                 {isPickup ? (
-                  <Field label="ชื่อผู้ประสานงาน (ถ้าแจ้งมาแล้ว)" error={fieldErrors.contactPerson ?? null}>
+                  <Field id={`${fieldId}-contact-person`} label="ชื่อผู้ประสานงาน (ถ้าแจ้งมาแล้ว)" error={fieldErrors.contactPerson ?? null}>
                     <Input
+                      id={`${fieldId}-contact-person`}
                       maxLength={200}
                       placeholder="เช่น คุณวิภา ฝ่ายติดตามทรัพย์"
                       value={contactPerson}
@@ -208,8 +213,9 @@ export function HandoverLotModal({
                     />
                   </Field>
                 ) : (
-                  <Field label="ที่อยู่จัดส่ง" required error={fieldErrors.deliveryAddr ?? null}>
+                  <Field id={`${fieldId}-delivery-addr`} label="ที่อยู่จัดส่ง" required error={fieldErrors.deliveryAddr ?? null}>
                     <Textarea
+                      id={`${fieldId}-delivery-addr`}
                       rows={2}
                       maxLength={500}
                       placeholder="ที่อยู่ที่จะส่งเครื่องคืน"
@@ -222,8 +228,9 @@ export function HandoverLotModal({
               </div>
 
               {!isPickup && (
-                <Field label="เลขพัสดุ (ถ้ามีแล้ว)" hint="กรณีไรเดอร์/ขนส่งที่ยังไม่มีเลข เว้นว่างได้">
+                <Field id={`${fieldId}-tracking-no`} label="เลขพัสดุ (ถ้ามีแล้ว)" hint="กรณีไรเดอร์/ขนส่งที่ยังไม่มีเลข เว้นว่างได้">
                   <Input
+                    id={`${fieldId}-tracking-no`}
                     maxLength={100}
                     className="font-mono"
                     value={trackingNo}
@@ -232,8 +239,9 @@ export function HandoverLotModal({
                 </Field>
               )}
 
-              <Field label="หมายเหตุ (ถ้ามี)" error={fieldErrors.note ?? null}>
+              <Field id={`${fieldId}-note`} label="หมายเหตุ (ถ้ามี)" error={fieldErrors.note ?? null}>
                 <Textarea
+                  id={`${fieldId}-note`}
                   rows={1}
                   maxLength={1000}
                   placeholder="บันทึกเพิ่มเติม..."

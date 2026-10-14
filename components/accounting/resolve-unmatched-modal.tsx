@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { useBankTransactions } from '@/components/accounting/use-bank-transactions'
 import { Button, Field, InlineAlert, Input, Modal, Select, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
@@ -24,6 +24,8 @@ export function ResolveUnmatchedModal({
   onClose: () => void
   onResolved: () => void
 }) {
+  // id ผูก label ↔ ช่อง + aria-invalid/aria-describedby ผ่าน `<Field id>` (ตรวจซ้ำ staging SV5-R9-01)
+  const fieldId = useId()
   const { showToast } = useToast()
   const [note, setNote] = useState('')
   const [saving, setSaving] = useState(false)
@@ -96,8 +98,9 @@ export function ResolveUnmatchedModal({
           <SuspenseRefundPicker transaction={transaction} onPick={setNote} />
         )}
 
-        <Field label="เหตุผลที่ปิดรายการ" required hint="บังคับกรอกเสมอ — บันทึกไว้ในประวัติการใช้งาน">
+        <Field id={`${fieldId}-note`} label="เหตุผลที่ปิดรายการ" required hint="บังคับกรอกเสมอ — บันทึกไว้ในประวัติการใช้งาน">
           <Input
+            id={`${fieldId}-note`}
             value={note}
             onChange={(event) => setNote(event.target.value)}
             placeholder="เช่น ค่าธรรมเนียมธนาคารรายเดือน / ดอกเบี้ยรับ — ไม่ใช่รายรับ-จ่ายของระบบ"
@@ -124,13 +127,16 @@ function SuspenseRefundPicker({
   transaction: BankTransactionDto
   onPick: (note: string) => void
 }) {
+  // id ผูก label ↔ ช่อง + aria-invalid/aria-describedby ผ่าน `<Field id>` (ตรวจซ้ำ staging SV5-R9-01)
+  const fieldId = useId()
   const { data, loading } = useBankTransactions('suspense_refunded')
   const [pickedId, setPickedId] = useState('')
   const options = suspenseRefundOptions(transaction, data.items)
   if (loading || options.length === 0) return null
   return (
-    <Field label="โอนคืนของเงินรับรอตรวจสอบ" hint="เลือกรายการที่บันทึกคืนเงินผู้โอนไว้แล้ว — ระบบเติมเหตุผลและอ้างอิงให้">
+    <Field id={`${fieldId}-picked-id`} label="โอนคืนของเงินรับรอตรวจสอบ" hint="เลือกรายการที่บันทึกคืนเงินผู้โอนไว้แล้ว — ระบบเติมเหตุผลและอ้างอิงให้">
       <Select
+        id={`${fieldId}-picked-id`}
         value={pickedId}
         onChange={(event) => {
           setPickedId(event.target.value)

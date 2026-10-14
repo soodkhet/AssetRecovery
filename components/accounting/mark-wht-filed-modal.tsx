@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { Button, Field, InlineAlert, Modal, Textarea, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { fmtSatangSymbol } from '@/lib/format/money'
@@ -21,6 +21,8 @@ export function MarkWhtFiledModal({
   onClose: () => void
   onFiled: () => void
 }) {
+  // id ผูก label ↔ ช่อง + aria-invalid/aria-describedby ผ่าน `<Field id>` (ตรวจซ้ำ staging SV5-R9-01)
+  const fieldId = useId()
   const { showToast } = useToast()
   const [reason, setReason] = useState('')
   const [saving, setSaving] = useState(false)
@@ -102,8 +104,9 @@ export function MarkWhtFiledModal({
           </div>
         </div>
 
-        <Field label="อ้างอิงการยื่น" required hint="บังคับกรอก — เช่น เลขที่ใบเสร็จ/วันที่ยื่น/ผู้ยื่น">
+        <Field id={`${fieldId}-reason`} label="อ้างอิงการยื่น" required hint="บังคับกรอก — เช่น เลขที่ใบเสร็จ/วันที่ยื่น/ผู้ยื่น">
           <Textarea
+            id={`${fieldId}-reason`}
             maxLength={1000}
             rows={3}
             value={reason}

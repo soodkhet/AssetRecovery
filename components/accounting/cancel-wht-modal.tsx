@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { Button, Field, InlineAlert, Modal, Textarea, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { fmtDate } from '@/lib/format/datetime'
@@ -23,6 +23,8 @@ export function CancelWhtModal({
   onClose: () => void
   onCancelled: () => void
 }) {
+  // id ผูก label ↔ ช่อง + aria-invalid/aria-describedby ผ่าน `<Field id>` (ตรวจซ้ำ staging SV5-R9-01)
+  const fieldId = useId()
   const { showToast } = useToast()
   const [reason, setReason] = useState('')
   const [reissue, setReissue] = useState(false)
@@ -93,8 +95,9 @@ export function CancelWhtModal({
           </div>
         </div>
 
-        <Field label="เหตุผลการยกเลิก" required hint="บังคับกรอก — บันทึกลงเอกสารและประวัติการใช้งาน">
+        <Field id={`${fieldId}-reason`} label="เหตุผลการยกเลิก" required hint="บังคับกรอก — บันทึกลงเอกสารและประวัติการใช้งาน">
           <Textarea
+            id={`${fieldId}-reason`}
             maxLength={1000}
             rows={3}
             value={reason}

@@ -1,7 +1,7 @@
 'use client'
 
 import { EXPORT_HANDOFF_TEXT } from '@/lib/exports/handoff-ui'
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { ExportPackModal } from '@/components/accounting/export-pack-modal'
 import { useExportHistory } from '@/components/accounting/use-exports'
 import { usePermission } from '@/components/auth/permission-provider'
@@ -35,6 +35,8 @@ import { fmtCount } from '@/lib/format/money'
  * `generated → sent → accepted` · ดาวน์โหลดซ้ำได้ทุกเวอร์ชัน (ไฟล์เดิม ไม่ประกอบใหม่)
  */
 export function ExportTab() {
+  // id ผูก label ↔ ช่อง + aria-invalid/aria-describedby ผ่าน `<Field id>` (ตรวจซ้ำ staging SV5-R9-01)
+  const fieldId = useId()
   const { can } = usePermission()
   const canManage = can('manage', EXPORT_ACCOUNTING_PACK)
   const { showToast } = useToast()
@@ -202,8 +204,8 @@ export function ExportTab() {
             : `${pending.record.periodLabel} · ${pending.record.versionLabel} · สร้างเมื่อ ${fmtDateTime(pending.record.generatedAt)} — การส่งจริงเกิดนอกระบบ ที่นี่บันทึกไว้เพื่อให้ตามสถานะได้`
         }
       >
-        <Field label="หมายเหตุ (ถ้ามี)" hint={EXPORT_HANDOFF_TEXT[pending?.action ?? 'mark-sent'].noteHint}>
-          <Textarea rows={2} maxLength={1000} value={note} onChange={(event) => setNote(event.target.value)} />
+        <Field id={`${fieldId}-note`} label="หมายเหตุ (ถ้ามี)" hint={EXPORT_HANDOFF_TEXT[pending?.action ?? 'mark-sent'].noteHint}>
+          <Textarea id={`${fieldId}-note`} rows={2} maxLength={1000} value={note} onChange={(event) => setNote(event.target.value)} />
         </Field>
       </ConfirmModal>
     </div>

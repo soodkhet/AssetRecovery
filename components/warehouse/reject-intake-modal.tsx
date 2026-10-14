@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { AssetSummaryHeader } from '@/components/warehouse/asset-summary-header'
-import { Button, Field, InlineAlert, Modal, Textarea, useToast } from '@/components/ui'
+import { Button, Field, InlineAlert, Modal, Textarea, fieldControlAria, useToast } from '@/components/ui'
 import { cn } from '@/components/ui/cn'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
@@ -34,12 +34,15 @@ export function RejectIntakeModal({
   onClose: () => void
   onDone: () => void
 }) {
+  // id ผูก label ↔ ช่อง + aria-invalid/aria-describedby ผ่าน `<Field id>` (ตรวจซ้ำ staging SV5-R9-01)
+  const fieldId = useId()
   const { showToast } = useToast()
   const [reason, setReason] = useState('')
   const [imeiActual, setImeiActual] = useState(asset.imeiActual ?? '')
   const [serialActual, setSerialActual] = useState(asset.serialActual ?? '')
   const imeiNormalized = parseImei(imeiActual)
   const imeiFormatInvalid = imeiActual.trim() !== '' && imeiNormalized === null
+  const imeiError = imeiFormatInvalid ? IMEI_FORMAT_MESSAGE : null
   const showSerialInput = asset.serialContract !== null || asset.imeiContract === null
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<ApiCallError | null>(null)
@@ -106,8 +109,10 @@ export function RejectIntakeModal({
 
         <div className="grid gap-3 rounded-xl border border-slate-200 p-3 sm:grid-cols-2">
           <IdentityRow label="IMEI ในสัญญา" value={asset.imeiContract} />
-          <Field label="IMEI ที่พบบนเครื่อง" error={imeiFormatInvalid ? IMEI_FORMAT_MESSAGE : null}>
+          <Field id={`${fieldId}-imei`} label="IMEI ที่พบบนเครื่อง" error={imeiError}>
             <input
+              id={`${fieldId}-imei`}
+              {...fieldControlAria(`${fieldId}-imei`, { error: imeiError })}
               type="text"
               inputMode="numeric"
               maxLength={IMEI_INPUT_MAX_LENGTH}
@@ -123,8 +128,9 @@ export function RejectIntakeModal({
           {showSerialInput && (
             <>
               <IdentityRow label="Serial ในสัญญา" value={asset.serialContract} />
-              <Field label="Serial ที่พบบนเครื่อง">
+              <Field id={`${fieldId}-serial`} label="Serial ที่พบบนเครื่อง">
                 <input
+                  id={`${fieldId}-serial`}
                   type="text"
                   maxLength={100}
                   value={serialActual}
@@ -142,8 +148,9 @@ export function RejectIntakeModal({
           </InlineAlert>
         )}
 
-        <Field label="เหตุผลที่ตีกลับ" required hint="ระบบเก็บเหตุผลนี้ไว้และแสดงให้ทีมภาคสนามเห็น — เขียนให้เข้าใจว่าต้องแก้อะไร">
+        <Field id={`${fieldId}-reason`} label="เหตุผลที่ตีกลับ" required hint="ระบบเก็บเหตุผลนี้ไว้และแสดงให้ทีมภาคสนามเห็น — เขียนให้เข้าใจว่าต้องแก้อะไร">
           <Textarea
+            id={`${fieldId}-reason`}
             rows={3}
             value={reason}
             maxLength={1000}

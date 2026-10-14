@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { Button, Field, InlineAlert, Modal, Select, Textarea, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import type { CostCenterOptionDto, ExpenseRecordDto } from '@/lib/expenses/types'
@@ -25,6 +25,8 @@ export function CostCenterMapModal({
   onClose: () => void
   onMapped: () => void
 }) {
+  // id ผูก label ↔ ช่อง + aria-invalid/aria-describedby ผ่าน `<Field id>` (ตรวจซ้ำ staging SV5-R9-01)
+  const fieldId = useId()
   const { showToast } = useToast()
   const [costCenterId, setCostCenterId] = useState(record?.costCenterId ?? '')
   const [reason, setReason] = useState('')
@@ -93,8 +95,8 @@ export function CostCenterMapModal({
           </div>
         </div>
 
-        <Field label="เลือกศูนย์ต้นทุน" required>
-          <Select value={costCenterId} onChange={(event) => setCostCenterId(event.target.value)}>
+        <Field id={`${fieldId}-cost-center-id`} label="เลือกศูนย์ต้นทุน" required>
+          <Select id={`${fieldId}-cost-center-id`} value={costCenterId} onChange={(event) => setCostCenterId(event.target.value)}>
             <option value="">— เลือกศูนย์ต้นทุน —</option>
             {costCenters.map((option) => (
               <option key={option.id} value={option.id}>
@@ -104,8 +106,9 @@ export function CostCenterMapModal({
           </Select>
         </Field>
 
-        <Field label="หมายเหตุการ Mapping" required hint="บังคับกรอก — บันทึกเป็นเหตุผลในประวัติการใช้งาน">
+        <Field id={`${fieldId}-reason`} label="หมายเหตุการ Mapping" required hint="บังคับกรอก — บันทึกเป็นเหตุผลในประวัติการใช้งาน">
           <Textarea
+            id={`${fieldId}-reason`}
             maxLength={1000}
             rows={3}
             value={reason}

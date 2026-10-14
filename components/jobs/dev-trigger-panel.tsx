@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { Can } from '@/components/auth/permission-provider'
 import { Button, Card, Field, InlineAlert, Input, Select, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
@@ -12,6 +12,8 @@ import { DEV_TRIGGER_JOB_TYPES, jobTypeLabel, type JobTypeCode } from '@/lib/job
  * Vercel Preview ไม่มี cron ⇒ สั่งงานรายวัน (เช่น สรุปวันลงพื้นที่) จากหน้านี้แทน · production ไม่แสดงและ API ตอบ 404
  */
 export function DevTriggerPanel({ onTriggered }: { onTriggered: () => void }) {
+  // id ผูก label ↔ ช่อง + aria-invalid/aria-describedby ผ่าน `<Field id>` (ตรวจซ้ำ staging SV5-R9-01)
+  const fieldId = useId()
   const { showToast } = useToast()
   const [jobType, setJobType] = useState<JobTypeCode>(DEV_TRIGGER_JOB_TYPES[0] ?? 'daily_field_allowance')
   const [date, setDate] = useState('')
@@ -40,8 +42,8 @@ export function DevTriggerPanel({ onTriggered }: { onTriggered: () => void }) {
           ระบบทดสอบไม่มีตัวตั้งเวลาอัตโนมัติ ใช้แผงนี้สั่งงานแทน (ระบบจริงทำให้เองตามเวลา และไม่มีแผงนี้)
         </InlineAlert>
         <div className="mt-4 grid grid-cols-1 items-end gap-4 sm:grid-cols-3">
-          <Field label="งาน">
-            <Select value={jobType} onChange={(event) => setJobType(event.target.value as JobTypeCode)}>
+          <Field id={`${fieldId}-job-type`} label="งาน">
+            <Select id={`${fieldId}-job-type`} value={jobType} onChange={(event) => setJobType(event.target.value as JobTypeCode)}>
               {DEV_TRIGGER_JOB_TYPES.map((code) => (
                 <option key={code} value={code}>
                   {jobTypeLabel(code)}
@@ -51,10 +53,11 @@ export function DevTriggerPanel({ onTriggered }: { onTriggered: () => void }) {
           </Field>
           {needsDate && (
             <Field
+              id={`${fieldId}-date`}
               label={jobType === 'daily_field_allowance' ? 'วันที่ลงพื้นที่ที่จะสรุป' : 'จำลองว่าวันนี้คือ'}
               hint={jobType === 'daily_field_allowance' ? 'เว้นว่าง = ทุกวันที่จบแล้วที่ยังไม่สรุป · ใส่วันนี้ได้ (สรุปวันนี้ทันที)' : 'เว้นว่าง = วันนี้'}
             >
-              <Input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+              <Input id={`${fieldId}-date`} type="date" value={date} onChange={(event) => setDate(event.target.value)} />
             </Field>
           )}
           <div>

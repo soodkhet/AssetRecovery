@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { AuditDetailModal } from '@/components/audit/audit-detail-modal'
 import { EMPTY_AUDIT_FILTERS, useAuditLogs, type AuditLogFilters } from '@/components/audit/use-audit-logs'
 import {
@@ -38,6 +38,8 @@ import { fmtCount } from '@/lib/format/money'
 const ACTION_OPTIONS = Object.entries(AUDIT_ACTION_FILTER_LABEL) as [AuditLogAction, string][]
 
 export function AuditLogsManager() {
+  // id ผูก label ↔ ช่อง + aria-invalid/aria-describedby ผ่าน `<Field id>` (ตรวจซ้ำ staging SV5-R9-01)
+  const fieldId = useId()
   const [filters, setFilters] = useState<AuditLogFilters>(EMPTY_AUDIT_FILTERS)
   const [offset, setOffset] = useState(0)
   const [openedId, setOpenedId] = useState<string | null>(null)
@@ -61,8 +63,8 @@ export function AuditLogsManager() {
 
       <Card>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          <Field label="เป้าหมาย (Target)">
-            <Select value={filters.targetType} onChange={(event) => update({ targetType: event.target.value })}>
+          <Field id={`${fieldId}-target-type`} label="เป้าหมาย (Target)">
+            <Select id={`${fieldId}-target-type`} value={filters.targetType} onChange={(event) => update({ targetType: event.target.value })}>
               <option value="">ทั้งหมด</option>
               {data.targetTypes.map((targetType) => (
                 <option key={targetType} value={targetType}>
@@ -72,8 +74,8 @@ export function AuditLogsManager() {
             </Select>
           </Field>
           {/* `90` §14 กำหนดตัวกรองไว้ 3 ช่อง: เป้าหมาย · ผู้ดำเนินการ · ช่วงวัน */}
-          <Field label="ผู้ดำเนินการ">
-            <Select value={filters.actorId} onChange={(event) => update({ actorId: event.target.value })}>
+          <Field id={`${fieldId}-actor-id`} label="ผู้ดำเนินการ">
+            <Select id={`${fieldId}-actor-id`} value={filters.actorId} onChange={(event) => update({ actorId: event.target.value })}>
               <option value="">ทั้งหมด</option>
               {data.actors.map((actor) => (
                 <option key={actor.id} value={actor.id}>
@@ -82,8 +84,9 @@ export function AuditLogsManager() {
               ))}
             </Select>
           </Field>
-          <Field label="การกระทำ (Action)">
+          <Field id={`${fieldId}-action`} label="การกระทำ (Action)">
             <Select
+              id={`${fieldId}-action`}
               value={filters.action}
               onChange={(event) =>
                 update({
@@ -100,15 +103,16 @@ export function AuditLogsManager() {
             </Select>
           </Field>
           {/* `<input type="date">` = ข้อยกเว้นเดียวที่ใช้ ค.ศ. (DEC-005) — ช่วงวันถูกตีความเป็นวันไทยที่ backend */}
-          <Field label="ตั้งแต่วันที่">
+          <Field id={`${fieldId}-date-from`} label="ตั้งแต่วันที่">
             <Input
+              id={`${fieldId}-date-from`}
               type="date"
               value={filters.dateFrom}
               onChange={(event) => update({ dateFrom: event.target.value })}
             />
           </Field>
-          <Field label="ถึงวันที่">
-            <Input type="date" value={filters.dateTo} onChange={(event) => update({ dateTo: event.target.value })} />
+          <Field id={`${fieldId}-date-to`} label="ถึงวันที่">
+            <Input id={`${fieldId}-date-to`} type="date" value={filters.dateTo} onChange={(event) => update({ dateTo: event.target.value })} />
           </Field>
         </div>
 

@@ -1,9 +1,9 @@
 'use client'
 
 import { StoredPhotoThumb } from '@/components/ui/stored-photo-thumb'
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { AssetSummaryHeader } from '@/components/warehouse/asset-summary-header'
-import { Button, Field, InlineAlert, Modal, Textarea, useToast } from '@/components/ui'
+import { Button, Field, InlineAlert, Modal, Textarea, fieldControlAria, useToast } from '@/components/ui'
 import { cn } from '@/components/ui/cn'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
@@ -62,6 +62,8 @@ export function IntakeModal({
   onClose: () => void
   onDone: () => void
 }) {
+  // id ผูก label ↔ ช่อง + aria-invalid/aria-describedby ผ่าน `<Field id>` (ตรวจซ้ำ staging SV5-R9-01)
+  const fieldId = useId()
   const { showToast } = useToast()
 
   const [imeiActual, setImeiActual] = useState(asset.imeiActual ?? '')
@@ -93,6 +95,7 @@ export function IntakeModal({
   )
   /** รูปแบบผิด (ไม่ครบ/เกิน 15 หลัก หรือมีอักขระอื่น) = พิมพ์ผิด (schema ปฏิเสธ) ไม่ใช่ "ไม่ตรงสัญญา" */
   const imeiFormatInvalid = imeiActual.trim() !== '' && imeiNormalized === null
+  const imeiError = imeiFormatInvalid ? IMEI_FORMAT_MESSAGE : null
   const imeiTouched = imeiActual.trim() !== '' || serialActual.trim() !== ''
   // รูปแบบผิดแสดงแค่ข้อความรูปแบบ — ไม่ขึ้นคำเตือน "ไม่ตรงสัญญา" ซ้อน (UAT BUG-083)
   const mismatch = imeiTouched && !imeiFormatInvalid && !comparison.matched
@@ -248,11 +251,14 @@ export function IntakeModal({
               </div>
             </Field>
             <Field
+              id={`${fieldId}-imei`}
               label="IMEI ที่ตรวจจริงบนเครื่อง"
               required={requiredIdentity === 'imei'}
-              error={imeiFormatInvalid ? IMEI_FORMAT_MESSAGE : null}
+              error={imeiError}
             >
               <input
+                id={`${fieldId}-imei`}
+                {...fieldControlAria(`${fieldId}-imei`, { error: imeiError })}
                 type="text"
                 inputMode="numeric"
                 maxLength={IMEI_INPUT_MAX_LENGTH}
@@ -280,8 +286,9 @@ export function IntakeModal({
                     {asset.serialContract ?? '—'}
                   </div>
                 </Field>
-                <Field label="Serial ที่ตรวจจริงบนเครื่อง" required={requiredIdentity === 'serial'}>
+                <Field id={`${fieldId}-serial`} label="Serial ที่ตรวจจริงบนเครื่อง" required={requiredIdentity === 'serial'}>
                   <input
+                    id={`${fieldId}-serial`}
                     type="text"
                     maxLength={100}
                     value={serialActual}
@@ -343,8 +350,9 @@ export function IntakeModal({
               ))}
             </div>
             {colorCapacityMatched === false && (
-              <Field className="mt-2" label="สิ่งที่พบ" required hint="ระบุสี/ความจุของเครื่องที่รับจริง">
+              <Field id={`${fieldId}-color-capacity-note`} className="mt-2" label="สิ่งที่พบ" required hint="ระบุสี/ความจุของเครื่องที่รับจริง">
                 <Textarea
+                  id={`${fieldId}-color-capacity-note`}
                   rows={2}
                   value={colorCapacityNote}
                   maxLength={500}
@@ -378,12 +386,14 @@ export function IntakeModal({
             ))}
           </div>
           <Field
+            id={`${fieldId}-condition-note`}
             className="mt-3"
             label="รายละเอียดสภาพเครื่อง"
             required={requiresConditionNote(condition)}
             hint={requiresConditionNote(condition) ? 'สภาพชำรุด/อุปกรณ์ขาดหาย ต้องกรอกรายละเอียดกำกับเสมอ' : undefined}
           >
             <Textarea
+              id={`${fieldId}-condition-note`}
               rows={2}
               value={conditionNote}
               maxLength={1000}

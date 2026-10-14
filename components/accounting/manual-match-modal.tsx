@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { Button, Field, InlineAlert, Modal, Select, Textarea, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import {
@@ -33,6 +33,8 @@ export function ManualMatchModal({
   onClose: () => void
   onMatched: () => void
 }) {
+  // id ผูก label ↔ ช่อง + aria-invalid/aria-describedby ผ่าน `<Field id>` (ตรวจซ้ำ staging SV5-R9-01)
+  const fieldId = useId()
   const { showToast } = useToast()
   const [candidates, setCandidates] = useState<readonly MatchCandidateDto[]>([])
   const [targetId, setTargetId] = useState('')
@@ -148,8 +150,8 @@ export function ManualMatchModal({
           </InlineAlert>
         )}
 
-        <Field label="เลือกรายการที่ต้องการจับคู่" required>
-          <Select value={targetId} onChange={(event) => setTargetId(event.target.value)}>
+        <Field id={`${fieldId}-target-id`} label="เลือกรายการที่ต้องการจับคู่" required>
+          <Select id={`${fieldId}-target-id`} value={targetId} onChange={(event) => setTargetId(event.target.value)}>
             <option value="">— เลือกรายการ —</option>
             {candidates.map((candidate) => (
               <option key={candidate.id} value={candidate.id}>
@@ -192,11 +194,13 @@ export function ManualMatchModal({
         )}
 
         <Field
+          id={`${fieldId}-note`}
           label="หมายเหตุชี้แจง"
           required={noteRequired}
           hint={noteRequired ? 'บังคับกรอก — บันทึกไว้ในประวัติการใช้งาน' : 'ไม่บังคับเมื่อยอดตรงเป๊ะ'}
         >
           <Textarea
+            id={`${fieldId}-note`}
             maxLength={1000}
             rows={2}
             value={note}
