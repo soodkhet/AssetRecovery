@@ -1,12 +1,15 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { FieldCaseDetailView } from '@/components/field/field-case-detail'
 import { IconAlert, IconChevronLeft, IconChevronRight } from '@/components/field/field-icons'
 import { useFieldCases } from '@/components/field/field-cases-provider'
 import { Button, ErrorState, LoadingState, Modal, useToast } from '@/components/ui'
 import { TOUCH_TARGET_CLASS } from '@/components/ui/button'
 import { cn } from '@/components/ui/cn'
+import { installFocusTrap } from '@/components/ui/focus-trap'
+import { guardModalHistory } from '@/components/ui/modal-history'
+import { isTopModal, registerModal, unregisterModal } from '@/components/ui/modal-stack'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
 import {
@@ -68,6 +71,32 @@ export function CalendarPickerModal({
   const [retryKey, setRetryKey] = useState(0)
 
   const caseId = target?.caseId ?? null
+
+  // กล่องยืนยันวันที่ซ้อนบน Modal ⇒ เป็นชั้นบนสุดของตัวเอง: Esc ปิดเฉพาะกล่องนี้ · กักโฟกัสในกล่อง ·
+  // ปิดแล้วคืนโฟกัสให้ช่องวันที่ที่กด (ตรวจ a11y staging SV5-C1-01)
+  const confirmRef = useRef<HTMLDivElement>(null)
+  const confirmTitleId = useId()
+  const confirmOpen = pickedDate !== null
+  useEffect(() => {
+    if (!confirmOpen) return
+    const token = registerModal()
+    function handleKey(event: KeyboardEvent) {
+      if (event.key === 'Escape' && isTopModal(token)) setPickedDate(null)
+    }
+    // ปุ่ม Back ของมือถือ = ปิดเฉพาะกล่องนี้ (เดิมกล่องไม่ลงชั้น ⇒ Back ปิดทั้งปฏิทิน)
+    const releaseHistory = guardModalHistory({
+      onBack: () => (isTopModal(token) ? 'close' : 'stay'),
+      onClose: () => setPickedDate(null),
+    })
+    document.addEventListener('keydown', handleKey)
+    const releaseFocus = installFocusTrap({ getContainer: () => confirmRef.current, isTop: () => isTopModal(token) })
+    return () => {
+      unregisterModal(token)
+      releaseHistory()
+      document.removeEventListener('keydown', handleKey)
+      releaseFocus()
+    }
+  }, [confirmOpen])
 
   useEffect(() => {
     if (!open || caseId === null) return
@@ -245,8 +274,15 @@ export function CalendarPickerModal({
       {pickedDate !== null && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-5">
           <div className="absolute inset-0 bg-slate-900/55" onClick={() => setPickedDate(null)} aria-hidden="true" />
-          <div role="dialog" aria-modal="true" className="relative w-full max-w-[360px] rounded-2xl bg-white p-4">
-            <div className="mb-3 text-base font-extrabold text-slate-900">
+          <div
+            ref={confirmRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={confirmTitleId}
+            tabIndex={-1}
+            className="relative w-full max-w-[360px] rounded-2xl bg-white p-4 focus:outline-none"
+          >
+            <div id={confirmTitleId} className="mb-3 text-base font-extrabold text-slate-900">
               {withWeekdayPrefix(pickedDate, fmtDate(pickedDate))}
             </div>
 

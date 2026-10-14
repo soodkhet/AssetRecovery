@@ -2,12 +2,14 @@
 
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useRef, type MouseEvent, type RefObject } from 'react'
+import { installFocusTrap } from '@/components/ui/focus-trap'
 import { afterModalHistorySettled, guardModalHistory } from '@/components/ui/modal-history'
 import { isTopModal, registerModal, unregisterModal } from '@/components/ui/modal-stack'
 
 /**
  * staging E-075 — พฤติกรรมกลางของเมนู/ลิ้นชักที่ทับหน้า (แบบเดียวกับเมนู Field Tracker):
- * Esc ปิด · ปุ่ม Back ของมือถือปิดแทนการออกจากหน้า · ล็อกการเลื่อนหน้าข้างหลัง · โฟกัสเข้าแผง และคืนโฟกัสเมื่อปิด
+ * Esc ปิด · ปุ่ม Back ของมือถือปิดแทนการออกจากหน้า · ล็อกการเลื่อนหน้าข้างหลัง · โฟกัสเข้าแผง กักโฟกัสในแผง (SV5-C1-01)
+ * และคืนโฟกัสเมื่อปิด
  * · กดลิงก์ในเมนู ⇒ ปิดก่อนแล้วค่อยนำทาง (ไม่งั้น sentinel ของ Back ค้าง ต้องกด Back สองครั้ง)
  *
  * เรียกใน component ที่ mount เฉพาะตอนเปิดเท่านั้น
@@ -26,7 +28,6 @@ export function useOverlayDismiss(onClose: () => void): {
 
   useEffect(() => {
     const token = registerModal()
-    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
     function handleKey(event: KeyboardEvent) {
       if (event.key === 'Escape' && isTopModal(token)) onCloseRef.current()
     }
@@ -37,13 +38,17 @@ export function useOverlayDismiss(onClose: () => void): {
     const previousOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     document.addEventListener('keydown', handleKey)
-    panelRef.current?.focus()
+    const releaseFocus = installFocusTrap({
+      getContainer: () => panelRef.current,
+      isTop: () => isTopModal(token),
+      initialFocus: 'container',
+    })
     return () => {
       unregisterModal(token)
       document.removeEventListener('keydown', handleKey)
       document.body.style.overflow = previousOverflow
       releaseHistory()
-      previousFocus?.focus()
+      releaseFocus()
       const href = navigateToRef.current
       if (href !== null) afterModalHistorySettled(() => router.push(href))
     }

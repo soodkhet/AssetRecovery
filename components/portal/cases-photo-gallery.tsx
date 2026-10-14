@@ -5,6 +5,7 @@ import { PortalIcon } from '@/components/portal/portal-icons'
 import { usePortalApiUrl } from '@/components/portal/portal-scope'
 import { InlineAlert } from '@/components/ui'
 import { TOUCH_TARGET_CLASS } from '@/components/ui/button'
+import { installFocusTrap } from '@/components/ui/focus-trap'
 import { isTopModal, registerModal, unregisterModal } from '@/components/ui/modal-stack'
 import { portalAssetPhotoPath, portalPhotoLabel as photoLabel, wrapPhotoIndex } from '@/lib/portal/cases-view'
 
@@ -133,10 +134,16 @@ function PhotoLightbox({
       else if (event.key === 'ArrowLeft') current.onChange(wrapPhotoIndex(current.index - 1, current.count))
     }
     document.addEventListener('keydown', handleKey)
-    panelRef.current?.focus()
+    // กักโฟกัสในตัวดูรูป + คืนโฟกัสให้รูปย่อที่เปิดเมื่อปิด (SV5-C1-01)
+    const releaseFocus = installFocusTrap({
+      getContainer: () => panelRef.current,
+      isTop: () => isTopModal(token),
+      initialFocus: 'container',
+    })
     return () => {
       unregisterModal(token)
       document.removeEventListener('keydown', handleKey)
+      releaseFocus()
     }
   }, [])
 

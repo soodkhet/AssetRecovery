@@ -27,7 +27,9 @@ import { FieldPwaProvider } from '@/components/field/pwa-provider'
 import { FieldReassignmentProvider } from '@/components/field/reassignment-provider'
 import { SessionExpiredDialog } from '@/components/auth/session-expired-dialog'
 import { ToastProvider } from '@/components/ui'
+import { installFocusTrap } from '@/components/ui/focus-trap'
 import { afterModalHistorySettled, guardModalHistory } from '@/components/ui/modal-history'
+import { isTopModal, registerModal, unregisterModal } from '@/components/ui/modal-stack'
 import { requestLogout } from '@/lib/auth/logout-client'
 import { LOGIN_PATH } from '@/lib/auth/constants'
 import type { ClientSession } from '@/lib/auth/types'
@@ -259,17 +261,30 @@ function HamburgerDrawer({
   }, [onClose])
   /** แถวเมนูที่กด — นำทางหลังถอย sentinel ของเมนูเสร็จ (ไม่งั้นหน้าใหม่ทับ sentinel แล้ว Back ต้องกดสองครั้ง) */
   const navigateToRef = useRef<string | null>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
+    // ลงชั้น modal + กักโฟกัสในเมนู คืนโฟกัสให้ปุ่มเปิดเมนูเมื่อปิด (ตรวจ a11y staging SV5-C1-01)
+    const token = registerModal()
     function handleKey(event: KeyboardEvent) {
-      if (event.key === 'Escape') onCloseRef.current()
+      if (event.key === 'Escape' && isTopModal(token)) onCloseRef.current()
     }
     // ปุ่ม Back / ปัดย้อนกลับของมือถือ = ปิดเมนู อยู่หน้าเดิม (แบบเดียวกับ Modal กลาง — preship R5-009)
-    const releaseHistory = guardModalHistory({ onBack: () => 'close', onClose: () => onCloseRef.current() })
+    const releaseHistory = guardModalHistory({
+      onBack: () => (isTopModal(token) ? 'close' : 'stay'),
+      onClose: () => onCloseRef.current(),
+    })
     document.addEventListener('keydown', handleKey)
+    const releaseFocus = installFocusTrap({
+      getContainer: () => panelRef.current,
+      isTop: () => isTopModal(token),
+      initialFocus: 'container',
+    })
     return () => {
+      unregisterModal(token)
       document.removeEventListener('keydown', handleKey)
       releaseHistory()
+      releaseFocus()
       const href = navigateToRef.current
       if (href !== null) afterModalHistorySettled(() => router.push(href))
     }
@@ -286,7 +301,14 @@ function HamburgerDrawer({
   return (
     <div className="fixed inset-0 z-50 flex lg:hidden">
       <div className="absolute inset-0 bg-slate-900/50" onClick={onClose} aria-hidden="true" />
-      <div role="dialog" aria-modal="true" className="relative flex h-full w-[82%] max-w-[360px] flex-col bg-white">
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="เมนู"
+        tabIndex={-1}
+        className="relative flex h-full w-[82%] max-w-[360px] flex-col bg-white focus:outline-none"
+      >
         <div className="flex items-center justify-between border-b border-slate-100 px-2 py-2">
           <UserCard session={session} />
           <button

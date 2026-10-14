@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useRef, useState, type ReactNode, type SyntheticEvent } from 'react'
+import { useEffect, useId, useRef, useState, type ReactNode, type SyntheticEvent } from 'react'
 import { Button, type ButtonVariant } from '@/components/ui/button'
 import { cn } from '@/components/ui/cn'
+import { installFocusTrap } from '@/components/ui/focus-trap'
 import { busyElementLocksModal, decideModalClose } from '@/components/ui/modal-close-guard'
 import { guardModalHistory } from '@/components/ui/modal-history'
 import { isTopModal, registerModal, unregisterModal } from '@/components/ui/modal-stack'
@@ -10,6 +11,8 @@ import { isTopModal, registerModal, unregisterModal } from '@/components/ui/moda
 /**
  * Modal — centered + backdrop ตาม `04` §8/§10
  * ปิดด้วย Esc (เฉพาะ modal บนสุดเมื่อซ้อนกัน — `modal-stack.ts`) / คลิก backdrop · ล็อก scroll ของหน้าเบื้องหลังระหว่างเปิด
+ * กักโฟกัส: Tab/Shift+Tab วนในตัวบนสุด · เปิดแล้วโฟกัสช่อง/ปุ่มแรก (ข้ามปุ่ม X · `data-autofocus` กำหนดเองได้) · ปิดแล้วคืนโฟกัสให้ปุ่มที่เปิด
+ * (ตรวจ a11y staging SV5-C1-01 — `focus-trap.ts`)
  * ระหว่างบันทึก (`busy` หรือมี `<Button loading>` อยู่ใน modal นี้) ปิดไม่ได้และช่องกรอกถูกล็อก ·
  * กรอกข้อมูลแล้วสั่งปิดต้องยืนยันทิ้งก่อน (`confirmDiscard`) — preship PS-001 (`modal-close-guard.ts`)
  * ⚠️ Modal ที่ทำลายข้อมูล (ยกเลิก/ลบ/ปลดล็อก) **ต้อง confirm** และคำบนปุ่มต้องตรง action (`04` §10)
@@ -58,6 +61,11 @@ export function Modal({
   confirmDiscard?: boolean
 }) {
   const panelRef = useRef<HTMLDivElement>(null)
+  const titleId = useId()
+  const descriptionId = useId()
+  const discardTitleId = useId()
+  /** ช่อง/ปุ่มที่โฟกัสอยู่ก่อนเปิดกล่องยืนยันทิ้งข้อมูล — คืนให้เมื่อกด "กลับไปแก้ไข" */
+  const focusBeforeConfirmRef = useRef<HTMLElement | null>(null)
   const [ownBusy, setOwnBusy] = useState(false)
   const [confirming, setConfirming] = useState(false)
   const isBusy = busy || ownBusy
@@ -83,8 +91,10 @@ export function Modal({
   function requestClose() {
     const { closeLocked: busyNow, confirmDiscard: confirmNow } = guardRef.current
     const decision = decideModalClose({ busy: busyNow, dirty: dirtyRef.current, confirmDiscard: confirmNow })
-    if (decision === 'confirm-discard') setConfirming(true)
-    else if (decision === 'close') onCloseRef.current()
+    if (decision === 'confirm-discard') {
+      focusBeforeConfirmRef.current = currentFocus()
+      setConfirming(true)
+    } else if (decision === 'close') onCloseRef.current()
   }
   const requestCloseRef = useRef(requestClose)
   useEffect(() => {
@@ -132,7 +142,10 @@ export function Modal({
             const { closeLocked: busyNow, confirmDiscard: confirmNow } = guardRef.current
             const decision = decideModalClose({ busy: busyNow, dirty: dirtyRef.current, confirmDiscard: confirmNow })
             if (decision === 'close') return 'close'
-            if (decision === 'confirm-discard') setConfirming(true)
+            if (decision === 'confirm-discard') {
+              focusBeforeConfirmRef.current = currentFocus()
+              setConfirming(true)
+            }
             return 'stay'
           },
           onClose: () => onCloseRef.current(),
@@ -143,7 +156,11 @@ export function Modal({
     document.body.style.overflow = 'hidden'
     document.addEventListener('keydown', handleKey)
     window.addEventListener('beforeunload', handleBeforeUnload)
-    panelRef.current?.focus()
+    // กล่องยืนยันทิ้งข้อมูลที่ซ้อนอยู่ในแผง ⇒ กักโฟกัสในกล่องนั้นแทนระหว่างแสดง
+    const releaseFocus = installFocusTrap({
+      getContainer: () => panel?.querySelector<HTMLElement>(':scope > [role="alertdialog"]') ?? panel,
+      isTop: () => isTopModal(token),
+    })
 
     return () => {
       observer.disconnect()
@@ -154,8 +171,25 @@ export function Modal({
       document.body.style.overflow = previousOverflow
       document.removeEventListener('keydown', handleKey)
       window.removeEventListener('beforeunload', handleBeforeUnload)
+      releaseFocus()
     }
   }, [open])
+
+  // ปิดกล่องยืนยันทิ้งข้อมูล ("กลับไปแก้ไข"/Esc) ⇒ ปุ่มในกล่องหายไป โฟกัสตกไป body — คืนให้ช่อง/ปุ่มเดิม (ไม่มี ⇒ แผง)
+  const wasConfirmingRef = useRef(false)
+  useEffect(() => {
+    if (wasConfirmingRef.current && !confirming) {
+      const panel = panelRef.current
+      const active = document.activeElement
+      const previous = focusBeforeConfirmRef.current
+      focusBeforeConfirmRef.current = null
+      if (panel !== null && (active === null || active === document.body)) {
+        if (previous !== null && previous.isConnected && panel.contains(previous)) previous.focus()
+        else panel.focus()
+      }
+    }
+    wasConfirmingRef.current = confirming
+  }, [confirming])
 
   /** ผู้ใช้กรอก/เปลี่ยนค่าเอง (ไม่นับค่าที่โค้ดตั้ง และช่องค้นหา) ⇒ ถือว่ามีข้อมูลที่ยังไม่บันทึก */
   function markDirty(event: SyntheticEvent) {
@@ -182,6 +216,8 @@ export function Modal({
         ref={panelRef}
         role="dialog"
         aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={description !== undefined ? descriptionId : undefined}
         aria-busy={isBusy || undefined}
         tabIndex={-1}
         onInput={markDirty}
@@ -194,14 +230,22 @@ export function Modal({
       >
         <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
           <div className="min-w-0">
-            <h2 className="text-base font-bold text-slate-900">{title}</h2>
-            {description !== undefined && <p className="mt-1 text-xs text-slate-500">{description}</p>}
+            <h2 id={titleId} className="text-base font-bold text-slate-900">
+              {title}
+            </h2>
+            {description !== undefined && (
+              <p id={descriptionId} className="mt-1 text-xs text-slate-500">
+                {description}
+              </p>
+            )}
           </div>
           <button
             type="button"
             onClick={requestClose}
             disabled={closeLocked}
             aria-label="ปิด"
+            // โฟกัสแรกตอนเปิดไปที่ช่อง/ปุ่มในเนื้อหา ไม่ใช่ปุ่มปิด (Tab ยังถึงตามปกติ)
+            data-initial-focus="skip"
             // จอสัมผัสขยายพื้นที่แตะเป็น 44×44 (เดิม 24×24 — preship PS-018)
             className="focus-ring inline-flex items-center justify-center rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-40 pointer-coarse:-m-2.5 pointer-coarse:min-h-11 pointer-coarse:min-w-11"
           >
@@ -235,11 +279,11 @@ export function Modal({
         {confirming && (
           <div
             role="alertdialog"
-            aria-labelledby="modal-discard-title"
+            aria-labelledby={discardTitleId}
             className="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-white/90 p-4"
           >
             <div className="w-full max-w-xs rounded-xl border border-slate-200 bg-white p-5 shadow-lg">
-              <h3 id="modal-discard-title" className="text-sm font-bold text-slate-900">
+              <h3 id={discardTitleId} className="text-sm font-bold text-slate-900">
                 ทิ้งข้อมูลที่กรอกไว้?
               </h3>
               <p className="mt-1 text-xs text-slate-500">ข้อมูลที่ยังไม่ได้บันทึกในหน้าต่างนี้จะหายไป</p>
@@ -327,4 +371,10 @@ function hasOwnBusyElement(panel: HTMLElement): boolean {
     if (element === panel || element.closest('[role="dialog"]') !== panel) return false
     return busyElementLocksModal({ optedOut: element.getAttribute('data-modal-busy') === 'ignore' })
   })
+}
+
+/** element ที่โฟกัสอยู่ (ไม่นับ body) */
+function currentFocus(): HTMLElement | null {
+  const active = document.activeElement
+  return active instanceof HTMLElement && active !== document.body ? active : null
 }

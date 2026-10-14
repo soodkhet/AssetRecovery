@@ -7,6 +7,7 @@ import { PortalIcon } from '@/components/portal/portal-icons'
 import { usePortalData } from '@/components/portal/use-portal-data'
 import { Button, ErrorState, LoadingState, RefText } from '@/components/ui'
 import { TOUCH_TARGET_CLASS } from '@/components/ui/button'
+import { installFocusTrap } from '@/components/ui/focus-trap'
 import { guardModalHistory } from '@/components/ui/modal-history'
 import { isTopModal, registerModal, unregisterModal } from '@/components/ui/modal-stack'
 import { fmtDate } from '@/lib/format/datetime'
@@ -51,12 +52,18 @@ export function PortalCaseDetailDrawer({
     const previousOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     document.addEventListener('keydown', handleKey)
-    panelRef.current?.focus()
+    // กักโฟกัสในลิ้นชัก + คืนโฟกัสให้แถวที่เปิดเมื่อปิด (SV5-C1-01)
+    const releaseFocus = installFocusTrap({
+      getContainer: () => panelRef.current,
+      isTop: () => isTopModal(token),
+      initialFocus: 'container',
+    })
     return () => {
       unregisterModal(token)
       releaseHistory()
       document.body.style.overflow = previousOverflow
       document.removeEventListener('keydown', handleKey)
+      releaseFocus()
     }
   }, [])
 
