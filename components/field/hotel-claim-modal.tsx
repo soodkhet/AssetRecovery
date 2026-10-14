@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { IconFile } from '@/components/field/field-icons'
-import { Button, Field, FieldErrorText, FormSubmitError, Input, Modal, Select, Textarea, revealFirstFieldError, useToast } from '@/components/ui'
+import { Button, Field, FieldErrorText, FormSubmitError, Input, Modal, Select, Textarea, fieldControlAria, revealFirstFieldError, useToast } from '@/components/ui'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import {
@@ -46,6 +46,8 @@ export function HotelClaimModal({
   onClose: () => void
   onCreated: (expense: FieldExpenseDto) => void
 }) {
+  // id ผูก label ↔ ช่อง + aria-invalid/aria-describedby ผ่าน `<Field id>` (ตรวจซ้ำ staging SV5-R9-01)
+  const fieldId = useId()
   const { showToast } = useToast()
   const fileRef = useRef<HTMLInputElement>(null)
   const [teammates, setTeammates] = useState<FieldTeammateDto[]>([])
@@ -256,12 +258,13 @@ export function HotelClaimModal({
       {/* ล็อกช่องกรอกระหว่างอัปโหลด — ค่าที่ส่งคือค่าตอนกดส่ง แก้ระหว่างนี้จะไม่ถูกส่ง */}
       <fieldset disabled={uploading} className="m-0 min-w-0 border-0 p-0">
       <div ref={bodyRef} className="space-y-3">
-        <Field label="วันที่เข้าพัก" required error={fieldError('expenseDate')}>
-          <Input type="date" value={expenseDate} onChange={(event) => changeExpenseDate(event.target.value)} />
+        <Field id={`${fieldId}-expense-date`} label="วันที่เข้าพัก" required error={fieldError('expenseDate')}>
+          <Input id={`${fieldId}-expense-date`} type="date" value={expenseDate} onChange={(event) => changeExpenseDate(event.target.value)} />
         </Field>
 
-        <Field label="จำนวนคืน" error={fieldError('nights')} hint="ใบเสร็จใบเดียวครอบหลายคืนได้ — ไม่กรอก = 1 คืน">
+        <Field id={`${fieldId}-nights-text`} label="จำนวนคืน" error={fieldError('nights')} hint="ใบเสร็จใบเดียวครอบหลายคืนได้ — ไม่กรอก = 1 คืน">
           <Input
+            id={`${fieldId}-nights-text`}
             type="number"
             inputMode="numeric"
             min={HOTEL_NIGHTS_MIN}
@@ -272,8 +275,9 @@ export function HotelClaimModal({
           />
         </Field>
 
-        <Field label="จำนวนเงิน (บาท)" required error={fieldError('amount')} hint={noReceipt ? 'ไม่มีใบเสร็จ — ใช้ยอดรวมของรายการด้านล่าง' : undefined}>
+        <Field id={`${fieldId}-amount-baht`} label="จำนวนเงิน (บาท)" required error={fieldError('amount')} hint={noReceipt ? 'ไม่มีใบเสร็จ — ใช้ยอดรวมของรายการด้านล่าง' : undefined}>
           <Input
+            id={`${fieldId}-amount-baht`}
             numeric
             inputMode="decimal"
             placeholder="0.00"
@@ -283,8 +287,8 @@ export function HotelClaimModal({
           />
         </Field>
 
-        <Field label="พักร่วมกับ (ถ้ามี — เลือกได้จากคนในทีมเท่านั้น)">
-          <Select value={sharedWithUserId} onChange={(event) => setSharedWithUserId(event.target.value)}>
+        <Field id={`${fieldId}-shared-with-user-id`} label="พักร่วมกับ (ถ้ามี — เลือกได้จากคนในทีมเท่านั้น)">
+          <Select id={`${fieldId}-shared-with-user-id`} value={sharedWithUserId} onChange={(event) => setSharedWithUserId(event.target.value)}>
             <option value="">— พักคนเดียว —</option>
             {teammates.map((teammate) => (
               <option key={teammate.id} value={teammate.id}>
@@ -323,14 +327,16 @@ export function HotelClaimModal({
             )}
           </div>
         ) : (
-        <Field label="แนบใบเสร็จ" required error={fieldError('receipt')}>
+        <Field id={`${fieldId}-receipt`} label="แนบใบเสร็จ" required error={fieldError('receipt')}>
           <button
+            id={`${fieldId}-receipt`}
             type="button"
             onClick={() => fileRef.current?.click()}
+            {...fieldControlAria(`${fieldId}-receipt`, { error: fieldError('receipt'), describedBy: `${fieldId}-receipt-file-name` })}
             className="focus-ring flex w-full flex-col items-center gap-1.5 rounded-xl border-2 border-dashed border-slate-300 py-6 text-slate-400"
           >
             <IconFile className="h-6 w-6" />
-            <span className="text-xs font-semibold">
+            <span id={`${fieldId}-receipt-file-name`} className="text-xs font-semibold">
               {receipt === null ? 'แตะเพื่อแนบใบเสร็จ' : receipt.name}
             </span>
           </button>
@@ -350,8 +356,9 @@ export function HotelClaimModal({
         {/* mytester5 D-OUT5-01 — ใช้ใบรับรองแทนใบเสร็จ = ไม่มีใบเสร็จจริง ⇒ ไม่มีช่อง "ใบเสร็จออกในนามบริษัท" */}
         {!noReceipt && <ReceiptInCompanyNameCheckbox checked={receiptInCompanyName} onChange={setReceiptInCompanyName} />}
 
-        <Field label="หมายเหตุ (ถ้ามี)" error={fieldErrors.note}>
+        <Field id={`${fieldId}-note`} label="หมายเหตุ (ถ้ามี)" error={fieldErrors.note}>
           <Textarea
+            id={`${fieldId}-note`}
             rows={2}
             value={note}
             maxLength={HOTEL_CLAIM_NOTE_MAX_LENGTH}

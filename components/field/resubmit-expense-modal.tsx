@@ -1,10 +1,10 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { IconFile } from '@/components/field/field-icons'
 import { ReceiptInCompanyNameCheckbox } from '@/components/field/hotel-claim-modal'
 import { NoReceiptLinesEditor } from '@/components/substitute-receipts/no-receipt-lines'
-import { Button, Field, FieldErrorText, FormSubmitError, InlineAlert, Input, Modal, Textarea, revealFirstFieldError, useToast } from '@/components/ui'
+import { Button, Field, FieldErrorText, FormSubmitError, InlineAlert, Input, Modal, Textarea, fieldControlAria, revealFirstFieldError, useToast } from '@/components/ui'
 import { REASON_MAX } from '@/lib/api/validation'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest } from '@/lib/api/types'
@@ -56,6 +56,8 @@ export function ResubmitExpenseModal({
   onClose: () => void
   onDone: () => void
 }) {
+  // id ผูก label ↔ ช่อง + aria-invalid/aria-describedby ผ่าน `<Field id>` (ตรวจซ้ำ staging SV5-R9-01)
+  const fieldId = useId()
   const { showToast } = useToast()
   const fileRef = useRef<HTMLInputElement>(null)
   const editable = isSeparateExpense(expense)
@@ -314,6 +316,7 @@ export function ResubmitExpenseModal({
               </Field>
             ) : (
               <Field
+                id={`${fieldId}-amount-baht`}
                 label="จำนวนเงิน (บาท)"
                 required
                 error={fieldError('amount')}
@@ -326,6 +329,7 @@ export function ResubmitExpenseModal({
                 }
               >
                 <Input
+                  id={`${fieldId}-amount-baht`}
                   numeric
                   inputMode="decimal"
                   value={amountBaht}
@@ -336,11 +340,13 @@ export function ResubmitExpenseModal({
 
             {isHotel && (
               <Field
+                id={`${fieldId}-nights-text`}
                 label="จำนวนคืน"
                 error={fieldError('nights')}
                 hint={`เดิม ${hotelNightsCapText(expense.hotelNights, expense.hotelMaxPerNightSatang)} — ไม่กรอก = 1 คืน`}
               >
                 <Input
+                  id={`${fieldId}-nights-text`}
                   type="number"
                   inputMode="numeric"
                   min={HOTEL_NIGHTS_MIN}
@@ -353,8 +359,8 @@ export function ResubmitExpenseModal({
             )}
 
             {evidenceModes.length > 0 && substitute !== null && (
-              <Field label="หลักฐานรายจ่าย" required>
-                <div className="space-y-2">
+              <Field id={`${fieldId}-evidence`} group label="หลักฐานรายจ่าย" required>
+                <div id={`${fieldId}-evidence`} role="radiogroup" aria-required aria-labelledby={`${fieldId}-evidence-label`} className="space-y-2">
                   {evidenceModes.map((option) => (
                     <label
                       key={option}
@@ -429,11 +435,13 @@ export function ResubmitExpenseModal({
 
             {cancelsActive && activeSubstitute !== null && (
               <Field
+                id={`${fieldId}-cancel-reason`}
                 label={`เหตุผลการยกเลิกใบรับรอง ${activeSubstitute.receiptNumber}`}
                 required
                 error={fieldError('cancelReason')}
               >
                 <Textarea
+                  id={`${fieldId}-cancel-reason`}
                   rows={2}
                   maxLength={REASON_MAX}
                   value={cancelReason}
@@ -445,17 +453,20 @@ export function ResubmitExpenseModal({
 
             {mode === 'receipt' && (
               <Field
+                id={`${fieldId}-receipt`}
                 label={evidenceState.hasRealReceipt ? 'แนบใบเสร็จใหม่ (ถ้าต้องเปลี่ยน)' : 'แนบใบเสร็จ'}
                 required={receiptRequired}
                 error={fieldError('receipt')}
               >
                 <button
+                  id={`${fieldId}-receipt`}
                   type="button"
                   onClick={() => fileRef.current?.click()}
+                  {...fieldControlAria(`${fieldId}-receipt`, { error: fieldError('receipt'), describedBy: `${fieldId}-receipt-file-name` })}
                   className="focus-ring flex w-full flex-col items-center gap-1.5 rounded-xl border-2 border-dashed border-slate-300 py-5 text-slate-400"
                 >
                   <IconFile className="h-6 w-6" />
-                  <span className="text-xs font-semibold">
+                  <span id={`${fieldId}-receipt-file-name`} className="text-xs font-semibold">
                     {resubmitReceiptPickerText({
                       hasExistingReceipt: evidenceState.hasRealReceipt,
                       fileName: receipt === null ? null : receipt.name,
@@ -482,8 +493,8 @@ export function ResubmitExpenseModal({
           </p>
         )}
 
-        <Field label="สิ่งที่แก้ไข / ชี้แจง" required error={fieldError('note')}>
-          <Textarea rows={3} maxLength={1000} value={note} onChange={(event) => setNote(event.target.value)} />
+        <Field id={`${fieldId}-note`} label="สิ่งที่แก้ไข / ชี้แจง" required error={fieldError('note')}>
+          <Textarea id={`${fieldId}-note`} rows={3} maxLength={1000} value={note} onChange={(event) => setNote(event.target.value)} />
         </Field>
       </div>
       </fieldset>
