@@ -137,7 +137,7 @@ export function IntakeModal({
     setError(null)
     setNoteErrors({})
 
-    // ตรวจด้วยตัว assert ชุดเดียวกับ API — ผู้ใช้เห็น code ของ `44` §12 ไม่ใช่ `REQUIRED_MISSING`
+    // ตรวจด้วยตัว assert ชุดเดียวกับ API — ข้อความตาม code ของ `44` §12 ไม่ใช่ `REQUIRED_MISSING` (รายละเอียดสภาพว่างแสดงใต้ช่อง)
     try {
       assertIntakeCondition({ condition, conditionNote: conditionNote.trim() === '' ? null : conditionNote })
     } catch (assertError) {
@@ -390,7 +390,11 @@ export function IntakeModal({
                 type="button"
                 role="radio"
                 aria-checked={condition === value}
-                onClick={() => setCondition(value)}
+                onClick={() => {
+                  setCondition(value)
+                  // เปลี่ยนสภาพแล้วข้อผิด "ต้องระบุรายละเอียด" ของสภาพเดิมไม่ค้าง (รีวิว SV5-A11Y-A2-02)
+                  setNoteErrors((current) => ({ ...current, conditionNote: undefined }))
+                }}
                 className={cn(
                   'focus-ring rounded-xl border-2 py-3 text-xs font-bold transition-colors',
                   condition === value

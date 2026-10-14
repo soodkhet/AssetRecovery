@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
+  DEFAULT_SUBSTITUTE_RECEIPT_MAX_PER_DOC_SATANG,
+  DEFAULT_SUBSTITUTE_RECEIPT_MAX_PER_MONTH_SATANG,
+} from '@/lib/substitute-receipts/substitute-receipt'
+import {
   SETTINGS_ERROR_CODES,
   settingsErrorMessage,
   settingsErrorStatus,
@@ -178,6 +182,12 @@ describe('financePolicyUpdateSchema (§6.2.1)', () => {
     const { writeOffToleranceSatang: _omit, ...missing } = base
     expect(financePolicyUpdateSchema.safeParse(missing).success).toBe(false)
     expect(financePolicyUpdateSchema.parse({ ...base, writeOffToleranceSatang: 0 }).writeOffToleranceSatang).toBe(0)
+  })
+
+  it('เพดานใบรับรองแทนใบเสร็จไม่ส่ง key = ค่าเริ่มต้น (คงพฤติกรรมเดิม)', () => {
+    const parsed = financePolicyUpdateSchema.parse(base)
+    expect(parsed.substituteReceiptMaxPerDocSatang).toBe(DEFAULT_SUBSTITUTE_RECEIPT_MAX_PER_DOC_SATANG)
+    expect(parsed.substituteReceiptMaxPerMonthSatang).toBe(DEFAULT_SUBSTITUTE_RECEIPT_MAX_PER_MONTH_SATANG)
   })
 
   it('เพดานใบรับรองแทนใบเสร็จส่ง null = ไม่ผ่าน (ไม่ใช้ค่าเริ่มต้นแทน)', () => {

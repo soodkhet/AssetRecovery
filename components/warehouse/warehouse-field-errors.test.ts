@@ -42,6 +42,7 @@ describe('ฟอร์มคลัง: ข้อผิดของช่อง�
     }
     const text = readFileSync(join(DIR, file), 'utf8')
     expect(text).toContain('useRevealFieldError()')
+    expect(text).toMatch(/\breveal\(\)/)
     expect(text).toMatch(/ref=\{formRef\}/)
   })
 })

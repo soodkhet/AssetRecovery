@@ -41,7 +41,7 @@ export function FileDropzone({
   const inputRef = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
   const dropHandlers =
-    onDropFile === undefined
+    onDropFile === undefined || disabled
       ? {}
       : {
           onDragOver: (event: DragEvent) => {
@@ -52,7 +52,7 @@ export function FileDropzone({
           onDrop: (event: DragEvent) => {
             event.preventDefault()
             setDragging(false)
-            if (!disabled) onDropFile(event.dataTransfer.files[0])
+            onDropFile(event.dataTransfer.files[0])
           },
         }
   return (

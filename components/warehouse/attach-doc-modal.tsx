@@ -311,7 +311,7 @@ export function DocumentSlotField({
               type="file"
               aria-labelledby={`${slotId}-name ${slotId}-action`}
               aria-describedby={`${slotId}-hint`}
-              aria-required
+              aria-required={!slot.attached}
               accept={LOT_DOCUMENT_ACCEPT}
               className="sr-only"
               disabled={disabled || uploading}
