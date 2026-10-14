@@ -1,8 +1,16 @@
 'use client'
 
-import { Button, Input } from '@/components/ui'
+import { useId } from 'react'
+import { Button, FieldErrorText, Input } from '@/components/ui'
 import { fmtSatangSymbol } from '@/lib/format/money'
-import { emptySubstituteLine, substituteDraftTotalSatang, type SubstituteLineDraft } from '@/lib/substitute-receipts/form'
+import {
+  emptySubstituteLine,
+  substituteDraftTotalSatang,
+  substituteLineInputId,
+  type SubstituteLineDraft,
+  type SubstituteLineField,
+  type SubstituteLineIssueAt,
+} from '@/lib/substitute-receipts/form'
 import { SUBSTITUTE_RECEIPT_MAX_LINES } from '@/lib/substitute-receipts/substitute-receipt'
 
 /**
@@ -54,6 +62,7 @@ export function NoReceiptLinesEditor({
   onChange,
   defaultDate,
   variant = 'general',
+  error = null,
 }: {
   lines: readonly SubstituteLineDraft[]
   onChange: (lines: SubstituteLineDraft[]) => void
@@ -61,8 +70,14 @@ export function NoReceiptLinesEditor({
   defaultDate: string
   /** ชนิดรายจ่าย — เปลี่ยนเฉพาะตัวอย่างในข้อความ (ค่าตั้งต้น = รายจ่ายทั่วไป) */
   variant?: NoReceiptLinesVariant
+  /**
+   * ข้อผิดพลาดของแถว/ช่อง (จาก `substituteDraftPayload().at`) — แสดงใต้แถวนั้น + กรอบแดงที่ช่อง และชี้ id ของช่อง
+   * ให้ `revealFirstFieldError()` โฟกัสช่องที่ผิดจริง (ตรวจซ้ำ staging SV5-R4-01)
+   */
+  error?: (SubstituteLineIssueAt & { message: string }) | null
 }) {
   const examples = NO_RECEIPT_EXAMPLES[variant]
+  const idPrefix = useId()
   const total = substituteDraftTotalSatang(lines)
 
   function update(key: string, patch: Partial<SubstituteLineDraft>): void {
@@ -84,51 +99,72 @@ export function NoReceiptLinesEditor({
         กรอกรายจ่ายที่เรียกใบเสร็จไม่ได้ ({examples.intro}) — ระบบจะออกใบรับรองแทนใบเสร็จรับเงินให้ดาวน์โหลดไปเซ็น
         แล้วอัปโหลดฉบับเซ็นกลับเข้าระบบ · ยอดรวมต้องไม่เกินเพดานที่บริษัทกำหนด
       </p>
-      {lines.map((line, index) => (
-        <div key={line.key} className="space-y-1.5 rounded-lg border border-slate-200 bg-white p-2.5">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-700">รายการที่ {index + 1}</span>
-            {lines.length > 1 && (
-              <button
-                type="button"
-                onClick={() => remove(line.key)}
-                aria-label={`ลบรายการที่ ${index + 1}`}
-                className="focus-ring rounded-md px-1.5 py-0.5 text-xs text-slate-400 hover:text-red-600"
+      {lines.map((line, index) => {
+        const rowError = error !== null && error.lineKey === line.key ? error : null
+        /** id + สถานะผิดของช่องในแถวนี้ */
+        const fieldProps = (field: SubstituteLineField) => {
+          const id = substituteLineInputId(idPrefix, index, field)
+          const invalid = rowError !== null && rowError.field === field
+          return { id, invalid, ...(invalid ? { 'aria-describedby': `${id}-error` } : {}) }
+        }
+        return (
+          <div key={line.key} className="space-y-1.5 rounded-lg border border-slate-200 bg-white p-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-700">รายการที่ {index + 1}</span>
+              {lines.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => remove(line.key)}
+                  aria-label={`ลบรายการที่ ${index + 1}`}
+                  className="focus-ring rounded-md px-1.5 py-0.5 text-xs text-slate-400 hover:text-red-600"
+                >
+                  ลบ
+                </button>
+              )}
+            </div>
+            <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-[150px_1fr_130px]">
+              <Input
+                {...fieldProps('lineDate')}
+                type="date"
+                aria-label={`วันที่จ่าย รายการที่ ${index + 1}`}
+                value={line.lineDate}
+                onChange={(event) => update(line.key, { lineDate: event.target.value })}
+              />
+              <Input
+                {...fieldProps('description')}
+                aria-label={`รายละเอียดรายจ่าย รายการที่ ${index + 1}`}
+                placeholder={examples.placeholder}
+                value={line.description}
+                onChange={(event) => update(line.key, { description: event.target.value })}
+              />
+              <Input
+                {...fieldProps('amount')}
+                numeric
+                inputMode="decimal"
+                aria-label={`จำนวนเงิน (บาท) รายการที่ ${index + 1}`}
+                placeholder="0.00"
+                value={line.amountBaht}
+                onChange={(event) => update(line.key, { amountBaht: event.target.value })}
+              />
+            </div>
+            <Input
+              {...fieldProps('note')}
+              aria-label={`หมายเหตุ รายการที่ ${index + 1}`}
+              placeholder="หมายเหตุ / ผู้รับเงิน / สถานที่ (ถ้ามี)"
+              value={line.note}
+              onChange={(event) => update(line.key, { note: event.target.value })}
+            />
+            {rowError !== null && (
+              <FieldErrorText
+                id={`${substituteLineInputId(idPrefix, index, rowError.field)}-error`}
+                controlId={substituteLineInputId(idPrefix, index, rowError.field)}
               >
-                ลบ
-              </button>
+                {rowError.message}
+              </FieldErrorText>
             )}
           </div>
-          <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-[150px_1fr_130px]">
-            <Input
-              type="date"
-              aria-label={`วันที่จ่าย รายการที่ ${index + 1}`}
-              value={line.lineDate}
-              onChange={(event) => update(line.key, { lineDate: event.target.value })}
-            />
-            <Input
-              aria-label={`รายละเอียดรายจ่าย รายการที่ ${index + 1}`}
-              placeholder={examples.placeholder}
-              value={line.description}
-              onChange={(event) => update(line.key, { description: event.target.value })}
-            />
-            <Input
-              numeric
-              inputMode="decimal"
-              aria-label={`จำนวนเงิน (บาท) รายการที่ ${index + 1}`}
-              placeholder="0.00"
-              value={line.amountBaht}
-              onChange={(event) => update(line.key, { amountBaht: event.target.value })}
-            />
-          </div>
-          <Input
-            aria-label={`หมายเหตุ รายการที่ ${index + 1}`}
-            placeholder="หมายเหตุ / ผู้รับเงิน / สถานที่ (ถ้ามี)"
-            value={line.note}
-            onChange={(event) => update(line.key, { note: event.target.value })}
-          />
-        </div>
-      ))}
+        )
+      })}
       <div className="flex flex-wrap items-center justify-between gap-2">
         {lines.length < SUBSTITUTE_RECEIPT_MAX_LINES ? (
           <Button size="sm" variant="secondary" onClick={add}>

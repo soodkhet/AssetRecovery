@@ -28,6 +28,7 @@ import {
   substituteDraftTotalSatang,
   substituteLinesToDrafts,
   type SubstituteLineDraft,
+  type SubstituteLineIssueAt,
 } from '@/lib/substitute-receipts/form'
 import { isSubstituteReceiptRefActive } from '@/lib/substitute-receipts/substitute-receipt'
 import type { SubstituteReceiptDetailDto } from '@/lib/substitute-receipts/types'
@@ -92,9 +93,16 @@ export function ResubmitExpenseModal({
   const [note, setNote] = useState('')
   const [receipt, setReceipt] = useState<File | null>(null)
   // ข้อผิดพลาด + ช่องที่ชี้ไป (`field: null` = ของทั้งฟอร์ม เช่นอัปโหลดล้ม) — แสดงที่ช่องนั้น + ใน footer ติดจอ
-  const [error, setErrorState] = useState<{ message: string; field: ResubmitFormField | null } | null>(null)
-  function setError(message: string | null, field: ResubmitFormField | null = null): void {
-    setErrorState(message === null ? null : { message, field })
+  // `lineAt` = แถว/ช่องที่ผิดในตารางรายการของใบรับรองใหม่ ⇒ แสดงใต้แถวนั้น + โฟกัสช่องนั้น (ตรวจซ้ำ staging SV5-R4-01)
+  const [error, setErrorState] = useState<
+    { message: string; field: ResubmitFormField | null; lineAt: SubstituteLineIssueAt | null } | null
+  >(null)
+  function setError(
+    message: string | null,
+    field: ResubmitFormField | null = null,
+    lineAt: SubstituteLineIssueAt | null = null,
+  ): void {
+    setErrorState(message === null ? null : { message, field, lineAt })
   }
   const bodyRef = useRef<HTMLDivElement>(null)
   // ตรวจซ้ำ staging SV5-R3-01: ข้อความเคยอยู่ท้ายฟอร์มนอกจอ กดส่งแล้วเหมือนไม่มีอะไรเกิดขึ้น ⇒ หลังกดส่งแล้วไม่ผ่าน
@@ -123,12 +131,12 @@ export function ResubmitExpenseModal({
       .then((result) => {
         if (unmountedRef.current) return
         setLines(substituteLinesToDrafts(result.data?.lines ?? [], lineDate, targetTotalSatang))
-        if (result.error !== undefined) setErrorState({ message: 'ดึงรายการจากใบเดิมไม่ได้ — กรอกรายการใหม่', field: null })
+        if (result.error !== undefined) setErrorState({ message: 'ดึงรายการจากใบเดิมไม่ได้ — กรอกรายการใหม่', field: null, lineAt: null })
       })
       .catch(() => {
         if (unmountedRef.current) return
         setLines(substituteLinesToDrafts([], lineDate, targetTotalSatang))
-        setErrorState({ message: 'ดึงรายการจากใบเดิมไม่ได้ — กรอกรายการใหม่', field: null })
+        setErrorState({ message: 'ดึงรายการจากใบเดิมไม่ได้ — กรอกรายการใหม่', field: null, lineAt: null })
       })
       .finally(() => {
         if (!unmountedRef.current) setLoadingLines(false)
@@ -172,7 +180,7 @@ export function ResubmitExpenseModal({
       isHotel,
       nightsText,
       newSubstitute,
-      linesError: draft === null ? null : draft.error,
+      linesError: draft === null || draft.error === null ? null : { message: draft.error, at: draft.at },
       linesTotalSatang: linesTotal,
       cancelsActive,
       cancelReason,
@@ -180,7 +188,7 @@ export function ResubmitExpenseModal({
       note,
     })
     if (issue !== null) {
-      setError(issue.message, issue.field)
+      setError(issue.message, issue.field, issue.lineAt ?? null)
       setRevealTick((tick) => tick + 1)
       return
     }
@@ -235,6 +243,13 @@ export function ResubmitExpenseModal({
   function fieldError(field: ResubmitFormField): string | undefined {
     return error !== null && error.field === field ? error.message : undefined
   }
+  // ข้อผิดของแถวในตารางรายการ — แสดงใต้แถวนั้นแทนใต้ทั้งตาราง
+  // ลบแถวที่ผิดไปแล้ว ⇒ กลับไปแสดงใต้ทั้งตาราง (ข้อความไม่หาย)
+  const lineAt = error !== null && error.field === 'lines' ? error.lineAt : null
+  const linesRowError =
+    error !== null && lineAt !== null && lines.some((line) => line.key === lineAt.lineKey)
+      ? { ...lineAt, message: error.message }
+      : null
 
   return (
     <Modal
@@ -401,8 +416,14 @@ export function ResubmitExpenseModal({
                 <p className="text-xs text-slate-500">กำลังดึงรายการจากใบเดิม...</p>
               ) : (
                 <div>
-                  <NoReceiptLinesEditor lines={lines} onChange={setLines} defaultDate={lineDate} variant={isHotel ? 'hotel' : 'general'} />
-                  {fieldError('lines') !== undefined && (
+                  <NoReceiptLinesEditor
+                    lines={lines}
+                    onChange={setLines}
+                    defaultDate={lineDate}
+                    variant={isHotel ? 'hotel' : 'general'}
+                    error={linesRowError}
+                  />
+                  {fieldError('lines') !== undefined && linesRowError === null && (
                     <FieldErrorText>{fieldError('lines')}</FieldErrorText>
                   )}
                 </div>

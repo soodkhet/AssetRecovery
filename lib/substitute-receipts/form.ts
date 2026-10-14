@@ -33,10 +33,41 @@ export interface SubstituteDraftPayload {
   lines: Array<{ lineDate: string; description: string; amountSatang: number; note: string | null }>
 }
 
-/** ฟอร์ม → payload ของ API · ผิดข้อใด = `{ error }` ข้อความแรกที่ผู้ใช้ต้องแก้ (ระบุบรรทัด) */
+/** ช่องของบรรทัดรายการ — เรียงตามลำดับบนจอในแถว (วันที่ → รายละเอียด → จำนวนเงิน → หมายเหตุ) */
+export const SUBSTITUTE_LINE_FIELDS = ['lineDate', 'description', 'amount', 'note'] as const
+export type SubstituteLineField = (typeof SUBSTITUTE_LINE_FIELDS)[number]
+
+/** ตำแหน่งที่ผิดในตารางรายการ — แถว (0-based) + ช่อง · ใช้แสดงข้อความใต้แถวนั้น + เลื่อน/โฟกัสช่องที่ผิดจริง (ตรวจซ้ำ staging SV5-R4-01) */
+export interface SubstituteLineIssueAt {
+  lineIndex: number
+  /** `key` ของแถว — editor จับคู่ด้วย key (ลบ/แทรกแถวหลังแสดงข้อความแล้ว ข้อความไม่ย้ายไปแถวอื่น) */
+  lineKey: string
+  field: SubstituteLineField
+}
+
+/** key ใน payload/schema → ช่องบนจอ (`amountSatang` กรอกเป็นช่อง "จำนวนเงิน (บาท)") */
+const PAYLOAD_KEY_TO_FIELD: Readonly<Partial<Record<string, SubstituteLineField>>> = {
+  lineDate: 'lineDate',
+  description: 'description',
+  amountSatang: 'amount',
+  note: 'note',
+}
+
+/** id ของช่องกรอกในแถว — `<NoReceiptLinesEditor>` ใส่ให้ input · ข้อความ error ของแถวชี้กลับด้วย id นี้ */
+export function substituteLineInputId(idPrefix: string, lineIndex: number, field: SubstituteLineField): string {
+  return `${idPrefix}-line-${lineIndex}-${field}`
+}
+
+/**
+ * ฟอร์ม → payload ของ API · ผิดข้อใด = `{ error, at }` ข้อความของช่องแรกที่ผู้ใช้ต้องแก้ (ระบุบรรทัด) —
+ * ไล่ตามลำดับบนจอ: แถวบนก่อน แล้วช่องซ้าย→ขวาในแถว (ไม่พึ่งลำดับ issue ของ Zod) · `at: null` = ผิดระดับทั้งตาราง
+ * (เช่นไม่มีบรรทัด/เกินจำนวนบรรทัด)
+ */
 export function substituteDraftPayload(
   drafts: readonly SubstituteLineDraft[],
-): { payload: SubstituteDraftPayload; error: null } | { payload: null; error: string } {
+):
+  | { payload: SubstituteDraftPayload; error: null; at: null }
+  | { payload: null; error: string; at: SubstituteLineIssueAt | null } {
   const lines = drafts.map((draft) => {
     const amount = parseBahtInput(draft.amountBaht)
     return {
@@ -47,13 +78,29 @@ export function substituteDraftPayload(
     }
   })
   const parsed = substituteReceiptDraftSchema.safeParse({ lines })
-  if (!parsed.success) {
-    const issue = parsed.error.issues[0]
-    const lineIndex = issue?.path[1]
-    const prefix = typeof lineIndex === 'number' ? `รายการที่ ${lineIndex + 1}: ` : ''
-    return { payload: null, error: `${prefix}${issue?.message ?? 'กรอกรายการให้ครบ'}` }
+  if (parsed.success) return { payload: { lines }, error: null, at: null }
+
+  let first: { message: string; at: SubstituteLineIssueAt | null } | null = null
+  let firstRank = Number.POSITIVE_INFINITY
+  for (const issue of parsed.error.issues) {
+    const [root, lineIndex, key] = issue.path
+    const field = typeof key === 'string' && Object.hasOwn(PAYLOAD_KEY_TO_FIELD, key) ? PAYLOAD_KEY_TO_FIELD[key] : undefined
+    const lineKey = typeof lineIndex === 'number' ? drafts[lineIndex]?.key : undefined
+    if (root !== 'lines' || typeof lineIndex !== 'number' || field === undefined || lineKey === undefined) {
+      // ผิดระดับทั้งตาราง (ไม่มี/เกินจำนวนบรรทัด) — มาก่อนข้อผิดของแถวใด ๆ
+      if (firstRank > -1) {
+        first = { message: issue.message, at: null }
+        firstRank = -1
+      }
+      continue
+    }
+    const rank = lineIndex * SUBSTITUTE_LINE_FIELDS.length + SUBSTITUTE_LINE_FIELDS.indexOf(field)
+    if (rank < firstRank) {
+      first = { message: `รายการที่ ${lineIndex + 1}: ${issue.message}`, at: { lineIndex, lineKey, field } }
+      firstRank = rank
+    }
   }
-  return { payload: { lines }, error: null }
+  return { payload: null, error: first?.message ?? 'กรอกรายการให้ครบ', at: first?.at ?? null }
 }
 
 /**

@@ -78,9 +78,17 @@ describe('resubmitFormIssue — ตรวจฟอร์มส่งใหม่
     expect(resubmitFormIssue({ ...ok, amountBaht: '0' })?.field).toBe('amount')
     expect(resubmitFormIssue({ ...ok, amountBaht: 'abc' })?.field).toBe('amount')
     expect(resubmitFormIssue({ ...ok, nightsText: '0' })?.field).toBe('nights')
-    expect(resubmitFormIssue({ ...ok, newSubstitute: true, linesError: 'รายการที่ 1: กรอกรายละเอียด' })).toEqual({
+    expect(
+      resubmitFormIssue({
+        ...ok,
+        newSubstitute: true,
+        linesError: { message: 'รายการที่ 2: จำนวนเงินต้องมากกว่า 0', at: { lineIndex: 1, lineKey: 'line-1', field: 'amount' } },
+      }),
+    ).toEqual({
       field: 'lines',
-      message: 'รายการที่ 1: กรอกรายละเอียด',
+      message: 'รายการที่ 2: จำนวนเงินต้องมากกว่า 0',
+      // ตรวจซ้ำ staging SV5-R4-01 — ส่งแถว/ช่องที่ผิดจริงต่อให้ฟอร์มโฟกัส
+      lineAt: { lineIndex: 1, lineKey: 'line-1', field: 'amount' },
     })
     expect(resubmitFormIssue({ ...ok, newSubstitute: true, linesTotalSatang: 60_000 })?.field).toBe('amount')
     expect(resubmitFormIssue({ ...ok, cancelsActive: true, cancelReason: 'ส' })?.field).toBe('cancelReason')

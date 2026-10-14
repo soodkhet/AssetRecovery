@@ -37,17 +37,23 @@ export function Label({
 /**
  * เลื่อนไปข้อความผิดพลาดของช่องแรก (`[data-field-error]` ภายใน root) แล้วย้าย focus ไปช่องกรอกของมัน
  * — ฟอร์มยาวใน modal: error อยู่นอกจอแล้วผู้ใช้เห็นว่ากดแล้วไม่มีอะไรเกิดขึ้น (staging S-003)
+ * ข้อความที่ระบุช่องเอง (`data-field-error-for="<id>"` — เช่นแถวในตารางรายการ) ⇒ โฟกัสช่องนั้นตรง ๆ
+ * แทนช่องแรกในกล่อง (ตรวจซ้ำ staging SV5-R4-01) · เลื่อนช่องมากลางจอ (`block: 'center'`) ให้พ้นหัว modal ที่ติดจอ
  * @returns false เมื่อไม่พบข้อความผิดพลาดที่แสดงอยู่ (ผู้เรียกควรแจ้งทางอื่น เช่น toast)
  */
 export function revealFirstFieldError(root: HTMLElement | null): boolean {
   const message = root?.querySelector<HTMLElement>('[data-field-error]')
   if (!message) return false
-  message.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  const controlId = message.dataset.fieldErrorFor
+  const target = controlId ? message.ownerDocument.getElementById(controlId) : null
   const scope = message.parentElement
   // ช่องกรอกก่อน · ไม่มีช่องกรอกที่ focus ได้ (เช่นปุ่มเลือกไฟล์ที่ซ่อน `<input type=file>` ไว้) ⇒ ปุ่มในช่องนั้น (SV5-R3-01)
   const control =
+    target ??
     scope?.querySelector<HTMLElement>('input:not([type=hidden]):not([type=file]), select, textarea') ??
     scope?.querySelector<HTMLElement>('button')
+  // ช่องที่ระบุตรง ๆ อาจห่างจากข้อความ (ข้อความอยู่ท้ายแถว) ⇒ เลื่อนตามช่อง · ไม่งั้นเลื่อนตามข้อความ (อยู่ใต้ช่องพอดี)
+  ;(target ?? message).scrollIntoView({ block: 'center', behavior: 'smooth' })
   control?.focus({ preventScroll: true })
   return true
 }
@@ -65,10 +71,13 @@ export function FormSubmitError({ message }: { message: string | null }) {
   )
 }
 
-/** ข้อความ error ใต้ช่อง — `data-field-error` ให้ `revealFirstFieldError()` หาเจอ · ใช้ตรงเมื่อช่องไม่ได้ห่อด้วย `<Field>` */
-export function FieldErrorText({ children }: { children: ReactNode }) {
+/**
+ * ข้อความ error ใต้ช่อง — `data-field-error` ให้ `revealFirstFieldError()` หาเจอ · ใช้ตรงเมื่อช่องไม่ได้ห่อด้วย `<Field>`
+ * `controlId` = id ของช่องที่ผิด (ใส่เมื่อในกล่องเดียวกันมีหลายช่อง เช่นแถวในตารางรายการ) ⇒ โฟกัสช่องนั้นตรง ๆ
+ */
+export function FieldErrorText({ children, id, controlId }: { children: ReactNode; id?: string; controlId?: string }) {
   return (
-    <p data-field-error className="mt-1 text-[11px] font-semibold text-red-600">
+    <p id={id} data-field-error data-field-error-for={controlId} className="mt-1 text-[11px] font-semibold text-red-600">
       {children}
     </p>
   )

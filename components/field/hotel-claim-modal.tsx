@@ -24,6 +24,7 @@ import {
   substituteDraftPayload,
   substituteDraftTotalSatang,
   type SubstituteLineDraft,
+  type SubstituteLineIssueAt,
 } from '@/lib/substitute-receipts/form'
 
 /**
@@ -63,9 +64,16 @@ export function HotelClaimModal({
     emptySubstituteLine('line-0', expenseDate),
   ])
   // ข้อผิดพลาด + ช่องที่ชี้ไป (`field: null` = ของทั้งฟอร์ม เช่นอัปโหลดล้ม) — แสดงที่ช่องนั้น + ใน footer ติดจอ
-  const [error, setErrorState] = useState<{ message: string; field: HotelClaimFormField | 'lines' | null } | null>(null)
-  function setError(message: string | null, field: HotelClaimFormField | 'lines' | null = null): void {
-    setErrorState(message === null ? null : { message, field })
+  // `lineAt` = แถว/ช่องที่ผิดในตารางรายการ "ไม่มีใบเสร็จ" ⇒ แสดงใต้แถวนั้น + โฟกัสช่องนั้น (ตรวจซ้ำ staging SV5-R4-01)
+  const [error, setErrorState] = useState<
+    { message: string; field: HotelClaimFormField | 'lines' | null; lineAt: SubstituteLineIssueAt | null } | null
+  >(null)
+  function setError(
+    message: string | null,
+    field: HotelClaimFormField | 'lines' | null = null,
+    lineAt: SubstituteLineIssueAt | null = null,
+  ): void {
+    setErrorState(message === null ? null : { message, field, lineAt })
   }
   const bodyRef = useRef<HTMLDivElement>(null)
   // ตรวจซ้ำ staging SV5-R3-01: ข้อความเคยอยู่ท้ายฟอร์มนอกจอ ⇒ หลังกดส่งแล้วไม่ผ่าน เลื่อน+โฟกัสไปช่องที่ผิด
@@ -143,7 +151,9 @@ export function HotelClaimModal({
     const hotelNights = parseHotelNightsInput(nightsText)
     const substitute = noReceipt ? substituteDraftPayload(substituteLines) : null
     const linesIssue =
-      substitute !== null && substitute.error !== null ? { field: 'lines' as const, message: substitute.error } : null
+      substitute !== null && substitute.error !== null
+        ? { field: 'lines' as const, message: substitute.error, lineAt: substitute.at }
+        : null
     // ไม่มีใบเสร็จ: ยอดเงิน = ยอดรวมรายการ (ช่องยอดถูกล็อก) ⇒ ยอดผิดชี้ไปที่รายการแทน
     const amountFromLines = noReceipt && formIssue !== null && formIssue.field === 'amount'
     const issue =
@@ -153,7 +163,7 @@ export function HotelClaimModal({
           ? { field: 'lines' as const, message: formIssue.message }
           : formIssue
     if (issue !== null) {
-      setError(issue.message, issue.field)
+      setError(issue.message, issue.field, 'lineAt' in issue ? issue.lineAt : null)
       setRevealTick((tick) => tick + 1)
       return
     }
@@ -211,6 +221,13 @@ export function HotelClaimModal({
   function fieldError(field: HotelClaimFormField | 'lines'): string | undefined {
     return error !== null && error.field === field ? error.message : undefined
   }
+  // ข้อผิดของแถวในตารางรายการ — แสดงใต้แถวนั้นแทนใต้ทั้งตาราง
+  // ลบแถวที่ผิดไปแล้ว ⇒ กลับไปแสดงใต้ทั้งตาราง (ข้อความไม่หาย)
+  const lineAt = error !== null && error.field === 'lines' ? error.lineAt : null
+  const linesRowError =
+    error !== null && lineAt !== null && substituteLines.some((line) => line.key === lineAt.lineKey)
+      ? { ...lineAt, message: error.message }
+      : null
 
   return (
     <Modal
@@ -302,8 +319,9 @@ export function HotelClaimModal({
               onChange={setSubstituteLines}
               defaultDate={expenseDate}
               variant="hotel"
+              error={linesRowError}
             />
-            {fieldError('lines') !== undefined && (
+            {fieldError('lines') !== undefined && linesRowError === null && (
               <FieldErrorText>{fieldError('lines')}</FieldErrorText>
             )}
           </div>

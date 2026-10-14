@@ -1,5 +1,6 @@
 import { HOTEL_NIGHTS_RANGE_MESSAGE, parseHotelNightsInput } from '@/lib/field/hotel-claim'
 import { bahtInputError, fmtSatangSymbol, parseBahtInput } from '@/lib/format/money'
+import type { SubstituteLineIssueAt } from '@/lib/substitute-receipts/form'
 import { SUBSTITUTE_RECEIPT_CANCEL_REASON_MIN } from '@/lib/substitute-receipts/substitute-receipt'
 
 /**
@@ -65,6 +66,8 @@ export type ResubmitFormField = 'amount' | 'nights' | 'lines' | 'cancelReason' |
 export interface ResubmitFormIssue {
   field: ResubmitFormField
   message: string
+  /** `field: 'lines'` — แถว/ช่องที่ผิดในตารางรายการ (`null` = ผิดระดับทั้งตาราง) · ตรวจซ้ำ staging SV5-R4-01 */
+  lineAt?: SubstituteLineIssueAt | null
 }
 
 /**
@@ -78,9 +81,12 @@ export function resubmitFormIssue(input: {
   /** ค่าที่พัก ⇒ ตรวจช่องจำนวนคืน */
   isHotel: boolean
   nightsText: string
-  /** ออกใบรับรองใหม่ — `linesError` = ผลตรวจรายการของใบ (`null` = ผ่าน) · `linesTotalSatang` = ยอดรวมรายการ */
+  /**
+   * ออกใบรับรองใหม่ — `linesError` = ผลตรวจรายการของใบจาก `substituteDraftPayload()` (`null` = ผ่าน · `at` = แถว/ช่องที่ผิด)
+   * · `linesTotalSatang` = ยอดรวมรายการ
+   */
   newSubstitute: boolean
-  linesError: string | null
+  linesError: { message: string; at: SubstituteLineIssueAt | null } | null
   linesTotalSatang: number
   /** ยกเลิกใบรับรองที่ใช้งานอยู่พร้อมการส่ง ⇒ เหตุผลบังคับ */
   cancelsActive: boolean
@@ -101,7 +107,9 @@ export function resubmitFormIssue(input: {
     return { field: 'nights', message: HOTEL_NIGHTS_RANGE_MESSAGE }
   }
   if (input.newSubstitute) {
-    if (input.linesError !== null) return { field: 'lines', message: input.linesError }
+    if (input.linesError !== null) {
+      return { field: 'lines', message: input.linesError.message, lineAt: input.linesError.at }
+    }
     if (amountSatang !== null && input.linesTotalSatang > amountSatang) {
       return {
         field: 'amount',

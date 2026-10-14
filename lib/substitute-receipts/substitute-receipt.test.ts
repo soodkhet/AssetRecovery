@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { fitSubstituteLinesToTotal, substituteDraftPayload, substituteLinesToDrafts } from '@/lib/substitute-receipts/form'
+import {
+  emptySubstituteLine,
+  fitSubstituteLinesToTotal,
+  substituteDraftPayload,
+  substituteLineInputId,
+  substituteLinesToDrafts,
+} from '@/lib/substitute-receipts/form'
 import { resubmitExpenseSchema } from '@/lib/field/schemas'
 import { SubstituteReceiptError } from '@/lib/substitute-receipts/errors'
 import { substituteReceiptDraftSchema, substituteReceiptLineSchema } from '@/lib/substitute-receipts/schemas'
@@ -502,5 +508,55 @@ describe('ตรวจซ้ำ staging SV5-R2-01 — หลักฐานต�
         receiptFileUrl: 'expense-receipts/u/66666666-6666-4666-8666-666666666666.jpg',
       }).success,
     ).toBe(false)
+  })
+})
+
+/** ตรวจซ้ำ staging SV5-R4-01 — ข้อผิดของรายการชี้แถวและช่องที่ผิดจริง (ไม่ใช่ช่องแรกของแถวแรกเสมอ) */
+describe('substituteDraftPayload — ตำแหน่งที่ผิด (แถว + ช่อง)', () => {
+  const valid = (key: string) => ({
+    ...emptySubstituteLine(key, '2026-10-03'),
+    description: 'ค่าห้องพัก 1 คืน',
+    amountBaht: '500',
+  })
+
+  it('กรอกครบ ⇒ ไม่มีตำแหน่งผิด', () => {
+    expect(substituteDraftPayload([valid('a'), valid('b')])).toMatchObject({ error: null, at: null })
+  })
+
+  it('แถวที่ 2 ผิดช่องจำนวนเงิน ⇒ ชี้แถว 2 ช่อง amount', () => {
+    const result = substituteDraftPayload([valid('a'), { ...valid('b'), amountBaht: '0' }])
+    expect(result.at).toEqual({ lineIndex: 1, lineKey: 'b', field: 'amount' })
+    expect(result.error).toMatch(/^รายการที่ 2: /)
+  })
+
+  it('แถวที่ 1 ไม่มีรายละเอียด ⇒ ชี้ช่อง description ไม่ใช่วันที่', () => {
+    const result = substituteDraftPayload([{ ...valid('a'), description: '' }])
+    expect(result.at).toEqual({ lineIndex: 0, lineKey: 'a', field: 'description' })
+    expect(result.error).toBe('รายการที่ 1: ระบุรายละเอียดรายจ่ายอย่างน้อย 3 ตัวอักษร')
+  })
+
+  it('หลายช่องผิด ⇒ เลือกแถวบนก่อน แล้วช่องซ้ายก่อนในแถวเดียวกัน', () => {
+    const result = substituteDraftPayload([
+      valid('a'),
+      { ...valid('b'), description: '', amountBaht: '' },
+      { ...valid('c'), lineDate: '' },
+    ])
+    expect(result.at).toEqual({ lineIndex: 1, lineKey: 'b', field: 'description' })
+    expect(substituteDraftPayload([{ ...valid('a'), lineDate: '', amountBaht: 'x' }]).at).toEqual({
+      lineIndex: 0,
+      lineKey: 'a',
+      field: 'lineDate',
+    })
+  })
+
+  it('ไม่มีบรรทัด ⇒ ผิดระดับตาราง (at = null)', () => {
+    const result = substituteDraftPayload([])
+    expect(result.at).toBeNull()
+    expect(result.error).toBe('ต้องมีรายจ่ายอย่างน้อย 1 รายการ')
+  })
+
+  it('id ของช่องในแถว — ไม่ชนกันข้ามแถว/ช่อง', () => {
+    expect(substituteLineInputId('p', 1, 'amount')).toBe('p-line-1-amount')
+    expect(substituteLineInputId('p', 0, 'amount')).not.toBe(substituteLineInputId('p', 0, 'description'))
   })
 })
