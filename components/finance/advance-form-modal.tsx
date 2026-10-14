@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { usePermission } from '@/components/auth/permission-provider'
 import { OnBehalfPayeeSelect } from '@/components/payees/on-behalf-payee-select'
 import { Button, Field, InlineAlert, Input, Modal, Select, Textarea, useClearOnClose, useToast } from '@/components/ui'
@@ -38,6 +38,8 @@ export function AdvanceFormModal({ open, onClose, onCreated }: {
   const [purpose, setPurpose] = useState('')
   const [dueClearDate, setDueClearDate] = useState('')
   const [caseId, setCaseId] = useState('')
+  // id ผูก label ↔ ช่อง + aria-invalid/aria-describedby ผ่าน `<Field id>` (ตรวจซ้ำ staging SV5-R7-01)
+  const fieldId = useId()
   // `null` = กำลังโหลด/โหลดไม่ได้ (ช่องยังใช้ได้ — เว้นว่าง = ไม่อ้างอิงเคส)
   const [caseOptions, setCaseOptions] = useState<AdvanceCaseOptionDto[] | null>(null)
   const [caseOptionsFailed, setCaseOptionsFailed] = useState(false)
@@ -146,8 +148,9 @@ export function AdvanceFormModal({ open, onClose, onCreated }: {
           />
         )}
 
-        <Field label="ยอดเงินที่ขอเบิก (บาท)" required error={errors.requestedSatang}>
+        <Field id={`${fieldId}-amount`} label="ยอดเงินที่ขอเบิก (บาท)" required error={errors.requestedSatang}>
           <Input
+            id={`${fieldId}-amount`}
             numeric
             inputMode="decimal"
             placeholder="0.00"
@@ -156,8 +159,9 @@ export function AdvanceFormModal({ open, onClose, onCreated }: {
           />
         </Field>
 
-        <Field label="วัตถุประสงค์ (บังคับกรอก)" required error={errors.purpose}>
+        <Field id={`${fieldId}-purpose`} label="วัตถุประสงค์ (บังคับกรอก)" required error={errors.purpose}>
           <Textarea
+            id={`${fieldId}-purpose`}
             maxLength={500}
             rows={2}
             placeholder="ระบุวัตถุประสงค์ให้ชัดเจน เช่น เดินทางไปติดตามทรัพย์ จ.เชียงราย 3 วัน"
@@ -168,6 +172,7 @@ export function AdvanceFormModal({ open, onClose, onCreated }: {
 
         {forSelf && (
           <Field
+            id={`${fieldId}-case`}
             label="อ้างอิงเคส (ไม่บังคับ)"
             error={errors.caseId}
             hint={
@@ -178,7 +183,7 @@ export function AdvanceFormModal({ open, onClose, onCreated }: {
                   : 'เลือกได้เฉพาะเคสที่คุณรับผิดชอบอยู่'
             }
           >
-            <Select value={caseId} onChange={(event) => setCaseId(event.target.value)} disabled={caseOptions === null && !caseOptionsFailed}>
+            <Select id={`${fieldId}-case`} value={caseId} onChange={(event) => setCaseId(event.target.value)} disabled={caseOptions === null && !caseOptionsFailed}>
               <option value="">{caseOptions === null && !caseOptionsFailed ? 'กำลังโหลดเคส...' : '— ไม่อ้างอิงเคส —'}</option>
               {(caseOptions ?? []).map((option) => (
                 <option key={option.caseId} value={option.caseId}>
@@ -189,8 +194,9 @@ export function AdvanceFormModal({ open, onClose, onCreated }: {
           </Field>
         )}
 
-        <Field label="กำหนดเคลียร์ยอด" required error={errors.dueClearDate}>
+        <Field id={`${fieldId}-due`} label="กำหนดเคลียร์ยอด" required error={errors.dueClearDate}>
           <Input
+            id={`${fieldId}-due`}
             type="date"
             // UAT Q8 — ปฏิทินเลือกวันที่ผ่านมาแล้วไม่ได้ (UX) · ด่านจริงคือ `advanceCreateSchema` ฝั่ง API
             min={minDueClearInputDate(new Date())}

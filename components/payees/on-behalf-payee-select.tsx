@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { Field, Select } from '@/components/ui'
 import { callApi } from '@/lib/api/types'
 import type { PayeeOptionDto } from '@/lib/payees/types'
@@ -30,6 +30,8 @@ export function OnBehalfPayeeSelect({
 }) {
   const [options, setOptions] = useState<PayeeOptionDto[]>([])
   const [loadError, setLoadError] = useState<string | null>(null)
+  // label ↔ ช่อง + aria-invalid/aria-describedby (ตรวจซ้ำ staging SV5-R7-01)
+  const selectId = useId()
 
   useEffect(() => {
     let cancelled = false
@@ -46,6 +48,7 @@ export function OnBehalfPayeeSelect({
 
   return (
     <Field
+      id={selectId}
       label="ผู้รับเงิน (บันทึกแทน)"
       required={!allowSelf}
       error={error ?? loadError ?? undefined}
@@ -56,7 +59,7 @@ export function OnBehalfPayeeSelect({
           : 'เลือกพนักงานที่ขอแทน (ระบบบันทึกชื่อผู้บันทึกแทนไว้ในประวัติ)')
       }
     >
-      <Select value={value} onChange={(event) => onChange(event.target.value)}>
+      <Select id={selectId} value={value} onChange={(event) => onChange(event.target.value)}>
         <option value="">{allowSelf ? '— ของตัวเอง —' : '— เลือกผู้รับเงิน —'}</option>
         {options.map((option) => (
           <option key={option.id} value={option.id}>

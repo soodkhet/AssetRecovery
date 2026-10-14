@@ -1,4 +1,6 @@
-import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react'
+'use client'
+
+import { createContext, useContext, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react'
 import { cn } from '@/components/ui/cn'
 
 /**
@@ -44,18 +46,38 @@ export function Label({
 export function revealFirstFieldError(root: HTMLElement | null): boolean {
   const message = root?.querySelector<HTMLElement>('[data-field-error]')
   if (!message) return false
-  const controlId = message.dataset.fieldErrorFor
-  const target = controlId ? message.ownerDocument.getElementById(controlId) : null
-  const scope = message.parentElement
-  // ช่องกรอกก่อน · ไม่มีช่องกรอกที่ focus ได้ (เช่นปุ่มเลือกไฟล์ที่ซ่อน `<input type=file>` ไว้) ⇒ ปุ่มในช่องนั้น (SV5-R3-01)
-  const control =
-    target ??
-    scope?.querySelector<HTMLElement>('input:not([type=hidden]):not([type=file]), select, textarea') ??
-    scope?.querySelector<HTMLElement>('button')
+  const control = fieldErrorControl(root, message)
   // ช่องที่ระบุตรง ๆ อาจห่างจากข้อความ (ข้อความอยู่ท้ายแถว) ⇒ เลื่อนตามช่อง · ไม่งั้นเลื่อนตามข้อความ (อยู่ใต้ช่องพอดี)
-  ;(target ?? message).scrollIntoView({ block: 'center', behavior: 'smooth' })
+  ;(message.dataset.fieldErrorFor !== undefined && control !== null ? control : message).scrollIntoView({
+    block: 'center',
+    behavior: 'smooth',
+  })
   control?.focus({ preventScroll: true })
   return true
+}
+
+const CONTROL_SELECTOR = 'input:not([type=hidden]):not([type=file]), select, textarea'
+
+/**
+ * ช่องที่ควรโฟกัสของข้อความผิดพลาด — `data-field-error-for` ชี้ช่องกรอกตรง ๆ ⇒ ช่องนั้น
+ * · ชี้กล่อง (เช่น `<Field id>` ที่ id อยู่บน div ของกลุ่มช่อง) ⇒ ช่องกรอก/ปุ่มแรกในกล่องนั้น
+ * · ไม่มี/หาไม่เจอ ⇒ ช่องกรอกแรกในกล่องของข้อความ · ไม่มีช่องกรอกที่ focus ได้ (เช่นปุ่มเลือกไฟล์) ⇒ ปุ่ม (SV5-R3-01)
+ * · ค้น id ภายในฟอร์มก่อน แล้วจึงทั้งหน้า (id ค่าคงที่อาจซ้ำกับฟอร์มอื่นที่เปิดค้าง) — ตรวจซ้ำ staging SV5-R7-01
+ */
+export function fieldErrorControl(root: HTMLElement | null, message: HTMLElement): HTMLElement | null {
+  const controlId = message.dataset.fieldErrorFor
+  const target =
+    controlId === undefined || controlId === ''
+      ? null
+      : (Array.from(root?.querySelectorAll<HTMLElement>('[id]') ?? []).find((element) => element.id === controlId) ??
+        message.ownerDocument.getElementById(controlId))
+  if (target !== null) {
+    if (target.matches(`${CONTROL_SELECTOR}, button`)) return target
+    const inner = target.querySelector<HTMLElement>(CONTROL_SELECTOR) ?? target.querySelector<HTMLElement>('button')
+    if (inner !== null) return inner
+  }
+  const scope = message.parentElement
+  return scope?.querySelector<HTMLElement>(CONTROL_SELECTOR) ?? scope?.querySelector<HTMLElement>('button') ?? null
 }
 
 /**
@@ -96,7 +118,39 @@ export function FieldErrorText({ children, id, controlId }: { children: ReactNod
   )
 }
 
-/** ห่อ label + field + inline error ให้ครบชุดในที่เดียว */
+/**
+ * สิ่งที่ `<Field>` ส่งให้ช่องกรอกข้างใน (ตรวจซ้ำ staging SV5-R7-01) — ผูกเฉพาะช่องที่ `id` ตรงกับ `<Field id>`
+ * (กล่องเดียวมีหลายช่องได้ ⇒ ไม่เดาเอาช่องแรก)
+ */
+interface FieldControlState {
+  controlId: string
+  invalid: boolean
+  describedBy: string | undefined
+}
+
+const FieldControlContext = createContext<FieldControlState | null>(null)
+
+/** รวม aria-invalid/aria-describedby ของช่องกรอก: ค่าที่ส่งตรง + ค่าจาก `<Field>` ที่ห่อ (เมื่อ id ตรงกัน) */
+function useFieldControl(id: string | undefined, invalid: boolean, describedBy: string | undefined) {
+  const field = useContext(FieldControlContext)
+  const bound = field !== null && id !== undefined && field.controlId === id
+  const isInvalid = invalid || (bound && field.invalid)
+  const ids = [describedBy, bound ? field.describedBy : undefined].filter((value) => value !== undefined && value !== '')
+  return {
+    invalid: isInvalid,
+    aria: {
+      'aria-invalid': isInvalid || undefined,
+      'aria-describedby': ids.length > 0 ? ids.join(' ') : undefined,
+    },
+  }
+}
+
+/**
+ * ห่อ label + field + inline error ให้ครบชุดในที่เดียว
+ * `id` = id ของช่องกรอกข้างใน (ส่ง `id` เดียวกันให้ `<Input>`/`<Select>`/`<Textarea>`) ⇒ label ผูกช่อง (`htmlFor`)
+ * · ช่องได้ `aria-invalid` + `aria-describedby` ชี้ข้อความใต้ช่องเอง · `revealFirstFieldError()` โฟกัสช่องจาก id นี้
+ * (ตรวจซ้ำ staging SV5-R7-01)
+ */
 export function Field({
   id,
   label,
@@ -114,16 +168,28 @@ export function Field({
   children: ReactNode
   className?: string
 }) {
+  const hasError = typeof error === 'string' && error !== ''
+  const showHint = !hasError && hint !== undefined
+  const errorId = id !== undefined && hasError ? `${id}-error` : undefined
+  const hintId = id !== undefined && showHint ? `${id}-hint` : undefined
+  const control: FieldControlState | null =
+    id === undefined ? null : { controlId: id, invalid: hasError, describedBy: errorId ?? hintId }
   return (
     <div className={className}>
       <Label htmlFor={id} required={required}>
         {label}
       </Label>
-      {children}
-      {error ? (
-        <FieldErrorText>{error}</FieldErrorText>
+      <FieldControlContext.Provider value={control}>{children}</FieldControlContext.Provider>
+      {hasError ? (
+        <FieldErrorText id={errorId} controlId={id}>
+          {error}
+        </FieldErrorText>
       ) : (
-        hint !== undefined && <p className="mt-1 text-[11px] text-slate-400">{hint}</p>
+        showHint && (
+          <p id={hintId} className="mt-1 text-[11px] text-slate-400">
+            {hint}
+          </p>
+        )
       )}
     </div>
   )
@@ -135,11 +201,12 @@ export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   numeric?: boolean
 }
 
-export function Input({ invalid = false, numeric = false, className, ...rest }: InputProps) {
+export function Input({ invalid = false, numeric = false, className, 'aria-describedby': describedBy, ...rest }: InputProps) {
+  const field = useFieldControl(rest.id, invalid, describedBy)
   return (
     <input
-      aria-invalid={invalid || undefined}
-      className={cn(FIELD_CLASS, invalid && ERROR_CLASS, numeric && 'text-right font-mono', className)}
+      {...field.aria}
+      className={cn(FIELD_CLASS, field.invalid && ERROR_CLASS, numeric && 'text-right font-mono', className)}
       {...rest}
     />
   )
@@ -149,11 +216,12 @@ export interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   invalid?: boolean
 }
 
-export function Select({ invalid = false, className, children, ...rest }: SelectProps) {
+export function Select({ invalid = false, className, children, 'aria-describedby': describedBy, ...rest }: SelectProps) {
+  const field = useFieldControl(rest.id, invalid, describedBy)
   return (
     <select
-      aria-invalid={invalid || undefined}
-      className={cn(FIELD_CLASS, 'bg-white', invalid && ERROR_CLASS, className)}
+      {...field.aria}
+      className={cn(FIELD_CLASS, 'bg-white', field.invalid && ERROR_CLASS, className)}
       {...rest}
     >
       {children}
@@ -165,12 +233,13 @@ export interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElemen
   invalid?: boolean
 }
 
-export function Textarea({ invalid = false, className, rows = 3, ...rest }: TextareaProps) {
+export function Textarea({ invalid = false, className, rows = 3, 'aria-describedby': describedBy, ...rest }: TextareaProps) {
+  const field = useFieldControl(rest.id, invalid, describedBy)
   return (
     <textarea
       rows={rows}
-      aria-invalid={invalid || undefined}
-      className={cn(FIELD_CLASS, invalid && ERROR_CLASS, className)}
+      {...field.aria}
+      className={cn(FIELD_CLASS, field.invalid && ERROR_CLASS, className)}
       {...rest}
     />
   )

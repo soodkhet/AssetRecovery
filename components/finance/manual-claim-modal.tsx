@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { usePermission } from '@/components/auth/permission-provider'
 import { OnBehalfPayeeSelect } from '@/components/payees/on-behalf-payee-select'
 import { NoReceiptLinesEditor, NoReceiptToggle } from '@/components/substitute-receipts/no-receipt-lines'
@@ -68,6 +68,8 @@ export function ManualClaimModal({
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [submitTick, setSubmitTick] = useState(0)
   const { ref: bodyRef, reveal: revealError } = useRevealFieldError()
+  // id ผูก label ↔ ช่อง + aria-invalid/aria-describedby ผ่าน `<Field id>` (ตรวจซ้ำ staging SV5-R7-01)
+  const fieldId = useId()
   const [saving, setSaving] = useState(false)
   // อัปโหลดใบเสร็จยกเลิกได้จริง — ปิด modal/ออกจากหน้า = abort request ที่ค้าง (preship R3-026)
   const [uploading, setUploading] = useState(false)
@@ -267,8 +269,8 @@ export function ManualClaimModal({
 
         {canRecordForOthers && <OnBehalfPayeeSelect value={payeeId} onChange={setPayeeId} error={errors.payeeId} />}
 
-        <Field label="ประเภทรายการ" required error={errors.claimType}>
-          <Select value={claimType} onChange={(event) => setClaimType(event.target.value)}>
+        <Field id={`${fieldId}-type`} label="ประเภทรายการ" required error={errors.claimType}>
+          <Select id={`${fieldId}-type`} value={claimType} onChange={(event) => setClaimType(event.target.value)}>
             {MANUAL_CLAIM_TYPES.map((type) => (
               <option key={type} value={type}>
                 {EXPENSE_TYPE_LABEL[type]}
@@ -277,8 +279,9 @@ export function ManualClaimModal({
           </Select>
         </Field>
 
-        <Field label="ยอดเงิน (บาท)" required error={errors.grossSatang}>
+        <Field id={`${fieldId}-amount`} label="ยอดเงิน (บาท)" required error={errors.grossSatang}>
           <Input
+            id={`${fieldId}-amount`}
             numeric
             inputMode="decimal"
             placeholder="0.00"
@@ -288,8 +291,8 @@ export function ManualClaimModal({
           />
         </Field>
 
-        <Field label="วันที่เกิดรายการ" required error={errors.expenseDate}>
-          <Input type="date" value={expenseDate} onChange={(event) => changeExpenseDate(event.target.value)} />
+        <Field id={`${fieldId}-date`} label="วันที่เกิดรายการ" required error={errors.expenseDate}>
+          <Input id={`${fieldId}-date`} type="date" value={expenseDate} onChange={(event) => changeExpenseDate(event.target.value)} />
         </Field>
 
         {hotelReceiptRequired ? (
@@ -342,8 +345,9 @@ export function ManualClaimModal({
           </Field>
         )}
 
-        <Field label="รายละเอียด / หมายเหตุ" error={errors.note}>
+        <Field id={`${fieldId}-note`} label="รายละเอียด / หมายเหตุ" error={errors.note}>
           <Textarea
+            id={`${fieldId}-note`}
             rows={2}
             maxLength={500}
             placeholder="เช่น ค่าที่พักระหว่างติดตามทรัพย์ จ.เชียงราย คืนวันที่ 12"
