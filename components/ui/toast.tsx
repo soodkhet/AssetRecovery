@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -12,9 +13,14 @@ import {
   type ReactNode,
 } from 'react'
 import { cn } from '@/components/ui/cn'
-import { subscribeModalStack, topModalToastPlacement } from '@/components/ui/modal-stack'
+import { modalStackVersion, subscribeModalStack, topModalPanel, topModalToastPlacement } from '@/components/ui/modal-stack'
 import { findDuplicateToast } from '@/components/ui/toast-dedupe'
-import { TOAST_DISMISS_BUTTON_CLASS, toastViewportPositionClass } from '@/components/ui/toast-position'
+import {
+  TOAST_DISMISS_BUTTON_CLASS,
+  TOAST_TOP_CLASS,
+  toastTopAvoidingModalHeader,
+  toastViewportPositionClass,
+} from '@/components/ui/toast-position'
 import { SESSION_EXPIRED_EVENT } from '@/lib/api/session-expiry'
 
 /**
@@ -141,17 +147,34 @@ function ToastViewport({
   // modal กลางเปิด ⇒ toast ขึ้นมุมบน ไม่ทับปุ่มท้าย modal (mytester2 G2-02) · เมนู/ลิ้นชักเต็มความสูง ⇒ คงมุมล่าง
   // ไม่ทับหัว+ปุ่มปิดของแผง (SV5-D3-01)
   const modalPlacement = useSyncExternalStore(subscribeModalStack, topModalToastPlacement, () => null)
+  const hasToasts = toasts.length > 0
+  const { viewportRef, sentinelRef, top: avoidHeaderTop } = useToastTopAvoidingModalHeader(
+    modalPlacement === 'top' && hasToasts,
+    toasts,
+  )
 
-  if (toasts.length === 0) return null
+  if (!hasToasts) return null
 
   return (
-    // มือถือ: ยึดขอบซ้าย-ขวา 16px — เดิม `w-full` + `right-4` กว้างเท่าจอแล้วเลื่อนเข้ามา 16px ⇒ ขอบซ้ายถูกตัด (preship R9-008)
-    <div
-      className={cn(
-        'pointer-events-none fixed right-4 left-4 z-[60] flex flex-col gap-2 sm:left-auto sm:w-full sm:max-w-sm',
-        toastViewportPositionClass({ modalPlacement, aboveBottomNav }),
+    <>
+      {/* ตำแหน่งมุมบนปกติ (รวม safe-area) ไว้วัด — toast ที่ย้ายลงใต้หัว modal แล้วอ่านจากตัวเองไม่ได้ (SV5-E1-02) */}
+      {modalPlacement === 'top' && (
+        <div
+          ref={sentinelRef}
+          aria-hidden="true"
+          className={cn('pointer-events-none invisible fixed right-0 h-0 w-0', TOAST_TOP_CLASS)}
+        />
       )}
-    >
+      {/* มือถือ: ยึดขอบซ้าย-ขวา 16px — เดิม `w-full` + `right-4` กว้างเท่าจอแล้วเลื่อนเข้ามา 16px ⇒ ขอบซ้ายถูกตัด (preship R9-008) */}
+      <div
+        ref={viewportRef}
+        className={cn(
+          'pointer-events-none fixed right-4 left-4 z-[60] flex flex-col gap-2 sm:left-auto sm:w-full sm:max-w-sm',
+          toastViewportPositionClass({ modalPlacement, aboveBottomNav }),
+        )}
+        // toast มุมบนทับหัว modal/ปุ่ม X ⇒ เลื่อนลงใต้หัวแผง (ไม่ลงไปทับปุ่มท้ายแผง — G2-02)
+        style={avoidHeaderTop !== null ? { top: avoidHeaderTop } : undefined}
+      >
       {toasts.map((toast) => (
         <div
           key={toast.id}
@@ -177,6 +200,55 @@ function ToastViewport({
           </button>
         </div>
       ))}
-    </div>
+      </div>
+    </>
   )
+}
+
+/**
+ * วัดหัว/ท้ายแผงของ modal ชั้นบนสุดกับกอง toast แล้วตัดสินด้วย `toastTopAvoidingModalHeader()` (pure)
+ * วัดใหม่เมื่อ toast/ชั้น modal เปลี่ยน · หน้าต่าง resize · แผงเปลี่ยนขนาด (เนื้อหาโหลดเสร็จ ⇒ แผงกลางจอขยับ)
+ */
+function useToastTopAvoidingModalHeader(active: boolean, toasts: readonly Toast[]) {
+  const viewportRef = useRef<HTMLDivElement>(null)
+  const sentinelRef = useRef<HTMLDivElement>(null)
+  const [top, setTop] = useState<number | null>(null)
+  // modal กลางเปิดซ้อน/ปิดชั้นบน (ทิศ toast เท่าเดิม) ⇒ แผงชั้นบนสุดเปลี่ยน ต้องวัดใหม่
+  const stackVersion = useSyncExternalStore(subscribeModalStack, modalStackVersion, () => 0)
+
+  useLayoutEffect(() => {
+    if (!active) return
+    const panel = topModalPanel()
+    function measure() {
+      const viewport = viewportRef.current
+      const sentinel = sentinelRef.current
+      const current = topModalPanel()
+      if (viewport === null || sentinel === null || current === null) {
+        setTop(null)
+        return
+      }
+      const header = current.querySelector<HTMLElement>(':scope > [data-modal-header]')
+      const footer = current.querySelector<HTMLElement>(':scope > [data-modal-footer]')
+      const toastBox = viewport.getBoundingClientRect()
+      const next = toastTopAvoidingModalHeader({
+        naturalTop: sentinel.getBoundingClientRect().top,
+        toast: { left: toastBox.left, right: toastBox.right, height: toastBox.height },
+        header: header?.getBoundingClientRect() ?? null,
+        bottomLimit: (footer ?? current).getBoundingClientRect()[footer !== null ? 'top' : 'bottom'],
+      })
+      setTop((previous) => (previous === next ? previous : next))
+    }
+    measure()
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure)
+    if (panel !== null) observer?.observe(panel)
+    if (viewportRef.current !== null) observer?.observe(viewportRef.current)
+    window.addEventListener('resize', measure)
+    return () => {
+      observer?.disconnect()
+      window.removeEventListener('resize', measure)
+    }
+  }, [active, toasts, stackVersion])
+
+  // ไม่ใช้ (modal ไม่ใช่แบบกลาง/ไม่มี toast) ⇒ มุมบนเดิม — ค่าค้างจากรอบก่อนถูกวัดใหม่ใน layout effect ก่อนวาด
+  return { viewportRef, sentinelRef, top: active ? top : null }
 }

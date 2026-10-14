@@ -12,6 +12,9 @@ import { TOUCH_TARGET_CLASS } from '@/components/ui/button'
  *   ยกสูงพอพ้นส่วนท้ายแผง (ปุ่มออกจากระบบ) — ทับได้แค่รายการเมนูกลางแผงที่เลื่อนได้/ตัวรูป
  * - ชั้นบนสุดเป็นผู้ตัดสิน (ตัวดูรูปซ้อนในลิ้นชัก ⇒ ตามตัวดูรูป)
  */
+/** มุมบนของ toast ตอน modal กลางเปิด — ใช้ร่วมกับตัววัดตำแหน่งปกติใน `ToastViewport` (SV5-E1-02) */
+export const TOAST_TOP_CLASS = 'top-[calc(1rem+env(safe-area-inset-top))]'
+
 export function toastViewportPositionClass({
   modalPlacement,
   aboveBottomNav,
@@ -20,10 +23,56 @@ export function toastViewportPositionClass({
   modalPlacement: ModalToastPlacement | null
   aboveBottomNav: boolean
 }): string {
-  if (modalPlacement === 'top') return 'top-[calc(1rem+env(safe-area-inset-top))]'
+  if (modalPlacement === 'top') return TOAST_TOP_CLASS
   // ยกเหนือส่วนท้ายแผง (ปุ่มออกจากระบบท้ายเมนูภาคสนาม/พอร์ทัล สูงราว 80–90px) + safe-area
   if (modalPlacement === 'bottom') return 'bottom-[calc(6rem+env(safe-area-inset-bottom))]'
   return aboveBottomNav ? 'bottom-[calc(5rem+env(safe-area-inset-bottom))] lg:bottom-4' : 'bottom-4'
+}
+
+/** กรอบสี่เหลี่ยมบนจอ (px · แบบ `getBoundingClientRect()`) */
+export interface ScreenBox {
+  top: number
+  bottom: number
+  left: number
+  right: number
+}
+
+/** ระยะห่างจากหัวแผง/ท้ายแผงเมื่อย้าย toast ลงใต้หัว modal (px) */
+export const TOAST_MODAL_GAP_PX = 8
+
+/**
+ * toast มุมบน (modal กลางเปิด) ทับหัวแผง/ปุ่ม X ไหม ⇒ คืนตำแหน่ง `top` (px) ใหม่ใต้หัวแผง · `null` = คงมุมบนเดิม
+ * (ตรวจซ้ำ staging SV5-E1-02 — desktop 1440px toast y16–72 ทับปุ่ม "ปิด" ของโมดัล lg y62–86)
+ *
+ * - ไม่ทับหัวแผง (โมดัลแคบมีที่ว่างข้างขวา / โมดัลเตี้ยมีที่ว่างด้านบน) ⇒ คงเดิม
+ * - ทับ ⇒ ย้ายลงใต้หัวแผง (ทับได้แค่เนื้อหาที่เลื่อนได้ของแผงชั่วคราว) — ชิดขวาเท่าเดิม
+ * - ย้ายแล้วจะล้นลงไปทับท้ายแผง (ปุ่มหลัก — กติกา G2-02 สำคัญกว่า) ⇒ คงเดิม
+ *
+ * @param naturalTop ตำแหน่งบนของ toast ตอนอยู่มุมบนปกติ (รวม safe-area แล้ว)
+ * @param toast ขอบซ้าย/ขวา + ความสูงของกอง toast
+ * @param header หัวแผง (ชื่อ + ปุ่ม X) — `null` = ไม่รู้แผง ⇒ คงเดิม
+ * @param bottomLimit ขอบบนของท้ายแผง (footer) หรือขอบล่างแผงถ้าไม่มี footer
+ */
+export function toastTopAvoidingModalHeader({
+  naturalTop,
+  toast,
+  header,
+  bottomLimit,
+  gap = TOAST_MODAL_GAP_PX,
+}: {
+  naturalTop: number
+  toast: { left: number; right: number; height: number }
+  header: ScreenBox | null
+  bottomLimit: number | null
+  gap?: number
+}): number | null {
+  if (header === null || toast.height <= 0) return null
+  const overlaps =
+    toast.left < header.right && toast.right > header.left && naturalTop < header.bottom && naturalTop + toast.height > header.top
+  if (!overlaps) return null
+  const top = Math.ceil(header.bottom + gap)
+  if (bottomLimit !== null && top + toast.height > bottomLimit - gap) return null
+  return top
 }
 
 /**

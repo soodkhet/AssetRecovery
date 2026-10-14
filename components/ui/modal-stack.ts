@@ -17,19 +17,32 @@ export type ModalToastPlacement = 'top' | 'bottom'
 interface ModalEntry {
   token: symbol
   toastPlacement: ModalToastPlacement
+  /** แผงของชั้นนี้ — toast ใช้หาหัว/ท้ายแผงเพื่อหลบ (SV5-E1-02) */
+  getPanel: (() => HTMLElement | null) | null
 }
 
 const stack: ModalEntry[] = []
 const listeners = new Set<() => void>()
 
+/** เพิ่มทุกครั้งที่กองเปลี่ยน — ผู้ฟังที่ต้องรู้ว่า "ชั้นบนสุดเปลี่ยนตัว" แม้ทิศ toast เท่าเดิม (modal กลางซ้อน modal กลาง) */
+let version = 0
+
 function notify(): void {
+  version += 1
   for (const listener of listeners) listener()
 }
 
 /** ลงทะเบียน modal ที่เพิ่งเปิด — คืน token ไว้ถาม `isTopModal()` และถอนด้วย `unregisterModal()` */
-export function registerModal({ toastPlacement = 'top' }: { toastPlacement?: ModalToastPlacement } = {}): symbol {
+export function registerModal({
+  toastPlacement = 'top',
+  getPanel,
+}: {
+  toastPlacement?: ModalToastPlacement
+  /** แผงของ modal กลาง (หัว `[data-modal-header]` / ท้าย `[data-modal-footer]`) — toast มุมบนเลื่อนลงใต้หัวเมื่อทับปุ่ม X */
+  getPanel?: () => HTMLElement | null
+} = {}): symbol {
   const token = Symbol('modal')
-  stack.push({ token, toastPlacement })
+  stack.push({ token, toastPlacement, getPanel: getPanel ?? null })
   notify()
   return token
 }
@@ -59,6 +72,16 @@ export function hasOpenModal(): boolean {
  */
 export function topModalToastPlacement(): ModalToastPlacement | null {
   return stack[stack.length - 1]?.toastPlacement ?? null
+}
+
+/** รุ่นของกอง modal (เปลี่ยนทุกครั้งที่เปิด/ปิด) — ใช้กับ `useSyncExternalStore` เพื่อวัดตำแหน่งใหม่ (SV5-E1-02) */
+export function modalStackVersion(): number {
+  return version
+}
+
+/** แผงของชั้นบนสุด (ถ้าลงทะเบียนไว้) — `null` = ไม่มี modal / ชั้นบนสุดไม่ได้ให้แผงมา */
+export function topModalPanel(): HTMLElement | null {
+  return stack[stack.length - 1]?.getPanel?.() ?? null
 }
 
 /** ฟังการเปิด/ปิด modal — คืนฟังก์ชันเลิกฟัง */

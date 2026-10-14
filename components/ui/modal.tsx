@@ -117,7 +117,8 @@ export function Modal({
     }
 
     // modal ซ้อนกัน: Esc ปิดเฉพาะตัวบนสุด (UAT BUG-031 — เดิมตัวข้างหลังปิดแต่หน้าดูไฟล์ค้าง)
-    const token = registerModal()
+    // แผงให้ toast หาหัว/ท้ายเพื่อหลบปุ่ม X และปุ่มท้ายแผง (SV5-E1-02)
+    const token = registerModal({ getPanel: () => panel })
 
     function handleKey(event: KeyboardEvent) {
       if (event.key !== 'Escape' || !isTopModal(token)) return
@@ -228,7 +229,7 @@ export function Modal({
           SIZE_CLASS[size],
         )}
       >
-        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+        <div data-modal-header className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
           <div className="min-w-0">
             <h2 id={titleId} className="text-base font-bold text-slate-900">
               {title}
@@ -268,7 +269,7 @@ export function Modal({
 
         {footer !== undefined && (
           // มุมล่างโค้งตามกรอบ — เดิมพื้น slate-50 มุมเหลี่ยมโผล่เกินขอบ rounded-xl (preship R9-007)
-          <div className="shrink-0 rounded-b-xl border-t border-slate-200 bg-slate-50 px-5 py-3">
+          <div data-modal-footer className="shrink-0 rounded-b-xl border-t border-slate-200 bg-slate-50 px-5 py-3">
             {/* ปุ่มใน footer (รวม "ยกเลิก") ล็อกระหว่างบันทึกด้วย — เดิมปุ่มยกเลิกปิด modal กลางคำขอได้ (preship R2-006) */}
             <fieldset disabled={isBusy} className="m-0 flex w-full min-w-0 items-center justify-end gap-2 border-0 p-0">
               {footer}
