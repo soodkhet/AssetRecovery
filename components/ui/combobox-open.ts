@@ -49,3 +49,38 @@ export function consumeComboboxToggleKey(
   if (action !== null) event.preventDefault()
   return action
 }
+
+/** ชนิด input ที่ใช้เลือกตัวเลือก — `keyboard` = Enter · ที่เหลือตาม `PointerEvent.pointerType` (`''` = ไม่ทราบ) */
+export type ComboboxPickInput = 'keyboard' | 'mouse' | 'touch' | 'pen' | ''
+
+/**
+ * เลือกตัวเลือกแล้วโฟกัสไปไหน (มติผู้ใช้ 15/10/2569 — มือถือแตะเลือกแล้วคีย์บอร์ดเสมือนค้าง/เด้งบังฟอร์ม)
+ *
+ * - `input` = คืนโฟกัสช่องพิมพ์ (APG combobox) — Enter / เมาส์
+ * - `park` = ไม่โฟกัสช่องพิมพ์ (blur ถ้าโฟกัสอยู่ แม้กำลังพิมพ์กรอง) ให้คีย์บอร์ดยุบ — ผู้เรียกจอดโฟกัสในโมดัล ไม่ให้หลุดไป body
+ *   · แตะ (`touch`) / ปากกา (`pen` — แท็บเล็ตก็เด้งคีย์บอร์ดเสมือน)
+ *   · ไม่ทราบชนิด ⇒ ตัดสินจาก `(pointer: coarse)` แบบเดียวกับโฟกัสแรกของ focus trap
+ */
+export function focusAfterPick({
+  input,
+  coarsePointer,
+}: {
+  input: ComboboxPickInput
+  coarsePointer: boolean
+}): 'input' | 'park' {
+  switch (input) {
+    case 'keyboard':
+    case 'mouse':
+      return 'input'
+    case 'touch':
+    case 'pen':
+      return 'park'
+    case '':
+      return coarsePointer ? 'park' : 'input'
+  }
+}
+
+/** แปลง `PointerEvent.pointerType` (สตริงอิสระตามสเปก) เป็น `ComboboxPickInput` */
+export function toPickInput(pointerType: string | null | undefined): ComboboxPickInput {
+  return pointerType === 'mouse' || pointerType === 'touch' || pointerType === 'pen' ? pointerType : ''
+}

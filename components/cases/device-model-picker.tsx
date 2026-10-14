@@ -2,7 +2,14 @@
 
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { Input, cn } from '@/components/ui'
-import { comboboxOpenAction, consumeComboboxToggleKey, type ComboboxTrigger } from '@/components/ui/combobox-open'
+import {
+  comboboxOpenAction,
+  consumeComboboxToggleKey,
+  focusAfterPick,
+  toPickInput,
+  type ComboboxPickInput,
+  type ComboboxTrigger,
+} from '@/components/ui/combobox-open'
 import { callApi } from '@/lib/api/types'
 import type { DeviceAssetKind } from '@/lib/device-catalog/catalog'
 import type { DeviceModelOptionDto, DeviceTacLookupDto } from '@/lib/device-catalog/types'
@@ -162,26 +169,56 @@ export function DeviceModelPicker({ id, assetKind, value, identifier, invalid = 
 
   // เลือกแล้วโฟกัสกลับช่องพิมพ์ (APG combobox — SV5-G1-01 ข้อสังเกต) · "ระบุเอง" สลับไปช่องใหม่ ⇒ โฟกัสหลัง render
   // ได้โฟกัสอย่างเดียวไม่เปิดรายการซ้ำ (comboboxOpenAction — ไม่มี onFocus)
-  const refocusAfterPick = useRef(false)
+  // แตะเลือกบนจอสัมผัส ⇒ ไม่โฟกัสช่องพิมพ์ (blur แม้กำลังพิมพ์กรอง) ให้คีย์บอร์ดเสมือนยุบ แล้วจอดโฟกัสที่แผงโมดัล
+  // (เหมือน focus trap ทำกับจอสัมผัสตอนเปิด) ไม่ให้หลุดไป body — มติผู้ใช้ 15/10/2569 (pure `focusAfterPick`)
+  const focusAfterRender = useRef<'input' | 'park' | null>(null)
+  /** ชนิด pointer ของการกดล่าสุดในรายการ (pointerdown บอกชนิดได้ทุกเบราว์เซอร์ — click บน Safari รุ่นเก่าไม่ใช่ PointerEvent) */
+  const listPointer = useRef<ComboboxPickInput>('')
   // layout effect: โฟกัสก่อน focus trap (MutationObserver) จะดึงโฟกัสที่ตกไป body ไปช่องแรกของแผง
   useLayoutEffect(() => {
-    if (!refocusAfterPick.current) return
-    refocusAfterPick.current = false
+    const mode = focusAfterRender.current
+    if (mode === null) return
+    focusAfterRender.current = null
     const input = document.getElementById(id)
-    if (input !== null && document.activeElement !== input) input.focus()
+    if (mode === 'input') {
+      if (input !== null && document.activeElement !== input) input.focus()
+      return
+    }
+    // ไม่มีปุ่มเปิด/ล้างค่าใน combobox นี้ ⇒ จอดที่แผงโมดัล (`tabIndex=-1`) · นอกโมดัล ⇒ blur อย่างเดียว
+    const panel = input?.closest<HTMLElement>('[role="dialog"]') ?? null
+    if (panel !== null) panel.focus({ preventScroll: true })
+    // แผงโฟกัสไม่ได้ (ไม่มี tabIndex) / นอกโมดัล ⇒ blur อย่างเดียว ให้คีย์บอร์ดยุบ
+    if (input !== null && document.activeElement === input) input.blur()
   })
 
-  function pick(option: DeviceModelOptionDto): void {
-    refocusAfterPick.current = true
+  function afterPick(input: ComboboxPickInput): void {
+    const coarsePointer = window.matchMedia?.('(pointer: coarse)').matches ?? false
+    focusAfterRender.current = focusAfterPick({ input, coarsePointer })
+  }
+
+  function pick(option: DeviceModelOptionDto, input: ComboboxPickInput): void {
+    afterPick(input)
     onChange({ deviceModelId: option.id, text: option.label })
     setOpen(false)
   }
 
-  function chooseManual(): void {
-    refocusAfterPick.current = true
+  function chooseManual(input: ComboboxPickInput): void {
+    afterPick(input)
     setManual(true)
     setOpen(false)
     onChange({ deviceModelId: null, text: value.text })
+  }
+
+  /**
+   * เลือกด้วย pointer — click ที่เป็น PointerEvent บอกชนิดเอง (ชนะ) · ไม่งั้นใช้ชนิดจาก pointerdown ในรายการ แล้วล้างทุกครั้ง
+   * (ไม่มีทั้งคู่ เช่น screen reader เลือกด้วย virtual cursor ⇒ ไม่ทราบ ⇒ ตาม pointer: coarse)
+   */
+  function takeListPointer(event: { nativeEvent: Event }): ComboboxPickInput {
+    const recorded = listPointer.current
+    listPointer.current = ''
+    const native = event.nativeEvent
+    const fromClick = typeof PointerEvent !== 'undefined' && native instanceof PointerEvent ? toPickInput(native.pointerType) : ''
+    return fromClick !== '' ? fromClick : recorded
   }
 
   if (disabled) {
@@ -208,7 +245,8 @@ export function DeviceModelPicker({ id, assetKind, value, identifier, invalid = 
           type="button"
           className="text-xs font-medium text-emerald-700 hover:underline"
           onClick={() => {
-            refocusAfterPick.current = true
+            // กลับไปค้นหา = ตั้งใจพิมพ์ต่อ ⇒ โฟกัสช่องพิมพ์ทุกชนิด input (คีย์บอร์ดขึ้นได้)
+            focusAfterRender.current = 'input'
             setManual(false)
             apply({ type: 'click' })
           }}
@@ -265,8 +303,8 @@ export function DeviceModelPicker({ id, assetKind, value, identifier, invalid = 
           } else if (event.key === 'Enter' && highlight >= 0) {
             event.preventDefault()
             const option = options[highlight]
-            if (option === undefined) chooseManual()
-            else pick(option)
+            if (option === undefined) chooseManual('keyboard')
+            else pick(option, 'keyboard')
           }
         }}
       />
@@ -279,6 +317,13 @@ export function DeviceModelPicker({ id, assetKind, value, identifier, invalid = 
           id={listId}
           role="listbox"
           className="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-lg border border-slate-200 bg-white py-1 text-sm shadow-lg"
+          onPointerDown={(event) => {
+            listPointer.current = toPickInput(event.pointerType)
+          }}
+          onPointerCancel={() => {
+            // ลากเลื่อนรายการบนจอสัมผัส (ไม่ได้เลือก) ⇒ ไม่ให้ชนิดค้างไปใช้กับ click ครั้งหลัง
+            listPointer.current = ''
+          }}
           onMouseDown={(event) => {
             // คงโฟกัสที่ช่องพิมพ์ — คลิก <li> (โฟกัสไม่ได้) ไม่ดึงโฟกัสไปแผงโมดัล และช่องไม่ blur ปิดรายการก่อนคลิกเลือก
             event.preventDefault()
@@ -303,7 +348,7 @@ export function DeviceModelPicker({ id, assetKind, value, identifier, invalid = 
                   index === highlight && 'bg-slate-100',
                   option.id === value.deviceModelId && 'font-semibold text-slate-900',
                 )}
-                onClick={() => pick(option)}
+                onClick={(event) => pick(option, takeListPointer(event))}
               >
                 <span className="text-slate-500">{option.brandName}</span> {option.name}
               </li>
@@ -315,7 +360,7 @@ export function DeviceModelPicker({ id, assetKind, value, identifier, invalid = 
               'cursor-pointer border-t border-slate-100 px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50',
               highlight === options.length && 'bg-emerald-50',
             )}
-            onClick={chooseManual}
+            onClick={(event) => chooseManual(takeListPointer(event))}
           >
             ไม่พบในรายการ — ระบุเอง
           </li>

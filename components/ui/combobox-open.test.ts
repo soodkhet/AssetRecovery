@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { comboboxOpenAction, consumeComboboxToggleKey } from '@/components/ui/combobox-open'
+import { comboboxOpenAction, consumeComboboxToggleKey, focusAfterPick, toPickInput } from '@/components/ui/combobox-open'
 import { isDismissEscape } from '@/components/ui/modal-stack'
 
 const key = (k: string, altKey = false) => ({ type: 'keydown' as const, key: k, altKey })
@@ -70,5 +70,32 @@ describe('consumeComboboxToggleKey + isDismissEscape — Esc ปิดแค่�
       expect(consumeComboboxToggleKey(event, true)).toBeNull()
       expect(event.defaultPrevented).toBe(false)
     }
+  })
+})
+
+describe('focusAfterPick (มติผู้ใช้ 15/10/2569 — มือถือแตะเลือกแล้วคีย์บอร์ดยุบ)', () => {
+  it('Enter / เมาส์ ⇒ คืนโฟกัสช่องพิมพ์ (APG) แม้เครื่องเป็นจอสัมผัส', () => {
+    expect(focusAfterPick({ input: 'keyboard', coarsePointer: false })).toBe('input')
+    expect(focusAfterPick({ input: 'keyboard', coarsePointer: true })).toBe('input')
+    expect(focusAfterPick({ input: 'mouse', coarsePointer: false })).toBe('input')
+    expect(focusAfterPick({ input: 'mouse', coarsePointer: true })).toBe('input')
+  })
+  it('แตะ / ปากกา ⇒ จอด (คีย์บอร์ดเสมือนยุบ) แม้เครื่องเป็น pointer fine', () => {
+    expect(focusAfterPick({ input: 'touch', coarsePointer: true })).toBe('park')
+    expect(focusAfterPick({ input: 'touch', coarsePointer: false })).toBe('park')
+    expect(focusAfterPick({ input: 'pen', coarsePointer: false })).toBe('park')
+  })
+  it('ไม่ทราบชนิด ⇒ ตาม (pointer: coarse)', () => {
+    expect(focusAfterPick({ input: '', coarsePointer: true })).toBe('park')
+    expect(focusAfterPick({ input: '', coarsePointer: false })).toBe('input')
+  })
+  it('toPickInput: รับเฉพาะ mouse/touch/pen ที่เหลือ = ไม่ทราบ', () => {
+    expect(toPickInput('touch')).toBe('touch')
+    expect(toPickInput('mouse')).toBe('mouse')
+    expect(toPickInput('pen')).toBe('pen')
+    expect(toPickInput('')).toBe('')
+    expect(toPickInput('kinect')).toBe('')
+    expect(toPickInput(null)).toBe('')
+    expect(toPickInput(undefined)).toBe('')
   })
 })
