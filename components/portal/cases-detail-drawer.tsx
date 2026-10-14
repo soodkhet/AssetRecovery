@@ -40,7 +40,8 @@ export function PortalCaseDetailDrawer({
   }, [onClose])
 
   useEffect(() => {
-    const token = registerModal()
+    // ลิ้นชักขวาเต็มความสูง (จอกว้าง) หัว+ปุ่ม X ชิดขอบบน ⇒ toast คงมุมล่าง ยกพ้นปุ่ม "ปิด" ท้ายลิ้นชัก (SV5-D3-01)
+    const token = registerModal({ toastPlacement: 'bottom' })
     function handleKey(event: KeyboardEvent) {
       if (event.key === 'Escape' && isTopModal(token)) onCloseRef.current()
     }
