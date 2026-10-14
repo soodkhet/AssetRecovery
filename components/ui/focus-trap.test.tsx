@@ -4,6 +4,7 @@ import {
   chooseInitialFocus,
   decideFocusRecovery,
   decideTabTarget,
+  pickRestoreTarget,
   pickOpener,
   selectTabbable,
   shouldRestoreFocus,
@@ -173,32 +174,38 @@ describe('pickOpener — ใครเปิดโมดัล', () => {
 /** ตรวจ focus trap staging SV5-D3-02 — กดยืนยันแล้วปุ่มเข้าสถานะโหลด โฟกัสต้องไม่หลุดไป body */
 describe('decideFocusRecovery — ปุ่มที่โฟกัสอยู่ถูก disable ระหว่างโหลด', () => {
   it('ปุ่มที่กดถูก disable (โฟกัสหลุดเป็น body หรือยังค้างบนปุ่มที่ใช้ไม่ได้) ⇒ จอดที่แผง', () => {
-    expect(decideFocusRecovery({ focusLost: true, parked: false, lastFocusedUsable: false })).toBe('park')
+    expect(decideFocusRecovery({ focusLost: true, parked: false, restoreTargetUsable: false })).toBe('park')
   })
 
   it('error ⇒ ปุ่มกลับมาใช้ได้ขณะโฟกัสยังจอดที่แผง ⇒ คืนโฟกัสให้ปุ่มที่กด', () => {
-    expect(decideFocusRecovery({ focusLost: false, parked: true, lastFocusedUsable: true })).toBe('restore')
+    expect(decideFocusRecovery({ focusLost: false, parked: true, restoreTargetUsable: true })).toBe('restore')
   })
 
   it('ระหว่างยังโหลด (ปุ่มยัง disabled) มีการเปลี่ยนแปลงอื่นในแผง ⇒ จอดต่อ ไม่ทำอะไร', () => {
-    expect(decideFocusRecovery({ focusLost: false, parked: true, lastFocusedUsable: false })).toBeNull()
+    expect(decideFocusRecovery({ focusLost: false, parked: true, restoreTargetUsable: false })).toBeNull()
   })
 
   it('revealFirstFieldError โฟกัสช่องที่ผิดไปแล้ว (ไม่ได้จอด) ⇒ ไม่แย่งกลับไปปุ่ม', () => {
-    expect(decideFocusRecovery({ focusLost: false, parked: false, lastFocusedUsable: true })).toBeNull()
+    expect(decideFocusRecovery({ focusLost: false, parked: false, restoreTargetUsable: true })).toBeNull()
   })
 
   it('ไม่ดึงโฟกัสเข้าตัวเดิมเองถ้า trap ไม่ได้จอดไว้ (กันคีย์บอร์ดมือถือเด้ง)', () => {
-    expect(decideFocusRecovery({ focusLost: false, parked: false, lastFocusedUsable: false })).toBeNull()
+    expect(decideFocusRecovery({ focusLost: false, parked: false, restoreTargetUsable: false })).toBeNull()
   })
 
   it('ลำดับเต็ม: โหลด ⇒ จอด · error ⇒ คืนปุ่ม · โฟกัสอยู่ปุ่มแล้ว ⇒ เฉย', () => {
     const steps = [
-      { focusLost: true, parked: false, lastFocusedUsable: false },
-      { focusLost: false, parked: true, lastFocusedUsable: true },
-      { focusLost: false, parked: false, lastFocusedUsable: true },
+      { focusLost: true, parked: false, restoreTargetUsable: false },
+      { focusLost: false, parked: true, restoreTargetUsable: true },
+      { focusLost: false, parked: false, restoreTargetUsable: true },
     ]
     expect(steps.map((step) => decideFocusRecovery(step))).toEqual(['park', 'restore', null])
+  })
+
+  it('เป้าคืน: ช่องที่ผิดหลังส่งชนะปุ่มที่กด (Modal ปลด fieldset ช้ากว่า reveal) · ไม่มีช่องผิด ⇒ ปุ่มที่กด', () => {
+    expect(pickRestoreTarget({ errorControl: 'amount', parkedFrom: 'submit' })).toBe('amount')
+    expect(pickRestoreTarget({ errorControl: null, parkedFrom: 'submit' })).toBe('submit')
+    expect(pickRestoreTarget<string>({ errorControl: null, parkedFrom: null })).toBeNull()
   })
 
   it('<Button loading> ยัง disabled จริง (กันกดซ้ำ/Enter ส่งฟอร์มซ้ำ) + aria-busy', () => {

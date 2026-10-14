@@ -1,3 +1,5 @@
+import { fieldErrorControl } from '@/components/ui/input'
+
 /**
  * กักโฟกัสในโมดัล/ลิ้นชักที่ประกาศ `aria-modal="true"` (ตรวจ a11y staging SV5-C1-01 — WAI-ARIA dialog pattern / WCAG 2.4.3)
  *
@@ -123,8 +125,8 @@ export function pickOpener<T>({ active, lastInteracted }: { active: T | null; la
  * โฟกัสในแผงหลุดเพราะ element ที่โฟกัสอยู่ถูก disable/ซ่อน/ถอดออก (เช่น `<Button loading>` ที่กดยืนยันแล้วเข้าสถานะโหลด)
  * ⇒ ตัดสินว่าจะทำอะไร (SV5-D3-02) — ไม่เปลี่ยนการ disable ปุ่ม จึงยังกันกดส่งซ้ำ/Enter ส่งฟอร์มซ้ำได้เหมือนเดิม
  * - `park` = โฟกัสหลุด (body / ตัวที่ใช้ไม่ได้แล้ว) ⇒ จอดที่ตัวแผง (`tabIndex=-1`) ไม่ให้ screen reader หลงไป body
- * - `restore` = trap จอดโฟกัสไว้เอง แล้วตัวที่โฟกัสก่อนจอดกลับมาใช้ได้ (โหลดเสร็จ/error) ⇒ คืนให้ตัวนั้น
- *   (คืนเฉพาะกรณีจอดไว้เอง — ไม่ดึงโฟกัสเข้าช่องพิมพ์เองจนคีย์บอร์ดมือถือเด้ง)
+ * - `restore` = trap จอดโฟกัสไว้เอง แล้วเป้าคืน (ช่องที่ผิดหลังส่ง หรือตัวที่ใช้ไม่ได้ตอนจอด) กลับมาใช้ได้ ⇒ คืนให้ตัวนั้น
+ *   (คืนเฉพาะกรณีจอดไว้เอง — ไม่ดึงโฟกัสเข้าช่องพิมพ์ที่ผู้ใช้ blur เองจนคีย์บอร์ดมือถือเด้ง)
  * - `null` = โฟกัสอยู่ที่ใช้ได้แล้ว (เช่น `revealFirstFieldError` โฟกัสช่องที่ผิดไปแล้ว) ⇒ ไม่แย่ง
  */
 export type FocusRecovery = 'restore' | 'park' | null
@@ -132,18 +134,27 @@ export type FocusRecovery = 'restore' | 'park' | null
 export function decideFocusRecovery({
   focusLost,
   parked,
-  lastFocusedUsable,
+  restoreTargetUsable,
 }: {
-  /** activeElement เป็น body/null หรือเป็น element ในแผงที่ใช้ไม่ได้แล้ว (disabled/ซ่อน) */
+  /** activeElement เป็น body/null หรือเป็น element ในแผงที่ใช้ไม่ได้แล้ว (disabled/ถูกถอด/ซ่อน) */
   focusLost: boolean
   /** โฟกัสอยู่ที่ตัวแผงเพราะ trap จอดไว้เอง (ไม่ใช่ผู้ใช้/ผู้เรียกตั้งใจโฟกัสแผง) */
   parked: boolean
-  /** ตัวที่โฟกัสล่าสุดในแผงยังอยู่ในแผง ไม่ disabled ไม่ซ่อน */
-  lastFocusedUsable: boolean
+  /** มีเป้าคืน (`pickRestoreTarget`) และใช้ได้แล้ว */
+  restoreTargetUsable: boolean
 }): FocusRecovery {
   if (focusLost) return 'park'
-  if (parked && lastFocusedUsable) return 'restore'
+  if (parked && restoreTargetUsable) return 'restore'
   return null
+}
+
+/**
+ * เป้าที่จะคืนโฟกัสหลังจอด — ช่องที่ผิด (มีข้อความ `[data-field-error]` หลังส่งไม่ผ่าน) ชนะตัวที่จอดมา:
+ * `<Modal>` ปลด fieldset ช้ากว่า 1 commit ⇒ `revealFirstFieldError` โฟกัสช่องที่ยัง disabled ไม่ติด ต้องโฟกัสแทนตรงนี้
+ * · `parkedFrom` = ตัวที่ใช้ไม่ได้ตอนจอด (ปุ่มที่กด) — ผู้ใช้ blur เอง/หลุดด้วยเหตุอื่น ⇒ `null` (จอดเฉย ๆ ไม่คืน)
+ */
+export function pickRestoreTarget<T>({ errorControl, parkedFrom }: { errorControl: T | null; parkedFrom: T | null }): T | null {
+  return errorControl ?? parkedFrom
 }
 
 // ───────────────────────────── DOM ─────────────────────────────
@@ -279,21 +290,42 @@ export function installFocusTrap({ getContainer, isTop, initialFocus = 'first' }
     }
   }
 
-  /** ตัวล่าสุดในแผงที่ได้โฟกัส · โฟกัสถูกจอดที่แผงโดย trap — ไว้คืนเมื่อปุ่มที่กดกลับมาใช้ได้ (SV5-D3-02) */
+  /**
+   * ตัวล่าสุดในแผงที่ได้โฟกัส · trap จอดโฟกัสที่แผงอยู่ไหม · ตัวที่ใช้ไม่ได้ตอนจอด (เป้าคืน) — SV5-D3-02
+   */
   const initial = doc.activeElement
   let lastFocusedInside: HTMLElement | null =
     initial instanceof HTMLElement && initial !== container && container.contains(initial) ? initial : null
   let parked = false
+  let parkedFrom: HTMLElement | null = null
 
-  function isUsable(element: HTMLElement | null, current: HTMLElement): element is HTMLElement {
+  /** ใช้ได้แบบถูก ๆ (ไม่บังคับ layout — callback นี้ทำงานทุก commit ในแผง): อยู่ในแผง ไม่ disabled ไม่อยู่ใต้ inert/hidden */
+  function isUsable(element: HTMLElement | null, current: HTMLElement): boolean {
     return (
       element !== null &&
       element !== current &&
       element.isConnected &&
       current.contains(element) &&
       !element.matches(':disabled') &&
-      !isHidden(element)
+      element.closest('[inert], [hidden]') === null
     )
+  }
+
+  /** ช่องที่ผิดหลังส่ง — `pending` = มีข้อความผิดแต่ช่องยัง disabled (fieldset ปลดใน commit ถัดไป) ⇒ รอ จอดต่อ */
+  function errorControl(current: HTMLElement): HTMLElement | 'pending' | null {
+    const message = current.querySelector<HTMLElement>('[data-field-error]')
+    if (message === null) return null
+    const control = fieldErrorControl(current, message)
+    if (control === null) return null
+    return isUsable(control, current) ? control : 'pending'
+  }
+
+  function restoreTarget(current: HTMLElement): HTMLElement | null {
+    // ไม่มีปุ่มที่จอดมา (ผู้ใช้ blur เอง) ⇒ ไม่คืนอะไร — ไม่ดึงโฟกัสเข้าช่องพิมพ์เอง
+    if (parkedFrom === null || !parkedFrom.isConnected) return null
+    const error = errorControl(current)
+    if (error === 'pending') return null
+    return pickRestoreTarget({ errorControl: error, parkedFrom: isUsable(parkedFrom, current) ? parkedFrom : null })
   }
 
   function recoverFocus() {
@@ -301,19 +333,21 @@ export function installFocusTrap({ getContainer, isTop, initialFocus = 'first' }
     const current = getContainer()
     if (current === null) return
     const now = doc.activeElement
-    const focusLost =
-      now === null ||
-      now === doc.body ||
-      (now instanceof HTMLElement && now !== current && current.contains(now) && !isUsable(now, current))
-    const decision = decideFocusRecovery({
-      focusLost,
-      parked: parked && now === current,
-      lastFocusedUsable: isUsable(lastFocusedInside, current),
-    })
-    if (decision === 'restore' && lastFocusedInside !== null) {
+    const isParked = parked && now === current
+    // ทางลัด: โฟกัสอยู่ที่แผงโดยไม่ได้จอด (ผู้ใช้แตะพื้นที่ว่าง/initialFocus container) ⇒ ไม่มีอะไรต้องทำ
+    if (now === current && !isParked) return
+    const inside = now instanceof HTMLElement && now !== current && current.contains(now)
+    const focusLost = now === null || now === doc.body || (inside && !isUsable(now, current))
+    const target = isParked ? restoreTarget(current) : null
+    const decision = decideFocusRecovery({ focusLost, parked: isParked, restoreTargetUsable: target !== null })
+    if (decision === 'restore' && target !== null) {
       parked = false
-      lastFocusedInside.focus({ preventScroll: true })
+      parkedFrom = null
+      target.focus({ preventScroll: true })
     } else if (decision === 'park') {
+      // เป้าคืน = ตัวที่ใช้ไม่ได้ตอนนี้ (ปุ่มที่ถูก disable) เท่านั้น — ตัวที่ยังใช้ได้ (ผู้ใช้ blur เอง) ไม่คืน
+      const lostFrom = inside && now instanceof HTMLElement ? now : lastFocusedInside
+      parkedFrom = lostFrom !== null && !isUsable(lostFrom, current) && lostFrom.isConnected ? lostFrom : null
       parked = true
       current.focus({ preventScroll: true })
     }
@@ -359,6 +393,7 @@ export function installFocusTrap({ getContainer, isTop, initialFocus = 'first' }
       if (target !== current && target instanceof HTMLElement) {
         lastFocusedInside = target
         parked = false
+        parkedFrom = null
       }
       return
     }
