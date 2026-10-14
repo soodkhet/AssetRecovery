@@ -6,6 +6,7 @@ import { usePortalApiUrl } from '@/components/portal/portal-scope'
 import { InlineAlert } from '@/components/ui'
 import { TOUCH_TARGET_CLASS } from '@/components/ui/button'
 import { installFocusTrap } from '@/components/ui/focus-trap'
+import { guardModalHistory } from '@/components/ui/modal-history'
 import { isTopModal, registerModal, unregisterModal } from '@/components/ui/modal-stack'
 import { portalAssetPhotoPath, portalPhotoLabel as photoLabel, wrapPhotoIndex } from '@/lib/portal/cases-view'
 
@@ -134,6 +135,12 @@ function PhotoLightbox({
       else if (event.key === 'ArrowRight') current.onChange(wrapPhotoIndex(current.index + 1, current.count))
       else if (event.key === 'ArrowLeft') current.onChange(wrapPhotoIndex(current.index - 1, current.count))
     }
+    // ปุ่ม Back ของ browser/มือถือ = ปิดตัวดูรูป (ชั้นบนสุด) อยู่ในลิ้นชักเดิม — Back ครั้งถัดไปจึงปิดลิ้นชัก (SV5-D2-01 ·
+    // แนวเดียวกับลิ้นชัก/Modal กลาง preship R5-009) · ปิดด้วยปุ่ม X/Esc ⇒ ถอย sentinel ทิ้งเอง ไม่มี history ค้าง
+    const releaseHistory = guardModalHistory({
+      onBack: () => (isTopModal(token) ? 'close' : 'stay'),
+      onClose: () => latest.current.onClose(),
+    })
     document.addEventListener('keydown', handleKey)
     // กักโฟกัสในตัวดูรูป + คืนโฟกัสให้รูปย่อที่เปิดเมื่อปิด (SV5-C1-01)
     const releaseFocus = installFocusTrap({
@@ -143,6 +150,7 @@ function PhotoLightbox({
     })
     return () => {
       unregisterModal(token)
+      releaseHistory()
       document.removeEventListener('keydown', handleKey)
       releaseFocus()
     }
