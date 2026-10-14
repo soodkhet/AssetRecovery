@@ -10,6 +10,7 @@ import {
   Card,
   ErrorState,
   Field,
+  FieldGroupBox,
   InlineAlert,
   Input,
   LoadingState,
@@ -268,7 +269,7 @@ export function FinancePolicyCard() {
         />
 
         <Field id="policy-aging" group label={`ช่วงอายุหนี้ AR (วัน — ${MIN_AGING_BUCKETS}-${MAX_AGING_BUCKETS} ช่วง)`} required error={errors.arAgingBuckets}>
-          <div id="policy-aging" role="group" aria-labelledby="policy-aging-label" className="space-y-2">
+          <FieldGroupBox className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               {form.arAgingBuckets.map((value, index) => (
                 <div key={index} className="flex items-center gap-1">
@@ -309,7 +310,7 @@ export function FinancePolicyCard() {
                 </Badge>
               ))}
             </div>
-          </div>
+          </FieldGroupBox>
         </Field>
 
         <div className="space-y-2 rounded-lg border border-slate-100 bg-slate-50 p-3">

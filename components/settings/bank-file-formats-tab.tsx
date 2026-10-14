@@ -16,6 +16,7 @@ import {
   Button,
   Card,
   Field,
+  FieldGroupBox,
   InlineAlert,
   Modal,
   Select,
@@ -560,7 +561,7 @@ export function BankFileFormatsTab() {
           )}
 
           <Field id="bank-file-columns" group label="คอลัมน์ (ตามลำดับในไฟล์)" required error={errors.columnMapping}>
-            <div id="bank-file-columns" role="group" aria-labelledby="bank-file-columns-label" className="space-y-2">
+            <FieldGroupBox className="space-y-2">
               {form.columns.map((column, index) => (
                 <div key={index} className="flex items-center gap-2">
                   <span className="w-14 shrink-0 font-mono text-[10px] font-semibold text-slate-500">ลำดับ {index + 1}</span>
@@ -622,7 +623,7 @@ export function BankFileFormatsTab() {
                   ? '* = คอลัมน์ที่ขาดไม่ได้ — ไม่ครบธนาคารตัดโอนไม่ได้'
                   : '* = คอลัมน์ที่ขาดไม่ได้ · ต้องมีคอลัมน์ยอดเงินอย่างน้อย 1 ช่อง (เงินเข้า / เงินออก / จำนวนเงิน)'}
               </div>
-            </div>
+            </FieldGroupBox>
           </Field>
 
           {resetsTestStatus && (

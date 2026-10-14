@@ -11,6 +11,7 @@ import {
   Button,
   Card,
   Field,
+  FieldGroupBox,
   InlineAlert,
   Input,
   Modal,
@@ -483,7 +484,7 @@ export function CyclesTab() {
           {/* ซ่อนจริงตามชนิดที่เลือก — ค่าของอีกโหมดถูกส่งเป็น []/'' เสมอตอนบันทึก */}
           {form.cutoffRuleType === 'fixed_dates' && (
             <Field id="cycle-cutoff-dates" group label="วันที่ตัดรอบ (เลือกได้หลายวัน)" required error={errors.cutoffDates}>
-              <div id="cycle-cutoff-dates" role="group" aria-labelledby="cycle-cutoff-dates-label" className="flex flex-wrap gap-1.5">
+              <FieldGroupBox className="flex flex-wrap gap-1.5">
                 {CUTOFF_DAYS.map((day) => {
                   const selected = form.cutoffDates.includes(day)
                   return (
@@ -502,7 +503,7 @@ export function CyclesTab() {
                     </button>
                   )
                 })}
-              </div>
+              </FieldGroupBox>
             </Field>
           )}
 
@@ -578,10 +579,7 @@ export function CyclesTab() {
 
           {form.type === 'AR' && form.scopeKind === 'selected_companies' && (
             <Field id="cycle-companies" group label="บริษัทที่ใช้รอบนี้" required error={errors.companyIds}>
-              <div
-                id="cycle-companies"
-                role="group"
-                aria-labelledby="cycle-companies-label"
+              <FieldGroupBox
                 className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-slate-200 p-2"
               >
                 {companies.length === 0 && <p className="text-xs text-slate-400">กำลังโหลดรายชื่อบริษัท…</p>}
@@ -596,7 +594,7 @@ export function CyclesTab() {
                     {company.status === 'suspended' && <span className="text-[10px] text-red-600">(ระงับ)</span>}
                   </label>
                 ))}
-              </div>
+              </FieldGroupBox>
             </Field>
           )}
 

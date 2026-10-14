@@ -4,7 +4,7 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { IconFile } from '@/components/field/field-icons'
 import { ReceiptInCompanyNameCheckbox } from '@/components/field/hotel-claim-modal'
 import { NoReceiptLinesEditor } from '@/components/substitute-receipts/no-receipt-lines'
-import { Button, Field, FieldErrorText, FormSubmitError, InlineAlert, Input, Modal, Textarea, cn, fieldControlAria, fieldErrorClass, revealFirstFieldError, useToast } from '@/components/ui'
+import { Button, Field, FieldErrorText, FieldGroupBox, FormSubmitError, InlineAlert, Input, Modal, Textarea, cn, fieldControlAria, fieldErrorClass, revealFirstFieldError, useToast } from '@/components/ui'
 import { REASON_MAX } from '@/lib/api/validation'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest } from '@/lib/api/types'
@@ -360,7 +360,7 @@ export function ResubmitExpenseModal({
 
             {evidenceModes.length > 0 && substitute !== null && (
               <Field id={`${fieldId}-evidence`} group label="หลักฐานรายจ่าย" required>
-                <div id={`${fieldId}-evidence`} role="radiogroup" aria-required aria-labelledby={`${fieldId}-evidence-label`} className="space-y-2">
+                <FieldGroupBox role="radiogroup" aria-required className="space-y-2">
                   {evidenceModes.map((option) => (
                     <label
                       key={option}
@@ -411,7 +411,7 @@ export function ResubmitExpenseModal({
                       </span>
                     </label>
                   ))}
-                </div>
+                </FieldGroupBox>
               </Field>
             )}
 

@@ -8,7 +8,7 @@ export { Button, Spinner, buttonClass, type ButtonProps, type ButtonSize, type B
 export { Badge, RefText, StatusBadge } from '@/components/ui/badge'
 export { Card, CardHeader, PageHeader, StatCard } from '@/components/ui/card'
 export { FilterGroup } from '@/components/ui/filter-group'
-export { FIELD_ERROR_CLASS, Field, FieldErrorText, FormSubmitError, FormSubmitFooter, Input, Label, Select, Textarea, fieldControlAria, fieldErrorClass, fieldErrorControl, revealFirstFieldError, useFieldControl, type InputProps, type SelectProps, type TextareaProps } from '@/components/ui/input'
+export { FIELD_ERROR_CLASS, Field, FieldErrorText, FieldGroupBox, FormSubmitError, FormSubmitFooter, Input, Label, Select, Textarea, fieldControlAria, fieldErrorClass, fieldErrorControl, revealFirstFieldError, useFieldControl, type InputProps, type SelectProps, type TextareaProps } from '@/components/ui/input'
 export { ConfirmModal, Modal, type ModalSize } from '@/components/ui/modal'
 export { useRevealFieldError } from '@/components/ui/use-reveal-field-error'
 export { closedNow, useClearOnClose } from '@/components/ui/use-clear-on-close'

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useId, useRef, useState } from 'react'
-import { Button, Field, FieldErrorText, InlineAlert, Input, Modal, Textarea, useClearOnClose, useResetOnRecordChange, useRevealFieldError, useToast } from '@/components/ui'
+import { Button, Field, FieldErrorText, FieldGroupBox, InlineAlert, Input, Modal, Textarea, useClearOnClose, useResetOnRecordChange, useRevealFieldError, useToast } from '@/components/ui'
 import type { AdvanceDto, AdvanceSettleResult } from '@/lib/advances/types'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { advanceSettlement } from '@/lib/finance/advance-calc'
@@ -248,7 +248,7 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
         {/* มติ PO U30 — มียอดคืน ⇒ ผู้เคลียร์เลือกวิธีคืน (ค่าเริ่มต้นหักกลบในรอบจ่ายถัดไป) */}
         {preview !== null && preview.returnSatang > 0 && (
           <Field id={`${fieldId}-return-method`} group label={`วิธีคืนยอด ${fmtSatangSymbol(preview.returnSatang)}`} required>
-            <div id={`${fieldId}-return-method`} role="radiogroup" aria-required aria-labelledby={`${fieldId}-return-method-label`} className="space-y-2">
+            <FieldGroupBox role="radiogroup" aria-required className="space-y-2">
               {(['payout_offset', 'separate'] as const).map((method) => (
                 <label key={method} className="flex items-start gap-2 text-sm text-slate-700">
                   <input
@@ -268,7 +268,7 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
                   </span>
                 </label>
               ))}
-            </div>
+            </FieldGroupBox>
           </Field>
         )}
 

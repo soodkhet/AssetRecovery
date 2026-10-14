@@ -9,6 +9,8 @@ import { describe, expect, it } from 'vitest'
  *    (`<Field>` ที่แสดงค่าอย่างเดียว เช่น IMEI ในสัญญา ไม่ต้องมี)
  * 2) `<Field id={X}>` ต้องมีช่อง/กล่องข้างในที่ `id={X}` ตรงกัน (เทียบข้อความ expression) — label ไม่ชี้ลอย
  * 3) id ตรงกับกล่อง/ข้อความ (div/p ฯลฯ ที่ไม่ใช่ช่องกรอก) ⇒ ต้องเป็น `<Field id group>` (label ไม่ใส่ `for`)
+ * 4) `<Field group>` ที่ห่อกล่องกลุ่ม ต้องใช้ `<FieldGroupBox>` (ได้ id/aria-invalid/aria-describedby จาก Field) ห้าม `<div id>` เขียนเอง
+ *    · `<FieldGroupBox>` ต้องอยู่ใน `<Field id group>` เท่านั้น (SV5-A11Y-A3-01)
  */
 const ROOT = join(__dirname, '..', '..')
 const CONTROL_TAGS = new Set(['Input', 'Select', 'Textarea', 'StagedFileInput', 'input', 'select', 'textarea', 'button'])
@@ -63,15 +65,19 @@ function scanSource(file: string, text: string): Problem[] {
       node.children.forEach(collect)
       const at = `${relative(ROOT, file)}:${source.getLineAndCharacterOfPosition(node.getStart()).line + 1}`
       const fieldId = attr(node.openingElement, 'id')
-      if (fieldId === undefined) {
+      const isGroup = attr(node.openingElement, 'group') !== undefined
+      if (tags.includes('FieldGroupBox')) {
+        if (fieldId === undefined || !isGroup) problems.push({ at, issue: '<FieldGroupBox> ต้องอยู่ใน <Field id group>' })
+      } else if (fieldId === undefined) {
         if (tags.some((tag) => CONTROL_TAGS.has(tag))) problems.push({ at, issue: '<Field> ห่อช่องกรอกแต่ไม่มี id' })
       } else {
         const want = attrText(fieldId)
         const target = want === undefined ? undefined : ids.get(want)
         if (target === undefined) problems.push({ at, issue: `<Field id=${want}> ไม่มีช่องข้างในที่ id ตรงกัน` })
         // id อยู่บนกล่อง/ข้อความ (div/p) ⇒ label `for` ผูกไม่ได้ ต้องเป็น `<Field group>` (กล่องตั้งชื่อด้วย aria-labelledby)
-        else if (/^[a-z]/.test(target) && !CONTROL_TAGS.has(target) && attr(node.openingElement, 'group') === undefined)
+        else if (/^[a-z]/.test(target) && !CONTROL_TAGS.has(target) && !isGroup)
           problems.push({ at, issue: `<Field id=${want}> ชี้ <${target}> ต้องใส่ group` })
+        else if (isGroup && target === 'div') problems.push({ at, issue: `<Field id=${want} group> ใช้ <FieldGroupBox> แทน div` })
       }
     }
     ts.forEachChild(node, visit)
@@ -88,7 +94,7 @@ function scan(): Problem[] {
 }
 
 describe('<Field id> ครอบคลุมทุกฟอร์ม', () => {
-  it('ตัวสแกนจับได้จริง: ไม่มี id / id ไม่ตรง / id บนกล่องไม่ใส่ group · multi-line / แสดงค่าอย่างเดียว / group ผ่าน', () => {
+  it('ตัวสแกนจับได้จริง: ไม่มี id / id ไม่ตรง / id บนกล่องไม่ใส่ group / group ใช้ div / FieldGroupBox นอก group · multi-line / แสดงค่าอย่างเดียว / FieldGroupBox ผ่าน', () => {
     const file = join(ROOT, 'components', 'fixture.tsx')
     const problems = scanSource(
       file,
@@ -108,10 +114,13 @@ describe('<Field id> ครอบคลุมทุกฟอร์ม', () => {
           <Field label="จ"><button type="button" /></Field>
           <Field id="g" label="ฉ"><div id="g"><Input /></div></Field>
           <Field id="h" group label="ช"><div id="h" role="group" /></Field>
+          <Field id="i" group label="ซ"><FieldGroupBox role="radiogroup"><input type="radio" /></FieldGroupBox></Field>
+          <Field id="j" label="ฌ"><FieldGroupBox><Input /></FieldGroupBox></Field>
+          <Field id="k" group label="ญ"><p id="k">ค่าที่ระบบกำหนด</p></Field>
         </>
       )`,
     )
-    expect(problems.map((problem) => problem.at.split(':')[1])).toEqual(['3', '4', '14', '15'])
+    expect(problems.map((problem) => problem.at.split(':')[1])).toEqual(['3', '4', '14', '15', '16', '18'])
   })
 
   it('ทุก <Field> ที่มีช่องกรอกมี id และ id ตรงกับช่องข้างใน', () => {

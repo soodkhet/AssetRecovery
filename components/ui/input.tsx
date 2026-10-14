@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react'
+import { createContext, useContext, type HTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react'
 import { cn } from '@/components/ui/cn'
 
 /**
@@ -165,7 +165,7 @@ export function useFieldControl(id: string | undefined, invalid: boolean, descri
  * `id` = id ของช่องกรอกข้างใน (ส่ง `id` เดียวกันให้ `<Input>`/`<Select>`/`<Textarea>`) ⇒ label ผูกช่อง (`htmlFor`)
  * · ช่องได้ `aria-invalid` + `aria-describedby` ชี้ข้อความใต้ช่องเอง · `revealFirstFieldError()` โฟกัสช่องจาก id นี้
  * (ตรวจซ้ำ staging SV5-R7-01) · label มี id `<id>-label` · กลุ่มตัวเลือก (radio) = `<Field id group>` ⇒ label ไม่ใส่ `for`
- * (ผูกได้เฉพาะช่องเดี่ยว) ใส่ `id` ที่กล่อง `role="radiogroup"` แล้วตั้งชื่อด้วย `aria-labelledby="<id>-label"` (SV5-R9-01)
+ * (ผูกได้เฉพาะช่องเดี่ยว) กล่องกลุ่มใช้ `<FieldGroupBox>` ⇒ ได้ id/ชื่อ/aria-invalid/aria-describedby จาก Field เอง (SV5-R9-01 · SV5-A11Y-A3-01)
  */
 export function Field({
   id,
@@ -210,6 +210,36 @@ export function Field({
           </p>
         )
       )}
+    </div>
+  )
+}
+
+/**
+ * กล่องกลุ่มตัวเลือกของ `<Field id group>` (ตรวจซ้ำ staging SV5-A11Y-A3-01) — ใช้แทน `<div id role aria-labelledby>` ที่เขียนเอง
+ * ได้จาก `<Field>` ที่ห่ออัตโนมัติ: `id` = id ของ Field · `aria-labelledby="<id>-label"` · มีข้อผิด ⇒ `aria-invalid` +
+ * `aria-describedby="<id>-error"` (ไม่มีข้อผิดแต่มี hint ⇒ ชี้ `<id>-hint`) · `role` = `group` (ค่าเริ่มต้น) หรือ `radiogroup`
+ * ใช้นอก `<Field id>` ไม่ได้ (ไม่มี id/label ให้ผูก) ⇒ แสดงเป็น div ธรรมดา
+ */
+export function FieldGroupBox({
+  role = 'group',
+  children,
+  ...rest
+}: Omit<HTMLAttributes<HTMLDivElement>, 'id' | 'role' | 'aria-labelledby' | 'aria-invalid' | 'aria-describedby'> & {
+  role?: 'group' | 'radiogroup'
+  children: ReactNode
+}) {
+  const field = useContext(FieldControlContext)
+  if (field === null) return <div {...rest}>{children}</div>
+  return (
+    <div
+      {...rest}
+      id={field.controlId}
+      role={role}
+      aria-labelledby={`${field.controlId}-label`}
+      aria-invalid={field.invalid || undefined}
+      aria-describedby={field.describedBy}
+    >
+      {children}
     </div>
   )
 }

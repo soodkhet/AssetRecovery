@@ -12,6 +12,7 @@ import {
   Button,
   Card,
   Field,
+  FieldGroupBox,
   InlineAlert,
   Input,
   Modal,
@@ -431,7 +432,7 @@ export function ApprovalMatrixTab() {
           </Field>
 
           <Field id="approval-flow" group label="ลำดับขั้นอนุมัติ" required error={errors.approvalFlowRoleIds}>
-            <div id="approval-flow" role="group" aria-labelledby="approval-flow-label" className="space-y-2">
+            <FieldGroupBox className="space-y-2">
               {form.approvalFlow.map((role, index) => (
                 <div key={index} className="flex items-center gap-2">
                   <span className="w-12 shrink-0 font-mono text-[10px] font-semibold text-slate-500">ขั้น {index + 1}</span>
@@ -471,7 +472,7 @@ export function ApprovalMatrixTab() {
                   + เพิ่มขั้นอนุมัติ
                 </Button>
               )}
-            </div>
+            </FieldGroupBox>
           </Field>
 
           <label className="flex items-center gap-2 text-xs font-medium text-slate-700">

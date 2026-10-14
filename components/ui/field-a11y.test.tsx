@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { StagedFileInput } from '@/components/uploads/staged-file-input'
-import { FIELD_ERROR_CLASS, Field, Input, Select, Textarea, fieldControlAria, fieldErrorClass, fieldErrorControl } from '@/components/ui'
+import { FIELD_ERROR_CLASS, Field, FieldGroupBox, Input, Select, Textarea, fieldControlAria, fieldErrorClass, fieldErrorControl } from '@/components/ui'
 
 /** ตรวจซ้ำ staging SV5-R7-01 — `<Field id>` ผูก label ↔ ช่อง + ช่องที่ผิดมี aria-invalid/aria-describedby */
 describe('<Field id> ผูกช่องกรอก', () => {
@@ -223,5 +223,37 @@ describe('fieldErrorClass (SV5-A11Y-A1-01)', () => {
       </Field>,
     )
     expect(html).toContain(FIELD_ERROR_CLASS)
+  })
+})
+
+describe('<FieldGroupBox> ใน <Field id group> (SV5-A11Y-A3-01)', () => {
+  it('มีข้อผิด ⇒ กล่องได้ id/role/ชื่อ + aria-invalid + aria-describedby ชี้ <id>-error · label ไม่ใส่ for', () => {
+    const html = renderToStaticMarkup(
+      <Field id="cycle-companies" group label="บริษัทที่ใช้รอบนี้" required error="เลือกบริษัทอย่างน้อย 1 บริษัท">
+        <FieldGroupBox className="space-y-1">
+          <input type="checkbox" aria-label="บริษัท ก" />
+        </FieldGroupBox>
+      </Field>,
+    )
+    expect(html).not.toMatch(/<label[^>]*for=/)
+    expect(html).toMatch(/<div[^>]*id="cycle-companies"[^>]*role="group"/)
+    expect(html).toMatch(/<div[^>]*aria-labelledby="cycle-companies-label"/)
+    expect(html).toMatch(/<div[^>]*aria-invalid="true"/)
+    expect(html).toMatch(/<div[^>]*aria-describedby="cycle-companies-error"/)
+    expect(html).toContain('id="cycle-companies-error"')
+  })
+
+  it('ไม่มีข้อผิด ⇒ ไม่มี aria-invalid · มี hint ⇒ describedby ชี้ hint · role=radiogroup ส่งได้', () => {
+    const html = renderToStaticMarkup(
+      <Field id="return-method" group label="วิธีคืนยอด" hint="เลือก 1 วิธี">
+        <FieldGroupBox role="radiogroup" aria-required>
+          <input type="radio" aria-label="หักในรอบจ่าย" />
+        </FieldGroupBox>
+      </Field>,
+    )
+    expect(html).not.toContain('aria-invalid')
+    expect(html).toMatch(/<div[^>]*role="radiogroup"/)
+    expect(html).toMatch(/<div[^>]*aria-describedby="return-method-hint"/)
+    expect(html).toMatch(/<div[^>]*aria-required="true"/)
   })
 })
