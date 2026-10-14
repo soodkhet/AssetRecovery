@@ -212,7 +212,9 @@ export function Modal({
         </div>
 
         {children !== undefined && (
-          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 text-sm text-slate-700">
+          // `scroll-pb-10` — เลื่อนตามช่องที่โฟกัส (แตะ/Tab ไปช่องล่างสุด) เผื่อบรรทัดข้อผิดใต้ช่องไม่ให้ชิด/โดน footer บัง
+          // (ตรวจซ้ำ staging SV5-R8-01 — มือถือ "กรุณาเลือกกำหนดเคลียร์ยอด" โดนบังครึ่งบรรทัด)
+          <div className="min-h-0 flex-1 scroll-pb-10 overflow-y-auto px-5 py-4 text-sm text-slate-700">
             {/* ล็อกช่องกรอกระหว่างบันทึก — ค่าที่แก้ตอนนี้ไม่ได้ไปกับ request ที่กำลังส่ง */}
             <fieldset disabled={isBusy} className="m-0 min-w-0 border-0 p-0">
               {children}

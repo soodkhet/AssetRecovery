@@ -3,8 +3,9 @@
 import { useEffect, useId, useState } from 'react'
 import { usePermission } from '@/components/auth/permission-provider'
 import { OnBehalfPayeeSelect } from '@/components/payees/on-behalf-payee-select'
-import { Button, Field, InlineAlert, Input, Modal, Select, Textarea, useClearOnClose, useToast } from '@/components/ui'
+import { Button, Field, FormSubmitFooter, InlineAlert, Input, Modal, Select, Textarea, useClearOnClose, useRevealFieldError, useToast } from '@/components/ui'
 import { advanceCreateAccess, minDueClearInputDate } from '@/lib/advances/advance'
+import { advanceFormIssues } from '@/lib/advances/advance-form'
 import { advanceCaseOptionLabel, advanceRequestErrorText } from '@/lib/advances/advance-ui'
 import { advanceCreateSchema } from '@/lib/advances/schemas'
 import type { AdvanceCaseOptionDto, AdvanceDto } from '@/lib/advances/types'
@@ -47,6 +48,10 @@ export function AdvanceFormModal({ open, onClose, onCreated }: {
   const [saving, setSaving] = useState(false)
   // error จาก API ค้างบนฟอร์ม (UAT BUG-046) — toast หายเร็วเกินกว่าพนักงานบนมือถือจะอ่านทัน
   const [submitError, setSubmitError] = useState<{ title: string; message: string } | null>(null)
+  // ข้อผิดข้อแรกตามลำดับบนจอ — แสดงใน footer ติดจอเหนือปุ่ม + เลื่อน/โฟกัสช่องที่ผิด (ตรวจซ้ำ staging SV5-R8-01)
+  const [firstError, setFirstError] = useState<string | null>(null)
+  const [submitTick, setSubmitTick] = useState(0)
+  const { ref: bodyRef, reveal: revealError } = useRevealFieldError()
 
   const forSelf = access.self && payeeId === ''
 
@@ -66,6 +71,7 @@ export function AdvanceFormModal({ open, onClose, onCreated }: {
   useClearOnClose(open, () => {
     setErrors({})
     setSubmitError(null)
+    setFirstError(null)
   })
 
   if (!open) return null
@@ -80,15 +86,20 @@ export function AdvanceFormModal({ open, onClose, onCreated }: {
       caseId: forSelf && caseId !== '' ? caseId : null,
     }
     const parsed = advanceCreateSchema.safeParse(payload)
-    const needsPayee = !access.self && payload.payeeId === null
-    if (!parsed.success || needsPayee) {
-      setErrors({
-        ...(parsed.success ? {} : toFieldErrors(parsed.error)),
-        ...(needsPayee ? { payeeId: 'เลือกผู้รับเงินที่ขอแทน' } : {}),
-      })
+    const issues = advanceFormIssues({
+      schemaErrors: parsed.success ? {} : toFieldErrors(parsed.error),
+      needsPayee: !access.self && payload.payeeId === null,
+    })
+    if (issues.first !== null) {
+      setErrors(issues.errors)
+      setFirstError(issues.first.message)
+      setSubmitTick((tick) => tick + 1)
+      revealError()
       return
     }
 
+    setErrors({})
+    setFirstError(null)
     setSaving(true)
     setSubmitError(null)
     // ส่ง payload ดิบ (วันที่ยังเป็นสตริง) — `parsed.data.dueClearDate` ถูก transform เป็น Date แล้ว
@@ -97,6 +108,9 @@ export function AdvanceFormModal({ open, onClose, onCreated }: {
     if (result.error !== undefined) {
       const text = advanceRequestErrorText(result.error)
       setSubmitError(text)
+      // ข้อผิดจาก API ขึ้น footer ติดจอด้วย — มือถือเลื่อนลงล่างแล้ว InlineAlert บนสุดอยู่นอกจอ
+      setFirstError(text.message)
+      setSubmitTick((tick) => tick + 1)
       showToast({ tone: 'error', title: text.title, description: text.message })
       return
     }
@@ -108,6 +122,7 @@ export function AdvanceFormModal({ open, onClose, onCreated }: {
     setCaseId('')
     setErrors({})
     setSubmitError(null)
+    setFirstError(null)
     if (result.data !== undefined) onCreated(result.data)
     onClose()
   }
@@ -118,17 +133,18 @@ export function AdvanceFormModal({ open, onClose, onCreated }: {
       onClose={onClose}
       title="ขอเบิกเงินทดรองจ่าย"
       footer={
-        <>
+        <FormSubmitFooter message={firstError} tick={submitTick}>
           <Button variant="secondary" onClick={onClose}>
             ยกเลิก
           </Button>
           <Button loading={saving} onClick={() => void submit()}>
             ส่งคำขออนุมัติ
           </Button>
-        </>
+        </FormSubmitFooter>
       }
     >
-      <div className="space-y-4">
+      {/* ลำดับช่องบนจอต้องตรงกับ `ADVANCE_FORM_FIELDS` (lib/advances/advance-form.ts) — สลับช่องต้องแก้คู่กัน */}
+      <div ref={bodyRef} className="space-y-4">
         <InlineAlert tone="warning">
           ⚠️ กฎ: ต้องเคลียร์ยอดเดิมให้เสร็จก่อนขอเบิกรอบใหม่ได้เสมอ — ยอดที่อนุมัติแล้วหรือเลยกำหนดเคลียร์ถือว่ายังค้างทั้งคู่
         </InlineAlert>
