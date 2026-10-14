@@ -13,6 +13,7 @@ const FILES = ['intake-modal.tsx', 'handover-lot-modal.tsx', '../field/close-cas
 
 interface Group {
   named: boolean
+  required: boolean
   radios: number
   pressed: number
 }
@@ -36,7 +37,7 @@ function radioGroups(file: string): { groups: Group[]; pressed: number } {
       if (map.get('role') === '"radiogroup"') {
         // <FieldGroupBox> ได้ชื่อจาก <Field id group> เอง (aria-labelledby="<id>-label")
         const named = map.has('aria-labelledby') || map.has('aria-label') || open.tagName.getText() === 'FieldGroupBox'
-        current = { named, radios: 0, pressed: 0 }
+        current = { named, required: map.has('aria-required'), radios: 0, pressed: 0 }
         groups.push(current)
       }
       // ปุ่ม radio ต้องได้ props จาก useRovingRadio (role/aria-checked/tabIndex/ลูกศร — รีวิวรอบ 2)
@@ -62,5 +63,16 @@ describe('กลุ่มปุ่มเลือกของคลังเป�
       expect(group.radios).toBeGreaterThan(0)
     }
     expect(pressed).toBe(0)
+  })
+})
+
+// SV5-B2-01 — ทุกกลุ่มของรับเข้าคลังเป็นตัวเลือกบังคับ (*) ⇒ aria-required + อยู่ใน <Field id group> (FieldGroupBox)
+describe('รับเข้าคลัง: กลุ่มตัวเลือกบังคับทุกกลุ่มเป็น FieldGroupBox ที่ aria-required', () => {
+  it('intake-modal.tsx', () => {
+    const { groups } = radioGroups('intake-modal.tsx')
+    expect(groups).toHaveLength(2)
+    for (const group of groups) expect(group.required).toBe(true)
+    const text = readFileSync(join(__dirname, 'intake-modal.tsx'), 'utf8')
+    expect(text).not.toMatch(/<div[^>]*role="radiogroup"/)
   })
 })

@@ -13,7 +13,8 @@ const CASES: ReadonlyArray<[file: string, fieldIdSuffixes: readonly string[]]> =
   ['reject-intake-modal.tsx', ['-reason']],
   ['remove-from-lot-modal.tsx', ['-reason']],
   ['delete-empty-lot-modal.tsx', ['-reason']],
-  ['intake-modal.tsx', ['-condition-note', '-color-capacity-note']],
+  // SV5-B2-01 — กลุ่มสี/ความจุ + สภาพเครื่อง + ค่า IMEI/Serial ที่ตรวจจริงก็ผูกข้อผิดกับช่อง/กลุ่มเช่นกัน
+  ['intake-modal.tsx', ['-condition-note', '-color-capacity-note', '-color-capacity', '-condition', '-imei', '-serial']],
 ]
 
 function fieldsWithError(file: string): Map<string, boolean> {
@@ -44,5 +45,13 @@ describe('ฟอร์มคลัง: ข้อผิดของช่อง�
     expect(text).toContain('useRevealFieldError()')
     expect(text).toMatch(/\breveal\(\)/)
     expect(text).toMatch(/ref=\{formRef\}/)
+  })
+})
+
+describe('รับเข้าคลัง: ไม่มีข้อผิด "ยังไม่ได้ตรวจ" ที่ขึ้นแค่กล่องแจ้งเตือนบนสุด (SV5-B2-01)', () => {
+  it('ตรวจผ่าน collectIntakeFieldErrors() (ข้อผิดรายช่อง) · ไม่มีข้อความช่องบังคับส่งเข้า setError', () => {
+    const text = readFileSync(join(DIR, 'intake-modal.tsx'), 'utf8')
+    expect(text).toContain('collectIntakeFieldErrors(')
+    expect(text).not.toMatch(/setError\(\{[^}]*(COLOR_CAPACITY_[A-Z_]*MESSAGE|IMEI_FORMAT_MESSAGE)/)
   })
 })

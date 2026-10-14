@@ -14,23 +14,18 @@ import {
   INTAKE_PHOTO_ANGLES,
   INTAKE_PHOTO_ANGLE_LABELS,
   IMEI_MISMATCH_FORM_WARNING,
-  assertIntakeIdentity,
   requiredIntakeIdentity,
-  assertIntakeCondition,
   requiresConditionNote,
   type IntakePhotoAngle,
 } from '@/lib/warehouse/intake'
+import { collectIntakeFieldErrors, hasIntakeFieldErrors, type IntakeFieldErrors } from '@/lib/warehouse/intake-form'
 import {
   flattenIntakePhotos,
   groupIntakePhotos,
   intakePhotoWarning,
   type IntakePhotoGroups,
 } from '@/lib/warehouse/intake-photos'
-import {
-  ASSET_CONDITIONS,
-  COLOR_CAPACITY_CHOICE_REQUIRED_MESSAGE,
-  COLOR_CAPACITY_NOTE_REQUIRED_MESSAGE,
-} from '@/lib/warehouse/schemas'
+import { ASSET_CONDITIONS } from '@/lib/warehouse/schemas'
 import type { AssetDetailDto, AssetListItemDto } from '@/lib/warehouse/types'
 import { INTAKE_PHOTO_ACCEPT, WarehouseUploadError, uploadIntakePhoto } from '@/lib/warehouse/upload-client'
 import { ASSET_CONDITION_LABEL } from '@/lib/warehouse/warehouse-ui'
@@ -45,7 +40,7 @@ const COLOR_CAPACITY_CHOICES = [
  *
  * 1. เทียบ IMEI/serial กับสัญญา — ตรง = เขียว, ไม่ตรง = **แดงแต่ไปต่อได้** (`IMEI_MISMATCH` เตือน ไม่ block)
  *    การยืนยันทับคำเตือนต้องกดยืนยันซ้ำอีกครั้ง (force proceed — ธุรการต้องตั้งใจ ไม่ใช่เผลอ)
- * 2. สภาพเครื่อง + รายละเอียด (บังคับเมื่อไม่ใช่ "ปกติ") — ตรวจด้วย `assertIntakeCondition()` ตัวเดียวกับ API
+ * 2. สภาพเครื่อง + รายละเอียด (บังคับเมื่อไม่ใช่ "ปกติ") — ตรวจด้วย `collectIntakeFieldErrors()` (ตัว assert ชุดเดียวกับ API)
  * 3. รูป 7 มุม — ถ่ายไม่ครบ **เตือนอย่างเดียว** (`44` §12 ไม่มี code สำหรับรูปไม่ครบ)
  *
  * ปุ่ม "รับใหม่" ของเครื่องที่เคยตีกลับเปิด modal ตัวเดียวกันนี้ (`44` §8.2 retry · §9.1)
@@ -77,8 +72,9 @@ export function IntakeModal({
   const [uploading, setUploading] = useState<IntakePhotoAngle | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<ApiCallError | null>(null)
-  // รายละเอียดสภาพ/สิ่งที่พบว่าง = ข้อผิดของช่อง (ใต้ช่อง + aria-invalid + โฟกัส) ไม่ใช่กล่องแจ้งเตือน (ตรวจซ้ำ staging SV5-A11Y-A2-02)
-  const [noteErrors, setNoteErrors] = useState<{ condition?: string; conditionNote?: string; colorCapacityNote?: string }>({})
+  // ช่อง/กลุ่มบังคับที่ยังไม่ได้ตรวจ = ข้อผิดของช่อง (ใต้ช่อง + aria-invalid + โฟกัส) ไม่ใช่กล่องแจ้งเตือน
+  // (ตรวจซ้ำ staging SV5-A11Y-A2-02 · SV5-B2-01 — สี/ความจุ · IMEI/Serial ที่ตรวจจริง)
+  const [fieldErrors, setFieldErrors] = useState<IntakeFieldErrors>({})
   const { ref: formRef, reveal } = useRevealFieldError()
   /** ยืนยันทับคำเตือน IMEI ไม่ตรงแล้วหรือยัง (force proceed — `44` §8.2) */
   const [forceProceed, setForceProceed] = useState(false)
@@ -99,6 +95,8 @@ export function IntakeModal({
   /** รูปแบบผิด (ไม่ครบ/เกิน 15 หลัก หรือมีอักขระอื่น) = พิมพ์ผิด (schema ปฏิเสธ) ไม่ใช่ "ไม่ตรงสัญญา" */
   const imeiFormatInvalid = imeiActual.trim() !== '' && imeiNormalized === null
   const imeiError = imeiFormatInvalid ? IMEI_FORMAT_MESSAGE : null
+  /** ข้อผิดใต้ช่อง IMEI — รูปแบบผิด (คำนวณสด) ก่อน แล้วจึง "ยังไม่ได้กรอก" จากการกดยืนยัน */
+  const imeiFieldError = imeiError ?? fieldErrors.imei ?? null
   const imeiTouched = imeiActual.trim() !== '' || serialActual.trim() !== ''
   // รูปแบบผิดแสดงแค่ข้อความรูปแบบ — ไม่ขึ้นคำเตือน "ไม่ตรงสัญญา" ซ้อน (UAT BUG-083)
   const mismatch = imeiTouched && !imeiFormatInvalid && !comparison.matched
@@ -108,6 +106,16 @@ export function IntakeModal({
     serialContract: asset.serialContract,
   })
   const showSerialInput = asset.serialContract !== null || asset.imeiContract === null
+
+  /**
+   * พิมพ์ช่องไหน ล้างข้อผิดของช่องนั้น · สัญญาไม่มีทั้ง IMEI และ Serial (กรอกช่องใดก็ได้) ⇒ ล้างทั้งคู่
+   * (รีวิว SV5-B2-01 — เคสบังคับ IMEI พิมพ์ Serial แล้วข้อผิด IMEI ต้องไม่หาย)
+   */
+  function clearIdentityError(field: 'imei' | 'serial'): void {
+    setFieldErrors((current) =>
+      requiredIdentity === 'either' ? { ...current, imei: undefined, serial: undefined } : { ...current, [field]: undefined },
+    )
+  }
 
   const isRetry = asset.assetStatus === 'intake_rejected'
 
@@ -137,7 +145,10 @@ export function IntakeModal({
   const colorCapacityRadio = useRovingRadio({
     options: COLOR_CAPACITY_CHOICES.map((choice) => choice.value),
     value: colorCapacityMatched,
-    onSelect: setColorCapacityMatched,
+    onSelect: (value) => {
+      setColorCapacityMatched(value)
+      setFieldErrors((current) => ({ ...current, colorCapacity: undefined, colorCapacityNote: undefined }))
+    },
   })
   const conditionRadio = useRovingRadio({
     options: ASSET_CONDITIONS,
@@ -145,63 +156,35 @@ export function IntakeModal({
     onSelect: (value) => {
       setCondition(value)
       // เปลี่ยนสภาพแล้วข้อผิดของสภาพเดิม (ยังไม่เลือก/ต้องระบุรายละเอียด) ไม่ค้าง (รีวิว SV5-A11Y-A2-02)
-      setNoteErrors((current) => ({ ...current, condition: undefined, conditionNote: undefined }))
+      setFieldErrors((current) => ({ ...current, condition: undefined, conditionNote: undefined }))
     },
   })
 
   async function submit(): Promise<void> {
     setError(null)
-    setNoteErrors({})
-
-    // ตรวจด้วยตัว assert ชุดเดียวกับ API — ข้อความตาม code ของ `44` §12 ไม่ใช่ `REQUIRED_MISSING` (รายละเอียดสภาพว่างแสดงใต้ช่อง)
+    // ตรวจทุกช่องบังคับในรอบเดียว ⇒ ข้อผิดขึ้นใต้ช่อง/กลุ่มของมันพร้อมกัน แล้วโฟกัสช่องแรกที่ผิดตามลำดับบนจอ
+    // (useRevealFieldError) — ไม่ใช้กล่องแจ้งเตือนบนสุดที่เลื่อนพ้นจอ (ตรวจซ้ำ staging SV5-B2-01)
+    let next: IntakeFieldErrors
     try {
-      assertIntakeCondition({ condition, conditionNote: conditionNote.trim() === '' ? null : conditionNote })
+      next = collectIntakeFieldErrors({
+        contract: { imeiContract: asset.imeiContract, serialContract: asset.serialContract },
+        imeiActual,
+        serialActual,
+        colorCapacityMatched,
+        colorCapacityNote,
+        condition,
+        conditionNote,
+      })
     } catch (assertError) {
-      if (assertError instanceof WarehouseError) {
-        if (assertError.code === 'INTAKE_MISSING_NOTE') {
-          setNoteErrors({ conditionNote: assertError.userMessage })
-          reveal()
-        } else if (assertError.code === 'INTAKE_MISSING_CONDITION') {
-          // ยังไม่เลือกสภาพ ⇒ ข้อผิดของกลุ่ม + โฟกัสตัวเลือกที่รับ Tab (รีวิวรอบ 2 SV5-A11Y-A2-03)
-          setNoteErrors({ condition: assertError.userMessage })
-          reveal()
-        } else {
-          setError({ code: assertError.code, title: assertError.title, message: assertError.userMessage })
-        }
-        return
-      }
-      throw assertError
-    }
-
-    if (colorCapacityMatched === null) {
-      setError({ title: 'ยังไม่ได้ตรวจสี/ความจุ', message: COLOR_CAPACITY_CHOICE_REQUIRED_MESSAGE })
+      if (!(assertError instanceof WarehouseError)) throw assertError
+      setFieldErrors({})
+      setError({ code: assertError.code, title: assertError.title, message: assertError.userMessage })
       return
     }
-    if (!colorCapacityMatched && colorCapacityNote.trim() === '') {
-      setNoteErrors({ colorCapacityNote: COLOR_CAPACITY_NOTE_REQUIRED_MESSAGE })
+    setFieldErrors(next)
+    if (hasIntakeFieldErrors(next)) {
       reveal()
       return
-    }
-
-    if (imeiFormatInvalid) {
-      setError({
-        title: 'รูปแบบ IMEI ไม่ถูกต้อง',
-        message: `${IMEI_FORMAT_MESSAGE} — ตรวจสอบที่กรอกอีกครั้ง`,
-      })
-      return
-    }
-
-    try {
-      assertIntakeIdentity(
-        { imeiContract: asset.imeiContract, serialContract: asset.serialContract },
-        { imeiActual: imeiNormalized, serialActual: serialActual.trim() === '' ? null : serialActual.trim() },
-      )
-    } catch (assertError) {
-      if (assertError instanceof WarehouseError) {
-        setError({ code: assertError.code, title: assertError.title, message: assertError.userMessage })
-        return
-      }
-      throw assertError
     }
 
     // ไม่ตรงกับสัญญา = เตือนก่อน 1 ครั้ง แล้วจึงยอมให้ยืนยันทับ (`44` §8.2 force proceed)
@@ -284,11 +267,11 @@ export function IntakeModal({
               id={`${fieldId}-imei`}
               label="IMEI ที่ตรวจจริงบนเครื่อง"
               required={requiredIdentity === 'imei'}
-              error={imeiError}
+              error={imeiFieldError}
             >
               <input
                 id={`${fieldId}-imei`}
-                {...fieldControlAria(`${fieldId}-imei`, { error: imeiError })}
+                {...fieldControlAria(`${fieldId}-imei`, { error: imeiFieldError })}
                 type="text"
                 inputMode="numeric"
                 maxLength={IMEI_INPUT_MAX_LENGTH}
@@ -297,10 +280,11 @@ export function IntakeModal({
                 onChange={(event) => {
                   setImeiActual(event.target.value)
                   setForceProceed(false)
+                  clearIdentityError('imei')
                 }}
                 className={cn(
                   'focus-ring w-full rounded-lg border px-3 py-2 font-mono text-sm',
-                  imeiFormatInvalid || mismatch
+                  imeiFieldError !== null || mismatch
                     ? 'border-red-400 bg-red-50 text-red-700'
                     : comparison.matched
                       ? 'border-emerald-400 bg-emerald-50 text-emerald-700'
@@ -316,19 +300,26 @@ export function IntakeModal({
                     {asset.serialContract ?? '—'}
                   </div>
                 </Field>
-                <Field id={`${fieldId}-serial`} label="Serial ที่ตรวจจริงบนเครื่อง" required={requiredIdentity === 'serial'}>
+                <Field
+                  id={`${fieldId}-serial`}
+                  label="Serial ที่ตรวจจริงบนเครื่อง"
+                  required={requiredIdentity === 'serial'}
+                  error={fieldErrors.serial}
+                >
                   <input
                     id={`${fieldId}-serial`}
+                    {...fieldControlAria(`${fieldId}-serial`, { error: fieldErrors.serial })}
                     type="text"
                     maxLength={100}
                     value={serialActual}
                     onChange={(event) => {
                       setSerialActual(event.target.value)
                       setForceProceed(false)
+                      clearIdentityError('serial')
                     }}
                     className={cn(
                       'focus-ring w-full rounded-lg border px-3 py-2 font-mono text-sm',
-                      mismatch ? 'border-red-400 bg-red-50 text-red-700' : 'border-slate-300 bg-white',
+                      fieldErrors.serial !== undefined || mismatch ? 'border-red-400 bg-red-50 text-red-700' : 'border-slate-300 bg-white',
                     )}
                   />
                 </Field>
@@ -354,38 +345,48 @@ export function IntakeModal({
 
           {/* มติ PO U166 → O77 — เทียบสี/ความจุของเครื่องจริงกับค่าตามสัญญา: ตัวเลือกบังคับ ตรง/ไม่ตรง */}
           <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-            <div className="text-sm font-semibold text-slate-800">
-              สี/ความจุตรงกับสัญญา <span className="text-red-500">*</span>
-            </div>
-            <div className="mt-0.5 text-xs text-slate-500">
-              ตามสัญญา: ความจุ {asset.deviceCapacity ?? '—'} · สี {asset.deviceColor ?? '—'}
-            </div>
-            <div className="mt-2 grid grid-cols-2 gap-2" role="radiogroup" aria-label="สี/ความจุตรงกับสัญญา">
-              {COLOR_CAPACITY_CHOICES.map((choice, index) => (
-                <button
-                  key={choice.label}
-                  type="button"
-                  {...colorCapacityRadio.radioProps(choice.value, index)}
-                  className={cn(
-                    'focus-ring rounded-xl border-2 py-2 text-xs font-bold transition-colors',
-                    colorCapacityMatched === choice.value
-                      ? 'border-slate-900 bg-slate-900 text-white'
-                      : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300',
-                  )}
-                >
-                  {choice.label}
-                </button>
-              ))}
-            </div>
+            {/* กลุ่ม radio ใน Field group ⇒ ชื่อกลุ่ม + ข้อผิด "ยังไม่ได้ตรวจสี/ความจุ" ผูกกับกล่อง + โฟกัสตัวเลือกที่รับ Tab (SV5-B2-01) */}
+            <Field
+              id={`${fieldId}-color-capacity`}
+              group
+              label="สี/ความจุตรงกับสัญญา"
+              labelClassName="mb-0 text-sm font-semibold text-slate-800"
+              required
+              error={fieldErrors.colorCapacity}
+            >
+              <div className="mt-0.5 text-xs text-slate-500">
+                ตามสัญญา: ความจุ {asset.deviceCapacity ?? '—'} · สี {asset.deviceColor ?? '—'}
+              </div>
+              <FieldGroupBox role="radiogroup" aria-required className="mt-2 grid grid-cols-2 gap-2">
+                {COLOR_CAPACITY_CHOICES.map((choice, index) => (
+                  <button
+                    key={choice.label}
+                    type="button"
+                    {...colorCapacityRadio.radioProps(choice.value, index)}
+                    className={cn(
+                      'focus-ring rounded-xl border-2 py-2 text-xs font-bold transition-colors',
+                      colorCapacityMatched === choice.value
+                        ? 'border-slate-900 bg-slate-900 text-white'
+                        : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300',
+                    )}
+                  >
+                    {choice.label}
+                  </button>
+                ))}
+              </FieldGroupBox>
+            </Field>
             {colorCapacityMatched === false && (
-              <Field id={`${fieldId}-color-capacity-note`} className="mt-2" label="สิ่งที่พบ" required error={noteErrors.colorCapacityNote} hint="ระบุสี/ความจุของเครื่องที่รับจริง">
+              <Field id={`${fieldId}-color-capacity-note`} className="mt-2" label="สิ่งที่พบ" required error={fieldErrors.colorCapacityNote} hint="ระบุสี/ความจุของเครื่องที่รับจริง">
                 <Textarea
                   id={`${fieldId}-color-capacity-note`}
                   rows={2}
                   value={colorCapacityNote}
                   maxLength={500}
                   placeholder="เช่น สีขาว ความจุ 64GB"
-                  onChange={(event) => setColorCapacityNote(event.target.value)}
+                  onChange={(event) => {
+                    setColorCapacityNote(event.target.value)
+                    setFieldErrors((current) => ({ ...current, colorCapacityNote: undefined }))
+                  }}
                 />
               </Field>
             )}
@@ -396,7 +397,7 @@ export function IntakeModal({
         <section>
           <StepTitle step={2} label="บันทึกสภาพเครื่อง" />
           {/* กลุ่ม radio ใน Field group ⇒ ชื่อกลุ่ม + ข้อผิด "ยังไม่เลือกสภาพ" ผูกกับกล่อง (SV5-A11Y-A2-03 · รีวิวรอบ 2) */}
-          <Field id={`${fieldId}-condition`} group label="สภาพเครื่อง" labelClassName="sr-only" required error={noteErrors.condition}>
+          <Field id={`${fieldId}-condition`} group label="สภาพเครื่อง" labelClassName="sr-only" required error={fieldErrors.condition}>
             <FieldGroupBox role="radiogroup" aria-required className="grid grid-cols-3 gap-2">
               {ASSET_CONDITIONS.map((value, index) => (
                 <button
@@ -420,7 +421,7 @@ export function IntakeModal({
             className="mt-3"
             label="รายละเอียดสภาพเครื่อง"
             required={requiresConditionNote(condition)}
-            error={noteErrors.conditionNote}
+            error={fieldErrors.conditionNote}
             hint={requiresConditionNote(condition) ? 'สภาพชำรุด/อุปกรณ์ขาดหาย ต้องกรอกรายละเอียดกำกับเสมอ' : undefined}
           >
             <Textarea
@@ -429,7 +430,10 @@ export function IntakeModal({
               value={conditionNote}
               maxLength={1000}
               placeholder="อธิบายสภาพที่พบ เช่น จอร้าว ไม่มีสายชาร์จ"
-              onChange={(event) => setConditionNote(event.target.value)}
+              onChange={(event) => {
+                setConditionNote(event.target.value)
+                setFieldErrors((current) => ({ ...current, conditionNote: undefined }))
+              }}
             />
           </Field>
         </section>
