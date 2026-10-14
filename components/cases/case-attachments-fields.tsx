@@ -1,8 +1,7 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { Button, ConfirmModal, InlineAlert, StatusBadge } from '@/components/ui'
-import { buttonClass } from '@/components/ui/button'
 import { StoredPhotoThumb } from '@/components/ui/stored-photo-thumb'
 import {
   assertProductPhotoCapacity,
@@ -84,6 +83,8 @@ export function CaseAttachmentsFields({
   const [dragging, setDragging] = useState(false)
   const [pendingSwitch, setPendingSwitch] = useState<{ next: DocumentMode; dropCount: number } | null>(null)
   const photoInput = useRef<HTMLInputElement | null>(null)
+  // id ผูกชื่อ/คำแนะนำของแต่ละช่องเอกสารกับปุ่มเลือกไฟล์ (ตรวจ a11y staging — ช่องแนบเอกสารหน้าเคส)
+  const slotIdPrefix = useId()
 
   // คืนหน่วยความจำของ object URL ตอนปิดฟอร์ม (ไฟล์ที่ยังไม่ได้อัปโหลดถูกทิ้งไปพร้อมกัน)
   const stagedRef = useRef<readonly StagedFile[]>(staged)
@@ -237,24 +238,20 @@ export function CaseAttachmentsFields({
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-slate-800">{DOCUMENT_SLOT_LABEL[slot]}</span>
+                      <span id={`${slotIdPrefix}-${slot}-name`} className="text-sm font-semibold text-slate-800">
+                        {DOCUMENT_SLOT_LABEL[slot]}
+                      </span>
                       <StatusBadge group={badge.group} label={badge.label} />
                     </div>
-                    <p className="mt-0.5 text-[11px] text-slate-500">{DOCUMENT_SLOT_HINT[slot]}</p>
+                    <p id={`${slotIdPrefix}-${slot}-hint`} className="mt-0.5 text-[11px] text-slate-500">
+                      {DOCUMENT_SLOT_HINT[slot]}
+                    </p>
                   </div>
-                  <label className={buttonClass('secondary', 'sm', 'cursor-pointer')}>
-                    เลือกไฟล์
-                    <input
-                      type="file"
-                      className="hidden"
-                      multiple
-                      accept={acceptAttribute(slot)}
-                      onChange={(event) => {
-                        addFiles(slot, event.target.files)
-                        event.target.value = ''
-                      }}
-                    />
-                  </label>
+                  <CaseDocumentSlotPicker
+                    id={`${slotIdPrefix}-${slot}`}
+                    accept={acceptAttribute(slot)}
+                    onPick={(files) => addFiles(slot, files)}
+                  />
                 </div>
 
                 {uploadedOf(slot).length > 0 && (
@@ -446,6 +443,53 @@ export function CaseAttachmentsFields({
           </div>
         )}
       </section>
+    </>
+  )
+}
+
+/**
+ * ปุ่มเลือกไฟล์ของช่องเอกสาร 1 ประเภท (ตรวจ a11y staging — ช่องแนบเอกสารหน้าเคส)
+ *
+ * เดิมเป็น `<label>` ห่อ `<input type="file" className="hidden">` ⇒ label โฟกัสไม่ได้ + ช่องซ่อน (display:none)
+ * Tab ไม่ถึง ⇒ ใช้ `<button>` จริง (Tab ถึง · Enter/Space เปิดหน้าต่างเลือกไฟล์) · ช่องไฟล์ซ่อนนอกลำดับ Tab
+ * · ชื่อปุ่ม = ชื่อเอกสาร + คำบนปุ่ม (`aria-labelledby="<id>-name <id>"` — ไม่ซ้ำกันระหว่างช่อง)
+ * · คำแนะนำของเอกสาร (`<id>-hint`) เป็นคำอธิบายของปุ่ม — ผู้เรียกต้องวาง element `id="<id>-name"`/`id="<id>-hint"` เอง
+ */
+function CaseDocumentSlotPicker({
+  id,
+  accept,
+  onPick,
+}: {
+  id: string
+  accept: string
+  onPick: (files: FileList | null) => void
+}) {
+  const inputRef = useRef<HTMLInputElement | null>(null)
+  return (
+    <>
+      <Button
+        id={id}
+        variant="secondary"
+        size="sm"
+        aria-labelledby={`${id}-name ${id}`}
+        aria-describedby={`${id}-hint`}
+        onClick={() => inputRef.current?.click()}
+      >
+        เลือกไฟล์
+      </Button>
+      <input
+        ref={inputRef}
+        type="file"
+        className="hidden"
+        tabIndex={-1}
+        aria-hidden="true"
+        multiple
+        accept={accept}
+        onChange={(event) => {
+          onPick(event.target.files)
+          event.target.value = ''
+        }}
+      />
     </>
   )
 }
