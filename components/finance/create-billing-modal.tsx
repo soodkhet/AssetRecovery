@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { REASON_MIN_LENGTH } from '@/components/settings/reason-confirm-modal'
 import { Button, Field, InlineAlert, Input, Modal, Select, Textarea, useToast } from '@/components/ui'
 import {
@@ -43,6 +43,8 @@ export function CreateBillingModal({
   onClose: () => void
   onCreated: () => void
 }) {
+  // id ผูก label ↔ ช่อง + aria-invalid/aria-describedby ผ่าน `<Field id>` (ตรวจซ้ำ staging SV5-R9-01)
+  const fieldId = useId()
   const { showToast } = useToast()
   const [companies, setCompanies] = useState<readonly FinanceCompanyDto[]>([])
   const [companyId, setCompanyId] = useState('')
@@ -152,8 +154,8 @@ export function CreateBillingModal({
           — สร้างได้หลายรอบต่อเดือน แต่ต้องไม่มีรอบร่างของบริษัทเดียวกันค้างอยู่
         </InlineAlert>
 
-        <Field label="บริษัทไฟแนนซ์" required>
-          <Select value={companyId} onChange={(event) => selectCompany(event.target.value)}>
+        <Field id={`${fieldId}-company-id`} label="บริษัทไฟแนนซ์" required>
+          <Select id={`${fieldId}-company-id`} value={companyId} onChange={(event) => selectCompany(event.target.value)}>
             <option value="">— เลือกบริษัท —</option>
             {companies.map((company) => (
               <option key={company.id} value={company.id}>
@@ -196,6 +198,7 @@ export function CreateBillingModal({
         )}
 
         <Field
+          id={`${fieldId}-cutoff-date`}
           label="วันตัดรอบ"
           required
           hint={
@@ -204,7 +207,7 @@ export function CreateBillingModal({
               : `ครบกำหนดชำระ ${fmtDate(dueDatePreview)} · ระบบเสนอวันตัดรอบตามรอบบิลให้ แก้ได้`
           }
         >
-          <Input type="date" value={cutoffDate} onChange={(event) => setCutoffOverride(event.target.value)} />
+          <Input id={`${fieldId}-cutoff-date`} type="date" value={cutoffDate} onChange={(event) => setCutoffOverride(event.target.value)} />
           {closedPeriods.status === 'error' && <ClosedPeriodsUnavailableNote />}
         </Field>
 
@@ -222,8 +225,9 @@ export function CreateBillingModal({
           <ClosedPeriodCutoffAlert onUseToday={setCutoffOverride} />
         )}
 
-        <Field label="เหตุผล" required hint={`อย่างน้อย ${REASON_MIN_LENGTH} ตัวอักษร — บันทึกไว้ในประวัติการใช้งาน`}>
+        <Field id={`${fieldId}-reason`} label="เหตุผล" required hint={`อย่างน้อย ${REASON_MIN_LENGTH} ตัวอักษร — บันทึกไว้ในประวัติการใช้งาน`}>
           <Textarea
+            id={`${fieldId}-reason`}
             maxLength={500}
             rows={3}
             value={reason}

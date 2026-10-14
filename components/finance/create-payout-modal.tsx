@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { Button, Field, InlineAlert, Input, Modal, Select, useToast } from '@/components/ui'
 import {
   ClosedPeriodCutoffAlert,
@@ -44,6 +44,8 @@ export function CreatePayoutModal({
   onClose: () => void
   onCreated: () => void
 }) {
+  // id ผูก label ↔ ช่อง + aria-invalid/aria-describedby ผ่าน `<Field id>` (ตรวจซ้ำ staging SV5-R9-01)
+  const fieldId = useId()
   const { showToast } = useToast()
   const [side, setSide] = useState<'outsource' | 'inhouse'>('outsource')
   /**
@@ -154,8 +156,9 @@ export function CreatePayoutModal({
           ธนาคาร/ภาษีจะถูกบล็อกทั้งรอบ
         </InlineAlert>
 
-        <Field label="ฝั่งของรอบการจ่าย" required>
+        <Field id={`${fieldId}-side`} label="ฝั่งของรอบการจ่าย" required>
           <Select
+            id={`${fieldId}-side`}
             value={side}
             onChange={(event) => {
               setSide(event.target.value === 'inhouse' ? 'inhouse' : 'outsource')
@@ -169,8 +172,8 @@ export function CreatePayoutModal({
           </Select>
         </Field>
 
-        <Field label="วันตัดรอบ (Cut-off Date)" required>
-          <Input type="date" value={cutoffDate} onChange={(event) => setCutoffOverride(event.target.value)} />
+        <Field id={`${fieldId}-cutoff-date`} label="วันตัดรอบ (Cut-off Date)" required>
+          <Input id={`${fieldId}-cutoff-date`} type="date" value={cutoffDate} onChange={(event) => setCutoffOverride(event.target.value)} />
           {cutoffOverride === null && suggestedIsFallback && (
             <p className="mt-1 text-[11px] text-slate-500">วันตัดรอบตามรอบจ่ายอยู่ในงวดที่ปิดแล้ว — ระบบใช้วันนี้แทน (แก้ได้)</p>
           )}
@@ -196,6 +199,7 @@ export function CreatePayoutModal({
         <PayoutPreview side={side} cutoffDate={cutoffDate} cycle={cycleForCutoff} />
 
         <Field
+          id={`${fieldId}-selected-cycle`}
           label="รอบจ่าย (AP) ที่ใช้กำหนดวันจ่าย"
           hint={
             matchingCycles.length === 0
@@ -204,6 +208,7 @@ export function CreatePayoutModal({
           }
         >
           <Select
+            id={`${fieldId}-selected-cycle`}
             value={selectedCycle}
             onChange={(event) => {
               setCycleChoice(event.target.value)
@@ -227,8 +232,9 @@ export function CreatePayoutModal({
           (เงินทดรองจ่ายไม่หัก WHT)
         </InlineAlert>
 
-        <Field label="ชื่อรอบจ่าย (เว้นว่าง = ระบบตั้งให้จากฝั่ง + วันตัดรอบ)">
+        <Field id={`${fieldId}-name`} label="ชื่อรอบจ่าย (เว้นว่าง = ระบบตั้งให้จากฝั่ง + วันตัดรอบ)">
           <Input
+            id={`${fieldId}-name`}
             placeholder="เช่น รอบจ่าย Outsource ตัดรอบ 30/06/2569"
             value={name}
             onChange={(event) => setName(event.target.value)}

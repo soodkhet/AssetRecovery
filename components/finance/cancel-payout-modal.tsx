@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { Button, Field, InlineAlert, Modal, Textarea, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { fmtDateTime } from '@/lib/format/datetime'
@@ -24,6 +24,8 @@ export function CancelPayoutModal({
   onClose: () => void
   onCancelled: () => void
 }) {
+  // id ผูก label ↔ ช่อง + aria-invalid/aria-describedby ผ่าน `<Field id>` (ตรวจซ้ำ staging SV5-R9-01)
+  const fieldId = useId()
   const { showToast } = useToast()
   const [reason, setReason] = useState('')
   const [confirmFileNotSent, setConfirmFileNotSent] = useState(false)
@@ -94,8 +96,9 @@ export function CancelPayoutModal({
           )}
         </div>
 
-        <Field label="เหตุผลการยกเลิก" required hint="อย่างน้อย 5 ตัวอักษร — บันทึกลงรอบจ่ายและประวัติการแก้ไข">
+        <Field id={`${fieldId}-reason`} label="เหตุผลการยกเลิก" required hint="อย่างน้อย 5 ตัวอักษร — บันทึกลงรอบจ่ายและประวัติการแก้ไข">
           <Textarea
+            id={`${fieldId}-reason`}
             maxLength={500}
             rows={3}
             value={reason}

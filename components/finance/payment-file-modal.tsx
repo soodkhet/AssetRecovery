@@ -1,7 +1,7 @@
 'use client'
 
 import { buttonClass } from '@/components/ui/button'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useId, useState } from 'react'
 import { Button, Field, InlineAlert, Modal, RefText, Select, Textarea, useToast } from '@/components/ui'
 import { REASON_MIN_LENGTH } from '@/components/settings/reason-confirm-modal'
 import { callApi, jsonRequest, type ApiWarning } from '@/lib/api/types'
@@ -38,6 +38,8 @@ export function PaymentFileModal({
   onClose: () => void
   onDone: () => void
 }) {
+  // id ผูก label ↔ ช่อง + aria-invalid/aria-describedby ผ่าน `<Field id>` (ตรวจซ้ำ staging SV5-R9-01)
+  const fieldId = useId()
   const { showToast } = useToast()
   const [formats, setFormats] = useState<readonly BankFileFormatDto[]>([])
   const [accounts, setAccounts] = useState<readonly BankAccountDto[]>([])
@@ -231,8 +233,8 @@ export function PaymentFileModal({
         ) : (
           <>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Field label="รูปแบบไฟล์ธนาคาร" required>
-                <Select value={formatId} onChange={(event) => setFormatId(event.target.value)}>
+              <Field id={`${fieldId}-format-id`} label="รูปแบบไฟล์ธนาคาร" required>
+                <Select id={`${fieldId}-format-id`} value={formatId} onChange={(event) => setFormatId(event.target.value)}>
                   <option value="">— เลือกรูปแบบ —</option>
                   {formats.map((format) => (
                     <option key={format.id} value={format.id} disabled={!format.usable}>
@@ -243,8 +245,8 @@ export function PaymentFileModal({
                 </Select>
               </Field>
 
-              <Field label="บัญชีบริษัทที่จ่าย" required>
-                <Select value={accountId} onChange={(event) => changeAccount(event.target.value)}>
+              <Field id={`${fieldId}-account-id`} label="บัญชีบริษัทที่จ่าย" required>
+                <Select id={`${fieldId}-account-id`} value={accountId} onChange={(event) => changeAccount(event.target.value)}>
                   <option value="">— เลือกบัญชี —</option>
                   {accounts.map((account) => (
                     <option key={account.id} value={account.id}>
@@ -281,8 +283,9 @@ export function PaymentFileModal({
               <Summary label="ยอดโอนสุทธิ" value={fmtSatangSymbol(batch.transferSatang)} tone="emerald" />
             </div>
 
-            <Field label="เหตุผล / อ้างอิงการอนุมัติจ่าย" required>
+            <Field id={`${fieldId}-reason`} label="เหตุผล / อ้างอิงการอนุมัติจ่าย" required>
               <Textarea
+                id={`${fieldId}-reason`}
                 maxLength={500}
                 rows={2}
                 value={reason}
