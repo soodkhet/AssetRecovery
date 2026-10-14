@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  withAgingBucketError,
   DEFAULT_AR_AGING_BUCKETS,
   DEFAULT_WRITE_OFF_TOLERANCE_SATANG,
   MAX_AGING_BUCKETS,
@@ -93,5 +94,17 @@ describe('toFinancePolicyAuditPayload', () => {
       substitute_receipt_max_per_doc_satang: 50_000,
       substitute_receipt_max_per_month_satang: 300_000,
     })
+  })
+})
+
+describe('withAgingBucketError (SV5-A11Y-A3-02)', () => {
+  it('ข้อผิดรายช่อง ⇒ คัดขึ้นเป็นข้อความของกลุ่ม · มีข้อความกลุ่มอยู่แล้ว/ไม่มีข้อผิด ⇒ คงเดิม', () => {
+    expect(withAgingBucketError({ 'arAgingBuckets.1': 'ว่าง', reason: 'x' })).toEqual({
+      'arAgingBuckets.1': 'ว่าง',
+      arAgingBuckets: 'ว่าง',
+      reason: 'x',
+    })
+    expect(withAgingBucketError({ arAgingBuckets: 'กลุ่ม', 'arAgingBuckets.0': 'ช่อง' }).arAgingBuckets).toBe('กลุ่ม')
+    expect(withAgingBucketError({ reason: 'x' })).toEqual({ reason: 'x' })
   })
 })

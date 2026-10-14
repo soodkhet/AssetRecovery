@@ -168,6 +168,31 @@ describe('financePolicyUpdateSchema (§6.2.1)', () => {
   it('เพดาน advance ทศนิยม = ไม่ผ่าน (satang เท่านั้น)', () => {
     expect(financePolicyUpdateSchema.safeParse({ ...base, advanceMaxAmountPerRequestSatang: 1.5 }).success).toBe(false)
   })
+
+  // ตรวจซ้ำ staging SV5-A11Y-A3-02 — ช่องบังคับว่าง (FE ส่ง null) ต้องผิด ห้ามกลายเป็น 0 · 0 ที่พิมพ์เอง = ไม่ตัดส่วนต่าง ผ่าน
+  it('เพดานตัดส่วนต่างว่าง/ไม่ส่ง = ไม่ผ่าน พร้อมข้อความให้ระบุ · 0 = ผ่าน (ไม่ตัด)', () => {
+    const empty = financePolicyUpdateSchema.safeParse({ ...base, writeOffToleranceSatang: null })
+    expect(empty.success).toBe(false)
+    expect(empty.error?.issues[0]?.path).toEqual(['writeOffToleranceSatang'])
+    expect(empty.error?.issues[0]?.message).toBe('กรุณาระบุเพดานตัดส่วนต่างค่าธรรมเนียม')
+    const { writeOffToleranceSatang: _omit, ...missing } = base
+    expect(financePolicyUpdateSchema.safeParse(missing).success).toBe(false)
+    expect(financePolicyUpdateSchema.parse({ ...base, writeOffToleranceSatang: 0 }).writeOffToleranceSatang).toBe(0)
+  })
+
+  it('เพดานใบรับรองแทนใบเสร็จส่ง null = ไม่ผ่าน (ไม่ใช้ค่าเริ่มต้นแทน)', () => {
+    const perDoc = financePolicyUpdateSchema.safeParse({ ...base, substituteReceiptMaxPerDocSatang: null })
+    expect(perDoc.error?.issues[0]?.message).toBe('กรุณาระบุเพดานใบรับรองแทนใบเสร็จต่อใบ')
+    const perMonth = financePolicyUpdateSchema.safeParse({ ...base, substituteReceiptMaxPerMonthSatang: null })
+    expect(perMonth.error?.issues[0]?.message).toBe('กรุณาระบุเพดานใบรับรองแทนใบเสร็จต่อเดือน')
+  })
+
+  it('ช่วงอายุหนี้ที่เว้นว่าง (null) = ไม่ผ่าน ชี้ช่องนั้น — ไม่ตัดทิ้งเงียบ', () => {
+    const parsed = financePolicyUpdateSchema.safeParse({ ...base, arAgingBuckets: [30, null, 90] })
+    expect(parsed.success).toBe(false)
+    expect(parsed.error?.issues[0]?.path).toEqual(['arAgingBuckets', 1])
+    expect(parsed.error?.issues[0]?.message).toBe('กรุณาระบุจำนวนวันให้ครบทุกช่วง (ช่วงที่ไม่ใช้ให้กดลบ)')
+  })
 })
 
 describe('bankAccountCreateSchema (§6.3)', () => {

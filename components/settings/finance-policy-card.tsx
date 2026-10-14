@@ -20,7 +20,7 @@ import { callApi, jsonRequest } from '@/lib/api/types'
 import { toFieldErrors } from '@/lib/api/validation'
 import { fmtDate } from '@/lib/format/datetime'
 import { parseBahtInput, toBahtInput } from '@/lib/format/money'
-import { MAX_AGING_BUCKETS, MIN_AGING_BUCKETS, describeAgingBuckets } from '@/lib/settings/finance-policy'
+import { MAX_AGING_BUCKETS, MIN_AGING_BUCKETS, describeAgingBuckets, withAgingBucketError } from '@/lib/settings/finance-policy'
 import {
   advancePolicyHelp,
   agingBucketsHelp,
@@ -131,14 +131,15 @@ export function FinancePolicyCard() {
     const parsed = financePolicyUpdateSchema.safeParse({
       advanceMaxAmountPerRequestSatang: parseBahtInput(form.advanceMaxAmountPerRequest),
       requirePayeeIdDocument: form.requirePayeeIdDocument,
-      arAgingBuckets: form.arAgingBuckets.filter((value) => value.trim() !== '').map((value) => Number(value)),
-      writeOffToleranceSatang: parseBahtInput(form.writeOffTolerance) ?? 0,
-      substituteReceiptMaxPerDocSatang: parseBahtInput(form.substituteReceiptMaxPerDoc) ?? 0,
-      substituteReceiptMaxPerMonthSatang: parseBahtInput(form.substituteReceiptMaxPerMonth) ?? 0,
+      // ช่องว่างส่ง null ให้ schema ปฏิเสธ — ห้ามแปลงเป็น 0 / ห้ามตัดช่วงที่ว่างทิ้งเงียบ (ตรวจซ้ำ staging SV5-A11Y-A3-02)
+      arAgingBuckets: form.arAgingBuckets.map((value) => (value.trim() === '' ? null : Number(value))),
+      writeOffToleranceSatang: parseBahtInput(form.writeOffTolerance),
+      substituteReceiptMaxPerDocSatang: parseBahtInput(form.substituteReceiptMaxPerDoc),
+      substituteReceiptMaxPerMonthSatang: parseBahtInput(form.substituteReceiptMaxPerMonth),
       reason: form.reason.trim(),
     })
     if (!parsed.success) {
-      setErrors(toFieldErrors(parsed.error))
+      setErrors(withAgingBucketError(toFieldErrors(parsed.error)))
       return
     }
 
@@ -274,6 +275,8 @@ export function FinancePolicyCard() {
                   <div className="w-24">
                     <Input
                       aria-label={`ช่วงอายุหนี้ที่ ${index + 1}`}
+                      invalid={errors[`arAgingBuckets.${index}`] !== undefined}
+                      aria-describedby={errors[`arAgingBuckets.${index}`] !== undefined ? 'policy-aging-error' : undefined}
                       numeric
                       inputMode="numeric"
                       value={value}

@@ -52,6 +52,23 @@ export function satangSchema(label: string) {
     .max(MAX_SATANG, `${label} เกินเพดานที่ระบบรับได้`)
 }
 
+/**
+ * เงินช่องบังคับ — เหมือน `satangSchema()` แต่ค่าว่าง (`null`/ไม่ส่ง) ได้ข้อความ "กรุณาระบุ…" แทนข้อความรูปแบบตัวเลข
+ * ⇒ FE ส่ง `parseBahtInput()` ตรง ๆ (ช่องว่าง = `null`) ห้ามแปลงช่องว่างเป็น 0 เอง · 0 ที่ผู้ใช้พิมพ์ยังผ่าน (ตรวจซ้ำ staging SV5-A11Y-A3-02)
+ */
+export function requiredSatangSchema(label: string) {
+  return z
+    .number({
+      error: (issue) =>
+        issue.input === undefined || issue.input === null
+          ? `กรุณาระบุ${label}`
+          : `${label} ต้องเป็นตัวเลข ทศนิยมไม่เกิน 2 ตำแหน่ง`,
+    })
+    .int(`${label} ต้องเป็นจำนวนเต็มสตางค์ (ห้ามมีทศนิยม)`)
+    .min(0, `${label} ต้องไม่ติดลบ`)
+    .max(MAX_SATANG, `${label} เกินเพดานที่ระบบรับได้`)
+}
+
 /** เปอร์เซ็นต์ = NUMERIC(5,2) — ข้อยกเว้นเดียวของกฎ "เงินเป็น INTEGER" (`02` §2.2) */
 export function pctSchema(label: string, max = 100) {
   return z

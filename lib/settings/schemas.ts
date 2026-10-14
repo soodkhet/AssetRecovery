@@ -4,7 +4,7 @@ import {
   DEFAULT_SUBSTITUTE_RECEIPT_MAX_PER_DOC_SATANG,
   DEFAULT_SUBSTITUTE_RECEIPT_MAX_PER_MONTH_SATANG,
 } from '@/lib/substitute-receipts/substitute-receipt'
-import { dateOnlySchema, pctSchema, reasonSchema, satangSchema } from '@/lib/api/validation'
+import { dateOnlySchema, pctSchema, reasonSchema, requiredSatangSchema, satangSchema } from '@/lib/api/validation'
 import { MAX_APPROVAL_STEPS, duplicateApprovalSteps } from '@/lib/settings/approval-matrix'
 import { thaiBankByCode } from '@/lib/banks/thai-banks'
 import { ACCOUNT_TYPE_VALUES, MAX_AUTO_MATCH_TOLERANCE_DAYS } from '@/lib/settings/bank-account'
@@ -196,20 +196,27 @@ const financePolicyFields = z.object({
   requirePayeeIdDocument: z.boolean(),
   arAgingBuckets: z
     .array(
+      // ช่วงที่เว้นว่าง (FE ส่ง null) = ผิด — ห้ามตัดทิ้งเงียบ (ตรวจซ้ำ staging SV5-A11Y-A3-02)
       z
-        .number()
+        .number({
+          error: (issue) =>
+            issue.input === undefined || issue.input === null
+              ? 'กรุณาระบุจำนวนวันให้ครบทุกช่วง (ช่วงที่ไม่ใช้ให้กดลบ)'
+              : 'ช่วงอายุหนี้ต้องเป็นจำนวนเต็มวัน',
+        })
         .int('ช่วงอายุหนี้ต้องเป็นจำนวนเต็มวัน')
         .min(1, 'ช่วงอายุหนี้ต้องมากกว่า 0 วัน')
         .max(MAX_AGING_BUCKET_DAYS, 'ช่วงอายุหนี้มากเกินไป'),
     )
     .min(MIN_AGING_BUCKETS, 'ต้องมีช่วงอายุหนี้อย่างน้อย 1 ช่วง')
     .max(MAX_AGING_BUCKETS, `ช่วงอายุหนี้ได้ไม่เกิน ${MAX_AGING_BUCKETS} ช่วง`),
-  writeOffToleranceSatang: satangSchema('เพดานตัดส่วนต่างค่าธรรมเนียม'),
-  // มติ PO U103 — เพดานใบรับรองแทนใบเสร็จ (ต้องมากกว่า 0 · ไม่ส่ง = ค่าเริ่มต้น)
-  substituteReceiptMaxPerDocSatang: satangSchema('เพดานใบรับรองแทนใบเสร็จต่อใบ')
+  // บังคับ — 0 = ไม่ตัดส่วนต่าง (ค่าที่ผู้ใช้ตั้งเองได้) · ว่าง/null = ผิด ห้ามแปลงเป็น 0 (ตรวจซ้ำ staging SV5-A11Y-A3-02)
+  writeOffToleranceSatang: requiredSatangSchema('เพดานตัดส่วนต่างค่าธรรมเนียม'),
+  // มติ PO U103 — เพดานใบรับรองแทนใบเสร็จ (ต้องมากกว่า 0 · ไม่ส่ง key = ค่าเริ่มต้น · ส่ง null = ผิด)
+  substituteReceiptMaxPerDocSatang: requiredSatangSchema('เพดานใบรับรองแทนใบเสร็จต่อใบ')
     .refine((value) => value > 0, 'เพดานใบรับรองแทนใบเสร็จต่อใบต้องมากกว่า 0')
     .default(DEFAULT_SUBSTITUTE_RECEIPT_MAX_PER_DOC_SATANG),
-  substituteReceiptMaxPerMonthSatang: satangSchema('เพดานใบรับรองแทนใบเสร็จต่อเดือน')
+  substituteReceiptMaxPerMonthSatang: requiredSatangSchema('เพดานใบรับรองแทนใบเสร็จต่อเดือน')
     .refine((value) => value > 0, 'เพดานใบรับรองแทนใบเสร็จต่อเดือนต้องมากกว่า 0')
     .default(DEFAULT_SUBSTITUTE_RECEIPT_MAX_PER_MONTH_SATANG),
 })

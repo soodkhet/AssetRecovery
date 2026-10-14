@@ -77,3 +77,13 @@ export function toFinancePolicyAuditPayload(values: FinancePolicyValues): Record
     substitute_receipt_max_per_month_satang: values.substituteReceiptMaxPerMonthSatang,
   }
 }
+
+/**
+ * ข้อผิดของช่วงอายุหนี้รายช่อง (`arAgingBuckets.<index>`) ⇒ แสดงที่ข้อความของกลุ่ม (`arAgingBuckets`) ด้วย
+ * — ช่องรายช่วงไม่มีข้อความของตัวเอง (ชี้ข้อความกลุ่มแทน)
+ */
+export function withAgingBucketError(errors: Record<string, string>): Record<string, string> {
+  if (errors.arAgingBuckets !== undefined) return errors
+  const bucketMessage = Object.entries(errors).find(([key]) => key.startsWith('arAgingBuckets.'))?.[1]
+  return bucketMessage === undefined ? errors : { ...errors, arAgingBuckets: bucketMessage }
+}
