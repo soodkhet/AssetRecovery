@@ -6,6 +6,7 @@
  *   (ข้ามปุ่มที่ติด `data-initial-focus="skip"` เช่นปุ่ม X ที่หัว) — แต่ช่องที่เปิดรายการแนะนำเอง (combobox) / iframe /
  *   ช่องพิมพ์บนจอสัมผัส (คีย์บอร์ดเด้งบังฟอร์ม) ⇒ โฟกัสแผงแทน (`initialFocus: 'container'` = โฟกัสแผงเสมอ)
  * - ปิดแล้วคืนโฟกัสให้ปุ่มที่เปิด — เว้นแต่ผู้เรียกย้ายโฟกัสไปที่อื่นเองแล้ว
+ * - ปุ่มที่โฟกัสอยู่ถูก disable (`<Button loading>`) / ถอดออก ⇒ จอดโฟกัสที่แผง แล้วคืนให้ปุ่มเมื่อกลับมาใช้ได้ (SV5-D3-02)
  * - ใช้ keydown ไม่ใช้ `inert` — โมดัลของระบบ render ในที่ (ไม่มี portal) จึงไม่มี sibling ระดับ body ให้ปิด
  *
  * ตรรกะตัดสินแยกเป็น pure function (`selectTabbable` / `decideTabTarget` / `chooseInitialFocus`) — เทสต์ไม่ต้องใช้ DOM
@@ -116,6 +117,33 @@ export function shouldRestoreFocus({
  */
 export function pickOpener<T>({ active, lastInteracted }: { active: T | null; lastInteracted: T | null }): T | null {
   return active ?? lastInteracted
+}
+
+/**
+ * โฟกัสในแผงหลุดเพราะ element ที่โฟกัสอยู่ถูก disable/ซ่อน/ถอดออก (เช่น `<Button loading>` ที่กดยืนยันแล้วเข้าสถานะโหลด)
+ * ⇒ ตัดสินว่าจะทำอะไร (SV5-D3-02) — ไม่เปลี่ยนการ disable ปุ่ม จึงยังกันกดส่งซ้ำ/Enter ส่งฟอร์มซ้ำได้เหมือนเดิม
+ * - `park` = โฟกัสหลุด (body / ตัวที่ใช้ไม่ได้แล้ว) ⇒ จอดที่ตัวแผง (`tabIndex=-1`) ไม่ให้ screen reader หลงไป body
+ * - `restore` = trap จอดโฟกัสไว้เอง แล้วตัวที่โฟกัสก่อนจอดกลับมาใช้ได้ (โหลดเสร็จ/error) ⇒ คืนให้ตัวนั้น
+ *   (คืนเฉพาะกรณีจอดไว้เอง — ไม่ดึงโฟกัสเข้าช่องพิมพ์เองจนคีย์บอร์ดมือถือเด้ง)
+ * - `null` = โฟกัสอยู่ที่ใช้ได้แล้ว (เช่น `revealFirstFieldError` โฟกัสช่องที่ผิดไปแล้ว) ⇒ ไม่แย่ง
+ */
+export type FocusRecovery = 'restore' | 'park' | null
+
+export function decideFocusRecovery({
+  focusLost,
+  parked,
+  lastFocusedUsable,
+}: {
+  /** activeElement เป็น body/null หรือเป็น element ในแผงที่ใช้ไม่ได้แล้ว (disabled/ซ่อน) */
+  focusLost: boolean
+  /** โฟกัสอยู่ที่ตัวแผงเพราะ trap จอดไว้เอง (ไม่ใช่ผู้ใช้/ผู้เรียกตั้งใจโฟกัสแผง) */
+  parked: boolean
+  /** ตัวที่โฟกัสล่าสุดในแผงยังอยู่ในแผง ไม่ disabled ไม่ซ่อน */
+  lastFocusedUsable: boolean
+}): FocusRecovery {
+  if (focusLost) return 'park'
+  if (parked && lastFocusedUsable) return 'restore'
+  return null
 }
 
 // ───────────────────────────── DOM ─────────────────────────────
@@ -251,6 +279,61 @@ export function installFocusTrap({ getContainer, isTop, initialFocus = 'first' }
     }
   }
 
+  /** ตัวล่าสุดในแผงที่ได้โฟกัส · โฟกัสถูกจอดที่แผงโดย trap — ไว้คืนเมื่อปุ่มที่กดกลับมาใช้ได้ (SV5-D3-02) */
+  const initial = doc.activeElement
+  let lastFocusedInside: HTMLElement | null =
+    initial instanceof HTMLElement && initial !== container && container.contains(initial) ? initial : null
+  let parked = false
+
+  function isUsable(element: HTMLElement | null, current: HTMLElement): element is HTMLElement {
+    return (
+      element !== null &&
+      element !== current &&
+      element.isConnected &&
+      current.contains(element) &&
+      !element.matches(':disabled') &&
+      !isHidden(element)
+    )
+  }
+
+  function recoverFocus() {
+    if (!isTop()) return
+    const current = getContainer()
+    if (current === null) return
+    const now = doc.activeElement
+    const focusLost =
+      now === null ||
+      now === doc.body ||
+      (now instanceof HTMLElement && now !== current && current.contains(now) && !isUsable(now, current))
+    const decision = decideFocusRecovery({
+      focusLost,
+      parked: parked && now === current,
+      lastFocusedUsable: isUsable(lastFocusedInside, current),
+    })
+    if (decision === 'restore' && lastFocusedInside !== null) {
+      parked = false
+      lastFocusedInside.focus({ preventScroll: true })
+    } else if (decision === 'park') {
+      parked = true
+      current.focus({ preventScroll: true })
+    }
+  }
+
+  // ปุ่มที่โฟกัสอยู่ถูก disable (`<Button loading>`) / ถอดออก ⇒ browser ทิ้งโฟกัสไป body เงียบ ๆ (ไม่มี focusout ให้ฟัง)
+  // ⇒ ดูการเปลี่ยน disabled/hidden/inert/ลูกในแผง แล้วจอดโฟกัสที่แผง · ปุ่มกลับมาใช้ได้ (error) ⇒ คืนให้ปุ่มนั้น
+  const observer =
+    typeof MutationObserver === 'undefined'
+      ? null
+      : new MutationObserver(() => {
+          recoverFocus()
+        })
+  observer?.observe(container, {
+    subtree: true,
+    childList: true,
+    attributes: true,
+    attributeFilter: ['disabled', 'hidden', 'inert', 'aria-busy'],
+  })
+
   function handleKey(event: KeyboardEvent) {
     if (event.key !== 'Tab' || event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return
     if (!isTop()) return
@@ -270,7 +353,15 @@ export function installFocusTrap({ getContainer, isTop, initialFocus = 'first' }
     if (!isTop()) return
     const current = getContainer()
     const target = event.target
-    if (current === null || !(target instanceof Node) || current.contains(target)) return
+    if (current === null || !(target instanceof Node)) return
+    if (current.contains(target)) {
+      // จำตัวที่ได้โฟกัสล่าสุด (ไม่นับตัวแผงเอง) — ผู้ใช้/ผู้เรียกย้ายโฟกัสเอง ⇒ เลิกสถานะจอด
+      if (target !== current && target instanceof HTMLElement) {
+        lastFocusedInside = target
+        parked = false
+      }
+      return
+    }
     focusElement(tabbableElements(current)[0] ?? current)
   }
 
@@ -279,6 +370,7 @@ export function installFocusTrap({ getContainer, isTop, initialFocus = 'first' }
   return () => {
     doc.removeEventListener('keydown', handleKey)
     doc.removeEventListener('focusin', handleFocusIn)
+    observer?.disconnect()
     if (opener === null) return
     const now = doc.activeElement
     if (

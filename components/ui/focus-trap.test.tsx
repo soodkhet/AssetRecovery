@@ -2,12 +2,14 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import {
   chooseInitialFocus,
+  decideFocusRecovery,
   decideTabTarget,
   pickOpener,
   selectTabbable,
   shouldRestoreFocus,
   type TabCandidate,
 } from '@/components/ui/focus-trap'
+import { Button } from '@/components/ui/button'
 import { ConfirmModal, Modal } from '@/components/ui/modal'
 
 function candidate(overrides: Partial<TabCandidate> & { name?: string } = {}): TabCandidate & { name: string } {
@@ -165,5 +167,48 @@ describe('pickOpener — ใครเปิดโมดัล', () => {
   it('Safari ไม่โฟกัสปุ่มที่คลิก / autoFocus ย้ายโฟกัสเข้าแผงก่อน ⇒ ตัวที่ผู้ใช้กดล่าสุด', () => {
     expect(pickOpener({ active: null, lastInteracted: 'button' })).toBe('button')
     expect(pickOpener({ active: null, lastInteracted: null })).toBeNull()
+  })
+})
+
+/** ตรวจ focus trap staging SV5-D3-02 — กดยืนยันแล้วปุ่มเข้าสถานะโหลด โฟกัสต้องไม่หลุดไป body */
+describe('decideFocusRecovery — ปุ่มที่โฟกัสอยู่ถูก disable ระหว่างโหลด', () => {
+  it('ปุ่มที่กดถูก disable (โฟกัสหลุดเป็น body หรือยังค้างบนปุ่มที่ใช้ไม่ได้) ⇒ จอดที่แผง', () => {
+    expect(decideFocusRecovery({ focusLost: true, parked: false, lastFocusedUsable: false })).toBe('park')
+  })
+
+  it('error ⇒ ปุ่มกลับมาใช้ได้ขณะโฟกัสยังจอดที่แผง ⇒ คืนโฟกัสให้ปุ่มที่กด', () => {
+    expect(decideFocusRecovery({ focusLost: false, parked: true, lastFocusedUsable: true })).toBe('restore')
+  })
+
+  it('ระหว่างยังโหลด (ปุ่มยัง disabled) มีการเปลี่ยนแปลงอื่นในแผง ⇒ จอดต่อ ไม่ทำอะไร', () => {
+    expect(decideFocusRecovery({ focusLost: false, parked: true, lastFocusedUsable: false })).toBeNull()
+  })
+
+  it('revealFirstFieldError โฟกัสช่องที่ผิดไปแล้ว (ไม่ได้จอด) ⇒ ไม่แย่งกลับไปปุ่ม', () => {
+    expect(decideFocusRecovery({ focusLost: false, parked: false, lastFocusedUsable: true })).toBeNull()
+  })
+
+  it('ไม่ดึงโฟกัสเข้าตัวเดิมเองถ้า trap ไม่ได้จอดไว้ (กันคีย์บอร์ดมือถือเด้ง)', () => {
+    expect(decideFocusRecovery({ focusLost: false, parked: false, lastFocusedUsable: false })).toBeNull()
+  })
+
+  it('ลำดับเต็ม: โหลด ⇒ จอด · error ⇒ คืนปุ่ม · โฟกัสอยู่ปุ่มแล้ว ⇒ เฉย', () => {
+    const steps = [
+      { focusLost: true, parked: false, lastFocusedUsable: false },
+      { focusLost: false, parked: true, lastFocusedUsable: true },
+      { focusLost: false, parked: false, lastFocusedUsable: true },
+    ]
+    expect(steps.map((step) => decideFocusRecovery(step))).toEqual(['park', 'restore', null])
+  })
+
+  it('<Button loading> ยัง disabled จริง (กันกดซ้ำ/Enter ส่งฟอร์มซ้ำ) + aria-busy', () => {
+    const html = renderToStaticMarkup(
+      <Button type="submit" loading>
+        ยืนยัน
+      </Button>,
+    )
+    expect(html).toMatch(/<button[^>]*\sdisabled=""/)
+    expect(html).toContain('aria-busy="true"')
+    expect(renderToStaticMarkup(<Button type="submit">ยืนยัน</Button>)).not.toContain('disabled=""')
   })
 })
