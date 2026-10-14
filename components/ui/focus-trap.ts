@@ -5,7 +5,7 @@ import { fieldErrorControl, scrollFieldErrorIntoView } from '@/components/ui/inp
  *
  * - Tab / Shift+Tab วนอยู่ในแผงของชั้นบนสุดเท่านั้น (ชั้นข้างหลังเฉย — ตัดสินด้วย `isTop` จาก `modal-stack.ts`)
  * - เปิดแล้ว: โฟกัสที่อยู่ในแผงอยู่แล้ว (`autoFocus`) คงไว้ · `[data-autofocus]` · ไม่งั้นช่อง/ปุ่มแรกที่ Tab ถึง
- *   (ข้ามปุ่มที่ติด `data-initial-focus="skip"` เช่นปุ่ม X ที่หัว) — แต่ช่องที่เปิดรายการแนะนำเอง (combobox) / iframe /
+ *   (ข้ามปุ่มที่ติด `data-initial-focus="skip"` เช่นปุ่ม X ที่หัว) — แต่ combobox (รายการแนะนำ — เปิดเมื่อผู้ใช้คลิก/พิมพ์/ลูกศรลงเท่านั้น `combobox-open.ts`) / iframe /
  *   ช่องพิมพ์บนจอสัมผัส (คีย์บอร์ดเด้งบังฟอร์ม) ⇒ โฟกัสแผงแทน (`initialFocus: 'container'` = โฟกัสแผงเสมอ)
  * - ปิดแล้วคืนโฟกัสให้ปุ่มที่เปิด — เว้นแต่ผู้เรียกย้ายโฟกัสไปที่อื่นเองแล้ว
  * - ปุ่มที่โฟกัสอยู่ถูก disable (`<Button loading>`) / ถอดออก ⇒ จอดโฟกัสที่แผง แล้วคืนให้ปุ่มเมื่อกลับมาใช้ได้ (SV5-D3-02)
@@ -89,7 +89,7 @@ export interface InitialFocusCandidate {
 
 /**
  * เลือกตัวที่โฟกัสตอนเปิด — คืน index ใน `candidates` หรือ -1 = โฟกัสแผง
- * ตัวแรกที่ไม่ข้าม: combobox (โฟกัสแล้วเปิดรายการแนะนำเอง) / iframe (ตัวแสดง PDF ดึงคีย์ Esc ไป) ⇒ แผง ·
+ * ตัวแรกที่ไม่ข้าม: combobox (คงให้แผงรับโฟกัสก่อน — ผู้ใช้เลือกเองว่าจะเปิดรายการ) / iframe (ตัวแสดง PDF ดึงคีย์ Esc ไป) ⇒ แผง ·
  * ช่องพิมพ์บนจอสัมผัส ⇒ แผง (คีย์บอร์ดเด้งบังฟอร์มทันทีที่เปิด)
  */
 export function chooseInitialFocus(candidates: readonly InitialFocusCandidate[], { coarsePointer }: { coarsePointer: boolean }): number {

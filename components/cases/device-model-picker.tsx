@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from 'react'
 import { Input, cn } from '@/components/ui'
+import { comboboxOpenAction, type ComboboxTrigger } from '@/components/ui/combobox-open'
 import { callApi } from '@/lib/api/types'
 import type { DeviceAssetKind } from '@/lib/device-catalog/catalog'
 import type { DeviceModelOptionDto, DeviceTacLookupDto } from '@/lib/device-catalog/types'
@@ -58,6 +59,12 @@ export function DeviceModelPicker({ id, assetKind, value, identifier, invalid = 
   const [failed, setFailed] = useState(false)
   const [highlight, setHighlight] = useState(-1)
   const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(
+    () => () => {
+      if (blurTimer.current !== null) clearTimeout(blurTimer.current)
+    },
+    [],
+  )
   const [tacState, setTacState] = useState<TacState>({ status: 'idle' })
   // ข้อความล่าสุดที่เติมจาก IMEI — ผู้ใช้แก้แล้ว (ไม่ตรง) = ไม่เติมทับอีก
   const autoLabel = useRef<string | null>(null)
@@ -139,6 +146,17 @@ export function DeviceModelPicker({ id, assetKind, value, identifier, invalid = 
     }
   }, [open, manual, query, assetKind])
 
+  /** เปิด/ปิดรายการตามการกระทำของผู้ใช้เท่านั้น (pure `comboboxOpenAction`) */
+  function apply(trigger: ComboboxTrigger): void {
+    const action = comboboxOpenAction(trigger, open)
+    if (action === 'open') {
+      setLoading(true)
+      setOpen(true)
+    } else if (action === 'close') {
+      setOpen(false)
+    }
+  }
+
   function pick(option: DeviceModelOptionDto): void {
     onChange({ deviceModelId: option.id, text: option.label })
     setOpen(false)
@@ -175,8 +193,7 @@ export function DeviceModelPicker({ id, assetKind, value, identifier, invalid = 
           className="text-xs font-medium text-emerald-700 hover:underline"
           onClick={() => {
             setManual(false)
-            setLoading(true)
-            setOpen(true)
+            apply({ type: 'click' })
           }}
         >
           เลือกจากรายการแทน
@@ -198,9 +215,11 @@ export function DeviceModelPicker({ id, assetKind, value, identifier, invalid = 
         value={value.text}
         placeholder="พิมพ์ค้นหา เช่น samsung a55"
         invalid={invalid}
-        onFocus={() => {
-          setLoading(true)
-          setOpen(true)
+        // ได้โฟกัสอย่างเดียว (Tab / โปรแกรมโฟกัสช่องที่ผิด / focus trap คืนโฟกัส) ไม่เปิดรายการ — SV5-F1-01
+        onClick={() => {
+          // คลิกกลับเข้ามาเร็วหลัง blur — ยกเลิกตัวปิดที่ค้างอยู่ ไม่งั้นรายการหายเองหลังคลิก
+          if (blurTimer.current !== null) clearTimeout(blurTimer.current)
+          apply({ type: 'click' })
         }}
         onBlur={() => {
           blurTimer.current = setTimeout(() => setOpen(false), 150)
@@ -209,10 +228,19 @@ export function DeviceModelPicker({ id, assetKind, value, identifier, invalid = 
           // พิมพ์ใหม่ = ยกเลิกรุ่นที่เลือกไว้ (ข้อความที่พิมพ์ยังบันทึกได้เสมอ)
           onChange({ deviceModelId: null, text: event.target.value })
           setLoading(true)
-          setOpen(true)
+          apply({ type: 'input' })
         }}
         onKeyDown={(event) => {
-          if (!open) return
+          const trigger: ComboboxTrigger = { type: 'keydown', key: event.key, altKey: event.altKey }
+          const action = comboboxOpenAction(trigger, open)
+          if (action !== null) {
+            if (event.key !== 'Escape') event.preventDefault() // ลูกศรไม่เลื่อนเคอร์เซอร์/หน้า
+            // Esc ปิดแค่รายการ — ไม่ไหลไปปิดโมดัลที่ครอบอยู่ (โมดัลฟัง keydown ที่ document)
+            if (action === 'close') event.stopPropagation()
+            apply(trigger)
+            return
+          }
+          if (!open || event.altKey) return
           if (event.key === 'ArrowDown') {
             event.preventDefault()
             setHighlight((current) => (current + 1) % total)
@@ -224,8 +252,6 @@ export function DeviceModelPicker({ id, assetKind, value, identifier, invalid = 
             const option = options[highlight]
             if (option === undefined) chooseManual()
             else pick(option)
-          } else if (event.key === 'Escape') {
-            setOpen(false)
           }
         }}
       />
