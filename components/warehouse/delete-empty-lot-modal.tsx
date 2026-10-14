@@ -1,7 +1,7 @@
 'use client'
 
 import { useId, useState } from 'react'
-import { Button, Field, InlineAlert, Modal, Textarea, useToast } from '@/components/ui'
+import { Button, Field, InlineAlert, Modal, Textarea, useRevealFieldError, useToast } from '@/components/ui'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
 import { LOT_REMOVE_ASSET_REASON_MAX } from '@/lib/warehouse/schemas'
@@ -29,11 +29,16 @@ export function DeleteEmptyLotModal({
   const [reason, setReason] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<ApiCallError | null>(null)
+  // เหตุผลว่าง = ข้อผิดของช่อง (ใต้ช่อง + aria-invalid + โฟกัส) ไม่ใช่กล่องแจ้งเตือน (ตรวจซ้ำ staging SV5-A11Y-A2-02)
+  const [reasonError, setReasonError] = useState<string | null>(null)
+  const { ref: formRef, reveal } = useRevealFieldError()
 
   async function submit(): Promise<void> {
     setError(null)
+    setReasonError(null)
     if (reason.trim() === '') {
-      setError({ title: 'ต้องระบุเหตุผล', message: 'ต้องระบุเหตุผลที่ลบล็อต' })
+      setReasonError('ต้องระบุเหตุผลที่ลบล็อต')
+      reveal()
       return
     }
     setSubmitting(true)
@@ -69,7 +74,7 @@ export function DeleteEmptyLotModal({
         </>
       }
     >
-      <div className="space-y-4">
+      <div ref={formRef} className="space-y-4">
         <InlineAlert tone="warning" title="ลบแล้วกู้คืนไม่ได้">
           ล็อต {lot.lotNumber} (ใบส่งมอบ {lot.docRef}) จะหายจากรายการล็อตและพอร์ทัลบริษัท · เลขล็อตนี้จะไม่ถูกนำกลับมาใช้
           · ประวัติการลบเก็บไว้ในบันทึกการใช้งาน
@@ -81,7 +86,7 @@ export function DeleteEmptyLotModal({
           </InlineAlert>
         )}
 
-        <Field id={`${fieldId}-reason`} label="เหตุผลที่ลบล็อต" required hint="บันทึกลงประวัติการใช้งาน">
+        <Field id={`${fieldId}-reason`} label="เหตุผลที่ลบล็อต" required error={reasonError} hint="บันทึกลงประวัติการใช้งาน">
           <Textarea
             id={`${fieldId}-reason`}
             rows={3}

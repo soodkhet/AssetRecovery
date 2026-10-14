@@ -3,7 +3,7 @@
 import { StoredPhotoThumb } from '@/components/ui/stored-photo-thumb'
 import { useId, useState } from 'react'
 import { AssetSummaryHeader } from '@/components/warehouse/asset-summary-header'
-import { Button, Field, InlineAlert, Modal, Textarea, fieldControlAria, useToast } from '@/components/ui'
+import { Button, Field, InlineAlert, Modal, Textarea, fieldControlAria, useRevealFieldError, useToast } from '@/components/ui'
 import { cn } from '@/components/ui/cn'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
@@ -77,6 +77,9 @@ export function IntakeModal({
   const [uploading, setUploading] = useState<IntakePhotoAngle | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<ApiCallError | null>(null)
+  // รายละเอียดสภาพ/สิ่งที่พบว่าง = ข้อผิดของช่อง (ใต้ช่อง + aria-invalid + โฟกัส) ไม่ใช่กล่องแจ้งเตือน (ตรวจซ้ำ staging SV5-A11Y-A2-02)
+  const [noteErrors, setNoteErrors] = useState<{ conditionNote?: string; colorCapacityNote?: string }>({})
+  const { ref: formRef, reveal } = useRevealFieldError()
   /** ยืนยันทับคำเตือน IMEI ไม่ตรงแล้วหรือยัง (force proceed — `44` §8.2) */
   const [forceProceed, setForceProceed] = useState(false)
 
@@ -132,13 +135,19 @@ export function IntakeModal({
 
   async function submit(): Promise<void> {
     setError(null)
+    setNoteErrors({})
 
     // ตรวจด้วยตัว assert ชุดเดียวกับ API — ผู้ใช้เห็น code ของ `44` §12 ไม่ใช่ `REQUIRED_MISSING`
     try {
       assertIntakeCondition({ condition, conditionNote: conditionNote.trim() === '' ? null : conditionNote })
     } catch (assertError) {
       if (assertError instanceof WarehouseError) {
-        setError({ code: assertError.code, title: assertError.title, message: assertError.userMessage })
+        if (assertError.code === 'INTAKE_MISSING_NOTE') {
+          setNoteErrors({ conditionNote: assertError.userMessage })
+          reveal()
+        } else {
+          setError({ code: assertError.code, title: assertError.title, message: assertError.userMessage })
+        }
         return
       }
       throw assertError
@@ -149,7 +158,8 @@ export function IntakeModal({
       return
     }
     if (!colorCapacityMatched && colorCapacityNote.trim() === '') {
-      setError({ title: 'ยังไม่ได้ระบุสิ่งที่พบ', message: COLOR_CAPACITY_NOTE_REQUIRED_MESSAGE })
+      setNoteErrors({ colorCapacityNote: COLOR_CAPACITY_NOTE_REQUIRED_MESSAGE })
+      reveal()
       return
     }
 
@@ -232,7 +242,7 @@ export function IntakeModal({
         </>
       }
     >
-      <div className="space-y-5">
+      <div ref={formRef} className="space-y-5">
         <AssetSummaryHeader asset={asset} />
 
         {error !== null && (
@@ -350,7 +360,7 @@ export function IntakeModal({
               ))}
             </div>
             {colorCapacityMatched === false && (
-              <Field id={`${fieldId}-color-capacity-note`} className="mt-2" label="สิ่งที่พบ" required hint="ระบุสี/ความจุของเครื่องที่รับจริง">
+              <Field id={`${fieldId}-color-capacity-note`} className="mt-2" label="สิ่งที่พบ" required error={noteErrors.colorCapacityNote} hint="ระบุสี/ความจุของเครื่องที่รับจริง">
                 <Textarea
                   id={`${fieldId}-color-capacity-note`}
                   rows={2}
@@ -390,6 +400,7 @@ export function IntakeModal({
             className="mt-3"
             label="รายละเอียดสภาพเครื่อง"
             required={requiresConditionNote(condition)}
+            error={noteErrors.conditionNote}
             hint={requiresConditionNote(condition) ? 'สภาพชำรุด/อุปกรณ์ขาดหาย ต้องกรอกรายละเอียดกำกับเสมอ' : undefined}
           >
             <Textarea

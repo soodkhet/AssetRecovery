@@ -2,7 +2,7 @@
 
 import { useId, useState } from 'react'
 import { AssetSummaryHeader } from '@/components/warehouse/asset-summary-header'
-import { Button, Field, InlineAlert, Modal, Textarea, useToast } from '@/components/ui'
+import { Button, Field, InlineAlert, Modal, Textarea, useRevealFieldError, useToast } from '@/components/ui'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
 import { LOT_REMOVE_ASSET_REASON_MAX } from '@/lib/warehouse/schemas'
@@ -34,12 +34,17 @@ export function RemoveFromLotModal({
   const [reason, setReason] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<ApiCallError | null>(null)
+  // เหตุผลว่าง = ข้อผิดของช่อง (ใต้ช่อง + aria-invalid + โฟกัส) ไม่ใช่กล่องแจ้งเตือน (ตรวจซ้ำ staging SV5-A11Y-A2-02)
+  const [reasonError, setReasonError] = useState<string | null>(null)
+  const { ref: formRef, reveal } = useRevealFieldError()
   const lastAsset = lot.assets.length <= 1
 
   async function submit(): Promise<void> {
     setError(null)
+    setReasonError(null)
     if (reason.trim() === '') {
-      setError({ title: 'ต้องระบุเหตุผล', message: 'ต้องระบุเหตุผลที่นำเครื่องออกจากล็อต' })
+      setReasonError('ต้องระบุเหตุผลที่นำเครื่องออกจากล็อต')
+      reveal()
       return
     }
     setSubmitting(true)
@@ -75,7 +80,7 @@ export function RemoveFromLotModal({
         </>
       }
     >
-      <div className="space-y-4">
+      <div ref={formRef} className="space-y-4">
         <AssetSummaryHeader asset={asset} tone="danger" />
 
         <InlineAlert tone="warning" title="เครื่องจะกลับไปรอจัดล็อต">
@@ -89,7 +94,7 @@ export function RemoveFromLotModal({
           </InlineAlert>
         )}
 
-        <Field id={`${fieldId}-reason`} label="เหตุผลที่นำออกจากล็อต" required hint="บันทึกลงประวัติการใช้งาน">
+        <Field id={`${fieldId}-reason`} label="เหตุผลที่นำออกจากล็อต" required error={reasonError} hint="บันทึกลงประวัติการใช้งาน">
           <Textarea
             id={`${fieldId}-reason`}
             rows={3}

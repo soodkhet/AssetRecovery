@@ -2,7 +2,7 @@
 
 import { useId, useState } from 'react'
 import { AssetSummaryHeader } from '@/components/warehouse/asset-summary-header'
-import { Button, Field, InlineAlert, Modal, Textarea, fieldControlAria, useToast } from '@/components/ui'
+import { Button, Field, InlineAlert, Modal, Textarea, fieldControlAria, useRevealFieldError, useToast } from '@/components/ui'
 import { cn } from '@/components/ui/cn'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
@@ -46,14 +46,19 @@ export function RejectIntakeModal({
   const showSerialInput = asset.serialContract !== null || asset.imeiContract === null
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<ApiCallError | null>(null)
+  // เหตุผลว่าง = ข้อผิดของช่อง (ใต้ช่อง + aria-invalid + โฟกัส) ไม่ใช่กล่องแจ้งเตือน (ตรวจซ้ำ staging SV5-A11Y-A2-02)
+  const [reasonError, setReasonError] = useState<string | null>(null)
+  const { ref: formRef, reveal } = useRevealFieldError()
 
   async function submit(): Promise<void> {
     setError(null)
+    setReasonError(null)
     try {
       assertRejectReason(reason)
     } catch (assertError) {
       if (assertError instanceof WarehouseError) {
-        setError({ code: assertError.code, title: assertError.title, message: assertError.userMessage })
+        setReasonError(assertError.userMessage)
+        reveal()
         return
       }
       throw assertError
@@ -100,7 +105,7 @@ export function RejectIntakeModal({
         </>
       }
     >
-      <div className="space-y-4">
+      <div ref={formRef} className="space-y-4">
         <AssetSummaryHeader asset={asset} tone="danger" />
 
         <InlineAlert tone="warning" title="ตีกลับ = ไม่รับเข้าคลัง">
@@ -148,7 +153,7 @@ export function RejectIntakeModal({
           </InlineAlert>
         )}
 
-        <Field id={`${fieldId}-reason`} label="เหตุผลที่ตีกลับ" required hint="ระบบเก็บเหตุผลนี้ไว้และแสดงให้ทีมภาคสนามเห็น — เขียนให้เข้าใจว่าต้องแก้อะไร">
+        <Field id={`${fieldId}-reason`} label="เหตุผลที่ตีกลับ" required error={reasonError} hint="ระบบเก็บเหตุผลนี้ไว้และแสดงให้ทีมภาคสนามเห็น — เขียนให้เข้าใจว่าต้องแก้อะไร">
           <Textarea
             id={`${fieldId}-reason`}
             rows={3}
