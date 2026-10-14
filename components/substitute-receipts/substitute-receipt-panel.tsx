@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react'
 import { NoReceiptLinesEditor, type NoReceiptLinesVariant } from '@/components/substitute-receipts/no-receipt-lines'
-import { Button, ConfirmModal, Field, InlineAlert, Modal, StatusBadge, Textarea, useToast } from '@/components/ui'
+import { Button, ConfirmModal, Field, InlineAlert, Modal, StatusBadge, Textarea, useRevealFieldError, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { REASON_MAX } from '@/lib/api/validation'
 import { EXPENSE_RECEIPT_ACCEPT } from '@/lib/field/media-upload'
@@ -11,8 +11,10 @@ import { fmtSatangSymbol } from '@/lib/format/money'
 import {
   substituteDraftPayload,
   substituteDraftTotalSatang,
+  substituteLineRowError,
   substituteLinesToDrafts,
   type SubstituteLineDraft,
+  type SubstituteLineIssueAt,
 } from '@/lib/substitute-receipts/form'
 import {
   SUBSTITUTE_RECEIPT_CANCEL_REASON_MIN,
@@ -70,11 +72,16 @@ export function SubstituteReceiptPanel({
   const [reissueOpen, setReissueOpen] = useState(false)
   const [reissueLines, setReissueLines] = useState<SubstituteLineDraft[]>([])
   const [reissueError, setReissueError] = useState<string | null>(null)
+  // ข้อผิดของแถว/ช่องในรายการของใบใหม่ ⇒ แสดงใต้แถวนั้น + เลื่อน/โฟกัสช่องที่ผิด (ตรวจซ้ำ staging SV5-R4-01)
+  const [reissueAt, setReissueAt] = useState<SubstituteLineIssueAt | null>(null)
+  const { ref: reissueBodyRef, reveal: revealReissueError } = useRevealFieldError()
   const [reissuing, setReissuing] = useState(false)
   const [loadingLines, setLoadingLines] = useState(false)
   const pending = receipt.status === 'pending_signature'
   const cancelled = receipt.status === 'cancelled'
   const lineDate = defaultLineDate ?? receipt.issueDate
+
+  const reissueRowError = substituteLineRowError(reissueError, reissueAt, reissueLines)
 
   async function upload(file: File): Promise<void> {
     setUploading(true)
@@ -129,6 +136,7 @@ export function SubstituteReceiptPanel({
   // มติ PO U117 ข้อ 1 — ตั้งต้นด้วยรายการ/ยอดของใบที่ยกเลิก (แก้ได้) · โหลดไม่ได้ = บรรทัดว่าง
   async function openReissue(): Promise<void> {
     setReissueError(null)
+    setReissueAt(null)
     setLoadingLines(true)
     setReissueOpen(true)
     try {
@@ -144,8 +152,11 @@ export function SubstituteReceiptPanel({
     const draft = substituteDraftPayload(reissueLines)
     if (draft.payload === null) {
       setReissueError(draft.error)
+      setReissueAt(draft.at)
+      revealReissueError()
       return
     }
+    setReissueAt(null)
     if (requiredTotalSatang !== undefined && substituteDraftTotalSatang(reissueLines) !== requiredTotalSatang) {
       setReissueError(`ยอดรวมของใบใหม่ต้องเท่ากับยอดเบิก ${fmtSatangSymbol(requiredTotalSatang)}`)
       return
@@ -332,8 +343,8 @@ export function SubstituteReceiptPanel({
           </>
         }
       >
-        <div className="space-y-3">
-          {reissueError !== null && <InlineAlert tone="error" title={reissueError} />}
+        <div ref={reissueBodyRef} className="space-y-3">
+          {reissueError !== null && reissueRowError === null && <InlineAlert tone="error" title={reissueError} />}
           {requiredTotalSatang !== undefined && (
             <p className="text-xs text-slate-600">
               ยอดรวมของใบใหม่ต้องเท่ากับยอดเบิกปัจจุบัน{' '}
@@ -348,6 +359,7 @@ export function SubstituteReceiptPanel({
               onChange={setReissueLines}
               defaultDate={lineDate}
               variant={variant}
+              error={reissueRowError}
             />
           )}
         </div>

@@ -5,7 +5,7 @@ import { usePermission } from '@/components/auth/permission-provider'
 import { OnBehalfPayeeSelect } from '@/components/payees/on-behalf-payee-select'
 import { NoReceiptLinesEditor, NoReceiptToggle } from '@/components/substitute-receipts/no-receipt-lines'
 import { StagedFileInput } from '@/components/uploads/staged-file-input'
-import { Button, Field, InlineAlert, Input, Modal, Select, Textarea, useToast } from '@/components/ui'
+import { Button, Field, FieldErrorText, InlineAlert, Input, Modal, Select, Textarea, useRevealFieldError, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { toFieldErrors } from '@/lib/api/validation'
 import { MANUAL_CLAIM_TYPES } from '@/lib/claims/claim'
@@ -18,7 +18,9 @@ import {
   emptySubstituteLine,
   substituteDraftPayload,
   substituteDraftTotalSatang,
+  substituteLineRowError,
   type SubstituteLineDraft,
+  type SubstituteLineIssueAt,
 } from '@/lib/substitute-receipts/form'
 
 /** ข้อความแทนตัวเลือก "ไม่มีใบเสร็จ" เมื่อแผนทีมของผู้รับเงินบังคับใบเสร็จค่าที่พัก (ตรงกับฟอร์มมือถือ) */
@@ -58,6 +60,9 @@ export function ManualClaimModal({
   const [substituteLines, setSubstituteLines] = useState<SubstituteLineDraft[]>([emptySubstituteLine('line-0')])
   const [note, setNote] = useState('')
   const [errors, setErrors] = useState<Record<string, string>>({})
+  // แถว/ช่องที่ผิดในตารางรายการ "ไม่มีใบเสร็จ" + เลื่อน/โฟกัสช่องที่ผิดหลังกดส่ง (ตรวจซ้ำ staging SV5-R4-01)
+  const [substituteAt, setSubstituteAt] = useState<SubstituteLineIssueAt | null>(null)
+  const { ref: bodyRef, reveal: revealError } = useRevealFieldError()
   const [saving, setSaving] = useState(false)
   // อัปโหลดใบเสร็จยกเลิกได้จริง — ปิด modal/ออกจากหน้า = abort request ที่ค้าง (preship R3-026)
   const [uploading, setUploading] = useState(false)
@@ -110,6 +115,8 @@ export function ManualClaimModal({
     const substitute = noReceipt ? substituteDraftPayload(substituteLines) : null
     if (substitute !== null && substitute.error !== null) {
       setErrors({ substituteReceipt: substitute.error })
+      setSubstituteAt(substitute.at)
+      revealError()
       return
     }
     // ไม่มีใบเสร็จ ⇒ ยอดเบิก = ยอดรวมของรายการในใบรับรอง (เหมือนฟอร์มเบิกค่าที่พัก)
@@ -129,6 +136,8 @@ export function ManualClaimModal({
     const parsed = claimCreateSchema.safeParse(draft)
     if (!parsed.success) {
       setErrors(toFieldErrors(parsed.error))
+      setSubstituteAt(null)
+      revealError()
       return
     }
 
@@ -179,6 +188,8 @@ export function ManualClaimModal({
     }
   }
 
+  const substituteRowError = substituteLineRowError(errors.substituteReceipt, substituteAt, substituteLines)
+
   return (
     <Modal
       open
@@ -208,7 +219,7 @@ export function ManualClaimModal({
     >
       {/* ล็อกช่องกรอกระหว่างอัปโหลด — ค่าที่ส่งคือค่าตอนกดส่ง */}
       <fieldset disabled={uploading} className="m-0 min-w-0 border-0 p-0">
-      <div className="space-y-4">
+      <div ref={bodyRef} className="space-y-4">
         <InlineAlert tone="warning">
           รายการที่สร้างที่นี่ <b>ไม่ผูกกับเคส</b> — ค่าน้ำมัน/เบี้ยเลี้ยง/ค่าคอมมิชชันของเคสระบบคิดให้เองจากงานภาคสนาม
           ห้ามกรอกซ้ำที่นี่
@@ -257,17 +268,19 @@ export function ManualClaimModal({
         )}
 
         {noReceipt ? (
-          <>
+          // ห่อ div ⇒ ข้อความระดับทั้งตารางโฟกัสช่องในตาราง ไม่ใช่ช่องบนสุดของฟอร์ม
+          <div>
             <NoReceiptLinesEditor
               lines={substituteLines}
               onChange={setSubstituteLines}
               defaultDate={expenseDate}
               variant={claimType === 'hotel' ? 'hotel' : 'general'}
+              error={substituteRowError}
             />
-            {errors.substituteReceipt !== undefined && (
-              <p className="text-xs font-semibold text-red-600">{errors.substituteReceipt}</p>
+            {errors.substituteReceipt !== undefined && substituteRowError === null && (
+              <FieldErrorText>{errors.substituteReceipt}</FieldErrorText>
             )}
-          </>
+          </div>
         ) : (
           <Field
             label="แนบใบเสร็จ"

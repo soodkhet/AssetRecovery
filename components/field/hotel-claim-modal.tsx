@@ -23,6 +23,7 @@ import {
   emptySubstituteLine,
   substituteDraftPayload,
   substituteDraftTotalSatang,
+  substituteLineRowError,
   type SubstituteLineDraft,
   type SubstituteLineIssueAt,
 } from '@/lib/substitute-receipts/form'
@@ -223,11 +224,8 @@ export function HotelClaimModal({
   }
   // ข้อผิดของแถวในตารางรายการ — แสดงใต้แถวนั้นแทนใต้ทั้งตาราง
   // ลบแถวที่ผิดไปแล้ว ⇒ กลับไปแสดงใต้ทั้งตาราง (ข้อความไม่หาย)
-  const lineAt = error !== null && error.field === 'lines' ? error.lineAt : null
   const linesRowError =
-    error !== null && lineAt !== null && substituteLines.some((line) => line.key === lineAt.lineKey)
-      ? { ...lineAt, message: error.message }
-      : null
+    error !== null && error.field === 'lines' ? substituteLineRowError(error.message, error.lineAt, substituteLines) : null
 
   return (
     <Modal

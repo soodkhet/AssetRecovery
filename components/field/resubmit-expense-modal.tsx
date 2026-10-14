@@ -26,6 +26,7 @@ import { FieldUploadError, uploadExpenseReceipt } from '@/lib/field/upload-clien
 import {
   substituteDraftPayload,
   substituteDraftTotalSatang,
+  substituteLineRowError,
   substituteLinesToDrafts,
   type SubstituteLineDraft,
   type SubstituteLineIssueAt,
@@ -245,11 +246,8 @@ export function ResubmitExpenseModal({
   }
   // ข้อผิดของแถวในตารางรายการ — แสดงใต้แถวนั้นแทนใต้ทั้งตาราง
   // ลบแถวที่ผิดไปแล้ว ⇒ กลับไปแสดงใต้ทั้งตาราง (ข้อความไม่หาย)
-  const lineAt = error !== null && error.field === 'lines' ? error.lineAt : null
   const linesRowError =
-    error !== null && lineAt !== null && lines.some((line) => line.key === lineAt.lineKey)
-      ? { ...lineAt, message: error.message }
-      : null
+    error !== null && error.field === 'lines' ? substituteLineRowError(error.message, error.lineAt, lines) : null
 
   return (
     <Modal

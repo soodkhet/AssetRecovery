@@ -4,6 +4,7 @@ import {
   fitSubstituteLinesToTotal,
   substituteDraftPayload,
   substituteLineInputId,
+  substituteLineRowError,
   substituteLinesToDrafts,
 } from '@/lib/substitute-receipts/form'
 import { resubmitExpenseSchema } from '@/lib/field/schemas'
@@ -558,5 +559,34 @@ describe('substituteDraftPayload — ตำแหน่งที่ผิด (�
   it('id ของช่องในแถว — ไม่ชนกันข้ามแถว/ช่อง', () => {
     expect(substituteLineInputId('p', 1, 'amount')).toBe('p-line-1-amount')
     expect(substituteLineInputId('p', 0, 'amount')).not.toBe(substituteLineInputId('p', 0, 'description'))
+  })
+})
+
+/** ตรวจซ้ำ staging SV5-R4-01 (ต่อ) — ข้อผิดที่ส่งเข้า editor ของทุกฟอร์ม (เบิกเอง/เคลียร์เงินทดรอง/ออกใบใหม่แทน) */
+describe('substituteLineRowError', () => {
+  const drafts = [emptySubstituteLine('a'), emptySubstituteLine('b')]
+  const at = { lineIndex: 1, lineKey: 'b', field: 'amount' as const }
+
+  it('มีข้อความ + แถวยังอยู่ ⇒ ข้อผิดของแถวนั้น', () => {
+    expect(substituteLineRowError('รายการที่ 2: จำนวนเงินต้องมากกว่า 0', at, drafts)).toEqual({
+      ...at,
+      message: 'รายการที่ 2: จำนวนเงินต้องมากกว่า 0',
+    })
+  })
+
+  it('ไม่มีข้อความ / ผิดระดับตาราง / แถวถูกลบแล้ว ⇒ null (แสดงใต้ทั้งตารางแทน)', () => {
+    expect(substituteLineRowError(null, at, drafts)).toBeNull()
+    expect(substituteLineRowError(undefined, at, drafts)).toBeNull()
+    expect(substituteLineRowError('ต้องมีรายจ่ายอย่างน้อย 1 รายการ', null, drafts)).toBeNull()
+    expect(substituteLineRowError('รายการที่ 2: …', at, [emptySubstituteLine('a')])).toBeNull()
+  })
+
+  it('ใช้คู่ substituteDraftPayload — แถว 2 ผิดช่องจำนวนเงินของฟอร์มใดก็ชี้แถว 2 ช่อง amount', () => {
+    const lines = [
+      { ...emptySubstituteLine('x', '2026-10-03'), description: 'ค่าทางด่วน', amountBaht: '50' },
+      { ...emptySubstituteLine('y', '2026-10-03'), description: 'ค่าที่จอดรถ', amountBaht: '' },
+    ]
+    const draft = substituteDraftPayload(lines)
+    expect(substituteLineRowError(draft.error, draft.at, lines)).toMatchObject({ lineIndex: 1, lineKey: 'y', field: 'amount' })
   })
 })

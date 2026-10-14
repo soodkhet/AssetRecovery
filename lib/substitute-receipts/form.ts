@@ -104,6 +104,19 @@ export function substituteDraftPayload(
 }
 
 /**
+ * ข้อผิดที่จะส่งเข้า `<NoReceiptLinesEditor error>` — แสดงใต้แถวเมื่อมีข้อความและแถวนั้นยังอยู่ (จับคู่ด้วย key)
+ * · ลบแถวที่ผิดไปแล้ว / ผิดระดับทั้งตาราง ⇒ `null` (ผู้เรียกแสดงข้อความใต้ทั้งตารางแทน) · ตรวจซ้ำ staging SV5-R4-01
+ */
+export function substituteLineRowError(
+  message: string | null | undefined,
+  at: SubstituteLineIssueAt | null,
+  drafts: readonly SubstituteLineDraft[],
+): (SubstituteLineIssueAt & { message: string }) | null {
+  if (message === null || message === undefined || at === null) return null
+  return drafts.some((draft) => draft.key === at.lineKey) ? { ...at, message } : null
+}
+
+/**
  * บรรทัดของใบที่ยกเลิก → ฟอร์ม "ออกใบใหม่แทน" (มติ PO U117 ข้อ 1 — ดึงรายการ/ยอดมาให้แก้ได้)
  * ไม่มีบรรทัด = บรรทัดว่าง 1 แถววันที่ `fallbackDate`
  */

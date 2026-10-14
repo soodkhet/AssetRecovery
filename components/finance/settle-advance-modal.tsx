@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Button, Field, InlineAlert, Input, Modal, Textarea, useToast } from '@/components/ui'
+import { Button, Field, FieldErrorText, InlineAlert, Input, Modal, Textarea, useRevealFieldError, useToast } from '@/components/ui'
 import type { AdvanceDto, AdvanceSettleResult } from '@/lib/advances/types'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { advanceSettlement } from '@/lib/finance/advance-calc'
@@ -18,7 +18,9 @@ import {
   emptySubstituteLine,
   substituteDraftPayload,
   substituteDraftTotalSatang,
+  substituteLineRowError,
   type SubstituteLineDraft,
+  type SubstituteLineIssueAt,
 } from '@/lib/substitute-receipts/form'
 
 /**
@@ -51,6 +53,9 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
     emptySubstituteLine('line-0', toInputDate(new Date())),
   ])
   const [substituteError, setSubstituteError] = useState<string | null>(null)
+  // แถว/ช่องที่ผิดในตารางรายการ + เลื่อน/โฟกัสช่องที่ผิดหลังกดบันทึก (ตรวจซ้ำ staging SV5-R4-01)
+  const [substituteAt, setSubstituteAt] = useState<SubstituteLineIssueAt | null>(null)
+  const { ref: bodyRef, reveal: revealError } = useRevealFieldError()
   // อัปโหลดใบเสร็จยกเลิกได้จริง — ปิด modal/ออกจากหน้า = abort request ที่ค้าง (preship R3-026)
   const [uploading, setUploading] = useState(false)
   const uploadAbortRef = useRef<AbortController | null>(null)
@@ -74,20 +79,29 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
       })
     : null
 
+  const substituteRowError = substituteLineRowError(substituteError, substituteAt, substituteLines)
+
   async function submit(): Promise<void> {
     if (advance === null || !validUsed) return
     const substitute = noReceipt ? substituteDraftPayload(substituteLines) : null
     if (substitute !== null && substitute.error !== null) {
       setSubstituteError(substitute.error)
+      setSubstituteAt(substitute.at)
+      setReceiptError(null)
+      revealError()
       return
     }
     if (substitute !== null && substituteDraftTotalSatang(substituteLines) > usedSatang) {
       setSubstituteError('ยอดรวมรายการที่ไม่มีใบเสร็จต้องไม่เกินยอดที่ใช้จริง')
+      setSubstituteAt(null)
+      setReceiptError(null)
+      revealError()
       return
     }
     setSubstituteError(null)
     if (usedSatang > 0 && receipt === null && substitute === null) {
       setReceiptError('ต้องแนบใบเสร็จ หรือติ๊ก "ไม่มีใบเสร็จ" แล้วกรอกรายการ')
+      revealError()
       return
     }
     setReceiptError(null)
@@ -179,7 +193,7 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
     >
       {/* ล็อกช่องกรอกระหว่างอัปโหลด — ค่าที่ส่งคือค่าตอนกดบันทึก */}
       <fieldset disabled={uploading} className="m-0 min-w-0 border-0 p-0">
-      <div className="space-y-4">
+      <div ref={bodyRef} className="space-y-4">
         <div className="grid grid-cols-3 gap-3">
           <Summary label="ยอดที่ยืม (อนุมัติ)" value={fmtSatangSymbol(advance.approvedSatang ?? advance.requestedSatang)} />
           <Summary label="ใช้จริง (กรอก)" value={fmtSatangSymbol(usedSatang)} tone="blue" />
@@ -262,18 +276,22 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
           onChange={(checked) => {
             setNoReceipt(checked)
             setSubstituteError(null)
+            // ข้อความ "ต้องแนบใบเสร็จ…" เก่าค้างเหนือตาราง ⇒ reveal ครั้งถัดไปโฟกัสผิดช่อง (รีวิว SV5-R4-01)
+            setReceiptError(null)
           }}
           hint="มีรายจ่ายบางรายการที่เรียกใบเสร็จไม่ได้ — กรอกรายการแล้วระบบออกใบรับรองแทนใบเสร็จรับเงินให้เซ็น"
         />
         {noReceipt && (
-          <>
+          // ห่อ div ⇒ ข้อความระดับทั้งตารางโฟกัสช่องในตาราง ไม่ใช่ช่องบนสุดของฟอร์ม
+          <div>
             <NoReceiptLinesEditor
               lines={substituteLines}
               onChange={setSubstituteLines}
               defaultDate={toInputDate(new Date())}
+              error={substituteRowError}
             />
-            {substituteError !== null && <p className="text-xs font-semibold text-red-600">{substituteError}</p>}
-          </>
+            {substituteError !== null && substituteRowError === null && <FieldErrorText>{substituteError}</FieldErrorText>}
+          </div>
         )}
 
         <Field label="หมายเหตุ (ถ้ามี)">
