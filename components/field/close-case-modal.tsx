@@ -17,7 +17,7 @@ import {
   IconTrash,
   IconVideo,
 } from '@/components/field/field-icons'
-import { Button, ErrorState, LoadingState, Modal, Textarea, useToast } from '@/components/ui'
+import { Button, ErrorState, LoadingState, Modal, Textarea, useRovingRadio, useToast } from '@/components/ui'
 import { cn } from '@/components/ui/cn'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
@@ -141,22 +141,22 @@ function FailReasonSection({
   onDetailBlur: () => void
 }) {
   const needsDetail = value === CLOSE_FAIL_REASON_OTHER
+  // roving tabindex + ลูกศร (รีวิวรอบ 2 SV5-A11Y-A2-03 — ใช้กับทุกกลุ่ม radio แบบปุ่ม)
+  const reasonRadio = useRovingRadio({ options: CLOSE_FAIL_REASONS, value, onSelect, disabled: locked })
   return (
     <div>
       <SectionTitle note={locked ? 'ล็อกไว้ตามรอบเดิม — แก้ไม่ได้' : undefined}>
         เหตุผลที่ไม่สำเร็จ <span className="font-bold text-slate-400">(บังคับ)</span>
       </SectionTitle>
       <div role="radiogroup" aria-label="เหตุผลที่ไม่สำเร็จ" className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        {CLOSE_FAIL_REASONS.map((reason) => {
+        {CLOSE_FAIL_REASONS.map((reason, index) => {
           const selected = value === reason
           return (
             <button
               key={reason}
               type="button"
-              role="radio"
-              aria-checked={selected}
+              {...reasonRadio.radioProps(reason, index)}
               disabled={locked}
-              onClick={() => onSelect(reason)}
               className={cn(
                 // preship R2-029 — ≥44px บนจอสัมผัส
                 'focus-ring rounded-xl border-2 px-3 py-2.5 text-left text-xs font-bold pointer-coarse:min-h-11',

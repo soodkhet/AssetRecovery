@@ -85,7 +85,11 @@ export function fieldErrorControl(root: HTMLElement | null, message: HTMLElement
         message.ownerDocument.getElementById(controlId))
   if (target !== null) {
     if (target.matches(`${CONTROL_SELECTOR}, button`)) return target
-    const inner = target.querySelector<HTMLElement>(CONTROL_SELECTOR) ?? target.querySelector<HTMLElement>('button')
+    // กลุ่ม radio แบบ roving tabindex ⇒ ตัวที่รับ Tab (ตัวที่เลือก/ตัวแรก) ไม่ใช่ปุ่มแรกเสมอ
+    const inner =
+      target.querySelector<HTMLElement>('[role=radio][tabindex="0"]') ??
+      target.querySelector<HTMLElement>(CONTROL_SELECTOR) ??
+      target.querySelector<HTMLElement>('button')
     if (inner !== null) return inner
   }
   const scope = message.parentElement
@@ -171,6 +175,7 @@ export function Field({
   id,
   group = false,
   label,
+  labelClassName,
   required = false,
   error,
   hint,
@@ -181,6 +186,8 @@ export function Field({
   /** กล่องกลุ่มตัวเลือก (radio) — label ไม่ผูก `for` · กล่องใช้ `aria-labelledby="<id>-label"` แทน */
   group?: boolean
   label: ReactNode
+  /** คลาสของ label — เช่น `sr-only` เมื่อหัวข้อบนจอมีอยู่แล้ว (ยังให้ชื่อกลุ่ม/ช่องแก่โปรแกรมอ่านจอ) */
+  labelClassName?: string
   required?: boolean
   error?: string | null
   hint?: ReactNode
@@ -195,7 +202,12 @@ export function Field({
     id === undefined ? null : { controlId: id, invalid: hasError, describedBy: errorId ?? hintId }
   return (
     <div className={className}>
-      <Label id={id === undefined ? undefined : `${id}-label`} htmlFor={group ? undefined : id} required={required}>
+      <Label
+        id={id === undefined ? undefined : `${id}-label`}
+        htmlFor={group ? undefined : id}
+        required={required}
+        className={labelClassName}
+      >
         {label}
       </Label>
       <FieldControlContext.Provider value={control}>{children}</FieldControlContext.Provider>

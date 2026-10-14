@@ -6,9 +6,10 @@ import { describe, expect, it } from 'vitest'
 /**
  * กันถดถอย ตรวจซ้ำ staging SV5-A11Y-A2-03 — กลุ่มปุ่มเลือก "สภาพเครื่อง" (รับเข้าคลัง) และ "รูปแบบการส่งมอบ" (นัดส่งมอบ)
  * เป็น `role="radiogroup"` ที่มีชื่อ (`aria-labelledby` ชี้หัวข้อ/`aria-label`) และปุ่มในกลุ่มเป็น `role="radio"` + `aria-checked`
- * (ไม่ใช่ปุ่ม `aria-pressed` ลอยใน div ธรรมดา) — สแกน AST ของ source
+ * (ไม่ใช่ปุ่ม `aria-pressed` ลอยใน div ธรรมดา) · ปุ่มใช้ `useRovingRadio().radioProps()` (roving tabindex + ลูกศร)
+ * ห้ามเขียน `role="radio"` เอง — สแกน AST ของ source
  */
-const FILES = ['intake-modal.tsx', 'handover-lot-modal.tsx']
+const FILES = ['intake-modal.tsx', 'handover-lot-modal.tsx', '../field/close-case-modal.tsx']
 
 interface Group {
   named: boolean
@@ -33,10 +34,17 @@ function radioGroups(file: string): { groups: Group[]; pressed: number } {
     if (open !== null) {
       const map = attrs(open)
       if (map.get('role') === '"radiogroup"') {
-        current = { named: map.has('aria-labelledby') || map.has('aria-label'), radios: 0, pressed: 0 }
+        // <FieldGroupBox> ได้ชื่อจาก <Field id group> เอง (aria-labelledby="<id>-label")
+        const named = map.has('aria-labelledby') || map.has('aria-label') || open.tagName.getText() === 'FieldGroupBox'
+        current = { named, radios: 0, pressed: 0 }
         groups.push(current)
       }
-      if (map.get('role') === '"radio"' && map.has('aria-checked') && current !== null) current.radios += 1
+      // ปุ่ม radio ต้องได้ props จาก useRovingRadio (role/aria-checked/tabIndex/ลูกศร — รีวิวรอบ 2)
+      const roving = open.attributes.properties.some(
+        (prop) => ts.isJsxSpreadAttribute(prop) && /\.radioProps\(/.test(prop.expression.getText()),
+      )
+      if (roving && current !== null) current.radios += 1
+      if (map.get('role') === '"radio"') pressed += 1
       if (map.has('aria-pressed')) pressed += 1
     }
     ts.forEachChild(node, (child) => visit(child, current))

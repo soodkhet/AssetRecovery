@@ -3,7 +3,7 @@
 import { StoredPhotoThumb } from '@/components/ui/stored-photo-thumb'
 import { useId, useState } from 'react'
 import { AssetSummaryHeader } from '@/components/warehouse/asset-summary-header'
-import { Button, Field, InlineAlert, Modal, Textarea, fieldControlAria, useRevealFieldError, useToast } from '@/components/ui'
+import { Button, Field, FieldGroupBox, InlineAlert, Modal, Textarea, fieldControlAria, useRevealFieldError, useRovingRadio, useToast } from '@/components/ui'
 import { cn } from '@/components/ui/cn'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
@@ -78,7 +78,7 @@ export function IntakeModal({
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<ApiCallError | null>(null)
   // รายละเอียดสภาพ/สิ่งที่พบว่าง = ข้อผิดของช่อง (ใต้ช่อง + aria-invalid + โฟกัส) ไม่ใช่กล่องแจ้งเตือน (ตรวจซ้ำ staging SV5-A11Y-A2-02)
-  const [noteErrors, setNoteErrors] = useState<{ conditionNote?: string; colorCapacityNote?: string }>({})
+  const [noteErrors, setNoteErrors] = useState<{ condition?: string; conditionNote?: string; colorCapacityNote?: string }>({})
   const { ref: formRef, reveal } = useRevealFieldError()
   /** ยืนยันทับคำเตือน IMEI ไม่ตรงแล้วหรือยัง (force proceed — `44` §8.2) */
   const [forceProceed, setForceProceed] = useState(false)
@@ -133,6 +133,22 @@ export function IntakeModal({
     setPhotos((current) => current.filter((each) => each !== path))
   }
 
+  // กลุ่ม radio ใช้คีย์บอร์ดแบบ roving tabindex + ลูกศร (รีวิวรอบ 2 SV5-A11Y-A2-03)
+  const colorCapacityRadio = useRovingRadio({
+    options: COLOR_CAPACITY_CHOICES.map((choice) => choice.value),
+    value: colorCapacityMatched,
+    onSelect: setColorCapacityMatched,
+  })
+  const conditionRadio = useRovingRadio({
+    options: ASSET_CONDITIONS,
+    value: condition,
+    onSelect: (value) => {
+      setCondition(value)
+      // เปลี่ยนสภาพแล้วข้อผิดของสภาพเดิม (ยังไม่เลือก/ต้องระบุรายละเอียด) ไม่ค้าง (รีวิว SV5-A11Y-A2-02)
+      setNoteErrors((current) => ({ ...current, condition: undefined, conditionNote: undefined }))
+    },
+  })
+
   async function submit(): Promise<void> {
     setError(null)
     setNoteErrors({})
@@ -144,6 +160,10 @@ export function IntakeModal({
       if (assertError instanceof WarehouseError) {
         if (assertError.code === 'INTAKE_MISSING_NOTE') {
           setNoteErrors({ conditionNote: assertError.userMessage })
+          reveal()
+        } else if (assertError.code === 'INTAKE_MISSING_CONDITION') {
+          // ยังไม่เลือกสภาพ ⇒ ข้อผิดของกลุ่ม + โฟกัสตัวเลือกที่รับ Tab (รีวิวรอบ 2 SV5-A11Y-A2-03)
+          setNoteErrors({ condition: assertError.userMessage })
           reveal()
         } else {
           setError({ code: assertError.code, title: assertError.title, message: assertError.userMessage })
@@ -341,13 +361,11 @@ export function IntakeModal({
               ตามสัญญา: ความจุ {asset.deviceCapacity ?? '—'} · สี {asset.deviceColor ?? '—'}
             </div>
             <div className="mt-2 grid grid-cols-2 gap-2" role="radiogroup" aria-label="สี/ความจุตรงกับสัญญา">
-              {COLOR_CAPACITY_CHOICES.map((choice) => (
+              {COLOR_CAPACITY_CHOICES.map((choice, index) => (
                 <button
                   key={choice.label}
                   type="button"
-                  role="radio"
-                  aria-checked={colorCapacityMatched === choice.value}
-                  onClick={() => setColorCapacityMatched(choice.value)}
+                  {...colorCapacityRadio.radioProps(choice.value, index)}
                   className={cn(
                     'focus-ring rounded-xl border-2 py-2 text-xs font-bold transition-colors',
                     colorCapacityMatched === choice.value
@@ -376,36 +394,27 @@ export function IntakeModal({
 
         {/* ── ขั้น 2/3: บันทึกสภาพ ───────────────────────────────── */}
         <section>
-          <StepTitle id={`${fieldId}-condition-label`} step={2} label="บันทึกสภาพเครื่อง" />
-          {/* กลุ่มเลือกแบบ radio ผูกชื่อกับหัวข้อขั้น (ตรวจซ้ำ staging SV5-A11Y-A2-03) */}
-          <div
-            role="radiogroup"
-            aria-labelledby={`${fieldId}-condition-label`}
-            aria-required
-            className="grid grid-cols-3 gap-2"
-          >
-            {ASSET_CONDITIONS.map((value) => (
-              <button
-                key={value}
-                type="button"
-                role="radio"
-                aria-checked={condition === value}
-                onClick={() => {
-                  setCondition(value)
-                  // เปลี่ยนสภาพแล้วข้อผิด "ต้องระบุรายละเอียด" ของสภาพเดิมไม่ค้าง (รีวิว SV5-A11Y-A2-02)
-                  setNoteErrors((current) => ({ ...current, conditionNote: undefined }))
-                }}
-                className={cn(
-                  'focus-ring rounded-xl border-2 py-3 text-xs font-bold transition-colors',
-                  condition === value
-                    ? 'border-slate-900 bg-slate-900 text-white'
-                    : 'border-slate-200 text-slate-500 hover:border-slate-300',
-                )}
-              >
-                {ASSET_CONDITION_LABEL[value]}
-              </button>
-            ))}
-          </div>
+          <StepTitle step={2} label="บันทึกสภาพเครื่อง" />
+          {/* กลุ่ม radio ใน Field group ⇒ ชื่อกลุ่ม + ข้อผิด "ยังไม่เลือกสภาพ" ผูกกับกล่อง (SV5-A11Y-A2-03 · รีวิวรอบ 2) */}
+          <Field id={`${fieldId}-condition`} group label="สภาพเครื่อง" labelClassName="sr-only" required error={noteErrors.condition}>
+            <FieldGroupBox role="radiogroup" aria-required className="grid grid-cols-3 gap-2">
+              {ASSET_CONDITIONS.map((value, index) => (
+                <button
+                  key={value}
+                  type="button"
+                  {...conditionRadio.radioProps(value, index)}
+                  className={cn(
+                    'focus-ring rounded-xl border-2 py-3 text-xs font-bold transition-colors',
+                    condition === value
+                      ? 'border-slate-900 bg-slate-900 text-white'
+                      : 'border-slate-200 text-slate-500 hover:border-slate-300',
+                  )}
+                >
+                  {ASSET_CONDITION_LABEL[value]}
+                </button>
+              ))}
+            </FieldGroupBox>
+          </Field>
           <Field
             id={`${fieldId}-condition-note`}
             className="mt-3"
@@ -485,15 +494,13 @@ export function IntakeModal({
   )
 }
 
-function StepTitle({ id, step, label }: { id?: string; step: number; label: string }) {
+function StepTitle({ step, label }: { step: number; label: string }) {
   return (
     <div className="mb-3 flex items-center gap-2">
       <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-900 text-[10px] font-bold text-white">
         {step}
       </span>
-      <span id={id} className="text-xs font-bold tracking-wider text-slate-500 uppercase">
-        {label}
-      </span>
+      <span className="text-xs font-bold tracking-wider text-slate-500 uppercase">{label}</span>
     </div>
   )
 }

@@ -1,7 +1,7 @@
 'use client'
 
 import { useId, useState } from 'react'
-import { Badge, Button, Field, InlineAlert, Input, Modal, RefText, Textarea, useToast } from '@/components/ui'
+import { Badge, Button, Field, FieldGroupBox, InlineAlert, Input, Modal, RefText, Textarea, useRevealFieldError, useRovingRadio, useToast } from '@/components/ui'
 import { cn } from '@/components/ui/cn'
 import { HandoverNotePreview } from '@/components/warehouse/handover-note-preview'
 import { apiPath } from '@/lib/api/contract'
@@ -71,6 +71,10 @@ export function HandoverLotModal({
     }
   }
 
+  // กลุ่ม radio ใช้คีย์บอร์ดแบบ roving tabindex + ลูกศร · ข้อผิดของช่องโฟกัสช่องนั้น (รีวิวรอบ 2 SV5-A11Y-A2-03)
+  const typeRadio = useRovingRadio({ options: HANDOVER_TYPES, value: type, onSelect: chooseType })
+  const { ref: formRef, reveal } = useRevealFieldError()
+
   function buildInput(): unknown {
     return {
       companyId,
@@ -90,6 +94,7 @@ export function HandoverLotModal({
     // วันนัดเป็นสาระสำคัญของหน้าจอนี้ (mockup §8.3 ติด *) — schema ปล่อยผ่านได้เพราะ API รับ null ได้
     if (scheduledLocal.trim() === '') {
       setFieldErrors({ scheduledAt: `ต้องระบุ${isPickup ? 'วันนัดรับ' : 'กำหนดจัดส่ง'}` })
+      reveal()
       return
     }
 
@@ -101,6 +106,7 @@ export function HandoverLotModal({
         errors[key] = errors[key] ?? issue.message
       }
       setFieldErrors(errors)
+      reveal()
       return
     }
     setFieldErrors({})
@@ -142,7 +148,7 @@ export function HandoverLotModal({
           </>
         }
       >
-        <div className="space-y-5">
+        <div ref={formRef} className="space-y-5">
           {error !== null && (
             <InlineAlert tone="error" title={error.title}>
               {error.message}
@@ -151,39 +157,31 @@ export function HandoverLotModal({
 
           {/* ── รูปแบบการส่งมอบ (`44` §6.3) ───────────────────────── */}
           <section>
-            {/* กลุ่มเลือกแบบ radio ผูกชื่อกับหัวข้อ (ตรวจซ้ำ staging SV5-A11Y-A2-03) */}
-            <div id={`${fieldId}-handover-type-label`} className="mb-2 text-xs font-bold text-slate-700">
-              รูปแบบการส่งมอบ <span className="text-red-500">*</span>
-            </div>
-            <div
-              role="radiogroup"
-              aria-labelledby={`${fieldId}-handover-type-label`}
-              aria-required
-              className="grid grid-cols-1 gap-3 sm:grid-cols-2"
-            >
-              {HANDOVER_TYPES.map((value) => (
-                <button
-                  key={value}
-                  type="button"
-                  role="radio"
-                  aria-checked={type === value}
-                  onClick={() => chooseType(value)}
-                  className={cn(
-                    'focus-ring rounded-xl border-2 p-4 text-left transition-colors',
-                    type === value ? 'border-slate-900 bg-slate-50' : 'border-slate-200 hover:border-slate-300',
-                  )}
-                >
-                  <div className="text-sm font-bold text-slate-900">
-                    {value === 'finance_pickup' ? '🏢' : '🚚'} {HANDOVER_TYPE_LABEL[value]}
-                  </div>
-                  <div className="mt-1 text-[11px] text-slate-500">
-                    {value === 'finance_pickup'
-                      ? 'ลูกค้านัดมารับที่คลังของเรา — แนบใบเซ็นรับในแท็บ “รอส่งมอบ”'
-                      : 'ส่งพัสดุหรือเดินทางไปส่ง — เครื่องออกจากคลังทันที แนบหลักฐานในแท็บ “ส่งมอบแล้ว”'}
-                  </div>
-                </button>
-              ))}
-            </div>
+            {/* กลุ่ม radio ใน Field group ⇒ ชื่อกลุ่ม + ข้อผิดผูกกับกล่อง (SV5-A11Y-A2-03 · รีวิวรอบ 2) */}
+            <Field id={`${fieldId}-handover-type`} group label="รูปแบบการส่งมอบ" required error={fieldErrors.type ?? null}>
+              <FieldGroupBox role="radiogroup" aria-required className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {HANDOVER_TYPES.map((value, index) => (
+                  <button
+                    key={value}
+                    type="button"
+                    {...typeRadio.radioProps(value, index)}
+                    className={cn(
+                      'focus-ring rounded-xl border-2 p-4 text-left transition-colors',
+                      type === value ? 'border-slate-900 bg-slate-50' : 'border-slate-200 hover:border-slate-300',
+                    )}
+                  >
+                    <div className="text-sm font-bold text-slate-900">
+                      {value === 'finance_pickup' ? '🏢' : '🚚'} {HANDOVER_TYPE_LABEL[value]}
+                    </div>
+                    <div className="mt-1 text-[11px] text-slate-500">
+                      {value === 'finance_pickup'
+                        ? 'ลูกค้านัดมารับที่คลังของเรา — แนบใบเซ็นรับในแท็บ “รอส่งมอบ”'
+                        : 'ส่งพัสดุหรือเดินทางไปส่ง — เครื่องออกจากคลังทันที แนบหลักฐานในแท็บ “ส่งมอบแล้ว”'}
+                    </div>
+                  </button>
+                ))}
+              </FieldGroupBox>
+            </Field>
           </section>
 
           {type === null ? (
