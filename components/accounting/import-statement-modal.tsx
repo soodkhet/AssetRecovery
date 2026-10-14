@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { ImportTemplateHelp } from '@/components/imports/import-template-help'
+import { FileDropzone } from '@/components/uploads/file-dropzone'
 import { Button, Field, InlineAlert, Modal, Select, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import type { StatementImportResultDto, StatementImportTemplateDto } from '@/lib/bank-recon/types'
@@ -33,11 +34,9 @@ export function ImportStatementModal({
   // id ผูก label ↔ ช่อง + aria-invalid/aria-describedby ผ่าน `<Field id>` (ตรวจซ้ำ staging SV5-R9-01)
   const fieldId = useId()
   const { showToast } = useToast()
-  const inputRef = useRef<HTMLInputElement>(null)
   const [accounts, setAccounts] = useState<readonly BankAccountDto[]>([])
   const [bankAccountId, setBankAccountId] = useState('')
   const [file, setFile] = useState<File | null>(null)
-  const [dragging, setDragging] = useState(false)
   const [saving, setSaving] = useState(false)
   const [template, setTemplate] = useState<StatementImportTemplateDto | null>(null)
   const [templateError, setTemplateError] = useState<string | null>(null)
@@ -149,36 +148,13 @@ export function ImportStatementModal({
           </Select>
         </Field>
 
-        <div
-          onDragOver={(event) => {
-            event.preventDefault()
-            setDragging(true)
-          }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={(event) => {
-            event.preventDefault()
-            setDragging(false)
-            pickFile(event.dataTransfer.files[0])
-          }}
-          onClick={() => inputRef.current?.click()}
-          className={`cursor-pointer rounded-xl border-2 border-dashed p-8 text-center transition-colors ${
-            dragging ? 'border-slate-500 bg-slate-100' : 'border-slate-300 bg-slate-50 hover:bg-slate-100'
-          }`}
-        >
-          <div className="text-sm font-bold text-slate-700">
-            {file === null ? 'คลิกเพื่อเลือกไฟล์ หรือลากไฟล์มาวางที่นี่' : file.name}
-          </div>
-          <div className="mt-1 text-xs text-slate-400">
-            รองรับไฟล์ Excel (.xlsx) หรือ CSV ตามรูปแบบไฟล์รายการเดินบัญชีที่ตั้งไว้กับบัญชีนั้น (ตั้งค่าที่หน้าตั้งค่าการเงิน)
-          </div>
-          <input
-            ref={inputRef}
-            type="file"
-            accept={IMPORT_FILE_ACCEPT}
-            className="hidden"
-            onChange={(event) => pickFile(event.target.files?.[0])}
-          />
-        </div>
+        <FileDropzone
+          accept={IMPORT_FILE_ACCEPT}
+          title={file === null ? 'คลิกเพื่อเลือกไฟล์ หรือลากไฟล์มาวางที่นี่' : file.name}
+          description="รองรับไฟล์ Excel (.xlsx) หรือ CSV ตามรูปแบบไฟล์รายการเดินบัญชีที่ตั้งไว้กับบัญชีนั้น (ตั้งค่าที่หน้าตั้งค่าการเงิน)"
+          onPick={pickFile}
+          onDropFile={pickFile}
+        />
 
         {template !== null ? (
           <ImportTemplateHelp

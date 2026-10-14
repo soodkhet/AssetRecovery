@@ -22,6 +22,7 @@ import {
 import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
 import { ImportTemplateHelp } from '@/components/imports/import-template-help'
+import { FileDropzone } from '@/components/uploads/file-dropzone'
 import {
   buildCaseImportTemplate,
   CASE_IMPORT_TEMPLATE_COLUMNS,
@@ -223,25 +224,18 @@ export function CaseImportWizard({
         </Field>
 
         {step === 'file' && (
-          <div className="rounded-xl border-2 border-dashed border-slate-300 p-6 text-center">
-            <p className="text-sm font-semibold text-slate-700">เลือกไฟล์ Excel (.xlsx) หรือ CSV ที่จะนำเข้า</p>
-            <p className="mt-1 text-xs text-slate-500">
-              แถวแรกต้องเป็นหัวคอลัมน์ · ระบบรู้จักหัวคอลัมน์ทั้งภาษาไทยและอังกฤษ · สูงสุด 1,000 แถวต่อครั้ง
-            </p>
-            <label className={buttonClass('primary', 'sm', 'mt-3 cursor-pointer')}>
+          <FileDropzone
+            accept={IMPORT_FILE_ACCEPT}
+            title="เลือกไฟล์ Excel (.xlsx) หรือ CSV ที่จะนำเข้า"
+            description="แถวแรกต้องเป็นหัวคอลัมน์ · ระบบรู้จักหัวคอลัมน์ทั้งภาษาไทยและอังกฤษ · สูงสุด 1,000 แถวต่อครั้ง"
+            onPick={(file) => void readRowsFromFile(file)}
+            className="bg-white p-6 hover:bg-slate-50"
+          >
+            {/* หน้าตาปุ่มเดิม — ทั้งกล่องเป็นปุ่มเดียว (SV5-A11Y-A2-01) */}
+            <span aria-hidden="true" className={buttonClass('primary', 'sm', 'mt-3')}>
               เลือกไฟล์
-              <input
-                type="file"
-                accept={IMPORT_FILE_ACCEPT}
-                className="hidden"
-                onChange={(event) => {
-                  const file = event.target.files?.[0]
-                  event.target.value = ''
-                  if (file !== undefined) void readRowsFromFile(file)
-                }}
-              />
-            </label>
-          </div>
+            </span>
+          </FileDropzone>
         )}
 
         {step === 'file' && (
