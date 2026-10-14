@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Button, Field, FieldErrorText, InlineAlert, Input, Modal, Textarea, useClearOnClose, useRevealFieldError, useToast } from '@/components/ui'
+import { Button, Field, FieldErrorText, InlineAlert, Input, Modal, Textarea, useClearOnClose, useResetOnRecordChange, useRevealFieldError, useToast } from '@/components/ui'
 import type { AdvanceDto, AdvanceSettleResult } from '@/lib/advances/types'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { advanceSettlement } from '@/lib/finance/advance-calc'
@@ -70,6 +70,20 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
     setSubstituteError(null)
     setSubstituteAt(null)
   })
+  // เปิดให้เงินทดรองคนละรายการกับร่างที่ค้าง ⇒ ล้างร่าง (ยอดที่ใช้จริง/ไฟล์/รายการ/หมายเหตุ) · เปิดรายการเดิมคงร่างไว้
+  // (มติผู้ใช้ 14/10/2569)
+  function resetDraft(): void {
+    setUsed('')
+    setReceipt(null)
+    setReceiptError(null)
+    setNote('')
+    setReturnMethod(DEFAULT_ADVANCE_RETURN_METHOD)
+    setNoReceipt(false)
+    setSubstituteLines([emptySubstituteLine('line-0', toInputDate(new Date()))])
+    setSubstituteError(null)
+    setSubstituteAt(null)
+  }
+  useResetOnRecordChange(advance?.id ?? null, resetDraft)
 
   if (advance === null) return null
 
@@ -153,11 +167,7 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
           ? `ยอดคืน ${fmtSatangSymbol(settled.returnSatang)} — ${ADVANCE_RETURN_METHOD_LABEL[returnMethod]} · ขอเบิกรอบใหม่ได้`
           : 'รายการนี้ปิดแล้ว ขอเบิกรอบใหม่ได้',
     })
-    setUsed('')
-    setReturnMethod(DEFAULT_ADVANCE_RETURN_METHOD)
-    setReceipt(null)
-    setNote('')
-    setNoReceipt(false)
+    resetDraft()
     if (settled?.substituteReceipt !== null && settled?.substituteReceipt !== undefined) {
       showToast({
         tone: 'success',

@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { Button, Field, InlineAlert, Input, Modal, Select, Textarea, useToast } from '@/components/ui'
+import { StagedFileInput } from '@/components/uploads/staged-file-input'
+import { Button, Field, InlineAlert, Input, Modal, Select, Textarea, useResetOnRecordChange, useToast } from '@/components/ui'
 import { ADVANCE_RETURN_METHOD_LABEL } from '@/lib/advances/advance'
 import type { AdvanceDto } from '@/lib/advances/types'
 import { callApi, jsonRequest } from '@/lib/api/types'
@@ -30,6 +31,8 @@ export function ChangeReturnMethodModal({
   const { showToast } = useToast()
   const [reason, setReason] = useState('')
   const [saving, setSaving] = useState(false)
+  // เปิดให้รายการอื่น ⇒ ล้างเหตุผลที่ค้าง · รายการเดิมคงไว้ (มติผู้ใช้ 14/10/2569)
+  useResetOnRecordChange(advance?.id ?? null, () => setReason(''))
   if (advance === null || advance.returnMethod === null) return null
 
   const target: AdvanceReturnMethod = advance.returnMethod === 'payout_offset' ? 'separate' : 'payout_offset'
@@ -98,6 +101,15 @@ export function RecordSeparateReturnModal({
   const [file, setFile] = useState<File | null>(null)
   const [note, setNote] = useState('')
   const [saving, setSaving] = useState(false)
+  // เปิดให้รายการอื่น ⇒ ล้างร่าง (ยอด/ไฟล์/หมายเหตุ ฯลฯ) · รายการเดิมคงไว้ (มติผู้ใช้ 14/10/2569)
+  function resetDraft(): void {
+    setChannel('bank_transfer')
+    setAmount('')
+    setReceivedDate(toInputDate(new Date()))
+    setFile(null)
+    setNote('')
+  }
+  useResetOnRecordChange(advance?.id ?? null, resetDraft)
   if (advance === null) return null
 
   // ช่องว่าง = รับคืนเต็มยอดค้าง
@@ -134,9 +146,7 @@ export function RecordSeparateReturnModal({
       title: 'บันทึกรับคืนเงินทดรองแล้ว',
       description: remaining === 0 ? 'ยอดคืนครบ — ปิดยอดแล้ว' : `ยังค้างอีก ${fmtSatangSymbol(remaining)}`,
     })
-    setAmount('')
-    setFile(null)
-    setNote('')
+    resetDraft()
     onDone()
     onClose()
   }
@@ -194,12 +204,15 @@ export function RecordSeparateReturnModal({
             onChange={(event) => setReceivedDate(event.target.value)}
           />
         </Field>
-        <Field id="adv-return-file" label="หลักฐาน (สลิปโอน/ใบรับเงิน — PDF/รูป)" required>
-          <Input
-            id="adv-return-file"
-            type="file"
+        {/* แสดงชื่อไฟล์จาก state — เปิดรายการเดิมซ้ำแล้วร่างไฟล์ยังอยู่ ผู้ใช้ต้องเห็นว่าแนบอะไรไว้ (มติผู้ใช้ 14/10/2569) */}
+        <Field label="หลักฐาน (สลิปโอน/ใบรับเงิน — PDF/รูป)" required>
+          <StagedFileInput
+            fileName={file?.name ?? null}
             accept="application/pdf,image/*"
-            onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+            placeholder="แตะเพื่อเลือกไฟล์หลักฐาน"
+            disabled={saving}
+            onPick={setFile}
+            onClear={() => setFile(null)}
           />
         </Field>
         <Field id="adv-return-note" label="หมายเหตุ (ถ้ามี)">

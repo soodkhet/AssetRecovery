@@ -12,6 +12,7 @@ export { Field, FieldErrorText, FormSubmitError, FormSubmitFooter, Input, Label,
 export { ConfirmModal, Modal, type ModalSize } from '@/components/ui/modal'
 export { useRevealFieldError } from '@/components/ui/use-reveal-field-error'
 export { closedNow, useClearOnClose } from '@/components/ui/use-clear-on-close'
+export { draftOwnerTransition, useResetOnRecordChange } from '@/components/ui/use-reset-on-record-change'
 export { EmptyState, ErrorState, InlineAlert, LoadingState, Skeleton } from '@/components/ui/states'
 export { TBody, THead, Table, TableState, Td, Th, Tr } from '@/components/ui/table'
 export { ToastProvider, useToast, type Toast, type ToastInput, type ToastTone } from '@/components/ui/toast'
