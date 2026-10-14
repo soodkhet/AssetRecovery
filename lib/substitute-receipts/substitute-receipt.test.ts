@@ -3,6 +3,7 @@ import {
   emptySubstituteLine,
   fitSubstituteLinesToTotal,
   substituteDraftPayload,
+  substituteLineAtFromFields,
   substituteLineInputId,
   substituteLineRowError,
   substituteLinesToDrafts,
@@ -588,5 +589,24 @@ describe('substituteLineRowError', () => {
     ]
     const draft = substituteDraftPayload(lines)
     expect(substituteLineRowError(draft.error, draft.at, lines)).toMatchObject({ lineIndex: 1, lineKey: 'y', field: 'amount' })
+  })
+})
+
+describe('ตรวจซ้ำ staging — หน้าต่างออกใบใหม่แทน: ข้อผิดรายช่องจาก server ชี้แถว+ช่อง', () => {
+  const lines = [emptySubstituteLine('a', '2026-10-01'), emptySubstituteLine('b', '2026-10-01')]
+
+  it('เลือกช่องแรกตามลำดับบนจอ (แถวบนก่อน ช่องซ้ายก่อน) และแปลง amountSatang → ช่องจำนวนเงิน', () => {
+    const at = substituteLineAtFromFields(
+      { 'lines.1.lineDate': 'วันที่ไม่ถูกต้อง', 'lines.0.amountSatang': 'ยอดต้องมากกว่า 0', 'lines.0.note': 'ยาวเกิน' },
+      lines,
+    )
+    expect(at).toEqual({ lineIndex: 0, lineKey: 'a', field: 'amount', message: 'รายการที่ 1: ยอดต้องมากกว่า 0' })
+  })
+
+  it('ไม่มี fields / ช่องระดับทั้งตาราง / แถวที่ไม่มีแล้ว ⇒ null (แสดงที่ footer อย่างเดียว)', () => {
+    expect(substituteLineAtFromFields(undefined, lines)).toBeNull()
+    expect(substituteLineAtFromFields({ lines: 'ต้องมีอย่างน้อย 1 รายการ' }, lines)).toBeNull()
+    expect(substituteLineAtFromFields({ 'lines.5.description': 'กรอกรายละเอียด' }, lines)).toBeNull()
+    expect(substituteLineAtFromFields({ 'lines.0.unknown': 'x' }, lines)).toBeNull()
   })
 })

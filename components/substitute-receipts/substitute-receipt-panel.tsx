@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react'
 import { NoReceiptLinesEditor, type NoReceiptLinesVariant } from '@/components/substitute-receipts/no-receipt-lines'
-import { Button, ConfirmModal, Field, InlineAlert, Modal, StatusBadge, Textarea, useRevealFieldError, useToast } from '@/components/ui'
+import { Button, ConfirmModal, Field, FieldErrorText, FormSubmitFooter, InlineAlert, Modal, StatusBadge, Textarea, useRevealFieldError, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { REASON_MAX } from '@/lib/api/validation'
 import { EXPENSE_RECEIPT_ACCEPT } from '@/lib/field/media-upload'
@@ -11,6 +11,7 @@ import { fmtSatangSymbol } from '@/lib/format/money'
 import {
   substituteDraftPayload,
   substituteDraftTotalSatang,
+  substituteLineAtFromFields,
   substituteLineRowError,
   substituteLinesToDrafts,
   type SubstituteLineDraft,
@@ -71,9 +72,15 @@ export function SubstituteReceiptPanel({
   const [cancelling, setCancelling] = useState(false)
   const [reissueOpen, setReissueOpen] = useState(false)
   const [reissueLines, setReissueLines] = useState<SubstituteLineDraft[]>([])
+  // ข้อผิดตอนกดออกใบ — แสดงใน footer ติดจอ (+ ใต้แถว/ช่องที่ผิดถ้าผูกกับช่อง) · ไม่ขึ้นแถบบนสุดที่มองไม่เห็นเมื่อเลื่อนลงมา
   const [reissueError, setReissueError] = useState<string | null>(null)
+  const [reissueTick, setReissueTick] = useState(0)
+  // ผิดระดับทั้งตาราง (ไม่มีรายการ/เกินจำนวน) ⇒ ข้อความใต้ตาราง + โฟกัสช่องในตาราง
+  const [reissueTableError, setReissueTableError] = useState<string | null>(null)
+  // ดึงรายการจากใบเดิมไม่ได้ — แจ้งบนสุดตอนเปิด (ไม่ใช่ข้อผิดของการกดออกใบ)
+  const [reissueLoadNote, setReissueLoadNote] = useState<string | null>(null)
   // ข้อผิดของแถว/ช่องในรายการของใบใหม่ ⇒ แสดงใต้แถวนั้น + เลื่อน/โฟกัสช่องที่ผิด (ตรวจซ้ำ staging SV5-R4-01)
-  const [reissueAt, setReissueAt] = useState<SubstituteLineIssueAt | null>(null)
+  const [reissueAt, setReissueAt] = useState<(SubstituteLineIssueAt & { message: string }) | null>(null)
   const { ref: reissueBodyRef, reveal: revealReissueError } = useRevealFieldError()
   const [reissuing, setReissuing] = useState(false)
   const [loadingLines, setLoadingLines] = useState(false)
@@ -81,7 +88,7 @@ export function SubstituteReceiptPanel({
   const cancelled = receipt.status === 'cancelled'
   const lineDate = defaultLineDate ?? receipt.issueDate
 
-  const reissueRowError = substituteLineRowError(reissueError, reissueAt, reissueLines)
+  const reissueRowError = substituteLineRowError(reissueAt?.message, reissueAt, reissueLines)
 
   async function upload(file: File): Promise<void> {
     setUploading(true)
@@ -137,31 +144,49 @@ export function SubstituteReceiptPanel({
   async function openReissue(): Promise<void> {
     setReissueError(null)
     setReissueAt(null)
+    setReissueTableError(null)
+    setReissueLoadNote(null)
     setLoadingLines(true)
     setReissueOpen(true)
     try {
       const result = await callApi<SubstituteReceiptDetailDto>(`/api/substitute-receipts/${receipt.id}`)
       setReissueLines(substituteLinesToDrafts(result.data?.lines ?? [], lineDate, requiredTotalSatang))
-      if (result.error !== undefined) setReissueError(`ดึงรายการจากใบเดิมไม่ได้ — กรอกรายการใหม่ (${result.error.message})`)
+      if (result.error !== undefined) setReissueLoadNote(`ดึงรายการจากใบเดิมไม่ได้ — กรอกรายการใหม่ (${result.error.message})`)
     } finally {
       setLoadingLines(false)
     }
   }
 
+  /** ข้อผิดตอนกดออกใบ ⇒ footer + (ถ้าผูกกับช่อง) ใต้แถวนั้น แล้วเลื่อน/โฟกัสช่องที่ผิด */
+  function failReissue(
+    message: string,
+    at: (SubstituteLineIssueAt & { message: string }) | null,
+    tableLevel = false,
+  ): void {
+    setReissueError(message)
+    setReissueAt(at)
+    setReissueTableError(tableLevel ? message : null)
+    setReissueTick((tick) => tick + 1)
+    if (at !== null || tableLevel) revealReissueError()
+  }
+
   async function confirmReissue(): Promise<void> {
     const draft = substituteDraftPayload(reissueLines)
     if (draft.payload === null) {
-      setReissueError(draft.error)
-      setReissueAt(draft.at)
-      revealReissueError()
+      failReissue(draft.error, draft.at === null ? null : { ...draft.at, message: draft.error }, draft.at === null)
       return
     }
-    setReissueAt(null)
     if (requiredTotalSatang !== undefined && substituteDraftTotalSatang(reissueLines) !== requiredTotalSatang) {
-      setReissueError(`ยอดรวมของใบใหม่ต้องเท่ากับยอดเบิก ${fmtSatangSymbol(requiredTotalSatang)}`)
+      // ยอดไม่เท่า ⇒ ชี้ช่องจำนวนเงินของแถวสุดท้าย (แถวที่ระบบปรับยอดตั้งต้นให้ — fitSubstituteLinesToTotal)
+      const message = `ยอดรวมของใบใหม่ต้องเท่ากับยอดเบิก ${fmtSatangSymbol(requiredTotalSatang)}`
+      const lastIndex = reissueLines.length - 1
+      const last = reissueLines[lastIndex]
+      failReissue(message, last === undefined ? null : { lineIndex: lastIndex, lineKey: last.key, field: 'amount', message })
       return
     }
     setReissueError(null)
+    setReissueAt(null)
+    setReissueTableError(null)
     setReissuing(true)
     try {
       const result = await callApi<SubstituteReceiptRefDto>(
@@ -169,7 +194,8 @@ export function SubstituteReceiptPanel({
         jsonRequest('POST', draft.payload),
       )
       if (result.error !== undefined || result.data === undefined) {
-        setReissueError(result.error?.message ?? 'ออกใบใหม่ไม่สำเร็จ')
+        // ข้อผิดรายช่องจาก server (เช่นเกินเพดาน/วันที่) ⇒ ชี้แถว+ช่องนั้นด้วย · ข้อความเต็มอยู่ที่ footer
+        failReissue(result.error?.message ?? 'ออกใบใหม่ไม่สำเร็จ', substituteLineAtFromFields(result.error?.fields, reissueLines))
         return
       }
       showToast({
@@ -333,18 +359,18 @@ export function SubstituteReceiptPanel({
         description="ตั้งต้นด้วยรายการจากใบที่ยกเลิก แก้ได้ก่อนออก — ระบบออกเลขใหม่ ผูกกับรายการเดิม และพิมพ์ “ออกแทนเลขที่” บนใบใหม่ · เพดานต่อใบ/ต่อเดือนตรวจใหม่ (ใบที่ยกเลิกไม่นับแล้ว)"
         size="lg"
         footer={
-          <>
+          <FormSubmitFooter message={reissueError} tick={reissueTick}>
             <Button variant="secondary" onClick={() => setReissueOpen(false)}>
               ปิด
             </Button>
             <Button onClick={() => void confirmReissue()} loading={reissuing} disabled={loadingLines}>
               ออกใบรับรองใหม่
             </Button>
-          </>
+          </FormSubmitFooter>
         }
       >
         <div ref={reissueBodyRef} className="space-y-3">
-          {reissueError !== null && reissueRowError === null && <InlineAlert tone="error" title={reissueError} />}
+          {reissueLoadNote !== null && <InlineAlert tone="warning" title={reissueLoadNote} />}
           {requiredTotalSatang !== undefined && (
             <p className="text-xs text-slate-600">
               ยอดรวมของใบใหม่ต้องเท่ากับยอดเบิกปัจจุบัน{' '}
@@ -354,13 +380,17 @@ export function SubstituteReceiptPanel({
           {loadingLines ? (
             <p className="text-xs text-slate-500">กำลังดึงรายการจากใบ {receipt.receiptNumber}...</p>
           ) : (
-            <NoReceiptLinesEditor
-              lines={reissueLines}
-              onChange={setReissueLines}
-              defaultDate={lineDate}
-              variant={variant}
-              error={reissueRowError}
-            />
+            // ห่อ div ⇒ ข้อความระดับทั้งตารางโฟกัสช่องในตาราง
+            <div>
+              <NoReceiptLinesEditor
+                lines={reissueLines}
+                onChange={setReissueLines}
+                defaultDate={lineDate}
+                variant={variant}
+                error={reissueRowError}
+              />
+              {reissueTableError !== null && <FieldErrorText>{reissueTableError}</FieldErrorText>}
+            </div>
           )}
         </div>
       </Modal>

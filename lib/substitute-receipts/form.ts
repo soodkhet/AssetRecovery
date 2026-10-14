@@ -133,6 +133,33 @@ export function substituteLineRowError(
 }
 
 /**
+ * ข้อผิดรายช่องจาก server (`fields` ของ error — key แบบ `lines.0.amountSatang`) → แถว/ช่องบนจอข้อแรกตามลำดับบนจอ
+ * · ไม่มีช่องของแถวที่ยังอยู่ ⇒ `null` (แสดงที่ footer อย่างเดียว) · ตรวจซ้ำ staging หน้าต่างออกใบใหม่แทน
+ */
+export function substituteLineAtFromFields(
+  fields: Readonly<Record<string, string>> | undefined,
+  drafts: readonly SubstituteLineDraft[],
+): (SubstituteLineIssueAt & { message: string }) | null {
+  let first: (SubstituteLineIssueAt & { message: string }) | null = null
+  let firstRank = Number.POSITIVE_INFINITY
+  for (const [path, message] of Object.entries(fields ?? {})) {
+    const match = /^lines\.(\d+)\.(\w+)$/.exec(path)
+    if (match === null) continue
+    const lineIndex = Number(match[1])
+    const key = match[2] ?? ''
+    const field = Object.hasOwn(PAYLOAD_KEY_TO_FIELD, key) ? PAYLOAD_KEY_TO_FIELD[key] : undefined
+    const lineKey = drafts[lineIndex]?.key
+    if (field === undefined || lineKey === undefined) continue
+    const rank = lineIndex * SUBSTITUTE_LINE_FIELDS.length + SUBSTITUTE_LINE_FIELDS.indexOf(field)
+    if (rank < firstRank) {
+      first = { lineIndex, lineKey, field, message: `รายการที่ ${lineIndex + 1}: ${message}` }
+      firstRank = rank
+    }
+  }
+  return first
+}
+
+/**
  * บรรทัดของใบที่ยกเลิก → ฟอร์ม "ออกใบใหม่แทน" (มติ PO U117 ข้อ 1 — ดึงรายการ/ยอดมาให้แก้ได้)
  * ไม่มีบรรทัด = บรรทัดว่าง 1 แถววันที่ `fallbackDate`
  */
