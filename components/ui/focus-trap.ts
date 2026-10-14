@@ -1,4 +1,4 @@
-import { fieldErrorControl } from '@/components/ui/input'
+import { fieldErrorControl, scrollFieldErrorIntoView } from '@/components/ui/input'
 
 /**
  * กักโฟกัสในโมดัล/ลิ้นชักที่ประกาศ `aria-modal="true"` (ตรวจ a11y staging SV5-C1-01 — WAI-ARIA dialog pattern / WCAG 2.4.3)
@@ -9,6 +9,7 @@ import { fieldErrorControl } from '@/components/ui/input'
  *   ช่องพิมพ์บนจอสัมผัส (คีย์บอร์ดเด้งบังฟอร์ม) ⇒ โฟกัสแผงแทน (`initialFocus: 'container'` = โฟกัสแผงเสมอ)
  * - ปิดแล้วคืนโฟกัสให้ปุ่มที่เปิด — เว้นแต่ผู้เรียกย้ายโฟกัสไปที่อื่นเองแล้ว
  * - ปุ่มที่โฟกัสอยู่ถูก disable (`<Button loading>`) / ถอดออก ⇒ จอดโฟกัสที่แผง แล้วคืนให้ปุ่มเมื่อกลับมาใช้ได้ (SV5-D3-02)
+ *   · server ตอบ error รายช่อง ⇒ คืนให้ช่องที่ผิดแทน + เลื่อนช่องนั้นมากลางแผง (SV5-E1-01)
  * - ใช้ keydown ไม่ใช้ `inert` — โมดัลของระบบ render ในที่ (ไม่มี portal) จึงไม่มี sibling ระดับ body ให้ปิด
  *
  * ตรรกะตัดสินแยกเป็น pure function (`selectTabbable` / `decideTabTarget` / `chooseInitialFocus`) — เทสต์ไม่ต้องใช้ DOM
@@ -157,6 +158,28 @@ export function pickRestoreTarget<T>({ errorControl, parkedFrom }: { errorContro
   return errorControl ?? parkedFrom
 }
 
+/**
+ * คืนโฟกัสแล้วต้องเลื่อนไหม (SV5-E1-01):
+ * - `reveal` = เป้าเป็นช่องที่ผิด ⇒ เลื่อนมากลางแผงแบบ `revealFirstFieldError` — server ตอบ 400 รายช่องขณะผู้ใช้อยู่ท้ายฟอร์ม
+ *   (กดบันทึก) ช่องที่ผิดมักอยู่นอกจอ โฟกัสอย่างเดียวผู้ใช้ไม่เห็นว่าผิดตรงไหน
+ * - `none` = คืนให้ปุ่มที่จอดมา (ปุ่มใน footer คงที่ เห็นอยู่แล้ว) ⇒ ไม่เลื่อน ไม่ให้แผงกระตุก
+ */
+export type RestoreScroll = 'reveal' | 'none'
+
+export function decideRestoreScroll({
+  targetIsErrorControl,
+  errorIsNew,
+}: {
+  targetIsErrorControl: boolean
+  /**
+   * ข้อความผิดเพิ่งปรากฏหลังจอด (ไม่ใช่ข้อความเดิมที่ค้างอยู่ก่อนกด) — กดปุ่มโหลดอื่นในเนื้อหา (ค้นหา/อัปโหลด)
+   * ขณะมีข้อความผิดเก่าค้างบนสุด ⇒ ไม่กระชากแผงขึ้นไปหา
+   */
+  errorIsNew: boolean
+}): RestoreScroll {
+  return targetIsErrorControl && errorIsNew ? 'reveal' : 'none'
+}
+
 // ───────────────────────────── DOM ─────────────────────────────
 
 const CANDIDATE_SELECTOR = [
@@ -298,6 +321,8 @@ export function installFocusTrap({ getContainer, isTop, initialFocus = 'first' }
     initial instanceof HTMLElement && initial !== container && container.contains(initial) ? initial : null
   let parked = false
   let parkedFrom: HTMLElement | null = null
+  /** ข้อความผิดที่มีอยู่ตอนจอด (node + ข้อความ) — ไว้แยกข้อความผิดใหม่จากการส่งรอบนี้กับของเก่าที่ค้าง (SV5-E1-01) */
+  let errorsAtPark = new Map<HTMLElement, string>()
 
   /** ใช้ได้แบบถูก ๆ (ไม่บังคับ layout — callback นี้ทำงานทุก commit ในแผง): อยู่ในแผง ไม่ disabled ไม่อยู่ใต้ inert/hidden */
   function isUsable(element: HTMLElement | null, current: HTMLElement): boolean {
@@ -311,21 +336,26 @@ export function installFocusTrap({ getContainer, isTop, initialFocus = 'first' }
     )
   }
 
-  /** ช่องที่ผิดหลังส่ง — `pending` = มีข้อความผิดแต่ช่องยัง disabled (fieldset ปลดใน commit ถัดไป) ⇒ รอ จอดต่อ */
-  function errorControl(current: HTMLElement): HTMLElement | 'pending' | null {
+  /** ช่องที่ผิดหลังส่ง (+ข้อความของช่อง) — `pending` = มีข้อความผิดแต่ช่องยัง disabled (fieldset ปลดใน commit ถัดไป) ⇒ รอ จอดต่อ */
+  function errorControl(current: HTMLElement): { control: HTMLElement; message: HTMLElement } | 'pending' | null {
     const message = current.querySelector<HTMLElement>('[data-field-error]')
     if (message === null) return null
     const control = fieldErrorControl(current, message)
     if (control === null) return null
-    return isUsable(control, current) ? control : 'pending'
+    return isUsable(control, current) ? { control, message } : 'pending'
   }
 
-  function restoreTarget(current: HTMLElement): HTMLElement | null {
+  function restoreTarget(current: HTMLElement): { element: HTMLElement; errorMessage: HTMLElement | null } | null {
     // ไม่มีปุ่มที่จอดมา (ผู้ใช้ blur เอง) ⇒ ไม่คืนอะไร — ไม่ดึงโฟกัสเข้าช่องพิมพ์เอง
     if (parkedFrom === null || !parkedFrom.isConnected) return null
     const error = errorControl(current)
     if (error === 'pending') return null
-    return pickRestoreTarget({ errorControl: error, parkedFrom: isUsable(parkedFrom, current) ? parkedFrom : null })
+    const element = pickRestoreTarget({
+      errorControl: error?.control ?? null,
+      parkedFrom: isUsable(parkedFrom, current) ? parkedFrom : null,
+    })
+    if (element === null) return null
+    return { element, errorMessage: error !== null && element === error.control ? error.message : null }
   }
 
   function recoverFocus() {
@@ -343,11 +373,23 @@ export function installFocusTrap({ getContainer, isTop, initialFocus = 'first' }
     if (decision === 'restore' && target !== null) {
       parked = false
       parkedFrom = null
-      target.focus({ preventScroll: true })
+      target.element.focus({ preventScroll: true })
+      // ช่องที่ผิดอาจอยู่นอกจอ (ผู้ใช้อยู่ท้ายฟอร์มตอนกดบันทึก) ⇒ เลื่อนมากลางแผง — ฟอร์มที่ไม่ได้เรียก reveal เองก็เห็น
+      const { errorMessage } = target
+      const errorIsNew = errorMessage !== null && errorsAtPark.get(errorMessage) !== errorMessage.textContent
+      errorsAtPark = new Map()
+      if (decideRestoreScroll({ targetIsErrorControl: errorMessage !== null, errorIsNew }) === 'reveal' && errorMessage !== null) {
+        scrollFieldErrorIntoView(errorMessage, target.element)
+      }
     } else if (decision === 'park') {
       // เป้าคืน = ตัวที่ใช้ไม่ได้ตอนนี้ (ปุ่มที่ถูก disable) เท่านั้น — ตัวที่ยังใช้ได้ (ผู้ใช้ blur เอง) ไม่คืน
       const lostFrom = inside && now instanceof HTMLElement ? now : lastFocusedInside
       parkedFrom = lostFrom !== null && !isUsable(lostFrom, current) && lostFrom.isConnected ? lostFrom : null
+      if (!parked) {
+        errorsAtPark = new Map(
+          Array.from(current.querySelectorAll<HTMLElement>('[data-field-error]')).map((message) => [message, message.textContent]),
+        )
+      }
       parked = true
       current.focus({ preventScroll: true })
     }

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   chooseInitialFocus,
   decideFocusRecovery,
+  decideRestoreScroll,
   decideTabTarget,
   pickRestoreTarget,
   pickOpener,
@@ -206,6 +207,13 @@ describe('decideFocusRecovery — ปุ่มที่โฟกัสอยู�
     expect(pickRestoreTarget({ errorControl: 'amount', parkedFrom: 'submit' })).toBe('amount')
     expect(pickRestoreTarget({ errorControl: null, parkedFrom: 'submit' })).toBe('submit')
     expect(pickRestoreTarget<string>({ errorControl: null, parkedFrom: null })).toBeNull()
+  })
+
+  it('คืนโฟกัสให้ช่องที่ผิด ⇒ เลื่อนมากลางแผง (ช่องอาจอยู่นอกจอ) · คืนปุ่มที่จอดมา ⇒ ไม่เลื่อน (SV5-E1-01)', () => {
+    expect(decideRestoreScroll({ targetIsErrorControl: true, errorIsNew: true })).toBe('reveal')
+    expect(decideRestoreScroll({ targetIsErrorControl: false, errorIsNew: false })).toBe('none')
+    // ข้อความผิดเก่าค้างบนสุด แล้วกดปุ่มโหลดอื่น (ค้นหา/อัปโหลด) ⇒ ไม่กระชากแผงขึ้นไปหา
+    expect(decideRestoreScroll({ targetIsErrorControl: true, errorIsNew: false })).toBe('none')
   })
 
   it('<Button loading> ยัง disabled จริง (กันกดซ้ำ/Enter ส่งฟอร์มซ้ำ) + aria-busy', () => {

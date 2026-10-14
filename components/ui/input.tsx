@@ -59,13 +59,20 @@ export function revealFirstFieldError(root: HTMLElement | null): boolean {
   const message = root?.querySelector<HTMLElement>('[data-field-error]')
   if (!message) return false
   const control = fieldErrorControl(root, message)
-  // ช่องที่ระบุตรง ๆ อาจห่างจากข้อความ (ข้อความอยู่ท้ายแถว) ⇒ เลื่อนตามช่อง · ไม่งั้นเลื่อนตามข้อความ (อยู่ใต้ช่องพอดี)
+  scrollFieldErrorIntoView(message, control)
+  control?.focus({ preventScroll: true })
+  return true
+}
+
+/**
+ * เลื่อนช่องที่ผิดมากลางจอ/แผง — ช่องที่ระบุตรง ๆ อาจห่างจากข้อความ (ข้อความอยู่ท้ายแถว) ⇒ เลื่อนตามช่อง ·
+ * ไม่งั้นเลื่อนตามข้อความ (อยู่ใต้ช่องพอดี) · ใช้ร่วมกับ focus trap ตอนคืนโฟกัสให้ช่องที่ผิดหลังส่ง (SV5-E1-01)
+ */
+export function scrollFieldErrorIntoView(message: HTMLElement, control: HTMLElement | null): void {
   ;(message.dataset.fieldErrorFor !== undefined && control !== null ? control : message).scrollIntoView({
     block: 'center',
     behavior: 'smooth',
   })
-  control?.focus({ preventScroll: true })
-  return true
 }
 
 const CONTROL_SELECTOR = 'input:not([type=hidden]):not([type=file]), select, textarea'

@@ -8,7 +8,7 @@ import { DeviceAttributeSelect } from '@/components/cases/device-attribute-selec
 import { DeviceModelPicker } from '@/components/cases/device-model-picker'
 import { useDeviceAttributeOptions } from '@/components/cases/use-device-attribute-options'
 import { TeamSuggestionPanel } from '@/components/cases/team-suggestion-panel'
-import { Button, ConfirmModal, Field, InlineAlert, Input, Modal, Select, Textarea, useToast } from '@/components/ui'
+import { Button, ConfirmModal, Field, InlineAlert, Input, Modal, Select, Textarea, useRevealFieldError, useToast } from '@/components/ui'
 import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
 import { apiPath } from '@/lib/api/contract'
 import {
@@ -101,6 +101,8 @@ export function CaseFormModal({
   /** id ของเคสที่ฟอร์มกำลังถืออยู่ — ใช้ตรวจว่าต้อง reset ค่าเมื่อ modal เปลี่ยนเป้าหมาย */
   const [loadedId, setLoadedId] = useState<string | null>(editing?.id ?? null)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  // กดบันทึกไม่ผ่าน ⇒ เลื่อน+โฟกัสช่องแรกที่ผิด (ช่องอาจอยู่บนสุดของฟอร์มยาว — ตรวจซ้ำ staging SV5-E1-01)
+  const { ref: formBodyRef, reveal: revealFieldError } = useRevealFieldError()
   const [formError, setFormError] = useState<ApiCallError | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [staged, setStaged] = useState<StagedFile[]>([])
@@ -210,6 +212,7 @@ export function CaseFormModal({
     const debt = parseBahtInput(form.outstandingDebtBaht)
     if (Number.isNaN(debt)) {
       setFieldErrors({ outstandingDebtSatang: 'มูลหนี้คงเหลือต้องเป็นตัวเลข (บาท)' })
+      revealFieldError()
       return
     }
 
@@ -223,6 +226,7 @@ export function CaseFormModal({
     const parsed = schema.safeParse(payload)
     if (!parsed.success) {
       setFieldErrors(zodFieldErrors(parsed.error))
+      revealFieldError()
       return
     }
 
@@ -239,6 +243,7 @@ export function CaseFormModal({
       if (!(error instanceof CaseError)) throw error
       const field = typeof error.context?.field === 'string' ? error.context.field : '_'
       setFieldErrors({ [mapCaseErrorField(field)]: error.userMessage })
+      revealFieldError()
       return
     }
 
@@ -256,6 +261,7 @@ export function CaseFormModal({
         const failure = result.error ?? { title: 'บันทึกไม่สำเร็จ', message: 'กรุณาลองใหม่' }
         setFormError(failure)
         setFieldErrors(result.error?.fields ?? {})
+        if (result.error?.fields !== undefined && Object.keys(result.error.fields).length > 0) revealFieldError()
         // ข้อความในฟอร์มอยู่บนสุด — ผู้ใช้ที่เลื่อนลงล่างไม่เห็น ⇒ แจ้ง toast ด้วยเสมอ (preship R4-004)
         showToast({ tone: 'error', title: failure.title, description: failure.message })
         return
@@ -412,7 +418,7 @@ export function CaseFormModal({
         </>
       }
     >
-      <div className="space-y-6">
+      <div ref={formBodyRef} className="space-y-6">
         {formError !== null && (
           <InlineAlert tone="error" title={formError.title}>
             <p>{formError.message}</p>
