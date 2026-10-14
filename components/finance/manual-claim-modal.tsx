@@ -5,10 +5,11 @@ import { usePermission } from '@/components/auth/permission-provider'
 import { OnBehalfPayeeSelect } from '@/components/payees/on-behalf-payee-select'
 import { NoReceiptLinesEditor, NoReceiptToggle } from '@/components/substitute-receipts/no-receipt-lines'
 import { StagedFileInput } from '@/components/uploads/staged-file-input'
-import { Button, Field, FieldErrorText, InlineAlert, Input, Modal, Select, Textarea, useRevealFieldError, useToast } from '@/components/ui'
+import { Button, Field, FieldErrorText, FormSubmitFooter, InlineAlert, Input, Modal, Select, Textarea, useRevealFieldError, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { toFieldErrors } from '@/lib/api/validation'
 import { MANUAL_CLAIM_TYPES } from '@/lib/claims/claim'
+import { manualClaimFormIssues } from '@/lib/claims/manual-claim-form'
 import { claimCreateSchema } from '@/lib/claims/schemas'
 import { EXPENSE_RECEIPT_ACCEPT } from '@/lib/field/media-upload'
 import { EXPENSE_TYPE_LABEL } from '@/lib/field/expense-ui'
@@ -16,6 +17,7 @@ import { FieldUploadError, uploadExpenseReceipt } from '@/lib/field/upload-clien
 import { parseBahtInput, toBahtInput } from '@/lib/format/money'
 import {
   emptySubstituteLine,
+  followSubstituteLineDates,
   substituteDraftPayload,
   substituteDraftTotalSatang,
   substituteLineRowError,
@@ -62,6 +64,9 @@ export function ManualClaimModal({
   const [errors, setErrors] = useState<Record<string, string>>({})
   // แถว/ช่องที่ผิดในตารางรายการ "ไม่มีใบเสร็จ" + เลื่อน/โฟกัสช่องที่ผิดหลังกดส่ง (ตรวจซ้ำ staging SV5-R4-01)
   const [substituteAt, setSubstituteAt] = useState<SubstituteLineIssueAt | null>(null)
+  // ข้อผิดข้อแรกตามลำดับบนจอ — แสดงใน footer ติดจอด้วย (ตรวจซ้ำ staging SV5-R5-01)
+  const [submitError, setSubmitError] = useState<string | null>(null)
+  const [submitTick, setSubmitTick] = useState(0)
   const { ref: bodyRef, reveal: revealError } = useRevealFieldError()
   const [saving, setSaving] = useState(false)
   // อัปโหลดใบเสร็จยกเลิกได้จริง — ปิด modal/ออกจากหน้า = abort request ที่ค้าง (preship R3-026)
@@ -91,7 +96,13 @@ export function ManualClaimModal({
       if (cancelled) return
       const required = response.data?.hotelReceiptRequired === true
       setHotelPolicy({ key: `${payeeId}|${expenseDate}`, required })
-      if (required) setNoReceipt(false)
+      if (required) {
+        // ตารางรายการถูกซ่อน ⇒ ข้อผิดของตารางที่ค้างอยู่ไม่เกี่ยวแล้ว
+        setNoReceipt(false)
+        setErrors({})
+        setSubstituteAt(null)
+        setSubmitError(null)
+      }
     })()
     return () => {
       cancelled = true
@@ -109,16 +120,27 @@ export function ManualClaimModal({
     setSubstituteLines([emptySubstituteLine('line-0')])
     setNote('')
     setErrors({})
+    setSubstituteAt(null)
+    setSubmitError(null)
+  }
+
+  /** ล้างข้อผิดทั้งหมด (ช่อง + แถวในตาราง + footer) */
+  function clearErrors(): void {
+    setErrors({})
+    setSubstituteAt(null)
+    setSubmitError(null)
+  }
+
+  /** วันที่เกิดรายการเปลี่ยน ⇒ วันที่จ่ายของแถวที่ยังไม่ได้แก้เองตามไปด้วย (แบบฟอร์มเบิกค่าที่พัก — SV5-R5-01) */
+  function changeExpenseDate(next: string): void {
+    setSubstituteLines((lines) => followSubstituteLineDates(lines, expenseDate, next))
+    setExpenseDate(next)
   }
 
   async function submit(): Promise<void> {
+    // ตรวจซ้ำ staging SV5-R5-01 — ตรวจตารางรายการและช่องหลักพร้อมกัน แล้วชี้ข้อแรกตามลำดับบนจอ
+    // (เดิมตรวจตารางแล้ว return ก่อน ⇒ วันที่เกิดรายการว่างแต่ระบบชี้ "วันที่จ่าย รายการที่ 1")
     const substitute = noReceipt ? substituteDraftPayload(substituteLines) : null
-    if (substitute !== null && substitute.error !== null) {
-      setErrors({ substituteReceipt: substitute.error })
-      setSubstituteAt(substitute.at)
-      revealError()
-      return
-    }
     // ไม่มีใบเสร็จ ⇒ ยอดเบิก = ยอดรวมของรายการในใบรับรอง (เหมือนฟอร์มเบิกค่าที่พัก)
     const grossSatang = noReceipt
       ? substituteDraftTotalSatang(substituteLines)
@@ -134,14 +156,22 @@ export function ManualClaimModal({
       note: note.trim(),
     }
     const parsed = claimCreateSchema.safeParse(draft)
-    if (!parsed.success) {
-      setErrors(toFieldErrors(parsed.error))
-      setSubstituteAt(null)
+    const issues = manualClaimFormIssues({
+      schemaErrors: parsed.success ? {} : toFieldErrors(parsed.error),
+      noReceipt,
+      linesError: substitute === null || substitute.error === null ? null : { message: substitute.error, at: substitute.at },
+    })
+    if (issues.first !== null) {
+      setErrors(issues.errors)
+      // ตารางผิดด้วย ⇒ แสดงใต้แถวที่ผิดเสมอ แม้ข้อแรกจะเป็นช่องหลัก
+      setSubstituteAt(substitute?.at ?? null)
+      setSubmitError(issues.first.message)
+      setSubmitTick((tick) => tick + 1)
       revealError()
       return
     }
 
-    setErrors({})
+    clearErrors()
     let receiptFileUrl: string | null = null
     if (!noReceipt && receipt !== null) {
       const controller = new AbortController()
@@ -150,9 +180,11 @@ export function ManualClaimModal({
       try {
         receiptFileUrl = await uploadExpenseReceipt(receipt, { signal: controller.signal })
       } catch (uploadError) {
-        setErrors({
-          receiptFileUrl: uploadError instanceof FieldUploadError ? uploadError.message : 'อัปโหลดใบเสร็จไม่สำเร็จ',
-        })
+        const message = uploadError instanceof FieldUploadError ? uploadError.message : 'อัปโหลดใบเสร็จไม่สำเร็จ'
+        setErrors({ receiptFileUrl: message })
+        setSubmitError(message)
+        setSubmitTick((tick) => tick + 1)
+        revealError()
         return
       } finally {
         uploadAbortRef.current = null
@@ -198,23 +230,25 @@ export function ManualClaimModal({
       // ระหว่างอัปโหลดไม่ใช้ `loading` (ซึ่งล็อกทั้ง footer) — ให้ปุ่ม "ยกเลิกการอัปโหลด" กดได้ (R3-026)
       lockClose={uploading}
       footer={
-        uploading ? (
-          <>
-            <Button variant="secondary" onClick={() => uploadAbortRef.current?.abort()}>
-              ยกเลิกการอัปโหลด
-            </Button>
-            <Button disabled>กำลังอัปโหลดใบเสร็จ...</Button>
-          </>
-        ) : (
-          <>
-            <Button variant="secondary" onClick={onClose}>
-              ยกเลิก
-            </Button>
-            <Button loading={saving} onClick={() => void submit()}>
-              ส่งเข้าคิวอนุมัติ
-            </Button>
-          </>
-        )
+        <FormSubmitFooter message={submitError} tick={submitTick}>
+          {uploading ? (
+            <>
+              <Button variant="secondary" onClick={() => uploadAbortRef.current?.abort()}>
+                ยกเลิกการอัปโหลด
+              </Button>
+              <Button disabled>กำลังอัปโหลดใบเสร็จ...</Button>
+            </>
+          ) : (
+            <>
+              <Button variant="secondary" onClick={onClose}>
+                ยกเลิก
+              </Button>
+              <Button loading={saving} onClick={() => void submit()}>
+                ส่งเข้าคิวอนุมัติ
+              </Button>
+            </>
+          )}
+        </FormSubmitFooter>
       }
     >
       {/* ล็อกช่องกรอกระหว่างอัปโหลด — ค่าที่ส่งคือค่าตอนกดส่ง */}
@@ -249,7 +283,7 @@ export function ManualClaimModal({
         </Field>
 
         <Field label="วันที่เกิดรายการ" required error={errors.expenseDate}>
-          <Input type="date" value={expenseDate} onChange={(event) => setExpenseDate(event.target.value)} />
+          <Input type="date" value={expenseDate} onChange={(event) => changeExpenseDate(event.target.value)} />
         </Field>
 
         {hotelReceiptRequired ? (
@@ -261,7 +295,7 @@ export function ManualClaimModal({
             checked={noReceipt}
             onChange={(checked) => {
               setNoReceipt(checked)
-              setErrors({})
+              clearErrors()
             }}
             hint="เรียกใบเสร็จจากผู้รับเงินไม่ได้ — กรอกรายการแล้วระบบออกใบรับรองแทนใบเสร็จรับเงินให้เซ็น"
           />
@@ -295,7 +329,7 @@ export function ManualClaimModal({
               disabled={saving}
               onPick={(file) => {
                 setReceipt(file)
-                setErrors({})
+                clearErrors()
               }}
               onClear={() => setReceipt(null)}
             />

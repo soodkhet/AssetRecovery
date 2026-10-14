@@ -72,6 +72,19 @@ export function FormSubmitError({ message }: { message: string | null }) {
 }
 
 /**
+ * footer ของ modal ฟอร์มแบบปุ่มเรียงขวา + `<FormSubmitError>` เหนือปุ่ม — `tick` = ตัวนับครั้งที่กดส่ง (ใส่เป็น `key`
+ * ให้ screen reader อ่านข้อความซ้ำแม้ข้อความเดิม) · ฟอร์มเบิกเอง/ออกใบใหม่แทน (ตรวจซ้ำ staging SV5-R5-01)
+ */
+export function FormSubmitFooter({ message, tick, children }: { message: string | null; tick: number; children: ReactNode }) {
+  return (
+    <div className="flex w-full min-w-0 flex-col gap-2">
+      <FormSubmitError key={tick} message={message} />
+      <div className="flex items-center justify-end gap-2">{children}</div>
+    </div>
+  )
+}
+
+/**
  * ข้อความ error ใต้ช่อง — `data-field-error` ให้ `revealFirstFieldError()` หาเจอ · ใช้ตรงเมื่อช่องไม่ได้ห่อด้วย `<Field>`
  * `controlId` = id ของช่องที่ผิด (ใส่เมื่อในกล่องเดียวกันมีหลายช่อง เช่นแถวในตารางรายการ) ⇒ โฟกัสช่องนั้นตรง ๆ
  */

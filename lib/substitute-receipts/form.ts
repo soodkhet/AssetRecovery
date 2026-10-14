@@ -21,6 +21,22 @@ export function emptySubstituteLine(key: string, lineDate = ''): SubstituteLineD
   return { key, lineDate, description: '', amountBaht: '', note: '' }
 }
 
+/**
+ * วันที่หลักของฟอร์ม (วันที่เข้าพัก/วันที่เกิดรายการ) เปลี่ยน ⇒ แถวที่วันที่จ่ายยังว่าง หรือยังเท่าวันที่หลักเดิม
+ * (ยังไม่ได้แก้เอง) ตามไปด้วย · แถวที่ผู้ใช้แก้วันที่เองแล้วไม่ทับ — ใช้ร่วมฟอร์มเบิกค่าที่พัก (Field Tracker)
+ * และฟอร์มสร้างรายการเบิกเอง (ตรวจซ้ำ staging SV5-R5-01)
+ */
+export function followSubstituteLineDates(
+  drafts: readonly SubstituteLineDraft[],
+  previousDate: string,
+  nextDate: string,
+): SubstituteLineDraft[] {
+  if (previousDate === nextDate) return [...drafts]
+  return drafts.map((draft) =>
+    draft.lineDate === '' || draft.lineDate === previousDate ? { ...draft, lineDate: nextDate } : draft,
+  )
+}
+
 /** ยอดรวมของบรรทัดที่กรอกยอดถูกต้องแล้ว — ใช้แสดงผลในฟอร์ม (ค่าจริงฝั่ง server คำนวณใหม่เสมอ) */
 export function substituteDraftTotalSatang(drafts: readonly SubstituteLineDraft[]): number {
   return drafts.reduce((sum, draft) => {

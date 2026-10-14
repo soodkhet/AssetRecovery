@@ -21,6 +21,7 @@ import { NoReceiptLinesEditor, NoReceiptToggle } from '@/components/substitute-r
 import { StorageUploadError, uploadToStorage } from '@/lib/uploads/client'
 import {
   emptySubstituteLine,
+  followSubstituteLineDates,
   substituteDraftPayload,
   substituteDraftTotalSatang,
   substituteLineRowError,
@@ -95,9 +96,7 @@ export function HotelClaimModal({
 
   /** วันที่เข้าพักเปลี่ยน ⇒ แถว "ไม่มีใบเสร็จ" ที่ยังว่าง/ยังเป็นวันเดิมตามไปด้วย (ผู้ใช้แก้วันแถวเองแล้วไม่ทับ) */
   function changeExpenseDate(next: string): void {
-    setSubstituteLines((lines) =>
-      lines.map((line) => (line.lineDate === '' || line.lineDate === expenseDate ? { ...line, lineDate: next } : line)),
-    )
+    setSubstituteLines((lines) => followSubstituteLineDates(lines, expenseDate, next))
     setExpenseDate(next)
   }
 
