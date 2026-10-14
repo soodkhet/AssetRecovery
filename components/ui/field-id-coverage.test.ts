@@ -178,3 +178,95 @@ describe('ช่องที่ใช้ fieldControlAria({ error }) มีก�
     expect(problems).toEqual([])
   })
 })
+
+/**
+ * กันถดถอย — `<Field required>` (มี * ที่ label) ที่ห่อช่อง native `<input>`/`<select>`/`<textarea>` (ไม่ผ่าน UI Kit ที่ได้
+ * `aria-required` จาก Field เอง) ต้องบอกโปรแกรมอ่านจอว่าบังคับด้วย: `required` / `aria-required` /
+ * `fieldControlAria(id, { required })` — เดิม IMEI/Serial ในฟอร์มรับเข้าคลังมี * แต่ไม่มี aria-required
+ */
+const NATIVE_FIELD_TAGS = new Set(['input', 'select', 'textarea'])
+
+function isTruthyAttr(element: ts.JsxOpeningLikeElement, name: string): boolean {
+  const found = attr(element, name)
+  return found !== undefined && attrText(found) !== 'false'
+}
+
+/** `fieldControlAria(id, { required: <ไม่ใช่ false> })` — อ่านอาร์กิวเมนต์ที่ 2 ด้วย AST (ไม่ใช้ regex) */
+function passesRequiredOption(expression: ts.Expression): boolean {
+  if (!ts.isCallExpression(expression) || expression.expression.getText() !== 'fieldControlAria') return false
+  const options = expression.arguments[1]
+  if (options === undefined || !ts.isObjectLiteralExpression(options)) return false
+  return options.properties.some((property) => {
+    if (ts.isShorthandPropertyAssignment(property)) return property.name.getText() === 'required'
+    return (
+      ts.isPropertyAssignment(property) &&
+      property.name.getText() === 'required' &&
+      property.initializer.kind !== ts.SyntaxKind.FalseKeyword
+    )
+  })
+}
+
+function scanRequiredNative(file: string, text: string): string[] {
+  const problems: string[] = []
+  const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+  const visit = (node: ts.Node): void => {
+    if (ts.isJsxElement(node) && node.openingElement.tagName.getText() === 'Field') {
+      const requiredAttr = attr(node.openingElement, 'required')
+      const fieldId = attr(node.openingElement, 'id')
+      const want = fieldId === undefined ? undefined : attrText(fieldId)
+      if (requiredAttr !== undefined && attrText(requiredAttr) !== 'false' && want !== undefined) {
+        const check = (child: ts.Node): void => {
+          const open = ts.isJsxElement(child) ? child.openingElement : ts.isJsxSelfClosingElement(child) ? child : null
+          if (open !== null && NATIVE_FIELD_TAGS.has(open.tagName.getText())) {
+            const idAttr = attr(open, 'id')
+            if (idAttr !== undefined && attrText(idAttr) === want) {
+              const announced =
+                isTruthyAttr(open, 'required') ||
+                isTruthyAttr(open, 'aria-required') ||
+                open.attributes.properties.some(
+                  (property) => ts.isJsxSpreadAttribute(property) && passesRequiredOption(property.expression),
+                )
+              if (!announced) problems.push(`${relative(ROOT, file)}:${source.getLineAndCharacterOfPosition(open.getStart()).line + 1}`)
+            }
+          }
+          ts.forEachChild(child, check)
+        }
+        node.children.forEach(check)
+      }
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(source)
+  return problems
+}
+
+describe('<Field required> ที่ห่อช่อง native ส่ง aria-required', () => {
+  it('ตัวสแกนจับได้จริง', () => {
+    const problems = scanRequiredNative(
+      join(ROOT, 'components', 'fixture.tsx'),
+      `const a = (
+        <>
+          <Field id="a" label="ก" required><input id="a" {...fieldControlAria('a', { error: e })} /></Field>
+          <Field id="b" label="ข" required={need}><input id="b" {...fieldControlAria('b', { error: e, required: need })} /></Field>
+          <Field id="c" label="ค" required><input id="c" required /></Field>
+          <Field id="d" label="ง"><input id="d" /></Field>
+          <Field id="e" label="จ" required><Input id="e" /></Field>
+          <Field id="f" label="ฉ" required><button id="f" type="button" /></Field>
+          <Field id="g" label="ช" required={false}><input id="g" /></Field>
+          <Field id="h" label="ซ" required><input id="h" {...fieldControlAria(f('h'), { required: false })} /></Field>
+          <Field id="i" label="ฌ" required><input id="i" aria-required={false} /></Field>
+          <Field id="j" label="ญ" required><input id="j" {...fieldControlAria(f('j'), { error: g(e), required })} /></Field>
+        </>
+      )`,
+    )
+    expect(problems.map((problem) => problem.split(':')[1])).toEqual(['3', '10', '11'])
+  })
+
+  it('ทุกจุดในระบบ', () => {
+    const problems = [...sourceFiles(join(ROOT, 'components')), ...sourceFiles(join(ROOT, 'app'))].flatMap((file) => {
+      const text = readFileSync(file, 'utf8')
+      return text.includes('<Field') ? scanRequiredNative(file, text) : []
+    })
+    expect(problems).toEqual([])
+  })
+})

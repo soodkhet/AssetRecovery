@@ -428,6 +428,7 @@ export function CompanyDocumentsModal({
                   <Field id="company-doc-file" label="ไฟล์ (PDF หรือรูปภาพ ไม่เกิน 10 MB)" required>
                     <input
                       id="company-doc-file"
+                      aria-required
                       type="file"
                       accept={ACCEPT}
                       className="block text-xs"

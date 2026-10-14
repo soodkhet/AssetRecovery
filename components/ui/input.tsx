@@ -142,6 +142,8 @@ interface FieldControlState {
   controlId: string
   invalid: boolean
   describedBy: string | undefined
+  /** `<Field required>` (มี * ที่ label) ⇒ ช่องข้างในได้ `aria-required` ให้โปรแกรมอ่านจอรู้ด้วย */
+  required: boolean
 }
 
 const FieldControlContext = createContext<FieldControlState | null>(null)
@@ -149,6 +151,8 @@ const FieldControlContext = createContext<FieldControlState | null>(null)
 /**
  * รวม aria-invalid/aria-describedby ของช่องกรอก: ค่าที่ส่งตรง + ค่าจาก `<Field>` ที่ห่อ (เมื่อ id ตรงกัน)
  * export ให้ช่องกรอกแบบประกอบเอง (เช่น `<StagedFileInput>`) ผูกกับ `<Field id>` ได้แบบเดียวกับ `<Input>`
+ * `required` = `<Field required>` ที่ผูกช่องนี้ — ช่องพิมพ์/เลือก (`<Input>`/`<Select>`/`<Textarea>`) ใส่เป็น `aria-required`
+ * (ปุ่มเลือกไฟล์แบบ role button เช่น `<StagedFileInput>` ไม่ใส่ — `aria-required` ไม่ใช้กับ role button)
  */
 export function useFieldControl(id: string | undefined, invalid: boolean, describedBy: string | undefined) {
   const field = useContext(FieldControlContext)
@@ -157,6 +161,7 @@ export function useFieldControl(id: string | undefined, invalid: boolean, descri
   const ids = [describedBy, bound ? field.describedBy : undefined].filter((value) => value !== undefined && value !== '')
   return {
     invalid: isInvalid,
+    required: bound && field.required,
     aria: {
       'aria-invalid': isInvalid || undefined,
       'aria-describedby': ids.length > 0 ? ids.join(' ') : undefined,
@@ -199,7 +204,7 @@ export function Field({
   const errorId = id !== undefined && hasError ? `${id}-error` : undefined
   const hintId = id !== undefined && showHint ? `${id}-hint` : undefined
   const control: FieldControlState | null =
-    id === undefined ? null : { controlId: id, invalid: hasError, describedBy: errorId ?? hintId }
+    id === undefined ? null : { controlId: id, invalid: hasError, describedBy: errorId ?? hintId, required }
   return (
     <div className={className}>
       <Label
@@ -250,6 +255,8 @@ export function FieldGroupBox({
       aria-labelledby={`${field.controlId}-label`}
       aria-invalid={field.invalid || undefined}
       aria-describedby={field.describedBy}
+      // `<Field required>` ⇒ `aria-required` อัตโนมัติเฉพาะ radiogroup (role group ไม่รองรับ) · ค่าที่ส่งตรงชนะ
+      aria-required={rest['aria-required'] ?? ((role === 'radiogroup' && field.required) || undefined)}
     >
       {children}
     </div>
@@ -259,10 +266,17 @@ export function FieldGroupBox({
 /**
  * aria ของช่องกรอก native (`<input>`/ปุ่มเลือกไฟล์ที่เขียนเองในฟอร์ม) ที่ห่อด้วย `<Field id>` — ใช้ชื่อ id
  * ชุดเดียวกับ `<Field>` (`<id>-error` เมื่อผิด · `<id>-hint` เมื่อ `<Field>` มี hint) · `describedBy` = คำอธิบายเพิ่มของช่อง (เช่นชื่อไฟล์ในปุ่ม) · ช่องจาก UI Kit ไม่ต้องใช้ (ได้จาก `<Field>` เอง)
+ * `required` = ส่งค่าเดียวกับ `<Field required>` เมื่อเป็นช่องพิมพ์/เลือก native ⇒ `aria-required` (รวม `<input type="file">` native · ปุ่ม `<button>` เลือกไฟล์ไม่ต้องส่ง)
+ * — กันถดถอยด้วย `field-id-coverage.test.ts`
  */
 export function fieldControlAria(
   id: string,
-  { error, hasHint = false, describedBy }: { error?: string | null; hasHint?: boolean; describedBy?: string } = {},
+  {
+    error,
+    hasHint = false,
+    describedBy,
+    required = false,
+  }: { error?: string | null; hasHint?: boolean; describedBy?: string; required?: boolean } = {},
 ) {
   const hasError = typeof error === 'string' && error !== ''
   const fieldDescribedBy = hasError ? `${id}-error` : hasHint ? `${id}-hint` : undefined
@@ -270,6 +284,7 @@ export function fieldControlAria(
   return {
     'aria-invalid': hasError || undefined,
     'aria-describedby': ids.length > 0 ? ids.join(' ') : undefined,
+    'aria-required': required || undefined,
   }
 }
 
@@ -284,6 +299,7 @@ export function Input({ invalid = false, numeric = false, className, 'aria-descr
   return (
     <input
       {...field.aria}
+      aria-required={field.required || undefined}
       className={cn(FIELD_CLASS, field.invalid && ERROR_CLASS, numeric && 'text-right font-mono', className)}
       {...rest}
     />
@@ -299,6 +315,7 @@ export function Select({ invalid = false, className, children, 'aria-describedby
   return (
     <select
       {...field.aria}
+      aria-required={field.required || undefined}
       className={cn(FIELD_CLASS, 'bg-white', field.invalid && ERROR_CLASS, className)}
       {...rest}
     >
@@ -317,6 +334,7 @@ export function Textarea({ invalid = false, className, rows = 3, 'aria-described
     <textarea
       rows={rows}
       {...field.aria}
+      aria-required={field.required || undefined}
       className={cn(FIELD_CLASS, field.invalid && ERROR_CLASS, className)}
       {...rest}
     />

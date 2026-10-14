@@ -257,3 +257,73 @@ describe('<FieldGroupBox> ใน <Field id group> (SV5-A11Y-A3-01)', () => {
     expect(html).toMatch(/<div[^>]*aria-required="true"/)
   })
 })
+
+/** ช่องบังคับ (*) ต้องบอกโปรแกรมอ่านจอด้วย — เดิม IMEI/Serial ในฟอร์มรับเข้าคลังมี * บนจอแต่ไม่มี aria-required */
+describe('<Field required> ⇒ aria-required ที่ช่องข้างใน', () => {
+  it('Input/Select/Textarea ที่ id ตรงกับ Field ได้ aria-required อัตโนมัติ', () => {
+    const html = renderToStaticMarkup(
+      <>
+        <Field id="req-a" label="ก" required>
+          <Input id="req-a" />
+        </Field>
+        <Field id="req-b" label="ข" required>
+          <Select id="req-b">
+            <option value="">—</option>
+          </Select>
+        </Field>
+        <Field id="req-c" label="ค" required>
+          <Textarea id="req-c" />
+        </Field>
+      </>,
+    )
+    expect(html).toMatch(/<input[^>]*aria-required="true"/)
+    expect(html).toMatch(/<select[^>]*aria-required="true"/)
+    expect(html).toMatch(/<textarea[^>]*aria-required="true"/)
+  })
+
+  it('Field ไม่บังคับ / id ไม่ตรง ⇒ ไม่ใส่', () => {
+    const html = renderToStaticMarkup(
+      <>
+        <Field id="opt" label="ไม่บังคับ">
+          <Input id="opt" />
+        </Field>
+        <Field id="main" label="หลัก" required>
+          <Input id="main" />
+          <Input id="other" />
+        </Field>
+      </>,
+    )
+    expect(html.match(/aria-required="true"/g)).toHaveLength(1)
+    expect(html).toMatch(/<input[^>]*aria-required="true"[^>]*id="main"/)
+  })
+
+  it('ปุ่มเลือกไฟล์ (role button) ไม่ใส่ aria-required · กล่อง role=group ไม่ใส่ · radiogroup ใส่', () => {
+    const file = renderToStaticMarkup(
+      <Field id="req-file" label="ใบเสร็จ" required>
+        <StagedFileInput id="req-file" fileName={null} accept="image/*" placeholder="เลือกไฟล์" onPick={() => undefined} />
+      </Field>,
+    )
+    expect(file).not.toContain('aria-required')
+    const group = renderToStaticMarkup(
+      <Field id="req-group" group label="ตัวเลือก" required>
+        <FieldGroupBox>
+          <input type="checkbox" />
+        </FieldGroupBox>
+      </Field>,
+    )
+    expect(group).not.toContain('aria-required')
+    const radio = renderToStaticMarkup(
+      <Field id="req-radio" group label="สภาพ" required>
+        <FieldGroupBox role="radiogroup">
+          <input type="radio" />
+        </FieldGroupBox>
+      </Field>,
+    )
+    expect(radio).toMatch(/<div[^>]*role="radiogroup"[^>]*aria-required="true"/)
+  })
+
+  it('fieldControlAria({ required }) ⇒ aria-required สำหรับช่อง native', () => {
+    expect(fieldControlAria('imei', { required: true })['aria-required']).toBe(true)
+    expect(fieldControlAria('imei')['aria-required']).toBeUndefined()
+  })
+})

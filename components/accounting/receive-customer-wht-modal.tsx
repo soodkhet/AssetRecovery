@@ -156,7 +156,7 @@ export function ReceiveCustomerWhtModal({
         <Field id={`${fieldId}-file`} label="ไฟล์สแกนหนังสือรับรอง" required hint="PDF หรือรูปภาพ ไม่เกิน 10 MB">
           <input
             id={`${fieldId}-file`}
-            {...fieldControlAria(`${fieldId}-file`, { hasHint: true })}
+            {...fieldControlAria(`${fieldId}-file`, { hasHint: true, required: true })}
             type="file"
             accept="application/pdf,image/*"
             className="block w-full text-xs text-slate-600"

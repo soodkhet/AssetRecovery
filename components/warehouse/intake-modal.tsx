@@ -271,7 +271,7 @@ export function IntakeModal({
             >
               <input
                 id={`${fieldId}-imei`}
-                {...fieldControlAria(`${fieldId}-imei`, { error: imeiFieldError })}
+                {...fieldControlAria(`${fieldId}-imei`, { error: imeiFieldError, required: requiredIdentity === 'imei' })}
                 type="text"
                 inputMode="numeric"
                 maxLength={IMEI_INPUT_MAX_LENGTH}
@@ -308,7 +308,7 @@ export function IntakeModal({
                 >
                   <input
                     id={`${fieldId}-serial`}
-                    {...fieldControlAria(`${fieldId}-serial`, { error: fieldErrors.serial })}
+                    {...fieldControlAria(`${fieldId}-serial`, { error: fieldErrors.serial, required: requiredIdentity === 'serial' })}
                     type="text"
                     maxLength={100}
                     value={serialActual}
