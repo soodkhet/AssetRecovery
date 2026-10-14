@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { Button, Field, InlineAlert, Input, Modal, Textarea, useToast } from '@/components/ui'
 import { advanceRejectedToastText } from '@/lib/advances/advance-ui'
 import type { AdvanceDto, AdvanceRejectResultDto } from '@/lib/advances/types'
@@ -26,6 +26,8 @@ export function AdvanceReviewModal({
   onClose: () => void
   onDone: () => void
 }) {
+  // id ผูก label ↔ ช่อง + aria-invalid/aria-describedby ผ่าน `<Field id>` (ตรวจซ้ำ staging SV5-R9-01)
+  const fieldId = useId()
   const { showToast } = useToast()
   const [approvedAmount, setApprovedAmount] = useState('')
   const [note, setNote] = useState('')
@@ -116,8 +118,9 @@ export function AdvanceReviewModal({
               อนุมัติแล้วเงินจะ<b>โอนให้ผู้ขอในรอบจ่ายถัดไป</b> — ผู้ขอเคลียร์ยอดได้หลังรอบจ่ายนั้นยืนยันจ่ายแล้ว และจะขอเบิกใหม่ไม่ได้จนกว่าจะเคลียร์ยอดนี้เสร็จ
             </InlineAlert>
 
-            <Field label="ยอดที่อนุมัติ (บาท) — เว้นว่าง = อนุมัติเต็มจำนวน">
+            <Field id={`${fieldId}-approved-amount`} label="ยอดที่อนุมัติ (บาท) — เว้นว่าง = อนุมัติเต็มจำนวน">
               <Input
+                id={`${fieldId}-approved-amount`}
                 numeric
                 inputMode="decimal"
                 placeholder={`เต็มจำนวน ${fmtSatangSymbol(advance.requestedSatang)}`}
@@ -132,13 +135,14 @@ export function AdvanceReviewModal({
               </InlineAlert>
             )}
 
-            <Field label="หมายเหตุ (ถ้ามี)">
-              <Textarea maxLength={500} rows={2} value={note} onChange={(event) => setNote(event.target.value)} />
+            <Field id={`${fieldId}-note`} label="หมายเหตุ (ถ้ามี)">
+              <Textarea id={`${fieldId}-note`} maxLength={500} rows={2} value={note} onChange={(event) => setNote(event.target.value)} />
             </Field>
           </>
         ) : (
-          <Field label="เหตุผลที่ปฏิเสธ (บังคับกรอก)" required>
+          <Field id={`${fieldId}-reason`} label="เหตุผลที่ปฏิเสธ (บังคับกรอก)" required>
             <Textarea
+              id={`${fieldId}-reason`}
               maxLength={500}
               rows={3}
               placeholder="เช่น วัตถุประสงค์ไม่ชัดเจน ขอให้ระบุแผนการเดินทางและจำนวนวัน"

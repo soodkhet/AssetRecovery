@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { Button, Field, FieldErrorText, InlineAlert, Input, Modal, Textarea, useClearOnClose, useResetOnRecordChange, useRevealFieldError, useToast } from '@/components/ui'
 import type { AdvanceDto, AdvanceSettleResult } from '@/lib/advances/types'
 import { callApi, jsonRequest } from '@/lib/api/types'
@@ -40,6 +40,8 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
   onClose: () => void
   onSettled: () => void
 }) {
+  // id ผูก label ↔ ช่อง + aria-invalid/aria-describedby ผ่าน `<Field id>` (ตรวจซ้ำ staging SV5-R9-01)
+  const fieldId = useId()
   const { showToast } = useToast()
   const [used, setUsed] = useState('')
   const [receipt, setReceipt] = useState<File | null>(null)
@@ -220,8 +222,9 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
           />
         </div>
 
-        <Field label="ยอดที่ใช้จริง (บาท)" required error={usedError}>
+        <Field id={`${fieldId}-used`} label="ยอดที่ใช้จริง (บาท)" required error={usedError}>
           <Input
+            id={`${fieldId}-used`}
             numeric
             inputMode="decimal"
             placeholder="0.00"
@@ -244,8 +247,8 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
 
         {/* มติ PO U30 — มียอดคืน ⇒ ผู้เคลียร์เลือกวิธีคืน (ค่าเริ่มต้นหักกลบในรอบจ่ายถัดไป) */}
         {preview !== null && preview.returnSatang > 0 && (
-          <Field label={`วิธีคืนยอด ${fmtSatangSymbol(preview.returnSatang)}`} required>
-            <div className="space-y-2">
+          <Field id={`${fieldId}-return-method`} group label={`วิธีคืนยอด ${fmtSatangSymbol(preview.returnSatang)}`} required>
+            <div id={`${fieldId}-return-method`} role="radiogroup" aria-required aria-labelledby={`${fieldId}-return-method-label`} className="space-y-2">
               {(['payout_offset', 'separate'] as const).map((method) => (
                 <label key={method} className="flex items-start gap-2 text-sm text-slate-700">
                   <input
@@ -270,11 +273,13 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
         )}
 
         <Field
+          id={`${fieldId}-file`}
           label="แนบใบเสร็จ"
           error={receiptError}
           hint={'รูปภาพหรือ PDF ไม่เกิน 10 MB — รายจ่ายที่ไม่มีใบเสร็จให้ติ๊ก "ไม่มีใบเสร็จ" ด้านล่าง'}
         >
           <StagedFileInput
+            id={`${fieldId}-file`}
             fileName={receipt?.name ?? null}
             accept={EXPENSE_RECEIPT_ACCEPT}
             placeholder="แตะเพื่อเลือกไฟล์ใบเสร็จ"
@@ -310,8 +315,8 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
           </div>
         )}
 
-        <Field label="หมายเหตุ (ถ้ามี)">
-          <Textarea rows={2} maxLength={500} value={note} onChange={(event) => setNote(event.target.value)} />
+        <Field id={`${fieldId}-note`} label="หมายเหตุ (ถ้ามี)">
+          <Textarea id={`${fieldId}-note`} rows={2} maxLength={500} value={note} onChange={(event) => setNote(event.target.value)} />
         </Field>
       </div>
       </fieldset>

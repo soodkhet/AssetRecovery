@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { StagedFileInput } from '@/components/uploads/staged-file-input'
 import { Button, Field, InlineAlert, Input, Modal, Select, Textarea, useResetOnRecordChange, useToast } from '@/components/ui'
 import { ADVANCE_RETURN_METHOD_LABEL } from '@/lib/advances/advance'
@@ -28,6 +28,8 @@ export function ChangeReturnMethodModal({
   onClose: () => void
   onDone: () => void
 }) {
+  // id ผูก label ↔ ช่อง + aria-invalid/aria-describedby ผ่าน `<Field id>` (ตรวจซ้ำ staging SV5-R9-01)
+  const fieldId = useId()
   const { showToast } = useToast()
   const [reason, setReason] = useState('')
   const [saving, setSaving] = useState(false)
@@ -77,8 +79,8 @@ export function ChangeReturnMethodModal({
         <InlineAlert tone="info">
           ปัจจุบัน: {ADVANCE_RETURN_METHOD_LABEL[advance.returnMethod]} — เปลี่ยนได้เฉพาะยอดที่ยังไม่ถูกหักในรอบจ่ายที่สร้างแล้ว
         </InlineAlert>
-        <Field label="เหตุผล" required hint="อย่างน้อย 5 ตัวอักษร">
-          <Textarea rows={2} value={reason} maxLength={500} onChange={(event) => setReason(event.target.value)} />
+        <Field id={`${fieldId}-reason`} label="เหตุผล" required hint="อย่างน้อย 5 ตัวอักษร">
+          <Textarea id={`${fieldId}-reason`} rows={2} value={reason} maxLength={500} onChange={(event) => setReason(event.target.value)} />
         </Field>
       </div>
     </Modal>
@@ -94,6 +96,8 @@ export function RecordSeparateReturnModal({
   onClose: () => void
   onDone: () => void
 }) {
+  // id ผูก label ↔ ช่อง + aria-invalid/aria-describedby ผ่าน `<Field id>` (ตรวจซ้ำ staging SV5-R9-01)
+  const fieldId = useId()
   const { showToast } = useToast()
   const [channel, setChannel] = useState<'cash' | 'bank_transfer'>('bank_transfer')
   const [amount, setAmount] = useState('')
@@ -205,8 +209,9 @@ export function RecordSeparateReturnModal({
           />
         </Field>
         {/* แสดงชื่อไฟล์จาก state — เปิดรายการเดิมซ้ำแล้วร่างไฟล์ยังอยู่ ผู้ใช้ต้องเห็นว่าแนบอะไรไว้ (มติผู้ใช้ 14/10/2569) */}
-        <Field label="หลักฐาน (สลิปโอน/ใบรับเงิน — PDF/รูป)" required>
+        <Field id={`${fieldId}-file`} label="หลักฐาน (สลิปโอน/ใบรับเงิน — PDF/รูป)" required>
           <StagedFileInput
+            id={`${fieldId}-file`}
             fileName={file?.name ?? null}
             accept="application/pdf,image/*"
             placeholder="แตะเพื่อเลือกไฟล์หลักฐาน"

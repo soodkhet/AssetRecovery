@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import {
   Button,
   Field,
@@ -47,6 +47,8 @@ export function AdjustmentFormModal({
   onClose: () => void
   onCreated: () => void
 }) {
+  // id ผูก label ↔ ช่อง + aria-invalid/aria-describedby ผ่าน `<Field id>` (ตรวจซ้ำ staging SV5-R9-01)
+  const fieldId = useId()
   const { showToast } = useToast()
   const [targetType, setTargetType] = useState<AdjustmentTargetType>('revenue')
   const [search, setSearch] = useState('')
@@ -176,8 +178,8 @@ export function AdjustmentFormModal({
           ระดับอนุมัติขึ้นกับ<b>สถานะรอบบัญชีของรายการต้นทาง</b> ที่ระบบบันทึกไว้ตอนสร้าง
         </InlineAlert>
 
-        <Field label="ประเภทรายการต้นทาง" required>
-          <Select value={targetType} onChange={(event) => changeTargetType(event.target.value)}>
+        <Field id={`${fieldId}-target-type`} label="ประเภทรายการต้นทาง" required>
+          <Select id={`${fieldId}-target-type`} value={targetType} onChange={(event) => changeTargetType(event.target.value)}>
             {ADJUSTMENT_TARGET_TYPES.map((type) => (
               <option key={type} value={type}>
                 {ADJUSTMENT_TARGET_LABEL[type]}
@@ -186,9 +188,10 @@ export function AdjustmentFormModal({
           </Select>
         </Field>
 
-        <Field label="ค้นหาเลขที่อ้างอิงของรายการต้นทาง" hint="เว้นว่าง = รายการล่าสุด 20 รายการ">
+        <Field id={`${fieldId}-search`} label="ค้นหาเลขที่อ้างอิงของรายการต้นทาง" hint="เว้นว่าง = รายการล่าสุด 20 รายการ">
           <div className="flex gap-2">
             <Input
+              id={`${fieldId}-search`}
               value={search}
               placeholder="เช่น CASE-26-0012 · มิถุนายน 2569 · ชื่อรอบจ่าย"
               onChange={(event) => setSearch(event.target.value)}
@@ -275,8 +278,9 @@ export function AdjustmentFormModal({
         )}
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="ประเภทการปรับปรุง" required>
+          <Field id={`${fieldId}-adjustment-type`} label="ประเภทการปรับปรุง" required>
             <Select
+              id={`${fieldId}-adjustment-type`}
               value={adjustmentType}
               onChange={(event) => setAdjustmentType(event.target.value === 'decrease' ? 'decrease' : 'increase')}
             >
@@ -285,8 +289,9 @@ export function AdjustmentFormModal({
             </Select>
           </Field>
 
-          <Field label={adjustmentAmountFieldLabel(targetType)} required>
+          <Field id={`${fieldId}-amount`} label={adjustmentAmountFieldLabel(targetType)} required>
             <Input
+              id={`${fieldId}-amount`}
               numeric
               inputMode="decimal"
               placeholder="0.00"
@@ -296,8 +301,9 @@ export function AdjustmentFormModal({
           </Field>
         </div>
 
-        <Field label="เหตุผล" required hint="บังคับกรอกเสมอ อย่างน้อย 5 ตัวอักษร">
+        <Field id={`${fieldId}-reason`} label="เหตุผล" required hint="บังคับกรอกเสมอ อย่างน้อย 5 ตัวอักษร">
           <Textarea
+            id={`${fieldId}-reason`}
             maxLength={1000}
             rows={3}
             value={reason}

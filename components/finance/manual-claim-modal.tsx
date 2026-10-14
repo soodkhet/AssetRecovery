@@ -326,12 +326,14 @@ export function ManualClaimModal({
           </div>
         ) : (
           <Field
+            id={`${fieldId}-file`}
             label="แนบใบเสร็จ"
             required
             error={errors.receiptFileUrl}
             hint="รูปภาพหรือ PDF ไม่เกิน 10 MB — ระบบตรวจไฟล์ก่อนบันทึก"
           >
             <StagedFileInput
+              id={`${fieldId}-file`}
               fileName={receipt?.name ?? null}
               accept={EXPENSE_RECEIPT_ACCEPT}
               placeholder="แตะเพื่อเลือกไฟล์ใบเสร็จ"

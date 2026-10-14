@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { Button, Field, InlineAlert, Modal, RefText, StatusBadge, Textarea, useToast } from '@/components/ui'
 import {
   ADJUSTMENT_TYPE_TONE,
@@ -32,6 +32,8 @@ export function AdjustmentReviewModal({
   onClose: () => void
   onDone: () => void
 }) {
+  // id ผูก label ↔ ช่อง + aria-invalid/aria-describedby ผ่าน `<Field id>` (ตรวจซ้ำ staging SV5-R9-01)
+  const fieldId = useId()
   const { showToast } = useToast()
   const [note, setNote] = useState('')
   const [rejectionReason, setRejectionReason] = useState('')
@@ -150,13 +152,14 @@ export function AdjustmentReviewModal({
                 แล้วรอบทบาทที่เหลือ ({adjustment.missingApproverRoles.join(', ')}) อนุมัติต่อ
               </InlineAlert>
             )}
-            <Field label="หมายเหตุของผู้อนุมัติ (ถ้ามี)">
-              <Textarea maxLength={1000} rows={2} value={note} onChange={(event) => setNote(event.target.value)} />
+            <Field id={`${fieldId}-note`} label="หมายเหตุของผู้อนุมัติ (ถ้ามี)">
+              <Textarea id={`${fieldId}-note`} maxLength={1000} rows={2} value={note} onChange={(event) => setNote(event.target.value)} />
             </Field>
           </>
         ) : (
-          <Field label="เหตุผลที่ปฏิเสธ (บังคับกรอก)" required>
+          <Field id={`${fieldId}-rejection-reason`} label="เหตุผลที่ปฏิเสธ (บังคับกรอก)" required>
             <Textarea
+              id={`${fieldId}-rejection-reason`}
               maxLength={1000}
               rows={3}
               placeholder="เช่น เอกสารประกอบไม่ครบ ให้แนบใบเสร็จฉบับจริงแล้วยื่นใหม่"
