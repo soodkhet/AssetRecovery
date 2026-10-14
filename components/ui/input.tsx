@@ -15,7 +15,17 @@ import { cn } from '@/components/ui/cn'
 // + สูงอย่างน้อย 44px ให้แตะได้แม่นบนมือถือ (mytester DI-04/PT-05) — ใช้ pointer-coarse ⇒ desktop ที่ใช้เมาส์หน้าตาเดิม
 const FIELD_CLASS =
   'focus-ring w-full rounded-lg border border-slate-300 px-3 py-2 text-sm pointer-coarse:min-h-11 pointer-coarse:text-base disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400'
-const ERROR_CLASS = 'border-red-300 bg-red-50'
+/** กรอบแดงของช่องที่ผิด — ชุดเดียวทั้งระบบ (ช่องจาก UI Kit · `<StagedFileInput>` · ปุ่มเลือกไฟล์ที่เขียนเอง — SV5-A11Y-A1-01) */
+export const FIELD_ERROR_CLASS = 'border-red-300 bg-red-50'
+const ERROR_CLASS = FIELD_ERROR_CLASS
+
+/**
+ * คลาสกรอบแดงของช่อง native/ปุ่มเลือกไฟล์ที่เขียนเองในฟอร์ม (คู่กับ `fieldControlAria()`) — `error` ว่าง/ไม่มี ⇒ ไม่ใส่
+ * ใส่ต่อท้าย className ผ่าน `cn()` (tailwind-merge ⇒ ทับสีกรอบเดิม) · ตรวจซ้ำ staging SV5-A11Y-A1-01
+ */
+export function fieldErrorClass(error: string | null | undefined): string | undefined {
+  return typeof error === 'string' && error !== '' ? FIELD_ERROR_CLASS : undefined
+}
 
 export function Label({
   id,

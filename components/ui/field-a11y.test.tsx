@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { StagedFileInput } from '@/components/uploads/staged-file-input'
-import { Field, Input, Select, Textarea, fieldControlAria, fieldErrorControl } from '@/components/ui'
+import { FIELD_ERROR_CLASS, Field, Input, Select, Textarea, fieldControlAria, fieldErrorClass, fieldErrorControl } from '@/components/ui'
 
 /** ตรวจซ้ำ staging SV5-R7-01 — `<Field id>` ผูก label ↔ ช่อง + ช่องที่ผิดมี aria-invalid/aria-describedby */
 describe('<Field id> ผูกช่องกรอก', () => {
@@ -208,5 +208,20 @@ describe('ช่องแนบไฟล์ + ช่อง native ใน <Field 
       </Field>,
     )
     expect(html).toMatch(/<label id="n-label" for="n"/)
+  })
+})
+
+describe('fieldErrorClass (SV5-A11Y-A1-01)', () => {
+  it('มีข้อผิด ⇒ กรอบแดงชุดเดียวกับช่อง UI Kit/StagedFileInput · ไม่มี/ว่าง ⇒ ไม่ใส่', () => {
+    expect(fieldErrorClass('กรุณาแนบใบเสร็จ')).toBe(FIELD_ERROR_CLASS)
+    expect(fieldErrorClass('')).toBeUndefined()
+    expect(fieldErrorClass(null)).toBeUndefined()
+    expect(fieldErrorClass(undefined)).toBeUndefined()
+    const html = renderToStaticMarkup(
+      <Field id="r" label="ใบเสร็จ" error="ผิด">
+        <Input id="r" />
+      </Field>,
+    )
+    expect(html).toContain(FIELD_ERROR_CLASS)
   })
 })

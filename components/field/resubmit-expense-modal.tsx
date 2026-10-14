@@ -4,7 +4,7 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { IconFile } from '@/components/field/field-icons'
 import { ReceiptInCompanyNameCheckbox } from '@/components/field/hotel-claim-modal'
 import { NoReceiptLinesEditor } from '@/components/substitute-receipts/no-receipt-lines'
-import { Button, Field, FieldErrorText, FormSubmitError, InlineAlert, Input, Modal, Textarea, fieldControlAria, revealFirstFieldError, useToast } from '@/components/ui'
+import { Button, Field, FieldErrorText, FormSubmitError, InlineAlert, Input, Modal, Textarea, cn, fieldControlAria, fieldErrorClass, revealFirstFieldError, useToast } from '@/components/ui'
 import { REASON_MAX } from '@/lib/api/validation'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest } from '@/lib/api/types'
@@ -463,7 +463,10 @@ export function ResubmitExpenseModal({
                   type="button"
                   onClick={() => fileRef.current?.click()}
                   {...fieldControlAria(`${fieldId}-receipt`, { error: fieldError('receipt'), describedBy: `${fieldId}-receipt-file-name` })}
-                  className="focus-ring flex w-full flex-col items-center gap-1.5 rounded-xl border-2 border-dashed border-slate-300 py-5 text-slate-400"
+                  className={cn(
+                    'focus-ring flex w-full flex-col items-center gap-1.5 rounded-xl border-2 border-dashed border-slate-300 py-5 text-slate-400',
+                    fieldErrorClass(fieldError('receipt')),
+                  )}
                 >
                   <IconFile className="h-6 w-6" />
                   <span id={`${fieldId}-receipt-file-name`} className="text-xs font-semibold">

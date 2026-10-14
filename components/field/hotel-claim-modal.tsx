@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from 'react'
 import { IconFile } from '@/components/field/field-icons'
-import { Button, Field, FieldErrorText, FormSubmitError, Input, Modal, Select, Textarea, fieldControlAria, revealFirstFieldError, useToast } from '@/components/ui'
+import { Button, Field, FieldErrorText, FormSubmitError, Input, Modal, Select, Textarea, cn, fieldControlAria, fieldErrorClass, revealFirstFieldError, useToast } from '@/components/ui'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import {
@@ -333,7 +333,10 @@ export function HotelClaimModal({
             type="button"
             onClick={() => fileRef.current?.click()}
             {...fieldControlAria(`${fieldId}-receipt`, { error: fieldError('receipt'), describedBy: `${fieldId}-receipt-file-name` })}
-            className="focus-ring flex w-full flex-col items-center gap-1.5 rounded-xl border-2 border-dashed border-slate-300 py-6 text-slate-400"
+            className={cn(
+              'focus-ring flex w-full flex-col items-center gap-1.5 rounded-xl border-2 border-dashed border-slate-300 py-6 text-slate-400',
+              fieldErrorClass(fieldError('receipt')),
+            )}
           >
             <IconFile className="h-6 w-6" />
             <span id={`${fieldId}-receipt-file-name`} className="text-xs font-semibold">

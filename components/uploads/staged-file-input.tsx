@@ -2,7 +2,7 @@
 
 import { useRef } from 'react'
 import { IconFile } from '@/components/field/field-icons'
-import { cn, useFieldControl } from '@/components/ui'
+import { FIELD_ERROR_CLASS, cn, useFieldControl } from '@/components/ui'
 
 /**
  * ช่องเลือกไฟล์แบบ "พักไว้ก่อน" (มติ PO U143/U150) — เลือกไฟล์แล้วยังไม่อัปโหลดจนผู้เรียกสั่ง (ตอนกดบันทึก)
@@ -46,7 +46,7 @@ export function StagedFileInput({
         {...field.aria}
         className={cn(
           'focus-ring flex min-w-0 flex-1 items-center gap-2 rounded-lg border-2 border-dashed border-slate-300 px-3 py-3 text-left text-slate-500 hover:border-slate-400 disabled:opacity-60',
-          field.invalid && 'border-red-300 bg-red-50',
+          field.invalid && FIELD_ERROR_CLASS,
         )}
       >
         <IconFile className="h-5 w-5 shrink-0" />

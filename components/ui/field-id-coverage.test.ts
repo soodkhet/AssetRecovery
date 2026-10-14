@@ -118,3 +118,54 @@ describe('<Field id> ครอบคลุมทุกฟอร์ม', () => {
     expect(scan()).toEqual([])
   })
 })
+
+/**
+ * กันถดถอย ตรวจซ้ำ staging SV5-A11Y-A1-01 — ช่อง/ปุ่มที่เขียนเองแล้วใช้ `fieldControlAria(id, { error })` (มี aria-invalid ได้)
+ * ต้องเปลี่ยนเป็นกรอบแดงด้วย — className อ้าง `fieldErrorClass(` (ชุดกลาง) หรือมีเงื่อนไขสีแดงของตัวเอง
+ */
+function scanErrorBorder(file: string, text: string): string[] {
+  const problems: string[] = []
+  const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+  const visit = (node: ts.Node): void => {
+    const open = ts.isJsxElement(node) ? node.openingElement : ts.isJsxSelfClosingElement(node) ? node : null
+    if (open !== null) {
+      const ariaSpread = open.attributes.properties.find(
+        (property) => ts.isJsxSpreadAttribute(property) && /fieldControlAria\([^)]*\berror\b/s.test(property.expression.getText()),
+      )
+      if (ariaSpread !== undefined) {
+        const className = attr(open, 'className')?.initializer?.getText() ?? ''
+        if (!className.includes('fieldErrorClass(') && !/\bred-\d/.test(className)) {
+          problems.push(`${relative(ROOT, file)}:${source.getLineAndCharacterOfPosition(open.getStart()).line + 1}`)
+        }
+      }
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(source)
+  return problems
+}
+
+describe('ช่องที่ใช้ fieldControlAria({ error }) มีกรอบแดงเมื่อผิด', () => {
+  it('ตัวสแกนจับได้จริง', () => {
+    const problems = scanErrorBorder(
+      join(ROOT, 'components', 'fixture.tsx'),
+      `const a = (
+        <>
+          <button {...fieldControlAria(id, { error: e })} className="border-slate-300" />
+          <button {...fieldControlAria(id, { error: e })} className={cn('border-slate-300', fieldErrorClass(e))} />
+          <input {...fieldControlAria(id, { error: e })} className={cn('x', bad ? 'border-red-400' : 'border-slate-300')} />
+          <input {...fieldControlAria(id, { hasHint: true })} className="block" />
+        </>
+      )`,
+    )
+    expect(problems.map((problem) => problem.split(':')[1])).toEqual(['3'])
+  })
+
+  it('ทุกจุดในระบบ', () => {
+    const problems = [...sourceFiles(join(ROOT, 'components')), ...sourceFiles(join(ROOT, 'app'))].flatMap((file) => {
+      const text = readFileSync(file, 'utf8')
+      return text.includes('fieldControlAria(') ? scanErrorBorder(file, text) : []
+    })
+    expect(problems).toEqual([])
+  })
+})
