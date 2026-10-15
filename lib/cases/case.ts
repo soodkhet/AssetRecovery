@@ -1,6 +1,7 @@
 import { CaseError } from '@/lib/cases/errors'
 import { IMEI_FORMAT_MESSAGE, isImeiLikeIdentifier, parseImei } from '@/lib/warehouse/imei'
 import type { AddressValue } from '@/lib/address/address-value'
+import { toAsciiDigits } from '@/lib/format/numeric-input'
 
 /**
  * กติกาข้อมูลของโมดูลรับเคส (ไฟล์ 38 §6, §11, §12) — **pure ล้วน ใช้ร่วม FE/BE**
@@ -38,25 +39,14 @@ export function digitsOnly(value: string): string {
 
 /** เพดานจำนวนตัวอักษรที่ช่องเบอร์โทรรับตอนวาง (มีตัวคั่น/รหัสประเทศ/ข้อความเบอร์ต่อ) — ให้ browser ไม่ตัดก่อนถึง {@link normalizePhoneInput} */
 export const PHONE_INPUT_MAX_LENGTH = 32
+/** อักขระคั่นที่ช่องเบอร์โทรรับตอนพิมพ์/วาง (`081-234-5678` · `(02) 123 4567` · `+66 81…`) — {@link normalizePhoneInput} แปลงเป็นตัวเลขล้วน · ตรงกับชุดที่นำเข้าไฟล์รับ */
+export const PHONE_INPUT_SEPARATORS = ' -.()+'
 /** ตัวเลขที่เก็บในช่องได้มากสุด — เกิน 10 ได้เพื่อให้ผู้ใช้**เห็น** error แทนการตัดทิ้งเงียบ */
 const PHONE_INPUT_MAX_DIGITS = 15
 const PHONE_MAX_DIGITS = 10
 
-const THAI_DIGIT_ZERO = 0x0e50
-const FULLWIDTH_DIGIT_ZERO = 0xff10
-
-/**
- * เลขไทย (๐-๙) / เลขเต็มความกว้าง (０-９) และ `＋` เต็มความกว้าง → ASCII (preship R3-030)
- * แป้นพิมพ์ไทย/IME บางตัวส่งเลขเหล่านี้มา — เดิมถูก `digitsOnly()` ตัดทิ้งเงียบจนเบอร์หายทั้งเบอร์
- * แทนที่ทีละตัว ความยาวสตริงเท่าเดิม (ตำแหน่ง cursor ไม่เลื่อน)
- */
-export function toAsciiDigits(value: string): string {
-  return value.replace(/[\u0E50-\u0E59\uFF10-\uFF19\uFF0B]/g, (char) => {
-    const code = char.charCodeAt(0)
-    if (code === 0xff0b) return '+'
-    return String(code >= FULLWIDTH_DIGIT_ZERO ? code - FULLWIDTH_DIGIT_ZERO : code - THAI_DIGIT_ZERO)
-  })
-}
+/** เลขไทย/เลขเต็มความกว้าง → ASCII (preship R3-030) — ย้ายไปอยู่กับตัวกรองช่องตัวเลขกลาง ใช้ชื่อเดิมได้ */
+export { toAsciiDigits }
 
 /**
  * ค่าที่พิมพ์/วางในช่องเบอร์โทร → ตัวเลขล้วน (preship R2-008)
