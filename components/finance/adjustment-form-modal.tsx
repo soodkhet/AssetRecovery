@@ -9,6 +9,7 @@ import {
   Input,
   Modal,
   ModalCancelButton,
+  MoneyInput,
   RefText,
   Select,
   StatusBadge,
@@ -308,10 +309,8 @@ export function AdjustmentFormModal({
           </Field>
 
           <Field id={`${fieldId}-amount`} label={adjustmentAmountFieldLabel(targetType)} required error={submitError.fields.amountSatang}>
-            <Input
+            <MoneyInput
               id={`${fieldId}-amount`}
-              numeric
-              inputMode="decimal"
               placeholder="0.00"
               value={amount}
               onChange={(event) => {

@@ -5,7 +5,7 @@ import { usePermission } from '@/components/auth/permission-provider'
 import { OnBehalfPayeeSelect } from '@/components/payees/on-behalf-payee-select'
 import { NoReceiptLinesEditor, NoReceiptToggle } from '@/components/substitute-receipts/no-receipt-lines'
 import { StagedFileInput } from '@/components/uploads/staged-file-input'
-import { Button, Field, FieldErrorText, FormSubmitFooter, InlineAlert, Input, Modal, ModalCancelButton, Select, Textarea, useClearOnClose, useRevealFieldError, useToast } from '@/components/ui'
+import { Button, Field, FieldErrorText, FormSubmitFooter, InlineAlert, Input, Modal, ModalCancelButton, MoneyInput, Select, Textarea, useClearOnClose, useRevealFieldError, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { toFieldErrors } from '@/lib/api/validation'
 import { MANUAL_CLAIM_TYPES } from '@/lib/claims/claim'
@@ -280,10 +280,8 @@ export function ManualClaimModal({
         </Field>
 
         <Field id={`${fieldId}-amount`} label="ยอดเงิน (บาท)" required error={errors.grossSatang}>
-          <Input
+          <MoneyInput
             id={`${fieldId}-amount`}
-            numeric
-            inputMode="decimal"
             placeholder="0.00"
             disabled={noReceipt}
             value={noReceipt ? toBahtInput(substituteDraftTotalSatang(substituteLines)) : amount}

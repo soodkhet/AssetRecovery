@@ -1,7 +1,7 @@
 'use client'
 
 import { useId } from 'react'
-import { Button, FieldErrorText, Input } from '@/components/ui'
+import { Button, FieldErrorText, Input, MoneyInput } from '@/components/ui'
 import { fmtSatangSymbol } from '@/lib/format/money'
 import {
   emptySubstituteLine,
@@ -137,10 +137,8 @@ export function NoReceiptLinesEditor({
                 value={line.description}
                 onChange={(event) => update(line.key, { description: event.target.value })}
               />
-              <Input
+              <MoneyInput
                 {...fieldProps('amount')}
-                numeric
-                inputMode="decimal"
                 aria-label={`จำนวนเงิน (บาท) รายการที่ ${index + 1}`}
                 placeholder="0.00"
                 value={line.amountBaht}

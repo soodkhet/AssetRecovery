@@ -2,7 +2,7 @@
 
 import { useId, useState } from 'react'
 import { StagedFileInput } from '@/components/uploads/staged-file-input'
-import { Button, Field, InlineAlert, Input, Modal, ModalCancelButton, Select, Textarea, useResetOnRecordChange, useToast } from '@/components/ui'
+import { Button, Field, InlineAlert, Input, Modal, ModalCancelButton, MoneyInput, Select, Textarea, useResetOnRecordChange, useToast } from '@/components/ui'
 import { ADVANCE_RETURN_METHOD_LABEL } from '@/lib/advances/advance'
 import type { AdvanceDto } from '@/lib/advances/types'
 import { callApi, jsonRequest } from '@/lib/api/types'
@@ -189,10 +189,8 @@ export function RecordSeparateReturnModal({
           hint={`เว้นว่าง = รับคืนเต็มยอดค้าง ${fmtSatangSymbol(advance.returnOutstandingSatang)}`}
           error={amountError ?? (overOutstanding ? 'ยอดเกินยอดคืนค้าง' : null)}
         >
-          <Input
+          <MoneyInput
             id="adv-return-amount"
-            numeric
-            inputMode="decimal"
             placeholder="0.00"
             value={amount}
             invalid={amountError !== null || overOutstanding}

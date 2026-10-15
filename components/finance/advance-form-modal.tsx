@@ -3,7 +3,7 @@
 import { useEffect, useId, useState } from 'react'
 import { usePermission } from '@/components/auth/permission-provider'
 import { OnBehalfPayeeSelect } from '@/components/payees/on-behalf-payee-select'
-import { Button, Field, FormSubmitFooter, InlineAlert, Input, Modal, ModalCancelButton, Select, Textarea, useClearOnClose, useRevealFieldError, useToast } from '@/components/ui'
+import { Button, Field, FormSubmitFooter, InlineAlert, Input, Modal, ModalCancelButton, MoneyInput, Select, Textarea, useClearOnClose, useRevealFieldError, useToast } from '@/components/ui'
 import { advanceCreateAccess, minDueClearInputDate } from '@/lib/advances/advance'
 import { advanceFormIssues } from '@/lib/advances/advance-form'
 import { advanceCaseOptionLabel, advanceRequestErrorText } from '@/lib/advances/advance-ui'
@@ -169,10 +169,8 @@ export function AdvanceFormModal({ open, onClose, onCreated }: {
         )}
 
         <Field id={`${fieldId}-amount`} label="ยอดเงินที่ขอเบิก (บาท)" required error={errors.requestedSatang}>
-          <Input
+          <MoneyInput
             id={`${fieldId}-amount`}
-            numeric
-            inputMode="decimal"
             placeholder="0.00"
             value={amount}
             onChange={(event) => setAmount(event.target.value)}

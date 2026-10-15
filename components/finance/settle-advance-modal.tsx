@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useId, useRef, useState } from 'react'
-import { Button, Field, FieldErrorText, FieldGroupBox, FormSubmitFooter, InlineAlert, Input, Modal, ModalCancelButton, Textarea, useClearOnClose, useResetOnRecordChange, useRevealFieldError, useToast } from '@/components/ui'
+import { Button, Field, FieldErrorText, FieldGroupBox, FormSubmitFooter, InlineAlert, Modal, ModalCancelButton, MoneyInput, Textarea, useClearOnClose, useResetOnRecordChange, useRevealFieldError, useToast } from '@/components/ui'
 import type { AdvanceDto, AdvanceSettleResult } from '@/lib/advances/types'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { advanceSettlement } from '@/lib/finance/advance-calc'
@@ -236,10 +236,8 @@ export function SettleAdvanceModal({ advance, onClose, onSettled }: {
         </div>
 
         <Field id={`${fieldId}-used`} label="ยอดที่ใช้จริง (บาท)" required error={usedError ?? errors.usedSatang ?? null}>
-          <Input
+          <MoneyInput
             id={`${fieldId}-used`}
-            numeric
-            inputMode="decimal"
             placeholder="0.00"
             value={used}
             onChange={(event) => {

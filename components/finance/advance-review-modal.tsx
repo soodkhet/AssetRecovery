@@ -1,7 +1,7 @@
 'use client'
 
 import { useId, useState } from 'react'
-import { Button, Field, InlineAlert, Input, Modal, Textarea, useToast } from '@/components/ui'
+import { Button, Field, InlineAlert, Modal, MoneyInput, Textarea, useToast } from '@/components/ui'
 import { advanceRejectedToastText } from '@/lib/advances/advance-ui'
 import type { AdvanceDto, AdvanceRejectResultDto } from '@/lib/advances/types'
 import { callApi, jsonRequest, type ApiCallResult } from '@/lib/api/types'
@@ -119,10 +119,8 @@ export function AdvanceReviewModal({
             </InlineAlert>
 
             <Field id={`${fieldId}-approved-amount`} label="ยอดที่อนุมัติ (บาท) — เว้นว่าง = อนุมัติเต็มจำนวน">
-              <Input
+              <MoneyInput
                 id={`${fieldId}-approved-amount`}
-                numeric
-                inputMode="decimal"
                 placeholder={`เต็มจำนวน ${fmtSatangSymbol(advance.requestedSatang)}`}
                 value={approvedAmount}
                 onChange={(event) => setApprovedAmount(event.target.value)}
