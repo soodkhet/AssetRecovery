@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from 'react'
 import { IconFile } from '@/components/field/field-icons'
-import { Button, Field, FieldErrorText, FormSubmitError, Input, Modal, Select, Textarea, cn, fieldControlAria, fieldErrorClass, revealFirstFieldError, useToast } from '@/components/ui'
+import { Button, Field, FieldErrorText, FormSubmitError, Input, Modal, MoneyInput, Select, Textarea, cn, fieldControlAria, fieldErrorClass, revealFirstFieldError, useToast } from '@/components/ui'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import {
@@ -276,10 +276,8 @@ export function HotelClaimModal({
         </Field>
 
         <Field id={`${fieldId}-amount-baht`} label="จำนวนเงิน (บาท)" required error={fieldError('amount')} hint={noReceipt ? 'ไม่มีใบเสร็จ — ใช้ยอดรวมของรายการด้านล่าง' : undefined}>
-          <Input
+          <MoneyInput
             id={`${fieldId}-amount-baht`}
-            numeric
-            inputMode="decimal"
             placeholder="0.00"
             disabled={noReceipt}
             value={noReceipt ? toBahtInput(substituteTotal) : amountBaht}

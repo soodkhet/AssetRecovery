@@ -4,7 +4,7 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { IconFile } from '@/components/field/field-icons'
 import { ReceiptInCompanyNameCheckbox } from '@/components/field/hotel-claim-modal'
 import { NoReceiptLinesEditor } from '@/components/substitute-receipts/no-receipt-lines'
-import { Button, Field, FieldErrorText, FieldGroupBox, FormSubmitError, InlineAlert, Input, Modal, Textarea, cn, fieldControlAria, fieldErrorClass, revealFirstFieldError, useToast } from '@/components/ui'
+import { Button, Field, FieldErrorText, FieldGroupBox, FormSubmitError, InlineAlert, Input, Modal, MoneyInput, Textarea, cn, fieldControlAria, fieldErrorClass, revealFirstFieldError, useToast } from '@/components/ui'
 import { REASON_MAX } from '@/lib/api/validation'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest } from '@/lib/api/types'
@@ -328,10 +328,8 @@ export function ResubmitExpenseModal({
                       : undefined
                 }
               >
-                <Input
+                <MoneyInput
                   id={`${fieldId}-amount-baht`}
-                  numeric
-                  inputMode="decimal"
                   value={amountBaht}
                   onChange={(event) => setAmountBaht(event.target.value)}
                 />
