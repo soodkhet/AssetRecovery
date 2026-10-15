@@ -11,6 +11,7 @@ import {
   InlineAlert,
   Input,
   Modal,
+  NumericInput,
   Select,
   StatusBadge,
   TBody,
@@ -391,11 +392,12 @@ export function DocumentNumberingTab() {
                 error={errors.nextSequence}
                 hint={`เว้นว่าง = นับต่อจากเลขเดิม · ตั้งได้ตั้งแต่ ${fmtCount(editing.minNextSequence)} ขึ้นไป (ต่ำกว่าเลขที่ใช้แล้วไม่ได้)`}
               >
-                <Input
+                <NumericInput
+                  kind="integer"
+                  maxDigits={8}
                   id="numbering-next"
-                  inputMode="numeric"
                   value={form.nextSequence}
-                  onChange={(event) => set('nextSequence', event.target.value.replace(/[^0-9]/g, ''))}
+                  onChange={(event) => set('nextSequence', event.target.value)}
                   placeholder={String(editing.minNextSequence)}
                 />
               </Field>

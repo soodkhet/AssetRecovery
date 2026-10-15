@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Can } from '@/components/auth/permission-provider'
 import { ReasonConfirmModal } from '@/components/settings/reason-confirm-modal'
 import { MANAGE_SETTINGS } from '@/components/settings/shared'
-import { Button, Card, ErrorState, Field, InlineAlert, Input, LoadingState, useToast } from '@/components/ui'
+import { Button, Card, ErrorState, Field, InlineAlert, LoadingState, NumericInput, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { REASON_MAX, toFieldErrors } from '@/lib/api/validation'
 import { fmtDate } from '@/lib/format/datetime'
@@ -216,12 +216,12 @@ export function AssignmentPolicyTab() {
           error={errors.reassignTimeoutHours}
         >
           <div className="w-32">
-            <Input
+            <NumericInput
+              kind="integer"
               id="assignment-reassign-timeout"
               numeric
-              inputMode="numeric"
               value={form.reassignTimeoutHours}
-              onChange={(event) => set('reassignTimeoutHours', event.target.value.replace(/\D/g, ''))}
+              onChange={(event) => set('reassignTimeoutHours', event.target.value)}
               placeholder={String(DEFAULT_ASSIGNMENT_POLICY_VALUES.reassignTimeoutHours)}
             />
           </div>
@@ -267,12 +267,12 @@ export function AssignmentPolicyTab() {
                 error={errors.acceptDeadlineHours}
               >
                 <div className="w-32">
-                  <Input
+                  <NumericInput
+                    kind="integer"
                     id="assignment-accept-deadline"
                     numeric
-                    inputMode="numeric"
                     value={form.acceptDeadlineHours}
-                    onChange={(event) => set('acceptDeadlineHours', event.target.value.replace(/\D/g, ''))}
+                    onChange={(event) => set('acceptDeadlineHours', event.target.value)}
                     placeholder="24"
                   />
                 </div>

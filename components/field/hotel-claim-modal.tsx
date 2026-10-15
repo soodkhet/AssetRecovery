@@ -2,13 +2,12 @@
 
 import { useEffect, useId, useRef, useState } from 'react'
 import { IconFile } from '@/components/field/field-icons'
-import { Button, Field, FieldErrorText, FormSubmitError, Input, Modal, MoneyInput, Select, Textarea, cn, fieldControlAria, fieldErrorClass, revealFirstFieldError, useToast } from '@/components/ui'
+import { Button, Field, FieldErrorText, FormSubmitError, Input, Modal, MoneyInput, NumericInput, Select, Textarea, cn, fieldControlAria, fieldErrorClass, revealFirstFieldError, useToast } from '@/components/ui'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import {
   HOTEL_CLAIM_NOTE_MAX_LENGTH,
   HOTEL_NIGHTS_MAX,
-  HOTEL_NIGHTS_MIN,
   hotelClaimFormIssue,
   parseHotelNightsInput,
   type HotelClaimFormField,
@@ -263,13 +262,10 @@ export function HotelClaimModal({
         </Field>
 
         <Field id={`${fieldId}-nights-text`} label="จำนวนคืน" error={fieldError('nights')} hint="ใบเสร็จใบเดียวครอบหลายคืนได้ — ไม่กรอก = 1 คืน">
-          <Input
+          <NumericInput
+            kind="integer"
+            maxDigits={String(HOTEL_NIGHTS_MAX).length}
             id={`${fieldId}-nights-text`}
-            type="number"
-            inputMode="numeric"
-            min={HOTEL_NIGHTS_MIN}
-            max={HOTEL_NIGHTS_MAX}
-            step={1}
             value={nightsText}
             onChange={(event) => setNightsText(event.target.value)}
           />

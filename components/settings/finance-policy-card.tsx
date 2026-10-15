@@ -12,9 +12,9 @@ import {
   Field,
   FieldGroupBox,
   InlineAlert,
-  Input,
   LoadingState,
   MoneyInput,
+  NumericInput,
   Textarea,
   useToast,
 } from '@/components/ui'
@@ -267,12 +267,12 @@ export function FinancePolicyCard() {
               {form.arAgingBuckets.map((value, index) => (
                 <div key={index} className="flex items-center gap-1">
                   <div className="w-24">
-                    <Input
+                    <NumericInput
+                      kind="integer"
                       aria-label={`ช่วงอายุหนี้ที่ ${index + 1}`}
                       invalid={errors[`arAgingBuckets.${index}`] !== undefined}
                       aria-describedby={errors[`arAgingBuckets.${index}`] !== undefined ? 'policy-aging-error' : undefined}
                       numeric
-                      inputMode="numeric"
                       value={value}
                       onChange={(event) => setBucket(index, event.target.value)}
                       placeholder="30"

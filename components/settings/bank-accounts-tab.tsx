@@ -21,6 +21,7 @@ import {
   InlineAlert,
   Input,
   Modal,
+  NumericInput,
   Select,
   StatusBadge,
   TBody,
@@ -467,12 +468,12 @@ export function BankAccountsTab() {
               required
               error={errors.autoMatchToleranceDays}
             >
-              <Input
+              <NumericInput
+                kind="integer"
                 id="bank-account-tolerance"
                 numeric
-                inputMode="numeric"
                 value={form.autoMatchToleranceDays}
-                onChange={(event) => set('autoMatchToleranceDays', event.target.value.replace(/\D/g, ''))}
+                onChange={(event) => set('autoMatchToleranceDays', event.target.value)}
                 placeholder={String(DEFAULT_AUTO_MATCH_TOLERANCE_DAYS)}
               />
             </Field>

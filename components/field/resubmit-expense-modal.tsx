@@ -4,12 +4,12 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { IconFile } from '@/components/field/field-icons'
 import { ReceiptInCompanyNameCheckbox } from '@/components/field/hotel-claim-modal'
 import { NoReceiptLinesEditor } from '@/components/substitute-receipts/no-receipt-lines'
-import { Button, Field, FieldErrorText, FieldGroupBox, FormSubmitError, InlineAlert, Input, Modal, MoneyInput, Textarea, cn, fieldControlAria, fieldErrorClass, revealFirstFieldError, useToast } from '@/components/ui'
+import { Button, Field, FieldErrorText, FieldGroupBox, FormSubmitError, InlineAlert, Modal, MoneyInput, NumericInput, Textarea, cn, fieldControlAria, fieldErrorClass, revealFirstFieldError, useToast } from '@/components/ui'
 import { REASON_MAX } from '@/lib/api/validation'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { EXPENSE_TYPE_ICON, expenseTypeLabel, isSeparateExpense } from '@/lib/field/expense-ui'
-import { HOTEL_NIGHTS_MAX, HOTEL_NIGHTS_MIN, hotelNightsCapText, parseHotelNightsInput } from '@/lib/field/hotel-claim'
+import { HOTEL_NIGHTS_MAX, hotelNightsCapText, parseHotelNightsInput } from '@/lib/field/hotel-claim'
 import { EXPENSE_RECEIPT_ACCEPT } from '@/lib/field/media-upload'
 import {
   defaultResubmitEvidenceMode,
@@ -343,13 +343,10 @@ export function ResubmitExpenseModal({
                 error={fieldError('nights')}
                 hint={`เดิม ${hotelNightsCapText(expense.hotelNights, expense.hotelMaxPerNightSatang)} — ไม่กรอก = 1 คืน`}
               >
-                <Input
+                <NumericInput
+                  kind="integer"
+                  maxDigits={String(HOTEL_NIGHTS_MAX).length}
                   id={`${fieldId}-nights-text`}
-                  type="number"
-                  inputMode="numeric"
-                  min={HOTEL_NIGHTS_MIN}
-                  max={HOTEL_NIGHTS_MAX}
-                  step={1}
                   value={nightsText}
                   onChange={(event) => setNightsText(event.target.value)}
                 />

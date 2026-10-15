@@ -5,7 +5,7 @@ import { usePermission } from '@/components/auth/permission-provider'
 import { DeviceBrandList, DeviceModelList } from '@/components/settings/device-catalog-lists'
 import { DeviceTacHistory, DeviceTacList } from '@/components/settings/device-tac-panels'
 import { MANAGE_DEVICE_CATALOG } from '@/components/settings/shared'
-import { Button, Card, Field, InlineAlert, Input, Textarea, cn, useToast } from '@/components/ui'
+import { Button, Card, Field, InlineAlert, NumericInput, Textarea, cn, useToast } from '@/components/ui'
 import { TOUCH_TARGET_CLASS } from '@/components/ui/button'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { toFieldErrors } from '@/lib/api/validation'
@@ -403,10 +403,10 @@ function DeviceCatalogSettingsForm({ canManage, onSaved }: { canManage: boolean;
         <Textarea id="device-filter-brands" rows={8} value={brandsText} disabled={!canManage} onChange={(event) => setBrandsText(event.target.value)} />
       </Field>
       <Field id="device-filter-years" label="แสดงรุ่นที่ออกภายใน (ปีล่าสุด)" hint="นับปีนี้ด้วย เช่น 5 ปี = รุ่นที่ออกตั้งแต่ 4 ปีก่อนถึงปีนี้" error={errors.recentYears}>
-        <Input
+        <NumericInput
+          kind="integer"
           id="device-filter-years"
           numeric
-          inputMode="numeric"
           className="w-32"
           value={recentYears}
           disabled={!canManage}
@@ -437,10 +437,10 @@ function DeviceCatalogSettingsForm({ canManage, onSaved }: { canManage: boolean;
         hint="ไฟล์ฐาน TAC ต้นทางไม่ถูกแก้นานกว่านี้ ⇒ ขึ้นป้าย “แหล่งข้อมูลอาจหยุดอัปเดต”"
         error={errors.staleAlertDays}
       >
-        <Input
+        <NumericInput
+          kind="integer"
           id="device-stale-days"
           numeric
-          inputMode="numeric"
           className="w-32"
           value={staleDays}
           disabled={!canManage}

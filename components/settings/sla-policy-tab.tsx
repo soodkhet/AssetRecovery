@@ -12,8 +12,8 @@ import {
   ErrorState,
   Field,
   InlineAlert,
-  Input,
   LoadingState,
+  NumericInput,
   Textarea,
   useToast,
 } from '@/components/ui'
@@ -156,12 +156,12 @@ export function SlaPolicyTab() {
         >
           <div className="flex items-center gap-3">
             <div className="w-32">
-              <Input
+              <NumericInput
+                kind="integer"
                 id="sla-hours"
                 numeric
-                inputMode="numeric"
                 value={form.slaAlertHours}
-                onChange={(event) => set('slaAlertHours', event.target.value.replace(/\D/g, ''))}
+                onChange={(event) => set('slaAlertHours', event.target.value)}
                 placeholder={String(DEFAULT_SLA_ALERT_HOURS)}
               />
             </div>

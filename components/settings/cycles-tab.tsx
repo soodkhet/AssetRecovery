@@ -15,6 +15,7 @@ import {
   InlineAlert,
   Input,
   Modal,
+  NumericInput,
   Select,
   StatusBadge,
   TBody,
@@ -533,12 +534,12 @@ export function CyclesTab() {
                 required
                 error={errors.dueRuleValue}
               >
-                <Input
+                <NumericInput
+                  kind="integer"
                   id="cycle-due-value"
                   numeric
-                  inputMode="numeric"
                   value={form.dueRuleValue}
-                  onChange={(event) => set('dueRuleValue', event.target.value.replace(/\D/g, ''))}
+                  onChange={(event) => set('dueRuleValue', event.target.value)}
                   placeholder={form.dueRuleType === 'net_days' ? '30' : '15'}
                 />
               </Field>

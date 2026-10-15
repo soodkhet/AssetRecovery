@@ -11,6 +11,7 @@ import {
   Input,
   Modal,
   ModalCancelButton,
+  NumericInput,
   Select,
   StatusBadge,
   TBody,
@@ -873,7 +874,9 @@ export function DeviceModelList({
             label="ปีที่ออก (พ.ศ. — ไม่บังคับ)"
             error={addError.fields.releaseYear}
           >
-            <Input
+            <NumericInput
+              kind="integer"
+              maxDigits={4}
               id="device-model-year"
               numeric
               value={addForm.releaseYear}

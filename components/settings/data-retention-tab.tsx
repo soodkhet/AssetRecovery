@@ -10,8 +10,8 @@ import {
   ErrorState,
   Field,
   InlineAlert,
-  Input,
   LoadingState,
+  NumericInput,
   Textarea,
   useToast,
 } from '@/components/ui'
@@ -150,12 +150,12 @@ export function DataRetentionTab() {
           error={errors.debtorDocumentRetentionYears}
         >
           <div className="w-32">
-            <Input
+            <NumericInput
+              kind="integer"
               id="retention-years"
               numeric
-              inputMode="numeric"
               value={form.years}
-              onChange={(event) => set('years', event.target.value.replace(/\D/g, ''))}
+              onChange={(event) => set('years', event.target.value)}
               placeholder={String(DEFAULT_DEBTOR_DOCUMENT_RETENTION_YEARS)}
             />
           </div>
