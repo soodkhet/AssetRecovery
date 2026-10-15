@@ -9,7 +9,8 @@ import { cn } from '@/components/ui'
  * ทั้งกล่องเป็น `<button type="button">` จริง ⇒ Tab ถึง · Enter/Space เปิดหน้าต่างเลือกไฟล์ (ปุ่ม native)
  * · ชื่อปุ่ม = `title` (`aria-labelledby`) · คำอธิบาย = `description` (`aria-describedby`)
  * · `<input type="file">` ซ่อนไว้นอกลำดับ Tab (`tabIndex=-1` + `aria-hidden`) เป็นแค่ตัวเปิดหน้าต่างของ browser
- * · `onDropFile` (ไม่บังคับ) = รับไฟล์ที่ลากมาวาง — ไม่ส่ง = ไม่รับการลากวาง
+ * · `onDropFile` (ไม่บังคับ) = รับไฟล์ที่ลากมาวาง — ไม่ส่ง = ไม่รับการลากวาง · ใน `<Modal>` การวางไฟล์นับเป็น "มีร่าง"
+ *   (ปิดแล้วถามทิ้ง — `dropMarksDraft()` · ตรวจซ้ำ staging SV5-P1-01) ⇒ ฟอร์มต้องล้างไฟล์ใน `onDiscard`
  * ห้ามเขียน `div onClick` + `input.hidden` เองอีก (โฟกัสไม่ได้ ไม่มีชื่อ) — ช่องแนบไฟล์ในฟอร์มใช้ `<StagedFileInput>`
  */
 export function FileDropzone({

@@ -44,3 +44,13 @@ export function discardAndClose({ onDiscard, onClose }: { onDiscard: (() => void
   onDiscard?.()
   onClose()
 }
+
+/**
+ * ลากไฟล์มาวางในโซนที่รับไฟล์ (`<FileDropzone onDropFile>` เรียก `preventDefault()`) ⇒ นับเป็น "มีร่าง" แบบเดียวกับคลิกเลือกไฟล์
+ * — ตรวจซ้ำ staging SV5-P1-01: เดิม modal ฟังแค่ input/change ⇒ ลากวางอย่างเดียวแล้ว ยกเลิก/Esc ปิดไม่ถาม ไฟล์ค้างเมื่อเปิดใหม่
+ * · วางที่อื่น (ไม่มีใครรับ = ไม่ `preventDefault`) หรือไม่มีไฟล์ (ลากข้อความ) ⇒ ไม่นับ
+ * · ไม่ดู `isTrusted` (ต่างจาก input/change) — โค้ดแอปไม่ยิง drop เอง
+ */
+export function dropMarksDraft({ handled, fileCount }: { handled: boolean; fileCount: number }): boolean {
+  return handled && fileCount > 0
+}

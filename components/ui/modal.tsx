@@ -1,10 +1,10 @@
 'use client'
 
-import { createContext, useContext, useEffect, useId, useRef, useState, type ReactNode, type SyntheticEvent } from 'react'
+import { createContext, useContext, useEffect, useId, useRef, useState, type DragEvent, type ReactNode, type SyntheticEvent } from 'react'
 import { Button, type ButtonVariant } from '@/components/ui/button'
 import { cn } from '@/components/ui/cn'
 import { installFocusTrap } from '@/components/ui/focus-trap'
-import { busyElementLocksModal, decideModalClose, discardAndClose } from '@/components/ui/modal-close-guard'
+import { busyElementLocksModal, decideModalClose, discardAndClose, dropMarksDraft } from '@/components/ui/modal-close-guard'
 import { guardModalHistory } from '@/components/ui/modal-history'
 import { isDismissEscape, isTopModal, registerModal, unregisterModal } from '@/components/ui/modal-stack'
 
@@ -214,6 +214,13 @@ export function Modal({
     dirtyRef.current = true
   }
 
+  /** ลากไฟล์มาวางใน `<FileDropzone onDropFile>` ⇒ มีร่างเหมือนคลิกเลือกไฟล์ (ไม่เกิด input/change) — ตรวจซ้ำ staging SV5-P1-01 */
+  function markDropDirty(event: DragEvent) {
+    const target = event.target
+    if (!(target instanceof HTMLElement) || target.closest('[role="dialog"]') !== panelRef.current) return
+    if (dropMarksDraft({ handled: event.defaultPrevented, fileCount: event.dataTransfer.files.length })) dirtyRef.current = true
+  }
+
   if (!open) return null
 
   return (
@@ -237,6 +244,7 @@ export function Modal({
         tabIndex={-1}
         onInput={markDirty}
         onChange={markDirty}
+        onDrop={markDropDirty}
         className={cn(
           // header/footer คงที่ · body เลื่อนได้เมื่อเนื้อหายาว (`40` §7.3 — modal ที่ยาวกว่าปกติ)
           'fade-in relative flex max-h-[90vh] w-full flex-col rounded-xl border border-slate-200 bg-white shadow-lg focus:outline-none',

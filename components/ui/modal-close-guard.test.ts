@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { busyElementLocksModal, decideModalClose, discardAndClose, MODAL_BUSY_IGNORE } from '@/components/ui/modal-close-guard'
+import { busyElementLocksModal, decideModalClose, discardAndClose, dropMarksDraft, MODAL_BUSY_IGNORE } from '@/components/ui/modal-close-guard'
 
 describe('decideModalClose', () => {
   it('ระหว่างบันทึก ปิดไม่ได้เลย แม้กรอกข้อมูลไว้หรือปิดการยืนยันทิ้ง', () => {
@@ -43,5 +43,16 @@ describe('discardAndClose (SV5-J1-01)', () => {
     const calls: string[] = []
     discardAndClose({ onDiscard: undefined, onClose: () => calls.push('close') })
     expect(calls).toEqual(['close'])
+  })
+})
+
+describe('dropMarksDraft (ตรวจซ้ำ staging SV5-P1-01)', () => {
+  it('ลากไฟล์วางในโซนที่รับไฟล์ ⇒ มีร่าง (ปิดแล้วถามทิ้ง)', () => {
+    expect(dropMarksDraft({ handled: true, fileCount: 1 })).toBe(true)
+  })
+
+  it('วางนอกโซนที่รับ หรือไม่มีไฟล์ ⇒ ไม่นับ', () => {
+    expect(dropMarksDraft({ handled: false, fileCount: 1 })).toBe(false)
+    expect(dropMarksDraft({ handled: true, fileCount: 0 })).toBe(false)
   })
 })
