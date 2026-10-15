@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 /**
  * ข้อผิดจากการกดส่งของฟอร์มใน modal (มติผู้ใช้ 15/10/2569) — ข้อความขึ้น `<FormSubmitFooter>` ติดจอเหนือปุ่มส่ง
@@ -45,14 +45,17 @@ export function useSubmitError(reveal?: () => void): {
   clearField: (field: string) => void
 } {
   const [state, setState] = useState<SubmitErrorState>(NO_SUBMIT_ERROR)
-  return {
-    ...state,
-    fail: (error) => {
-      setState((previous) => submitErrorFrom(previous, error))
-      reveal?.()
-    },
-    // tick คงไว้ — ข้อความเดิมขึ้นซ้ำครั้งหน้ายังได้ key ใหม่
-    clear: () => setState((previous) => ({ ...NO_SUBMIT_ERROR, tick: previous.tick })),
-    clearField: (field) => setState((previous) => clearSubmitErrorField(previous, field)),
-  }
+  // ฟังก์ชันที่คืนคงที่ข้าม render (ใส่ deps ของ useCallback/useEffect ได้) — `reveal` ล่าสุดอ่านผ่าน ref
+  const revealRef = useRef(reveal)
+  useEffect(() => {
+    revealRef.current = reveal
+  })
+  const fail = useCallback((error: { message: string; fields?: Readonly<Record<string, string>> }) => {
+    setState((previous) => submitErrorFrom(previous, error))
+    revealRef.current?.()
+  }, [])
+  // tick คงไว้ — ข้อความเดิมขึ้นซ้ำครั้งหน้ายังได้ key ใหม่
+  const clear = useCallback(() => setState((previous) => ({ ...NO_SUBMIT_ERROR, tick: previous.tick })), [])
+  const clearField = useCallback((field: string) => setState((previous) => clearSubmitErrorField(previous, field)), [])
+  return { ...state, fail, clear, clearField }
 }

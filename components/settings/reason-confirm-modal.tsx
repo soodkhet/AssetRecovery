@@ -52,6 +52,8 @@ export function ReasonConfirmModal({
       confirmVariant={confirmVariant}
       loading={loading}
       confirmDisabled={reason.trim().length < REASON_MIN_LENGTH}
+      // "ทิ้งข้อมูล" (พิมพ์เหตุผลแล้วสั่งปิด) ⇒ ล้างเหตุผลจริง ไม่ค้างถึงการเปิดครั้งหน้า (SV5-P2-02)
+      onDiscard={() => onReasonChange('')}
     >
       {children}
       <Field id="settings-reason" label="เหตุผล" required>

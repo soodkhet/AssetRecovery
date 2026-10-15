@@ -363,6 +363,7 @@ export function ConfirmModal({
   loading = false,
   confirmDisabled = false,
   submitError,
+  onDiscard,
   children,
 }: {
   open: boolean
@@ -381,6 +382,8 @@ export function ConfirmModal({
    * · ผูก `fields.<ช่อง>` กับ `<Field error>` ของช่องเหตุผลเอง (ตรวจซ้ำ staging SV5-P1-02)
    */
   submitError?: { message: string | null; tick: number }
+  /** พิมพ์แล้วสั่งปิด ⇒ "ทิ้งข้อมูล" ล้างช่องก่อนปิด (ดู `<Modal onDiscard>`) — ผู้เรียกที่ล้างเหตุผลตอนเปิดอยู่แล้วไม่ต้องส่ง */
+  onDiscard?: () => void
   children?: ReactNode
 }) {
   return (
@@ -390,6 +393,7 @@ export function ConfirmModal({
       title={title}
       description={description}
       busy={loading}
+      onDiscard={onDiscard}
       // กติกาเดียวกับ Modal (ตรวจซ้ำ staging SV5-P2-02): Back ของ browser/มือถือ ปิดกล่อง (ไม่ออกจากหน้า) ·
       // พิมพ์เหตุผลไว้แล้วสั่งปิด (ยกเลิก/Esc/X/Back) ⇒ ถามทิ้งก่อน · ไม่ได้พิมพ์ ⇒ ปิดทันทีเหมือนเดิม
       size="sm"
