@@ -3,7 +3,7 @@
 import { useEffect, useId, useState } from 'react'
 import { ImportTemplateHelp } from '@/components/imports/import-template-help'
 import { FileDropzone } from '@/components/uploads/file-dropzone'
-import { Button, Field, InlineAlert, Modal, Select, useToast } from '@/components/ui'
+import { Button, Field, FormSubmitFooter, InlineAlert, Modal, ModalCancelButton, Select, useClearOnClose, useRevealFieldError, useSubmitError, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import type { StatementImportResultDto, StatementImportTemplateDto } from '@/lib/bank-recon/types'
 import {
@@ -40,6 +40,10 @@ export function ImportStatementModal({
   const [saving, setSaving] = useState(false)
   const [template, setTemplate] = useState<StatementImportTemplateDto | null>(null)
   const [templateError, setTemplateError] = useState<string | null>(null)
+  const { ref: formRef, reveal: revealFormError } = useRevealFieldError()
+  const submitError = useSubmitError(revealFormError)
+  // ค้าง mount ⇒ ปิดแล้วล้างข้อผิดจากการกดส่ง (ร่างยังอยู่) · มติผู้ใช้ 15/10/2569
+  useClearOnClose(open, submitError.clear)
 
   useEffect(() => {
     if (!open) return
@@ -80,14 +84,23 @@ export function ImportStatementModal({
     setFile(next)
   }
 
+  /** "ทิ้งข้อมูล" ⇒ ล้างบัญชีที่เลือก + ไฟล์ + ข้อผิด */
+  function resetDraft(): void {
+    setBankAccountId('')
+    setFile(null)
+    submitError.clear()
+  }
+
   async function submit(): Promise<void> {
     if (!ready || file === null) return
+    submitError.clear()
     setSaving(true)
     let csv: string
     try {
       csv = await readImportFileAsCsv(file)
     } catch (readError) {
       setSaving(false)
+      submitError.fail({ message: readError instanceof Error ? readError.message : 'กรุณาลองใหม่' })
       showToast({
         tone: 'error',
         title: 'อ่านไฟล์ไม่ได้',
@@ -102,6 +115,7 @@ export function ImportStatementModal({
     setSaving(false)
 
     if (result.error !== undefined) {
+      submitError.fail(result.error)
       showToast({ tone: 'error', title: result.error.title, description: result.error.message })
       return
     }
@@ -125,20 +139,27 @@ export function ImportStatementModal({
       onClose={onClose}
       title="นำเข้ารายการเดินบัญชีธนาคาร"
       description="ระบบจะจับคู่อัตโนมัติให้เฉพาะรายการที่ยอดตรงและมีคู่ที่เป็นไปได้เพียงรายการเดียว"
+      // ค้าง mount ⇒ ยกเลิก/Esc/X/Back ถามเมื่อมีร่าง · "ทิ้งข้อมูล" ล้างร่างจริง (มติผู้ใช้ 15/10/2569)
+      onDiscard={resetDraft}
       footer={
-        <>
-          <Button variant="secondary" onClick={onClose}>
-            ยกเลิก
-          </Button>
+        <FormSubmitFooter message={submitError.message} tick={submitError.tick}>
+          <ModalCancelButton onClose={onClose} />
           <Button loading={saving} disabled={!ready} onClick={() => void submit()}>
             อัปโหลดและประมวลผล
           </Button>
-        </>
+        </FormSubmitFooter>
       }
     >
-      <div className="space-y-4">
-        <Field id={`${fieldId}-bank-account-id`} label="บัญชีธนาคาร" required>
-          <Select id={`${fieldId}-bank-account-id`} value={bankAccountId} onChange={(event) => setBankAccountId(event.target.value)}>
+      <div ref={formRef} className="space-y-4">
+        <Field id={`${fieldId}-bank-account-id`} label="บัญชีธนาคาร" required error={submitError.fields.bankAccountId}>
+          <Select
+            id={`${fieldId}-bank-account-id`}
+            value={bankAccountId}
+            onChange={(event) => {
+              setBankAccountId(event.target.value)
+              submitError.clearField('bankAccountId')
+            }}
+          >
             <option value="">— เลือกบัญชีธนาคาร —</option>
             {accounts.map((account) => (
               <option key={account.id} value={account.id}>

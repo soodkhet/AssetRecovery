@@ -1,7 +1,7 @@
 'use client'
 
 import { useId, useState } from 'react'
-import { Button, Field, InlineAlert, Modal, Select, Textarea, useToast } from '@/components/ui'
+import { Button, Field, FormSubmitFooter, InlineAlert, Modal, ModalCancelButton, Select, Textarea, useClearOnClose, useRevealFieldError, useSubmitError, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import type { AccountingPeriodDto } from '@/lib/accounting/types'
 import { exportVersionLabel, PACK_FILES } from '@/lib/exports/pack'
@@ -35,8 +35,19 @@ export function ExportPackModal({
   const [periodId, setPeriodId] = useState('')
   const [note, setNote] = useState('')
   const [saving, setSaving] = useState(false)
+  const { ref: formRef, reveal: revealFormError } = useRevealFieldError()
+  const submitError = useSubmitError(revealFormError)
+  // ค้าง mount (แท็บส่งออก) ⇒ ปิดแล้วล้างข้อผิดจากการกดส่ง (ร่างยังอยู่) · มติผู้ใช้ 15/10/2569
+  useClearOnClose(open, submitError.clear)
 
   if (!open) return null
+
+  /** ล้างร่าง + ข้อผิด — หลังส่งออกสำเร็จ และเมื่อผู้ใช้ยืนยัน "ทิ้งข้อมูล" */
+  function resetDraft(): void {
+    setPeriodId('')
+    setNote('')
+    submitError.clear()
+  }
 
   const selected = periods.find((period) => period.id === periodId) ?? periods[0]
   const targetId = selected?.id ?? ''
@@ -45,6 +56,7 @@ export function ExportPackModal({
 
   async function submit(): Promise<void> {
     if (targetId === '') return
+    submitError.clear()
     setSaving(true)
     const result = await callApi<ExportRecordDto>(
       '/api/accounting/export-pack',
@@ -55,6 +67,7 @@ export function ExportPackModal({
     setSaving(false)
 
     if (result.error !== undefined) {
+      submitError.fail(result.error)
       showToast({ tone: 'error', title: result.error.title, description: result.error.message })
       return
     }
@@ -67,6 +80,7 @@ export function ExportPackModal({
       description: 'กำลังดาวน์โหลดไฟล์ .zip — ชุดนี้ถูกเก็บไว้ในประวัติแล้ว ดาวน์โหลดซ้ำได้เสมอ',
     })
     downloadFromUrl(`/api/accounting/export-history/${record.id}/download`)
+    resetDraft()
     onExported(record)
     onClose()
   }
@@ -78,11 +92,11 @@ export function ExportPackModal({
       size="lg"
       title={`ส่งออก Accounting Pack${selected === undefined ? '' : ` — ${selected.periodLabel}`}`}
       description="ระบบสร้างไฟล์ CSV/XLSX ตามรูปแบบที่กำหนด แล้วรวมเป็นไฟล์ .zip พร้อมหน้าปกและ SHA-256"
+      // ค้าง mount ⇒ ปิด/Esc/X/Back ถามเมื่อมีร่าง · "ทิ้งข้อมูล" ล้างร่างจริง (มติผู้ใช้ 15/10/2569)
+      onDiscard={resetDraft}
       footer={
-        <>
-          <Button variant="secondary" onClick={onClose}>
-            ปิด
-          </Button>
+        <FormSubmitFooter message={submitError.message} tick={submitError.tick}>
+          <ModalCancelButton onClose={onClose}>ปิด</ModalCancelButton>
           {/* mytester H-06 — ถูกบล็อกด้วยข้อยกเว้นวิกฤต/ยังไม่รู้สถานะ ⇒ ปิดปุ่ม (server ตรวจซ้ำ) */}
           <Button
             loading={saving}
@@ -91,12 +105,19 @@ export function ExportPackModal({
           >
             ดาวน์โหลดไฟล์ (.zip)
           </Button>
-        </>
+        </FormSubmitFooter>
       }
     >
-      <div className="space-y-4 text-sm">
-        <Field id={`${fieldId}-target-id`} label="รอบบัญชี" required>
-          <Select id={`${fieldId}-target-id`} value={targetId} onChange={(event) => setPeriodId(event.target.value)}>
+      <div ref={formRef} className="space-y-4 text-sm">
+        <Field id={`${fieldId}-target-id`} label="รอบบัญชี" required error={submitError.fields.periodId}>
+          <Select
+            id={`${fieldId}-target-id`}
+            value={targetId}
+            onChange={(event) => {
+              setPeriodId(event.target.value)
+              submitError.clearField('periodId')
+            }}
+          >
             {periods.map((period) => (
               <option key={period.id} value={period.id}>
                 {period.periodLabel} · {period.statusLabel}
@@ -154,13 +175,21 @@ export function ExportPackModal({
           </div>
         </div>
 
-        <Field id={`${fieldId}-note`} label="บันทึกช่วยจำ" hint="ไม่บังคับ — เก็บไว้ในประวัติการใช้งานคู่กับรายชื่อไฟล์และเวอร์ชัน">
+        <Field
+          id={`${fieldId}-note`}
+          label="บันทึกช่วยจำ"
+          hint="ไม่บังคับ — เก็บไว้ในประวัติการใช้งานคู่กับรายชื่อไฟล์และเวอร์ชัน"
+          error={submitError.fields.note}
+        >
           <Textarea
             id={`${fieldId}-note`}
             maxLength={1000}
             rows={2}
             value={note}
-            onChange={(event) => setNote(event.target.value)}
+            onChange={(event) => {
+              setNote(event.target.value)
+              submitError.clearField('note')
+            }}
             placeholder="เช่น ส่งรอบแก้ไขหลังสำนักงานบัญชีทักเรื่องยอด VAT"
           />
         </Field>

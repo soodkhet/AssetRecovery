@@ -1,7 +1,7 @@
 'use client'
 
 import { useId, useState } from 'react'
-import { Button, Field, Modal, Textarea, useToast } from '@/components/ui'
+import { Button, Field, FormSubmitFooter, Modal, ModalCancelButton, Textarea, useClearOnClose, useRevealFieldError, useSubmitError, useToast } from '@/components/ui'
 import type { AccountantQuestionDto } from '@/lib/accounting/types'
 import { callApi, jsonRequest } from '@/lib/api/types'
 
@@ -25,13 +25,24 @@ export function QuestionFormModal({
   const { showToast } = useToast()
   const [questionText, setQuestionText] = useState('')
   const [saving, setSaving] = useState(false)
+  const { ref: formRef, reveal: revealFormError } = useRevealFieldError()
+  const submitError = useSubmitError(revealFormError)
+  // ค้าง mount ⇒ ปิดแล้วล้างข้อผิดจากการกดส่ง (ร่างยังอยู่) · มติผู้ใช้ 15/10/2569
+  useClearOnClose(open, submitError.clear)
 
   if (!open) return null
+
+  /** ล้างร่าง + ข้อผิด — หลังบันทึกสำเร็จ และเมื่อผู้ใช้ยืนยัน "ทิ้งข้อมูล" */
+  function resetDraft(): void {
+    setQuestionText('')
+    submitError.clear()
+  }
 
   const ready = questionText.trim() !== ''
 
   async function submit(): Promise<void> {
     if (!ready) return
+    submitError.clear()
     setSaving(true)
     const result = await callApi<AccountantQuestionDto>(
       '/api/accounting/questions',
@@ -40,11 +51,12 @@ export function QuestionFormModal({
     setSaving(false)
 
     if (result.error !== undefined) {
+      submitError.fail(result.error)
       showToast({ tone: 'error', title: result.error.title, description: result.error.message })
       return
     }
     showToast({ tone: 'success', title: 'บันทึกข้อซักถามแล้ว', description: 'ติดตามสถานะได้จากตารางนี้' })
-    setQuestionText('')
+    resetDraft()
     onCreated()
     onClose()
   }
@@ -55,27 +67,38 @@ export function QuestionFormModal({
       onClose={onClose}
       title="บันทึกข้อซักถามจากสำนักงานบัญชี"
       description="เก็บคำถามที่สำนักงานบัญชีส่งกลับมาให้เป็นหลักฐาน พร้อมติดตามว่าตอบไปแล้วหรือยัง"
+      // ค้าง mount ⇒ ยกเลิก/Esc/X/Back ถามเมื่อมีร่าง · "ทิ้งข้อมูล" ล้างร่างจริง (มติผู้ใช้ 15/10/2569)
+      onDiscard={resetDraft}
       footer={
-        <>
-          <Button variant="secondary" onClick={onClose}>
-            ยกเลิก
-          </Button>
+        <FormSubmitFooter message={submitError.message} tick={submitError.tick}>
+          <ModalCancelButton onClose={onClose} />
           <Button loading={saving} disabled={!ready} onClick={() => void submit()}>
             บันทึกข้อซักถาม
           </Button>
-        </>
+        </FormSubmitFooter>
       }
     >
-      <Field id={`${fieldId}-question-text`} label="คำถาม / ข้อสงสัย" required hint="ระบุให้ครบว่าถามถึงรายการไหน เพื่อให้ตามกลับได้ภายหลัง">
-        <Textarea
+      <div ref={formRef}>
+        <Field
           id={`${fieldId}-question-text`}
-          maxLength={2000}
-          rows={5}
-          value={questionText}
-          onChange={(event) => setQuestionText(event.target.value)}
-          placeholder="เช่น เงินเข้า 12,500 บาท วันที่ 22/06/2569 (Ref: KBANK-TRX-003) มาจากบริษัทใด"
-        />
-      </Field>
+          label="คำถาม / ข้อสงสัย"
+          required
+          hint="ระบุให้ครบว่าถามถึงรายการไหน เพื่อให้ตามกลับได้ภายหลัง"
+          error={submitError.fields.questionText}
+        >
+          <Textarea
+            id={`${fieldId}-question-text`}
+            maxLength={2000}
+            rows={5}
+            value={questionText}
+            onChange={(event) => {
+              setQuestionText(event.target.value)
+              submitError.clearField('questionText')
+            }}
+            placeholder="เช่น เงินเข้า 12,500 บาท วันที่ 22/06/2569 (Ref: KBANK-TRX-003) มาจากบริษัทใด"
+          />
+        </Field>
+      </div>
     </Modal>
   )
 }
