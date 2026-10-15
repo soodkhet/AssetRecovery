@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { FileViewerModal, type ViewableFile } from '@/components/cases/file-viewer-modal'
 import { IconFile, IconImage, IconMapPin, IconPhone, IconUser } from '@/components/field/field-icons'
-import { Button, ErrorState, LoadingState, Modal, RefText, StatusBadge } from '@/components/ui'
+import { Button, ErrorState, LoadingState, Modal, RefText, StatusBadge, useClearOnClose } from '@/components/ui'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
 import { fmtDate, fmtDateTime } from '@/lib/format/datetime'
@@ -431,6 +431,8 @@ export function FieldCaseDetailModal({
   const [actionError, setActionError] = useState<ApiCallError | null>(null)
   /** เพิ่มทีละ 1 เพื่อโหลดใหม่ (ปุ่มลองใหม่ — preship PS-010) */
   const [attempt, setAttempt] = useState(0)
+  // ค้าง mount ⇒ ปิดแล้วล้างข้อผิดของ "รับงาน" — เปิดเคสถัดไป/เคสเดิมไม่ขึ้นข้อผิดเก่า (มติผู้ใช้ 15/10/2569)
+  useClearOnClose(open, () => setActionError(null))
 
   useEffect(() => {
     if (!open || caseId === null) return

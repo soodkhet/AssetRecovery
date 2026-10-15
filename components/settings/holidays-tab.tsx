@@ -10,9 +10,11 @@ import {
   Button,
   Card,
   Field,
+  FormSubmitFooter,
   InlineAlert,
   Input,
   Modal,
+  ModalCancelButton,
   Select,
   TBody,
   THead,
@@ -22,6 +24,8 @@ import {
   Textarea,
   Th,
   Tr,
+  useRevealFieldError,
+  useSubmitError,
   useToast,
 } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
@@ -78,7 +82,9 @@ export function HolidaysTab() {
   const [importOpen, setImportOpen] = useState(false)
   const [importText, setImportText] = useState('')
   const [importReason, setImportReason] = useState('')
-  const [importErrors, setImportErrors] = useState<Record<string, string>>({})
+  // ข้อผิดตอนกดนำเข้า (ตรวจฝั่งหน้าจอ/API) ⇒ footer ติดจอ + ใต้ช่องที่ผิด (มติผู้ใช้ 15/10/2569)
+  const { ref: importRef, reveal: revealImportError } = useRevealFieldError()
+  const importError = useSubmitError(revealImportError)
   const [importing, setImporting] = useState(false)
 
   const [deleteTarget, setDeleteTarget] = useState<PublicHolidayDto | null>(null)
@@ -161,20 +167,36 @@ export function HolidaysTab() {
   async function readFile(file: File | undefined): Promise<void> {
     if (file === undefined) return
     setImportText(await file.text())
+    importError.clearField('items')
+  }
+
+  /** ล้างร่างนำเข้า + ข้อผิด — เมื่อผู้ใช้ยืนยัน "ทิ้งข้อมูล" */
+  function resetImportDraft(): void {
+    setImportText('')
+    setImportReason('')
+    importError.clear()
   }
 
   async function runImport(): Promise<void> {
     const payload = { items: preview.items, reason: importReason.trim() }
     const parsed = holidayImportSchema.safeParse(payload)
     if (!parsed.success || preview.errors.length > 0) {
-      setImportErrors(parsed.success ? {} : toFieldErrors(parsed.error))
+      if (parsed.success) {
+        importError.clear()
+        return
+      }
+      const fields = toFieldErrors(parsed.error)
+      // ข้อแรกตามลำดับบนจอ (รายการ → เหตุผล)
+      const first = fields.items ?? fields.reason ?? Object.values(fields)[0] ?? null
+      if (first !== null) importError.fail({ message: first, fields })
       return
     }
-    setImportErrors({})
+    importError.clear()
     setImporting(true)
     try {
       const result = await callApi<HolidayMutationResultDto>('/api/settings/holidays/import', jsonRequest('POST', payload))
       if (result.error !== undefined) {
+        importError.fail(result.error)
         showToast({ tone: 'error', title: result.error.title, description: result.error.message })
         return
       }
@@ -252,7 +274,7 @@ export function HolidaysTab() {
             <Button
               variant="secondary"
               onClick={() => {
-                setImportErrors({})
+                importError.clear()
                 setImportOpen(true)
               }}
             >
@@ -387,15 +409,23 @@ export function HolidaysTab() {
 
       <Modal
         open={importOpen}
-        onClose={() => setImportOpen(false)}
+        onClose={() => {
+          importError.clear()
+          setImportOpen(false)
+        }}
+        // ร่างอยู่ในแท็บ (ค้างข้ามการปิด) ⇒ ยกเลิก/Esc/X/Back ถามเมื่อมีร่าง · "ทิ้งข้อมูล" ล้างจริง (มติผู้ใช้ 15/10/2569)
+        onDiscard={resetImportDraft}
         size="lg"
         title="นำเข้าวันหยุดหลายวัน"
         description={`วางรายการหรือเลือกไฟล์ CSV — บรรทัดละ 1 วัน รูปแบบ ปี-เดือน-วัน,ชื่อวันหยุด (ปี ค.ศ. หรือ พ.ศ. ก็ได้) · ครั้งละไม่เกิน ${MAX_HOLIDAY_IMPORT_ROWS} วัน · วันที่มีอยู่แล้วจะถูกข้าม`}
         footer={
-          <>
-            <Button variant="secondary" onClick={() => setImportOpen(false)} disabled={importing}>
-              ยกเลิก
-            </Button>
+          <FormSubmitFooter message={importError.message} tick={importError.tick}>
+            <ModalCancelButton
+              onClose={() => {
+                importError.clear()
+                setImportOpen(false)
+              }}
+            />
             <Button
               onClick={() => void runImport()}
               loading={importing}
@@ -403,10 +433,10 @@ export function HolidaysTab() {
             >
               นำเข้า {preview.items.length} วัน
             </Button>
-          </>
+          </FormSubmitFooter>
         }
       >
-        <div className="space-y-4">
+        <div ref={importRef} className="space-y-4">
           <Field id="holiday-import-file" label="ไฟล์ CSV (ไม่บังคับ)">
             <Input
               id="holiday-import-file"
@@ -415,13 +445,16 @@ export function HolidaysTab() {
               onChange={(event) => void readFile(event.target.files?.[0])}
             />
           </Field>
-          <Field id="holiday-import-text" label="รายการวันหยุด" required error={importErrors.items}>
+          <Field id="holiday-import-text" label="รายการวันหยุด" required error={importError.fields.items}>
             <Textarea
               id="holiday-import-text"
               rows={8}
               className="font-mono"
               value={importText}
-              onChange={(event) => setImportText(event.target.value)}
+              onChange={(event) => {
+                setImportText(event.target.value)
+                importError.clearField('items')
+              }}
               placeholder={'2027-01-01,วันขึ้นปีใหม่\n2027-04-13,วันสงกรานต์\n2570-04-14,วันสงกรานต์'}
             />
           </Field>
@@ -446,12 +479,15 @@ export function HolidaysTab() {
               {preview.items.length > 5 ? ` · และอีก ${preview.items.length - 5} วัน` : ''}
             </InlineAlert>
           )}
-          <Field id="holiday-import-reason" label="เหตุผล" required error={importErrors.reason}>
+          <Field id="holiday-import-reason" label="เหตุผล" required error={importError.fields.reason}>
             <Textarea
               maxLength={500}
               id="holiday-import-reason"
               value={importReason}
-              onChange={(event) => setImportReason(event.target.value)}
+              onChange={(event) => {
+                setImportReason(event.target.value)
+                importError.clearField('reason')
+              }}
               placeholder="เช่น นำเข้าวันหยุดราชการประจำปี 2570 ตามประกาศ"
             />
           </Field>

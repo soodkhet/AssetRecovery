@@ -11,8 +11,10 @@ import {
   CardHeader,
   ConfirmModal,
   Field,
+  FormSubmitFooter,
   Input,
   Modal,
+  ModalCancelButton,
   PageHeader,
   Select,
   StatusBadge,
@@ -24,6 +26,8 @@ import {
   Th,
   Tr,
   Textarea,
+  useRevealFieldError,
+  useSubmitError,
   useToast,
 } from '@/components/ui'
 import { ROLE_GROUP_LABEL, roleGroupsForTab, type RoleGroupTabId } from '@/lib/roles/role-groups'
@@ -77,6 +81,8 @@ export function RolesManager() {
   const [createGroup, setCreateGroup] = useState<RoleGroup>('system')
   const [createReason, setCreateReason] = useState('')
   const [creating, setCreating] = useState(false)
+  const { ref: createRef, reveal: revealCreateError } = useRevealFieldError()
+  const createError = useSubmitError(revealCreateError)
 
   const applyResult = useCallback((result: RolesResult) => {
     if (result.error !== undefined) {
@@ -115,7 +121,22 @@ export function RolesManager() {
     [roles, visibleGroup],
   )
 
+  /** ล้างร่างฟอร์มสร้างบทบาท + ข้อผิด — หลังสร้างสำเร็จ และเมื่อผู้ใช้ยืนยัน "ทิ้งข้อมูล" (มติผู้ใช้ 15/10/2569) */
+  function resetCreateDraft(): void {
+    setCreateName('')
+    setCreateGroup('system')
+    setCreateReason('')
+    createError.clear()
+  }
+
+  /** ปิดฟอร์มสร้างบทบาท ⇒ ล้างข้อผิดจากการกดส่ง (ร่างยังอยู่) */
+  function closeCreate(): void {
+    createError.clear()
+    setCreateOpen(false)
+  }
+
   async function createRole() {
+    createError.clear()
     setCreating(true)
     try {
       const result = await callApi<unknown>(
@@ -123,6 +144,7 @@ export function RolesManager() {
         jsonRequest('POST', { name: createName, roleGroup: createGroup, reason: createReason }),
       )
       if (result.error !== undefined) {
+        createError.fail(result.error)
         showToast({ tone: 'error', title: result.error.title, description: result.error.message })
         return
       }
@@ -131,6 +153,7 @@ export function RolesManager() {
       setCreateOpen(false)
       setCreateName('')
       setCreateReason('')
+      createError.clear()
       await load()
     } finally {
       setCreating(false)
@@ -270,14 +293,14 @@ export function RolesManager() {
 
       <Modal
         open={createOpen}
-        onClose={() => setCreateOpen(false)}
+        onClose={closeCreate}
         title="สร้างบทบาทใหม่"
         description="บทบาทที่สร้างเองปรับสิทธิ์ได้ และไม่ใช่บทบาทพื้นฐานของระบบ"
+        // ร่างอยู่ในหน้า (ค้างข้ามการปิด) ⇒ ยกเลิก/Esc/X/Back ถามเมื่อมีร่าง · "ทิ้งข้อมูล" ล้างจริง (มติผู้ใช้ 15/10/2569)
+        onDiscard={resetCreateDraft}
         footer={
-          <>
-            <Button variant="secondary" onClick={() => setCreateOpen(false)} disabled={creating}>
-              ยกเลิก
-            </Button>
+          <FormSubmitFooter message={createError.message} tick={createError.tick}>
+            <ModalCancelButton onClose={closeCreate} />
             <Button
               onClick={() => void createRole()}
               loading={creating}
@@ -285,24 +308,36 @@ export function RolesManager() {
             >
               สร้างบทบาท
             </Button>
-          </>
+          </FormSubmitFooter>
         }
       >
-        <div className="space-y-4">
-          <Field id="role-name" label="ชื่อบทบาท" required>
+        <div ref={createRef} className="space-y-4">
+          <Field id="role-name" label="ชื่อบทบาท" required error={createError.fields.name}>
             <Input
               id="role-name"
               value={createName}
-              onChange={(event) => setCreateName(event.target.value)}
+              onChange={(event) => {
+                setCreateName(event.target.value)
+                createError.clearField('name')
+              }}
               placeholder="เช่น ผู้ตรวจสอบภายใน"
             />
           </Field>
 
-          <Field id="role-group" label="กลุ่มที่สังกัด" required hint="ชื่อซ้ำข้ามกลุ่มได้ — เป็นคนละบทบาทจริง">
+          <Field
+            id="role-group"
+            label="กลุ่มที่สังกัด"
+            required
+            hint="ชื่อซ้ำข้ามกลุ่มได้ — เป็นคนละบทบาทจริง"
+            error={createError.fields.roleGroup}
+          >
             <Select
               id="role-group"
               value={createGroup}
-              onChange={(event) => setCreateGroup(event.target.value as RoleGroup)}
+              onChange={(event) => {
+                setCreateGroup(event.target.value as RoleGroup)
+                createError.clearField('roleGroup')
+              }}
             >
               {(Object.keys(ROLE_GROUP_LABEL) as RoleGroup[]).map((group) => (
                 <option key={group} value={group}>
@@ -312,12 +347,15 @@ export function RolesManager() {
             </Select>
           </Field>
 
-          <Field id="role-reason" label="เหตุผล" required hint="บันทึกไว้ในประวัติการใช้งานถาวร">
+          <Field id="role-reason" label="เหตุผล" required hint="บันทึกไว้ในประวัติการใช้งานถาวร" error={createError.fields.reason}>
             <Textarea
               maxLength={500}
               id="role-reason"
               value={createReason}
-              onChange={(event) => setCreateReason(event.target.value)}
+              onChange={(event) => {
+                setCreateReason(event.target.value)
+                createError.clearField('reason')
+              }}
               placeholder="เช่น เพิ่มบทบาทผู้ตรวจสอบภายในตามมติที่ประชุม"
             />
           </Field>

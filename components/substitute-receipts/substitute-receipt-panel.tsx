@@ -280,7 +280,11 @@ export function SubstituteReceiptPanel({
         {canCancel && !cancelled && (
           <button
             type="button"
-            onClick={() => setCancelOpen(true)}
+            // กล่องยืนยันสั้น (ไม่ถามทิ้ง) ⇒ เปิดใหม่เริ่มเหตุผลว่างเสมอ แบบกล่องยืนยันอื่น (มติผู้ใช้ 15/10/2569)
+            onClick={() => {
+              setCancelReason('')
+              setCancelOpen(true)
+            }}
             className="focus-ring text-[11px] font-semibold text-red-700 underline inline-flex items-center pointer-coarse:min-h-11 pointer-coarse:px-1"
           >
             ยกเลิกใบรับรอง

@@ -7,8 +7,10 @@ import { MANAGE_DEVICE_CATALOG } from '@/components/settings/shared'
 import {
   Button,
   Field,
+  FormSubmitFooter,
   Input,
   Modal,
+  ModalCancelButton,
   Select,
   StatusBadge,
   TBody,
@@ -18,6 +20,9 @@ import {
   Td,
   Th,
   Tr,
+  useResetOnRecordChange,
+  useRevealFieldError,
+  useSubmitError,
   useToast,
 } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
@@ -176,7 +181,9 @@ export function DeviceBrandList({
   const [savingId, setSavingId] = useState<string | null>(null)
   const [addOpen, setAddOpen] = useState(false)
   const [addName, setAddName] = useState('')
-  const [addErrors, setAddErrors] = useState<Record<string, string>>({})
+  // ข้อผิดตอนกดเพิ่ม (ตรวจฝั่งหน้าจอ/API) ⇒ footer ติดจอ + ใต้ช่อง (มติผู้ใช้ 15/10/2569)
+  const { ref: addRef, reveal: revealAddError } = useRevealFieldError()
+  const addError = useSubmitError(revealAddError)
   const [adding, setAdding] = useState(false)
 
   const fetchItems = useCallback(async () => {
@@ -235,13 +242,16 @@ export function DeviceBrandList({
   async function addBrand(): Promise<void> {
     const parsed = deviceBrandCreateSchema.safeParse({ name: addName })
     if (!parsed.success) {
-      setAddErrors(toFieldErrors(parsed.error))
+      const fields = toFieldErrors(parsed.error)
+      addError.fail({ message: fields.name ?? Object.values(fields)[0] ?? '', fields })
       return
     }
+    addError.clear()
     setAdding(true)
     try {
       const result = await callApi('/api/settings/device-catalog/brands', jsonRequest('POST', { name: addName.trim() }))
       if (result.error !== undefined) {
+        addError.fail(result.error)
         showToast({ tone: 'error', title: result.error.title, description: result.error.message })
         return
       }
@@ -307,7 +317,7 @@ export function DeviceBrandList({
             />
             <Button
               onClick={() => {
-                setAddErrors({})
+                addError.clear()
                 setAddOpen(true)
               }}
             >
@@ -403,23 +413,44 @@ export function DeviceBrandList({
 
       <Modal
         open={addOpen}
-        onClose={() => setAddOpen(false)}
+        onClose={() => {
+          addError.clear()
+          setAddOpen(false)
+        }}
+        // ร่างอยู่ในรายการ (ค้างข้ามการปิด) ⇒ ยกเลิก/Esc/X/Back ถามเมื่อมีร่าง · "ทิ้งข้อมูล" ล้างจริง (มติผู้ใช้ 15/10/2569)
+        onDiscard={() => {
+          setAddName('')
+          addError.clear()
+        }}
         title="เพิ่มแบรนด์"
         description="แบรนด์ที่เพิ่มเองแสดงในตัวเลือกทันที (ตั้งด้วยมือ) — ชื่อซ้ำกับที่มีอยู่ไม่ได้ (ไม่สนตัวพิมพ์/ช่องว่าง)"
         footer={
-          <>
-            <Button variant="secondary" onClick={() => setAddOpen(false)} disabled={adding}>
-              ยกเลิก
-            </Button>
+          <FormSubmitFooter message={addError.message} tick={addError.tick}>
+            <ModalCancelButton
+              onClose={() => {
+                addError.clear()
+                setAddOpen(false)
+              }}
+            />
             <Button onClick={() => void addBrand()} loading={adding}>
               เพิ่มแบรนด์
             </Button>
-          </>
+          </FormSubmitFooter>
         }
       >
-        <Field id="device-brand-name" label="ชื่อแบรนด์" required error={addErrors.name}>
-          <Input id="device-brand-name" value={addName} onChange={(event) => setAddName(event.target.value)} placeholder="เช่น Wiko" />
-        </Field>
+        <div ref={addRef}>
+          <Field id="device-brand-name" label="ชื่อแบรนด์" required error={addError.fields.name}>
+            <Input
+              id="device-brand-name"
+              value={addName}
+              onChange={(event) => {
+                setAddName(event.target.value)
+                addError.clearField('name')
+              }}
+              placeholder="เช่น Wiko"
+            />
+          </Field>
+        </div>
       </Modal>
     </div>
   )
@@ -457,9 +488,18 @@ export function DeviceModelList({
   const [saving, setSaving] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
   const [addForm, setAddForm] = useState({ name: '', assetKind: 'smartphone' as DeviceAssetKind, releaseYear: '' })
-  const [addErrors, setAddErrors] = useState<Record<string, string>>({})
+  // ข้อผิดตอนกดเพิ่ม (ตรวจฝั่งหน้าจอ/API) ⇒ footer ติดจอ + ใต้ช่อง (มติผู้ใช้ 15/10/2569)
+  const { ref: addRef, reveal: revealAddError } = useRevealFieldError()
+  const addError = useSubmitError(revealAddError)
 
   const brandId = brand?.id ?? null
+  /** ล้างร่างเพิ่มรุ่น + ข้อผิด — หลังเพิ่มสำเร็จ, "ทิ้งข้อมูล" และเปิดให้แบรนด์อื่น */
+  function resetAddDraft(): void {
+    setAddForm({ name: '', assetKind: 'smartphone', releaseYear: '' })
+    addError.clear()
+  }
+  // ร่างผูกกับแบรนด์ ⇒ เปิดเพิ่มรุ่นให้แบรนด์อื่นต้องเริ่มว่าง · แบรนด์เดิมคงร่าง (มติผู้ใช้ 15/10/2569)
+  useResetOnRecordChange(addOpen ? brandId : null, resetAddDraft)
   const fetchItems = useCallback(async () => {
     const params = new URLSearchParams({ visibility, assetKind, page: String(page), pageSize: String(PAGE_SIZE) })
     if (search !== '') params.set('q', search)
@@ -534,19 +574,24 @@ export function DeviceModelList({
     }
     const parsed = deviceModelCreateSchema.safeParse(payload)
     if (!parsed.success) {
-      setAddErrors(toFieldErrors(parsed.error))
+      const fields = toFieldErrors(parsed.error)
+      // ข้อแรกตามลำดับบนจอ (ชื่อรุ่น → ประเภท → ปี)
+      const first = fields.name ?? fields.assetKind ?? fields.releaseYear ?? Object.values(fields)[0] ?? ''
+      addError.fail({ message: first, fields })
       return
     }
+    addError.clear()
     setSaving(true)
     try {
       const result = await callApi('/api/settings/device-catalog/models', jsonRequest('POST', payload))
       if (result.error !== undefined) {
+        addError.fail(result.error)
         showToast({ tone: 'error', title: result.error.title, description: result.error.message })
         return
       }
       showToast({ tone: 'success', title: `เพิ่มรุ่น ${brand.name} ${payload.name} แล้ว` })
       setAddOpen(false)
-      setAddForm({ name: '', assetKind: 'smartphone', releaseYear: '' })
+      resetAddDraft()
       reload()
     } finally {
       setSaving(false)
@@ -665,7 +710,7 @@ export function DeviceModelList({
               disabled={brand === null}
               title={brand === null ? 'เลือกแบรนด์ก่อน (กด “ดูรุ่น” ที่แท็บแบรนด์)' : undefined}
               onClick={() => {
-                setAddErrors({})
+                addError.clear()
                 setAddOpen(true)
               }}
             >
@@ -773,34 +818,48 @@ export function DeviceModelList({
 
       <Modal
         open={addOpen}
-        onClose={() => setAddOpen(false)}
+        onClose={() => {
+          addError.clear()
+          setAddOpen(false)
+        }}
+        // ร่างอยู่ในรายการ (ค้างข้ามการปิด) ⇒ ยกเลิก/Esc/X/Back ถามเมื่อมีร่าง · "ทิ้งข้อมูล" ล้างจริง (มติผู้ใช้ 15/10/2569)
+        onDiscard={resetAddDraft}
         title={`เพิ่มรุ่นของ ${brand?.name ?? ''}`}
         description="รุ่นที่เพิ่มเองแสดงในตัวเลือกทันที (ตั้งด้วยมือ) — ชื่อซ้ำในแบรนด์เดียวกันไม่ได้"
         footer={
-          <>
-            <Button variant="secondary" onClick={() => setAddOpen(false)} disabled={saving}>
-              ยกเลิก
-            </Button>
+          <FormSubmitFooter message={addError.message} tick={addError.tick}>
+            <ModalCancelButton
+              onClose={() => {
+                addError.clear()
+                setAddOpen(false)
+              }}
+            />
             <Button onClick={() => void addModel()} loading={saving}>
               เพิ่มรุ่น
             </Button>
-          </>
+          </FormSubmitFooter>
         }
       >
-        <div className="space-y-4">
-          <Field id="device-model-name" label="ชื่อรุ่น" required error={addErrors.name}>
+        <div ref={addRef} className="space-y-4">
+          <Field id="device-model-name" label="ชื่อรุ่น" required error={addError.fields.name}>
             <Input
               id="device-model-name"
               value={addForm.name}
-              onChange={(event) => setAddForm((current) => ({ ...current, name: event.target.value }))}
+              onChange={(event) => {
+                setAddForm((current) => ({ ...current, name: event.target.value }))
+                addError.clearField('name')
+              }}
               placeholder="เช่น Galaxy A56 5G"
             />
           </Field>
-          <Field id="device-model-kind" label="ประเภททรัพย์" required error={addErrors.assetKind}>
+          <Field id="device-model-kind" label="ประเภททรัพย์" required error={addError.fields.assetKind}>
             <Select
               id="device-model-kind"
               value={addForm.assetKind}
-              onChange={(event) => setAddForm((current) => ({ ...current, assetKind: event.target.value as DeviceAssetKind }))}
+              onChange={(event) => {
+                setAddForm((current) => ({ ...current, assetKind: event.target.value as DeviceAssetKind }))
+                addError.clearField('assetKind')
+              }}
             >
               {Object.entries(ASSET_TYPE_LABEL).map(([value, label]) => (
                 <option key={value} value={value}>
@@ -812,13 +871,16 @@ export function DeviceModelList({
           <Field
             id="device-model-year"
             label="ปีที่ออก (พ.ศ. — ไม่บังคับ)"
-            error={addErrors.releaseYear}
+            error={addError.fields.releaseYear}
           >
             <Input
               id="device-model-year"
               numeric
               value={addForm.releaseYear}
-              onChange={(event) => setAddForm((current) => ({ ...current, releaseYear: event.target.value }))}
+              onChange={(event) => {
+                setAddForm((current) => ({ ...current, releaseYear: event.target.value }))
+                addError.clearField('releaseYear')
+              }}
               placeholder="เช่น 2568"
             />
           </Field>
