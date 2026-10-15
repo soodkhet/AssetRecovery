@@ -9,6 +9,7 @@ import {
   Field,
   Input,
   Modal,
+  NumericInput,
   Select,
   StatusBadge,
   TBody,
@@ -281,7 +282,7 @@ function BindTacModal({ initialTac, onClose, onSaved }: { initialTac: string; on
     >
       <div className="space-y-4">
         <Field id="bind-tac" label="TAC (8 หลักแรกของ IMEI)" required error={errors.tac}>
-          <Input id="bind-tac" className="font-mono" value={tac} maxLength={12} onChange={(event) => setTac(event.target.value)} />
+          <NumericInput kind="digits" separators=" -." maxDigits={8} id="bind-tac" className="font-mono" value={tac} onChange={(event) => setTac(event.target.value)} />
         </Field>
         <Field id="bind-model-search" label="ค้นหารุ่นในแคตตาล็อก" hint="เฉพาะรุ่นที่แสดงในตัวเลือก — รุ่นที่ไม่มีให้เพิ่มเองในแท็บรุ่นก่อน">
           <Input id="bind-model-search" value={search} placeholder="เช่น samsung a55" onChange={(event) => setSearch(event.target.value)} />

@@ -19,6 +19,7 @@ import {
 } from '@/lib/teams/team-tax-rule'
 import { payeeBankOptions } from '@/lib/banks/thai-banks'
 import { EMPTY_ADDRESS, addressFromDto, type AddressValue } from '@/lib/address/address-value'
+import { BANK_ACCOUNT_NUMBER_MAX_LENGTH } from '@/lib/format/bank-account'
 import { branchCodeFromForm, branchKindOf, isHeadOfficeBranch, type BranchKind } from '@/lib/format/branch'
 import { fmtPercent } from '@/lib/format/money'
 import type { WhtCondition } from '@/lib/generated/prisma/enums'
@@ -328,11 +329,11 @@ export function PayeeFieldsSection({
         </Field>
         {form.branchKind === 'branch' && (
           <Field id="payee-branch-no" label="เลขที่สาขา (5 หลัก)" required error={errors.branchCode}>
-            <Input
+            <NumericInput
+              kind="digits"
+              maxDigits={5}
               id="payee-branch-no"
               numeric
-              inputMode="numeric"
-              maxLength={5}
               value={form.branchNumber}
               onChange={(event) => onChange('branchNumber', event.target.value)}
               placeholder="00001"
@@ -347,12 +348,14 @@ export function PayeeFieldsSection({
       label="เลขบัตรประชาชน / เลขทะเบียนนิติบุคคล (13 หลัก)"
       error={errors.nationalId}
     >
-      <Input
+      <NumericInput
+        kind="digits"
+        separators="- "
+        maxDigits={13}
         id="payee-national-id"
         value={form.nationalId}
         onChange={(event) => onChange('nationalId', event.target.value)}
         className="font-mono"
-        inputMode="numeric"
         placeholder="1234567890123"
       />
     </Field>
@@ -474,12 +477,14 @@ export function PayeeFieldsSection({
           />
         </Field>
         <Field id="payee-account-number" label="เลขบัญชี" error={errors.accountNumber}>
-          <Input
+          <NumericInput
+            kind="digits"
+            separators="- "
+            maxLength={BANK_ACCOUNT_NUMBER_MAX_LENGTH}
             id="payee-account-number"
             value={form.accountNumber}
             onChange={(event) => onChange('accountNumber', event.target.value)}
             className="font-mono"
-            inputMode="numeric"
           />
         </Field>
       </div>

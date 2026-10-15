@@ -281,10 +281,12 @@ export function CompanyFormModal({
             error={errors.taxId}
             hint="ตรวจรูปแบบอย่างเดียว ไม่มี checksum"
           >
-            <Input
+            <NumericInput
+              kind="digits"
+              separators="- "
+              maxDigits={13}
               id="co-taxid"
               numeric
-              inputMode="numeric"
               value={form.taxId}
               onChange={(event) => set('taxId', event.target.value)}
               placeholder="0105512345678"
@@ -313,11 +315,11 @@ export function CompanyFormModal({
           </Field>
           {form.branchKind === 'branch' && (
             <Field id="co-branch-no" label="เลขที่สาขา (5 หลัก)" required error={errors.branchCode}>
-              <Input
+              <NumericInput
+                kind="digits"
+                maxDigits={5}
                 id="co-branch-no"
                 numeric
-                inputMode="numeric"
-                maxLength={5}
                 value={form.branchNumber}
                 onChange={(event) => set('branchNumber', event.target.value)}
                 placeholder="00001"

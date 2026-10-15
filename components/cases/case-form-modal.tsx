@@ -8,7 +8,7 @@ import { DeviceAttributeSelect } from '@/components/cases/device-attribute-selec
 import { DeviceModelPicker } from '@/components/cases/device-model-picker'
 import { useDeviceAttributeOptions } from '@/components/cases/use-device-attribute-options'
 import { TeamSuggestionPanel } from '@/components/cases/team-suggestion-panel'
-import { Button, ConfirmModal, Field, InlineAlert, Input, Modal, MoneyInput, Select, Textarea, useRevealFieldError, useToast } from '@/components/ui'
+import { Button, ConfirmModal, Field, InlineAlert, Input, Modal, MoneyInput, NumericInput, Select, Textarea, useRevealFieldError, useToast } from '@/components/ui'
 import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
 import { apiPath } from '@/lib/api/contract'
 import {
@@ -19,6 +19,7 @@ import {
   digitsOnly,
   toAsciiDigits,
   PHONE_INPUT_MAX_LENGTH,
+  PHONE_INPUT_SEPARATORS,
   phoneInputError,
   DOCUMENT_SLOT_LABEL,
   isCaseDocumentDeletable,
@@ -570,12 +571,13 @@ export function CaseFormModal({
                 hint="13 หลัก ตัวเลขล้วน — ระบบตัดตัวอักษรออกให้อัตโนมัติ"
                 error={fieldErrors.debtorNationalId}
               >
-                <Input
+                <NumericInput
+                  kind="digits"
+                  separators="- "
+                  maxDigits={13}
                   id="debtor-national-id"
                   className="font-mono"
                   value={form.debtorNationalId}
-                  inputMode="numeric"
-                  maxLength={13}
                   placeholder="13 หลัก"
                   invalid={fieldErrors.debtorNationalId !== undefined}
                   onChange={(event) => patch({ debtorNationalId: digitsOnly(toAsciiDigits(event.target.value)).slice(0, 13) })}
@@ -603,13 +605,14 @@ export function CaseFormModal({
 
           <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field id="debtor-mobile" label="เบอร์โทรมือถือ" required error={fieldErrors.debtorPhoneMobile ?? phoneInputError(form.debtorPhoneMobile) ?? undefined}>
-              <Input
+              <NumericInput
+                kind="digits"
+                // เผื่อตัวคั่น/+66 ตอนวาง — onChange แปลงเป็นตัวเลขเอง ไม่ตัดความยาวเงียบ (preship PS-031/R2-008) · ตัวอักษรไม่รับ
+                separators={PHONE_INPUT_SEPARATORS}
+                maxLength={PHONE_INPUT_MAX_LENGTH}
                 id="debtor-mobile"
                 className="font-mono"
                 value={form.debtorPhoneMobile}
-                inputMode="numeric"
-                // เผื่อตัวคั่น/+66 ตอนวาง — onChange แปลงเป็นตัวเลขเอง ไม่ตัดความยาวเงียบ (preship PS-031/R2-008)
-                maxLength={PHONE_INPUT_MAX_LENGTH}
                 placeholder="10 หลัก"
                 invalid={fieldErrors.debtorPhoneMobile !== undefined || phoneInputError(form.debtorPhoneMobile) !== null}
                 onChange={(event) => patch({ debtorPhoneMobile: normalizePhoneEvent(event.target) })}
@@ -621,13 +624,14 @@ export function CaseFormModal({
               error={fieldErrors.debtorPhoneWork ?? phoneInputError(form.debtorPhoneWork) ?? undefined}
               hint="9-10 หลัก (ไม่บังคับ)"
             >
-              <Input
+              <NumericInput
+                kind="digits"
+                // เผื่อตัวคั่น/+66 ตอนวาง — onChange แปลงเป็นตัวเลขเอง ไม่ตัดความยาวเงียบ (preship PS-031/R2-008) · ตัวอักษรไม่รับ
+                separators={PHONE_INPUT_SEPARATORS}
+                maxLength={PHONE_INPUT_MAX_LENGTH}
                 id="debtor-work-phone"
                 className="font-mono"
                 value={form.debtorPhoneWork}
-                inputMode="numeric"
-                // เผื่อตัวคั่น/+66 ตอนวาง — onChange แปลงเป็นตัวเลขเอง ไม่ตัดความยาวเงียบ (preship PS-031/R2-008)
-                maxLength={PHONE_INPUT_MAX_LENGTH}
                 invalid={fieldErrors.debtorPhoneWork !== undefined || phoneInputError(form.debtorPhoneWork) !== null}
                 onChange={(event) => patch({ debtorPhoneWork: normalizePhoneEvent(event.target) })}
               />

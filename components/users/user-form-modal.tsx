@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Button, Field, InlineAlert, Input, Modal, Select, useToast } from '@/components/ui'
+import { Button, Field, InlineAlert, Input, Modal, NumericInput, Select, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import type { RoleGroup } from '@/lib/generated/prisma/enums'
 import type { FinanceCompanyDto } from '@/lib/finance-companies/types'
@@ -351,7 +351,10 @@ export function UserFormModal({
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field id="user-phone" label="เบอร์โทร" error={errors.phone}>
-            <Input
+            <NumericInput
+              kind="digits"
+              separators=" -()."
+              maxDigits={10}
               id="user-phone"
               value={form.phone}
               onChange={(event) => set('phone', event.target.value)}

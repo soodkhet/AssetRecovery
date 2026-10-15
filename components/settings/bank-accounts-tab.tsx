@@ -38,6 +38,7 @@ import { THAI_BANK_CODES } from '@/lib/banks/thai-banks'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { REASON_MAX, toFieldErrors } from '@/lib/api/validation'
 import { fmtDate } from '@/lib/format/datetime'
+import { BANK_ACCOUNT_NUMBER_MAX_LENGTH } from '@/lib/format/bank-account'
 import type { BankAccountUsage } from '@/lib/generated/prisma/enums'
 import {
   DEFAULT_AUTO_MATCH_TOLERANCE_DAYS,
@@ -425,7 +426,10 @@ export function BankAccountsTab() {
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field id="bank-account-number" label="เลขที่บัญชี" required error={errors.accountNumber}>
-              <Input
+              <NumericInput
+                kind="digits"
+                separators="- "
+                maxLength={BANK_ACCOUNT_NUMBER_MAX_LENGTH}
                 id="bank-account-number"
                 className="font-mono"
                 value={form.accountNumber}

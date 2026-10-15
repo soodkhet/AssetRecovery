@@ -1,7 +1,7 @@
 'use client'
 
 import { useId, useRef, useState } from 'react'
-import { Field, Input, Select } from '@/components/ui'
+import { Field, Input, NumericInput, Select } from '@/components/ui'
 import {
   THAI_PROVINCE_REGIONS,
   commonPostalArea,
@@ -209,12 +209,12 @@ export function AddressFields({
           required={isRequired('postalCode')}
           error={errors?.postalCode}
         >
-          <Input
+          <NumericInput
+            kind="digits"
+            maxDigits={5}
             id={`${fieldId}-postal`}
             value={value.postalCode}
             disabled={disabled}
-            inputMode="numeric"
-            maxLength={5}
             placeholder="5 หลัก"
             invalid={errors?.postalCode !== undefined}
             onChange={(event) => onPostalChange(event.target.value)}

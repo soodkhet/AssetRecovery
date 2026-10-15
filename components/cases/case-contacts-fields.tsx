@@ -1,7 +1,7 @@
 'use client'
 
-import { Button, Field, Input } from '@/components/ui'
-import { normalizePhoneInputWithCaret, PHONE_INPUT_MAX_LENGTH, phoneInputError } from '@/lib/cases/case'
+import { Button, Field, Input, NumericInput } from '@/components/ui'
+import { normalizePhoneInputWithCaret, PHONE_INPUT_MAX_LENGTH, PHONE_INPUT_SEPARATORS, phoneInputError } from '@/lib/cases/case'
 import { emptyContact, type CaseContactForm } from '@/lib/cases/case-form'
 
 /**
@@ -81,13 +81,14 @@ export function CaseContactsFields({
                 required
                 error={errors[`contacts.${index}.contactPhone`] ?? phoneInputError(contact.contactPhone) ?? undefined}
               >
-                <Input
+                <NumericInput
+                  kind="digits"
+                  // วางพร้อมตัวคั่น/+66 ได้ — แปลงเป็นตัวเลข ไม่ตัดความยาวเงียบ (preship R2-008) · ตัวอักษรไม่รับ (มติผู้ใช้ 15/10/2569)
+                  separators={PHONE_INPUT_SEPARATORS}
+                  maxLength={PHONE_INPUT_MAX_LENGTH}
                   id={`contact-phone-${contact.key}`}
                   className="font-mono"
                   value={contact.contactPhone}
-                  inputMode="numeric"
-                  // วางพร้อมตัวคั่น/+66 ได้ — แปลงเป็นตัวเลข ไม่ตัดความยาวเงียบ (preship R2-008)
-                  maxLength={PHONE_INPUT_MAX_LENGTH}
                   placeholder="10 หลัก"
                   invalid={errors[`contacts.${index}.contactPhone`] !== undefined || phoneInputError(contact.contactPhone) !== null}
                   onChange={(event) => patch(index, { contactPhone: normalizePhoneEvent(event.target) })}

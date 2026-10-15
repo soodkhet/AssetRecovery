@@ -17,6 +17,7 @@ import {
   Input,
   LoadingState,
   Modal,
+  NumericInput,
   Select,
   Textarea,
   cn,
@@ -556,11 +557,12 @@ export function OrganizationProfileTab() {
                 />
               </Field>
               <Field id="org-tax-id" label="เลขประจำตัวผู้เสียภาษี (13 หลัก)" required error={errors.taxId}>
-                <Input
+                <NumericInput
+                  kind="digits"
+                  separators="- "
+                  maxDigits={13}
                   id="org-tax-id"
                   numeric
-                  inputMode="numeric"
-                  maxLength={17}
                   value={form.taxId}
                   onChange={(event) => set('taxId', event.target.value)}
                   placeholder="0000000000000"
@@ -578,11 +580,11 @@ export function OrganizationProfileTab() {
               </Field>
               {form.branchKind === 'branch' && (
                 <Field id="org-branch-no" label="เลขที่สาขา (5 หลัก)" required error={errors.branchCode}>
-                  <Input
+                  <NumericInput
+                    kind="digits"
+                    maxDigits={5}
                     id="org-branch-no"
                     numeric
-                    inputMode="numeric"
-                    maxLength={5}
                     value={form.branchNumber}
                     onChange={(event) => set('branchNumber', event.target.value)}
                     placeholder="00001"
