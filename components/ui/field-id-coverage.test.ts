@@ -13,7 +13,7 @@ import { describe, expect, it } from 'vitest'
  *    · `<FieldGroupBox>` ต้องอยู่ใน `<Field id group>` เท่านั้น (SV5-A11Y-A3-01)
  */
 const ROOT = join(__dirname, '..', '..')
-const CONTROL_TAGS = new Set(['Input', 'Select', 'Textarea', 'StagedFileInput', 'input', 'select', 'textarea', 'button'])
+const CONTROL_TAGS = new Set(['Input', 'MoneyInput', 'Select', 'Textarea', 'StagedFileInput', 'input', 'select', 'textarea', 'button'])
 
 function sourceFiles(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
