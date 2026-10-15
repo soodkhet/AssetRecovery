@@ -8,6 +8,7 @@ import {
   InlineAlert,
   Input,
   Modal,
+  MoneyInput,
   Select,
   Textarea,
   cn,
@@ -256,10 +257,8 @@ export function CompensationPlanFormModal({
           {perKm ? (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field id="fuel-rate" label="อัตราต่อกิโลเมตร (บาท)" required error={errors.fuelRatePerKmSatang}>
-                <Input
+                <MoneyInput
                   id="fuel-rate"
-                  numeric
-                  inputMode="decimal"
                   value={form.fuelRatePerKm}
                   onChange={(event) => set('fuelRatePerKm', event.target.value)}
                   placeholder="7.00"
@@ -271,13 +270,11 @@ export function CompensationPlanFormModal({
                 hint="เว้นว่าง = ไม่จำกัดเพดาน"
                 error={errors.fuelMaxPerCaseSatang}
               >
-                <Input
+                <MoneyInput
                   id="fuel-max"
-                  numeric
-                  inputMode="decimal"
                   value={form.fuelMaxPerCase}
                   onChange={(event) => set('fuelMaxPerCase', event.target.value)}
-                  placeholder="1,000.00"
+                  placeholder="1000.00"
                 />
               </Field>
             </div>
@@ -289,10 +286,8 @@ export function CompensationPlanFormModal({
               hint="จ่าย = อัตรานี้ × จำนวนวันที่ลงพื้นที่จริง (นับวันที่มีเช็คอิน เหมือนเบี้ยเลี้ยง) · ไม่คำนวณตามระยะทาง"
               error={errors.fuelDailyFlatSatang}
             >
-              <Input
+              <MoneyInput
                 id="fuel-daily"
-                numeric
-                inputMode="decimal"
                 value={form.fuelDailyFlat}
                 onChange={(event) => set('fuelDailyFlat', event.target.value)}
                 placeholder="400.00"
@@ -312,10 +307,8 @@ export function CompensationPlanFormModal({
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field id="plan-allowance" label="เบี้ยเลี้ยง (บาท/วัน)" required error={errors.allowanceSatang}>
-            <Input
+            <MoneyInput
               id="plan-allowance"
-              numeric
-              inputMode="decimal"
               value={form.allowance}
               onChange={(event) => set('allowance', event.target.value)}
             />
@@ -327,10 +320,8 @@ export function CompensationPlanFormModal({
             hint="เว้นว่าง = ไม่กำหนดเพดาน"
             error={errors.hotelMaxPerNightSatang}
           >
-            <Input
+            <MoneyInput
               id="plan-hotel"
-              numeric
-              inputMode="decimal"
               value={form.hotelMaxPerNight}
               onChange={(event) => set('hotelMaxPerNight', event.target.value)}
             />
@@ -343,10 +334,8 @@ export function CompensationPlanFormModal({
             hint="จ่ายเมื่อปิดเคสสำเร็จ"
             error={errors.commissionSatang}
           >
-            <Input
+            <MoneyInput
               id="plan-commission"
-              numeric
-              inputMode="decimal"
               value={form.commission}
               onChange={(event) => set('commission', event.target.value)}
             />
@@ -359,10 +348,8 @@ export function CompensationPlanFormModal({
             hint="จ่ายเมื่อปิดเคสไม่สำเร็จ — เคสหนึ่งได้อย่างใดอย่างหนึ่งเท่านั้น"
             error={errors.noSuccessFeeSatang}
           >
-            <Input
+            <MoneyInput
               id="plan-no-success"
-              numeric
-              inputMode="decimal"
               value={form.noSuccessFee}
               onChange={(event) => set('noSuccessFee', event.target.value)}
             />

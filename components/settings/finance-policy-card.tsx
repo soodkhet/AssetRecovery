@@ -14,6 +14,7 @@ import {
   InlineAlert,
   Input,
   LoadingState,
+  MoneyInput,
   Textarea,
   useToast,
 } from '@/components/ui'
@@ -196,10 +197,8 @@ export function FinancePolicyCard() {
             label="เพดานเงินทดรองจ่ายต่อครั้ง (บาท)"
             error={errors.advanceMaxAmountPerRequestSatang}
           >
-            <Input
+            <MoneyInput
               id="policy-advance-max"
-              numeric
-              inputMode="decimal"
               value={form.advanceMaxAmountPerRequest}
               onChange={(event) => set('advanceMaxAmountPerRequest', event.target.value)}
               placeholder="เว้นว่าง = ไม่จำกัด"
@@ -207,10 +206,8 @@ export function FinancePolicyCard() {
           </Field>
 
           <Field id="policy-writeoff" label="เพดานตัดส่วนต่างค่าธรรมเนียม (บาท)" required error={errors.writeOffToleranceSatang}>
-            <Input
+            <MoneyInput
               id="policy-writeoff"
-              numeric
-              inputMode="decimal"
               value={form.writeOffTolerance}
               onChange={(event) => set('writeOffTolerance', event.target.value)}
               placeholder="50.00"
@@ -234,10 +231,8 @@ export function FinancePolicyCard() {
             hint="ค่าเริ่มต้น 500.00"
             error={errors.substituteReceiptMaxPerDocSatang}
           >
-            <Input
+            <MoneyInput
               id="policy-substitute-doc"
-              numeric
-              inputMode="decimal"
               value={form.substituteReceiptMaxPerDoc}
               onChange={(event) => set('substituteReceiptMaxPerDoc', event.target.value)}
               placeholder="500.00"
@@ -250,10 +245,8 @@ export function FinancePolicyCard() {
             hint="ค่าเริ่มต้น 3,000.00 — นับตามเดือนของวันที่ออกใบ"
             error={errors.substituteReceiptMaxPerMonthSatang}
           >
-            <Input
+            <MoneyInput
               id="policy-substitute-month"
-              numeric
-              inputMode="decimal"
               value={form.substituteReceiptMaxPerMonth}
               onChange={(event) => set('substituteReceiptMaxPerMonth', event.target.value)}
               placeholder="3000.00"

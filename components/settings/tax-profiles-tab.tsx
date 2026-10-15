@@ -18,6 +18,7 @@ import {
   InlineAlert,
   Input,
   Modal,
+  MoneyInput,
   Select,
   StatusBadge,
   TBody,
@@ -440,13 +441,11 @@ export function TaxProfilesTab() {
               error={errors.whtMinThresholdSatang}
               hint="ต่ำกว่ายอดนี้ไม่หัก — มาตรฐานกรมสรรพากรคือ 1,000 บาท"
             >
-              <Input
+              <MoneyInput
                 id="tax-threshold"
-                numeric
-                inputMode="decimal"
                 value={form.whtMinThreshold}
                 onChange={(event) => set('whtMinThreshold', event.target.value)}
-                placeholder="1,000.00"
+                placeholder="1000.00"
               />
             </Field>
           </div>

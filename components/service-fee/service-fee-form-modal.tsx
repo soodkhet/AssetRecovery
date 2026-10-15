@@ -3,7 +3,7 @@
 import { SettingHelp } from '@/components/settings/setting-help'
 import { pctFromInput, satangFromInput, serviceFeeHelp } from '@/lib/settings/help'
 import { useState } from 'react'
-import { Button, Field, InlineAlert, Input, Modal, Select, Textarea, useToast } from '@/components/ui'
+import { Button, Field, InlineAlert, Input, Modal, MoneyInput, Select, Textarea, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { serviceFeeTemplateCreateSchema } from '@/lib/service-fee/schemas'
 import {
@@ -205,13 +205,11 @@ export function ServiceFeeFormModal({
         {usesBase && (
           <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
             <Field id="sf-base" label={`${serviceFeeBaseLabel(form.model)} — บาท`} required error={errors.baseSatang}>
-              <Input
+              <MoneyInput
                 id="sf-base"
-                numeric
-                inputMode="decimal"
                 value={form.base}
                 onChange={(event) => set('base', event.target.value)}
-                placeholder="3,000.00"
+                placeholder="3000.00"
               />
             </Field>
           </div>
@@ -257,10 +255,8 @@ export function ServiceFeeFormModal({
               hint="เก็บเมื่อเคสปิดไม่สำเร็จที่หลักฐานครบและผ่านอนุมัติ"
               error={errors.failFeeSatang}
             >
-              <Input
+              <MoneyInput
                 id="sf-fail-fee"
-                numeric
-                inputMode="decimal"
                 value={form.failFee}
                 onChange={(event) => set('failFee', event.target.value)}
                 placeholder="300.00"

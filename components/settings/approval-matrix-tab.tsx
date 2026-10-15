@@ -16,6 +16,7 @@ import {
   InlineAlert,
   Input,
   Modal,
+  MoneyInput,
   Select,
   StatusBadge,
   TBody,
@@ -421,10 +422,8 @@ export function ApprovalMatrixTab() {
           </Field>
 
           <Field id="approval-threshold" label="เพดานเงิน (บาท)" error={errors.conditionThresholdSatang}>
-            <Input
+            <MoneyInput
               id="approval-threshold"
-              numeric
-              inputMode="decimal"
               value={form.threshold}
               onChange={(event) => set('threshold', event.target.value)}
               placeholder="เว้นว่าง = ไม่จำกัด"
