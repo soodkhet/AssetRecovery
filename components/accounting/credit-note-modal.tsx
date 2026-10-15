@@ -8,6 +8,7 @@ import {
   InlineAlert,
   Input,
   Modal,
+  MoneyInput,
   RefText,
   Select,
   StatusBadge,
@@ -38,7 +39,7 @@ import type { CreditNoteType } from '@/lib/credit-notes/schemas'
 import type { CreditNoteNotRequiredReason } from '@/lib/sales/uninvoiced-reduction'
 import type { AwaitingCreditNoteDto, CreditNoteCreateResultDto, CreditNoteDto } from '@/lib/credit-notes/types'
 import { fmtDate, toInputDate } from '@/lib/format/datetime'
-import { bahtInputError, fmtSatang, fmtSatangSymbol, parseBahtInput } from '@/lib/format/money'
+import { bahtInputError, fmtSatangSymbol, parseBahtInput, toBahtInput } from '@/lib/format/money'
 import { signedFileUrl, StorageUploadError, uploadToStorage } from '@/lib/uploads/client'
 
 /**
@@ -429,10 +430,8 @@ export function CreditNoteModal({
                   <Input id="cn-date" type="date" value={issueDate} onChange={(event) => setIssueDate(event.target.value)} />
                 </Field>
                 <Field id="cn-amount" label={`มูลค่าที่${isDebit ? 'เพิ่ม' : 'ลด'} (ก่อนภาษี, บาท)`} error={amountError ?? undefined}>
-                  <Input
+                  <MoneyInput
                     id="cn-amount"
-                    numeric
-                    inputMode="decimal"
                     value={amountText}
                     invalid={amountError !== null}
                     onChange={(event) => setAmountText(event.target.value)}
@@ -448,11 +447,9 @@ export function CreditNoteModal({
                   }
                   error={vatError ?? undefined}
                 >
-                  <Input
+                  <MoneyInput
                     id="cn-vat"
-                    numeric
-                    inputMode="decimal"
-                    placeholder={suggestedVatSatang === null ? undefined : fmtSatang(suggestedVatSatang)}
+                    placeholder={suggestedVatSatang === null ? undefined : toBahtInput(suggestedVatSatang)}
                     value={vatText}
                     invalid={vatError !== null}
                     onChange={(event) => setVatText(event.target.value)}

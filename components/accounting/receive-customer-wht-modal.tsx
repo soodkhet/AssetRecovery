@@ -1,7 +1,7 @@
 'use client'
 
 import { useId, useState } from 'react'
-import { Button, Field, InlineAlert, Input, Modal, Textarea, fieldControlAria, useToast } from '@/components/ui'
+import { Button, Field, InlineAlert, Input, Modal, MoneyInput, Textarea, fieldControlAria, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import type { CustomerWhtDto, CustomerWhtReceiveResultDto } from '@/lib/customer-wht/types'
 import { fmtDate, toInputDate } from '@/lib/format/datetime'
@@ -140,10 +140,10 @@ export function ReceiveCustomerWhtModal({
             <Input id={`${fieldId}-certificate-date`} type="date" value={certificateDate} onChange={(event) => setCertificateDate(event.target.value)} />
           </Field>
           <Field id={`${fieldId}-wht-text`} label="ยอดภาษีที่หักตามหนังสือ (บาท)" required error={whtError ?? undefined}>
-            <Input id={`${fieldId}-wht-text`} inputMode="decimal" value={whtText} onChange={(event) => setWhtText(event.target.value)} />
+            <MoneyInput numeric={false} id={`${fieldId}-wht-text`} value={whtText} onChange={(event) => setWhtText(event.target.value)} />
           </Field>
           <Field id={`${fieldId}-gross-text`} label="ยอดเงินได้ตามหนังสือ (บาท)" hint="ไม่บังคับ" error={grossError ?? undefined}>
-            <Input id={`${fieldId}-gross-text`} inputMode="decimal" value={grossText} onChange={(event) => setGrossText(event.target.value)} />
+            <MoneyInput numeric={false} id={`${fieldId}-gross-text`} value={grossText} onChange={(event) => setGrossText(event.target.value)} />
           </Field>
         </div>
 
