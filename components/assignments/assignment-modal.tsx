@@ -170,7 +170,8 @@ export function AssignmentModal({
                   <div className="mt-4">
                     <Field
                       id="reassign-reason"
-                      label="เหตุผลในการเปลี่ยนผู้รับผิดชอบ (จำเป็น)"
+                      label="เหตุผลในการเปลี่ยนผู้รับผิดชอบ"
+                      required
                       hint={`อย่างน้อย ${ASSIGNMENT_REASON_MIN} ตัวอักษร (พิมพ์แล้ว ${reason.trim().length})`}
                     >
                       <Textarea

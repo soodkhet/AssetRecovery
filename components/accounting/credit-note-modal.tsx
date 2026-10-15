@@ -490,7 +490,7 @@ export function CreditNoteModal({
                   </InlineAlert>
                 )
               })()}
-              <Field id="cn-reason" label="เหตุผล">
+              <Field id="cn-reason" label="เหตุผล" required>
                 <Textarea
                   id="cn-reason"
                   rows={2}

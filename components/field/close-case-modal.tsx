@@ -148,7 +148,7 @@ function FailReasonSection({
       <SectionTitle note={locked ? 'ล็อกไว้ตามรอบเดิม — แก้ไม่ได้' : undefined}>
         เหตุผลที่ไม่สำเร็จ <span className="font-bold text-slate-400">(บังคับ)</span>
       </SectionTitle>
-      <div role="radiogroup" aria-label="เหตุผลที่ไม่สำเร็จ" className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+      <div role="radiogroup" aria-label="เหตุผลที่ไม่สำเร็จ" aria-required="true" className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         {CLOSE_FAIL_REASONS.map((reason, index) => {
           const selected = value === reason
           return (

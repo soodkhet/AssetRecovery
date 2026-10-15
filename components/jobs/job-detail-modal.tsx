@@ -137,7 +137,7 @@ export function JobDetailModal({
                   {retryError.message}
                 </InlineAlert>
               )}
-              <Field id={`${fieldId}-reason`} label="เหตุผล">
+              <Field id={`${fieldId}-reason`} label="เหตุผล" required>
                 <Textarea
                   id={`${fieldId}-reason`}
                   maxLength={500}

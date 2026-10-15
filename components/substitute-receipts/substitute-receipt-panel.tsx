@@ -353,7 +353,7 @@ export function SubstituteReceiptPanel({
         submitError={cancelError}
       >
         <div ref={cancelBodyRef}>
-          <Field id={`cancel-reason-${receipt.id}`} label="เหตุผลการยกเลิก (บังคับ)" error={cancelError.fields.reason}>
+          <Field id={`cancel-reason-${receipt.id}`} label="เหตุผลการยกเลิก" required error={cancelError.fields.reason}>
             <Textarea
               id={`cancel-reason-${receipt.id}`}
               maxLength={REASON_MAX}
