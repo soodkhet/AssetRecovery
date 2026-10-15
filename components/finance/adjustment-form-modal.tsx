@@ -4,13 +4,18 @@ import { useEffect, useId, useState } from 'react'
 import {
   Button,
   Field,
+  FormSubmitFooter,
   InlineAlert,
   Input,
   Modal,
+  ModalCancelButton,
   RefText,
   Select,
   StatusBadge,
   Textarea,
+  useClearOnClose,
+  useRevealFieldError,
+  useSubmitError,
   useToast,
 } from '@/components/ui'
 import { cn } from '@/components/ui/cn'
@@ -58,6 +63,10 @@ export function AdjustmentFormModal({
   const [amount, setAmount] = useState('')
   const [reason, setReason] = useState('')
   const [saving, setSaving] = useState(false)
+  const { ref: formRef, reveal: revealFormError } = useRevealFieldError()
+  const submitError = useSubmitError(revealFormError)
+  // ปิดแล้วล้างข้อผิดจากการกดส่ง (มติผู้ใช้ 15/10/2569)
+  useClearOnClose(open, submitError.clear)
 
   // กดค้นหาซ้ำคำเดิม/ช่องว่างต้องโหลดใหม่และปลดสถานะค้นหาเสมอ — เดิม query ไม่เปลี่ยน effect ไม่รัน
   // ปุ่มค้างหมุนจน modal ล็อกทั้งบาน (preship R3-002) ⇒ ใช้ nonce ให้ effect รันทุกครั้งที่กด
@@ -105,17 +114,27 @@ export function AdjustmentFormModal({
     setQuery('')
   }
 
-  function close(): void {
+  /** ปิดหลังบันทึกสำเร็จ ⇒ ล้างร่าง แต่คงประเภทรายการต้นทาง/ประเภทการปรับปรุงไว้ (สร้างรายการถัดไปแบบเดิมได้ทันที) */
+  function closeAfterSave(): void {
     setSelected(null)
     setSearch('')
     setQuery('')
     setAmount('')
     setReason('')
+    submitError.clear()
     onClose()
+  }
+
+  /** ยกเลิก/Esc/X/Back/ทิ้งข้อมูล ⇒ ล้างร่างทั้งหมด — ยกเลิกถามก่อนเมื่อมีร่าง (มติผู้ใช้ 15/10/2569) */
+  function close(): void {
+    setTargetType('revenue')
+    setAdjustmentType('increase')
+    closeAfterSave()
   }
 
   async function submit(): Promise<void> {
     if (selected === null || !validAmount) return
+    submitError.clear()
     setSaving(true)
     const result = await callApi<AdjustmentDto>(
       '/api/adjustments',
@@ -129,6 +148,7 @@ export function AdjustmentFormModal({
     )
     setSaving(false)
     if (result.error !== undefined) {
+      submitError.fail(result.error)
       showToast({ tone: 'error', title: result.error.title, description: result.error.message })
       return
     }
@@ -151,7 +171,7 @@ export function AdjustmentFormModal({
       showToast({ tone: 'info', title: 'หลังอนุมัติ บันทึกใบลดหนี้ส่วนเกินในระบบ', description: CREDIT_NOTE_EXCESS_HINT })
     }
     onCreated()
-    close()
+    closeAfterSave()
   }
 
   return (
@@ -162,17 +182,15 @@ export function AdjustmentFormModal({
       title="สร้างรายการปรับปรุง (New Adjustment)"
       description="ไม่แก้รายการต้นทาง — สร้างรายการชดเชยใหม่พร้อมร่องรอยตรวจสอบ"
       footer={
-        <>
-          <Button variant="secondary" onClick={close}>
-            ยกเลิก
-          </Button>
+        <FormSubmitFooter message={submitError.message} tick={submitError.tick}>
+          <ModalCancelButton onClose={close} />
           <Button loading={saving} disabled={!ready} onClick={() => void submit()}>
             สร้างรายการ
           </Button>
-        </>
+        </FormSubmitFooter>
       }
     >
-      <div className="space-y-4">
+      <div ref={formRef} className="space-y-4">
         <InlineAlert tone="info">
           Adjustment ไม่แก้รายการต้นทาง — สร้างรายการชดเชยใหม่เสมอ ·
           ระดับอนุมัติขึ้นกับ<b>สถานะรอบบัญชีของรายการต้นทาง</b> ที่ระบบบันทึกไว้ตอนสร้าง
@@ -289,25 +307,31 @@ export function AdjustmentFormModal({
             </Select>
           </Field>
 
-          <Field id={`${fieldId}-amount`} label={adjustmentAmountFieldLabel(targetType)} required>
+          <Field id={`${fieldId}-amount`} label={adjustmentAmountFieldLabel(targetType)} required error={submitError.fields.amountSatang}>
             <Input
               id={`${fieldId}-amount`}
               numeric
               inputMode="decimal"
               placeholder="0.00"
               value={amount}
-              onChange={(event) => setAmount(event.target.value)}
+              onChange={(event) => {
+                setAmount(event.target.value)
+                submitError.clearField('amountSatang')
+              }}
             />
           </Field>
         </div>
 
-        <Field id={`${fieldId}-reason`} label="เหตุผล" required hint="บังคับกรอกเสมอ อย่างน้อย 5 ตัวอักษร">
+        <Field id={`${fieldId}-reason`} label="เหตุผล" required hint="บังคับกรอกเสมอ อย่างน้อย 5 ตัวอักษร" error={submitError.fields.reason}>
           <Textarea
             id={`${fieldId}-reason`}
             maxLength={1000}
             rows={3}
             value={reason}
-            onChange={(event) => setReason(event.target.value)}
+            onChange={(event) => {
+              setReason(event.target.value)
+              submitError.clearField('reason')
+            }}
             placeholder="เช่น ยอดเดิมคำนวณ % จากฐานผิด ยอดที่ถูกต้องคือ 8,250 บาท"
           />
         </Field>
