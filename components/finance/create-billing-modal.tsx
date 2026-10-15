@@ -2,7 +2,21 @@
 
 import { useEffect, useId, useState } from 'react'
 import { REASON_MIN_LENGTH } from '@/components/settings/reason-confirm-modal'
-import { Button, Field, InlineAlert, Input, Modal, Select, Textarea, useToast } from '@/components/ui'
+import {
+  Button,
+  Field,
+  FormSubmitFooter,
+  InlineAlert,
+  Input,
+  Modal,
+  ModalCancelButton,
+  Select,
+  Textarea,
+  useClearOnClose,
+  useRevealFieldError,
+  useSubmitError,
+  useToast,
+} from '@/components/ui'
 import {
   ClosedPeriodCutoffAlert,
   isClosedPeriodCutoffError,
@@ -61,6 +75,10 @@ export function CreateBillingModal({
   const [companiesError, setCompaniesError] = useState<ApiCallError | null>(null)
   /** เพิ่มเพื่อโหลดรายชื่อบริษัทใหม่ (ปุ่มลองใหม่ — เช่นหลังเข้าสู่ระบบในแท็บใหม่) */
   const [companiesVersion, setCompaniesVersion] = useState(0)
+  const { ref: formRef, reveal: revealFormError } = useRevealFieldError()
+  const submitError = useSubmitError(revealFormError)
+  // ค้าง mount ⇒ ปิดแล้วล้างข้อผิดจากการกดส่ง (ร่างยังอยู่) · มติผู้ใช้ 15/10/2569
+  useClearOnClose(open, submitError.clear)
 
   useEffect(() => {
     if (!open) return
@@ -91,7 +109,17 @@ export function CreateBillingModal({
       ? resolveDueDate(new Date(`${cutoffDate}T00:00:00Z`), cycle)
       : null
 
+  /** ล้างร่าง + ข้อผิด — หลังสร้างสำเร็จ และเมื่อผู้ใช้ยืนยัน "ทิ้งข้อมูล" */
+  function resetDraft(): void {
+    setCompanyId('')
+    setCutoffOverride(null)
+    setReason('')
+    setClosedCutoff(null)
+    submitError.clear()
+  }
+
   function selectCompany(nextCompanyId: string): void {
+    submitError.clearField('companyId')
     setCompanyId(nextCompanyId)
     // เปลี่ยนบริษัท = กลับไปใช้วันที่ระบบเสนอตามรอบบิลของบริษัทใหม่
     setCutoffOverride(null)
@@ -100,6 +128,7 @@ export function CreateBillingModal({
 
   async function submit(): Promise<void> {
     if (!ready) return
+    submitError.clear()
     setSaving(true)
     const result = await callApi<BillingBatchDetailDto>(
       '/api/billing-batches',
@@ -116,6 +145,7 @@ export function CreateBillingModal({
       return
     }
     if (result.error !== undefined) {
+      submitError.fail(result.error)
       showToast({ tone: 'error', title: result.error.title, description: result.error.message })
       return
     }
@@ -124,9 +154,7 @@ export function CreateBillingModal({
       title: `สร้างรอบวางบิล ${result.data?.batchNumber ?? ''} แล้ว`,
       description: `${result.data?.companyName ?? ''} งวด ${result.data?.period ?? ''} — ตรวจยอดก่อนกดส่งบิล`,
     })
-    setCompanyId('')
-    setCutoffOverride(null)
-    setReason('')
+    resetDraft()
     onCreated()
     onClose()
   }
@@ -137,24 +165,24 @@ export function CreateBillingModal({
       onClose={onClose}
       title="สร้างรอบวางบิล"
       description="ระบบรวมรายได้ที่รอวางบิลของบริษัทนั้นให้อัตโนมัติ"
+      // ค้าง mount ⇒ ยกเลิก/Esc/X/Back ถามเมื่อมีร่าง · "ทิ้งข้อมูล" ล้างร่างจริง (มติผู้ใช้ 15/10/2569)
+      onDiscard={resetDraft}
       footer={
-        <>
-          <Button variant="secondary" onClick={onClose}>
-            ยกเลิก
-          </Button>
+        <FormSubmitFooter message={submitError.message} tick={submitError.tick}>
+          <ModalCancelButton onClose={onClose} />
           <Button loading={saving} disabled={!ready} onClick={() => void submit()}>
             สร้างรอบวางบิล
           </Button>
-        </>
+        </FormSubmitFooter>
       }
     >
-      <div className="space-y-4">
+      <div ref={formRef} className="space-y-4">
         <InlineAlert tone="info">
           ระบบรวมรายได้ที่ยังไม่วางบิลทั้งหมดของบริษัทจนถึงวันตัดรอบ (รวมที่ค้างจากเดือนก่อน)
           — สร้างได้หลายรอบต่อเดือน แต่ต้องไม่มีรอบร่างของบริษัทเดียวกันค้างอยู่
         </InlineAlert>
 
-        <Field id={`${fieldId}-company-id`} label="บริษัทไฟแนนซ์" required>
+        <Field id={`${fieldId}-company-id`} label="บริษัทไฟแนนซ์" required error={submitError.fields.companyId}>
           <Select id={`${fieldId}-company-id`} value={companyId} onChange={(event) => selectCompany(event.target.value)}>
             <option value="">— เลือกบริษัท —</option>
             {companies.map((company) => (
@@ -201,13 +229,22 @@ export function CreateBillingModal({
           id={`${fieldId}-cutoff-date`}
           label="วันตัดรอบ"
           required
+          error={submitError.fields.cutoffDate}
           hint={
             dueDatePreview === null
               ? 'ระบบเสนอวันตัดรอบล่าสุดตามรอบบิลให้ — แก้ได้'
               : `ครบกำหนดชำระ ${fmtDate(dueDatePreview)} · ระบบเสนอวันตัดรอบตามรอบบิลให้ แก้ได้`
           }
         >
-          <Input id={`${fieldId}-cutoff-date`} type="date" value={cutoffDate} onChange={(event) => setCutoffOverride(event.target.value)} />
+          <Input
+            id={`${fieldId}-cutoff-date`}
+            type="date"
+            value={cutoffDate}
+            onChange={(event) => {
+              setCutoffOverride(event.target.value)
+              submitError.clearField('cutoffDate')
+            }}
+          />
           {closedPeriods.status === 'error' && <ClosedPeriodsUnavailableNote />}
         </Field>
 
@@ -225,13 +262,22 @@ export function CreateBillingModal({
           <ClosedPeriodCutoffAlert onUseToday={setCutoffOverride} />
         )}
 
-        <Field id={`${fieldId}-reason`} label="เหตุผล" required hint={`อย่างน้อย ${REASON_MIN_LENGTH} ตัวอักษร — บันทึกไว้ในประวัติการใช้งาน`}>
+        <Field
+          id={`${fieldId}-reason`}
+          label="เหตุผล"
+          required
+          hint={`อย่างน้อย ${REASON_MIN_LENGTH} ตัวอักษร — บันทึกไว้ในประวัติการใช้งาน`}
+          error={submitError.fields.reason}
+        >
           <Textarea
             id={`${fieldId}-reason`}
             maxLength={500}
             rows={3}
             value={reason}
-            onChange={(event) => setReason(event.target.value)}
+            onChange={(event) => {
+              setReason(event.target.value)
+              submitError.clearField('reason')
+            }}
             placeholder="เช่น ตัดรอบวางบิลประจำเดือนตามกำหนดของบริษัท"
           />
         </Field>

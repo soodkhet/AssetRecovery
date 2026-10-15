@@ -1,7 +1,20 @@
 'use client'
 
 import { useEffect, useId, useState } from 'react'
-import { Button, Field, InlineAlert, Input, Modal, Select, useToast } from '@/components/ui'
+import {
+  Button,
+  Field,
+  FormSubmitFooter,
+  InlineAlert,
+  Input,
+  Modal,
+  ModalCancelButton,
+  Select,
+  useClearOnClose,
+  useRevealFieldError,
+  useSubmitError,
+  useToast,
+} from '@/components/ui'
 import {
   ClosedPeriodCutoffAlert,
   isClosedPeriodCutoffError,
@@ -62,6 +75,10 @@ export function CreatePayoutModal({
   const [cycles, setCycles] = useState<readonly CycleDto[]>([])
   /** `null` = ให้ระบบเลือกตามฝั่ง · `NO_CYCLE` = ไม่ใช้รอบ · อื่น = id รอบที่ผู้ใช้เลือกเอง */
   const [cycleChoice, setCycleChoice] = useState<string | null>(null)
+  const { ref: formRef, reveal: revealFormError } = useRevealFieldError()
+  const submitError = useSubmitError(revealFormError)
+  // ค้าง mount ⇒ ปิดแล้วล้างข้อผิดจากการกดส่ง (ร่างยังอยู่) · มติผู้ใช้ 15/10/2569
+  useClearOnClose(open, submitError.clear)
 
   useEffect(() => {
     if (!open) return
@@ -95,8 +112,19 @@ export function CreatePayoutModal({
   const showClosedAlert =
     (closedCutoff !== null && closedCutoff === cutoffDate) || isCutoffInClosedPeriod(cutoffDate, isPeriodClosed)
 
+  /** ล้างร่าง + ข้อผิด — หลังสร้างสำเร็จ และเมื่อผู้ใช้ยืนยัน "ทิ้งข้อมูล" */
+  function resetDraft(): void {
+    setSide('outsource')
+    setCutoffOverride(null)
+    setName('')
+    setCycleChoice(null)
+    setClosedCutoff(null)
+    submitError.clear()
+  }
+
   async function submit(): Promise<void> {
     if (cutoffDate === '') return
+    submitError.clear()
     setSaving(true)
     const result = await callApi<PayoutBatchDto>(
       '/api/payout-batches',
@@ -113,6 +141,7 @@ export function CreatePayoutModal({
       return
     }
     if (result.error !== undefined) {
+      submitError.fail(result.error)
       showToast({ tone: 'error', title: result.error.title, description: result.error.message })
       return
     }
@@ -126,9 +155,11 @@ export function CreatePayoutModal({
     if (result.warning !== undefined) {
       showToast({ tone: 'warning', title: result.warning.title, description: result.warning.message })
     }
+    // สำเร็จ ⇒ คงฝั่งที่เลือกไว้ (สร้างรอบถัดไปฝั่งเดิมได้ทันที) ล้างที่เหลือ
     setCutoffOverride(null)
     setName('')
     setCycleChoice(null)
+    submitError.clear()
     onCreated()
     onClose()
   }
@@ -139,18 +170,18 @@ export function CreatePayoutModal({
       onClose={onClose}
       title="สร้างรอบจ่ายเงิน"
       description="ระบบรวบรวมรายการที่อนุมัติแล้วภายในวันตัดรอบให้อัตโนมัติ"
+      // ค้าง mount ⇒ ยกเลิก/Esc/X/Back ถามเมื่อมีร่าง · "ทิ้งข้อมูล" ล้างร่างจริง (มติผู้ใช้ 15/10/2569)
+      onDiscard={resetDraft}
       footer={
-        <>
-          <Button variant="secondary" onClick={onClose}>
-            ยกเลิก
-          </Button>
+        <FormSubmitFooter message={submitError.message} tick={submitError.tick}>
+          <ModalCancelButton onClose={onClose} />
           <Button loading={saving} disabled={cutoffDate === ''} onClick={() => void submit()}>
             สร้างรอบจ่าย
           </Button>
-        </>
+        </FormSubmitFooter>
       }
     >
-      <div className="space-y-4">
+      <div ref={formRef} className="space-y-4">
         <InlineAlert tone="warning">
           ห้ามรวม Inhouse + Outsource ในรอบเดียวกัน — ผู้รับเงินที่ยังไม่ยืนยันข้อมูล
           ธนาคาร/ภาษีจะถูกบล็อกทั้งรอบ
@@ -172,8 +203,16 @@ export function CreatePayoutModal({
           </Select>
         </Field>
 
-        <Field id={`${fieldId}-cutoff-date`} label="วันตัดรอบ (Cut-off Date)" required>
-          <Input id={`${fieldId}-cutoff-date`} type="date" value={cutoffDate} onChange={(event) => setCutoffOverride(event.target.value)} />
+        <Field id={`${fieldId}-cutoff-date`} label="วันตัดรอบ (Cut-off Date)" required error={submitError.fields.cutoffDate}>
+          <Input
+            id={`${fieldId}-cutoff-date`}
+            type="date"
+            value={cutoffDate}
+            onChange={(event) => {
+              setCutoffOverride(event.target.value)
+              submitError.clearField('cutoffDate')
+            }}
+          />
           {cutoffOverride === null && suggestedIsFallback && (
             <p className="mt-1 text-[11px] text-slate-500">วันตัดรอบตามรอบจ่ายอยู่ในงวดที่ปิดแล้ว — ระบบใช้วันนี้แทน (แก้ได้)</p>
           )}
@@ -232,12 +271,15 @@ export function CreatePayoutModal({
           (เงินทดรองจ่ายไม่หัก WHT)
         </InlineAlert>
 
-        <Field id={`${fieldId}-name`} label="ชื่อรอบจ่าย (เว้นว่าง = ระบบตั้งให้จากฝั่ง + วันตัดรอบ)">
+        <Field id={`${fieldId}-name`} label="ชื่อรอบจ่าย (เว้นว่าง = ระบบตั้งให้จากฝั่ง + วันตัดรอบ)" error={submitError.fields.name}>
           <Input
             id={`${fieldId}-name`}
             placeholder="เช่น รอบจ่าย Outsource ตัดรอบ 30/06/2569"
             value={name}
-            onChange={(event) => setName(event.target.value)}
+            onChange={(event) => {
+              setName(event.target.value)
+              submitError.clearField('name')
+            }}
           />
         </Field>
       </div>

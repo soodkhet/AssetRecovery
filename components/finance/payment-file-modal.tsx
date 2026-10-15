@@ -2,7 +2,20 @@
 
 import { buttonClass } from '@/components/ui/button'
 import { useCallback, useEffect, useId, useState } from 'react'
-import { Button, Field, InlineAlert, Modal, RefText, Select, Textarea, useToast } from '@/components/ui'
+import {
+  Button,
+  Field,
+  FormSubmitFooter,
+  InlineAlert,
+  Modal,
+  ModalCancelButton,
+  RefText,
+  Select,
+  Textarea,
+  useRevealFieldError,
+  useSubmitError,
+  useToast,
+} from '@/components/ui'
 import { REASON_MIN_LENGTH } from '@/components/settings/reason-confirm-modal'
 import { callApi, jsonRequest, type ApiWarning } from '@/lib/api/types'
 import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
@@ -49,6 +62,9 @@ export function PaymentFileModal({
   const [saving, setSaving] = useState(false)
   const [duplicateWarning, setDuplicateWarning] = useState<ApiWarning | null>(null)
   const [generated, setGenerated] = useState<PaymentFileResultDto | null>(null)
+  // ข้อผิดตอนกดสร้างไฟล์ ⇒ footer ติดจอ + ใต้ช่อง (มติผู้ใช้ 15/10/2569)
+  const { ref: formRef, reveal: revealFormError } = useRevealFieldError()
+  const submitError = useSubmitError(revealFormError)
 
   const batchId = batch?.id ?? null
   const previousAccountId = batch?.bankAccountId ?? null
@@ -86,6 +102,7 @@ export function PaymentFileModal({
   }, [batchId, previousAccountId, loadOptions])
 
   function changeAccount(nextId: string): void {
+    submitError.clearField('bankAccountId')
     setAccountId(nextId)
     const account = accounts.find((item) => item.id === nextId)
     if (account?.paymentFileFormatId) setFormatId(defaultPaymentFileFormatId(formats, account.paymentFileFormatId))
@@ -102,6 +119,7 @@ export function PaymentFileModal({
 
   async function submit(): Promise<void> {
     if (batch === null || !ready) return
+    submitError.clear()
     setSaving(true)
     const result = await callApi<PaymentFileResultDto>(
       `/api/payout-batches/${batch.id}/generate-payment-file`,
@@ -116,6 +134,7 @@ export function PaymentFileModal({
     setSaving(false)
 
     if (result.error !== undefined) {
+      submitError.fail(result.error)
       showToast({ tone: 'error', title: result.error.title, description: result.error.message })
       return
     }
@@ -144,8 +163,13 @@ export function PaymentFileModal({
     onDone()
   }
 
+  /** ปิดทุกทาง (ยกเลิก/Esc/X/Back/ทิ้งข้อมูล/ปิดหลังสร้างแล้ว) ⇒ ล้างร่าง — ยกเลิกถามก่อนเมื่อมีร่าง (มติผู้ใช้ 15/10/2569) */
   function close(): void {
+    // บัญชี/รูปแบบที่แก้ไว้ไม่ค้าง — เปิดใหม่ได้ค่าเริ่มต้นของรอบจาก effect (ไม่วาบค่าที่แก้ไว้)
+    setFormatId('')
+    setAccountId('')
     setReason('')
+    submitError.clear()
     setDuplicateWarning(null)
     setGenerated(null)
     onClose()
@@ -164,10 +188,8 @@ export function PaymentFileModal({
       description={batch.name}
       footer={
         generated === null ? (
-          <>
-            <Button variant="secondary" onClick={close}>
-              ยกเลิก
-            </Button>
+          <FormSubmitFooter message={submitError.message} tick={submitError.tick}>
+            <ModalCancelButton onClose={close} />
             <Button
               variant={confirming ? 'danger' : 'primary'}
               loading={saving}
@@ -176,12 +198,11 @@ export function PaymentFileModal({
             >
               {confirming ? 'ยืนยันสร้างซ้ำ (ระวังโอนซ้ำ)' : 'สร้างไฟล์โอน'}
             </Button>
-          </>
+          </FormSubmitFooter>
         ) : (
           <>
-            <Button variant="secondary" onClick={close}>
-              ปิด
-            </Button>
+            {/* สร้างไฟล์แล้ว (confirmDiscard ปิด) ⇒ ปิดทันทีไม่ถาม */}
+            <ModalCancelButton onClose={close}>ปิด</ModalCancelButton>
             <a
               href={`/api/payout-batches/${batch.id}/payment-file`}
               className={buttonClass('primary')}
@@ -192,7 +213,7 @@ export function PaymentFileModal({
         )
       }
     >
-      <div className="space-y-4">
+      <div ref={formRef} className="space-y-4">
         {wasGeneratedBefore && !confirming && generated === null && (
           <InlineAlert tone="warning" title="รอบจ่ายนี้เคยสร้างไฟล์โอนไปแล้ว">
             ระบบจะขอให้ยืนยันอีกครั้งก่อนสร้างไฟล์ใหม่ — ไฟล์ใหม่ใช้ Idempotency Key เดิม
@@ -233,8 +254,15 @@ export function PaymentFileModal({
         ) : (
           <>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Field id={`${fieldId}-format-id`} label="รูปแบบไฟล์ธนาคาร" required>
-                <Select id={`${fieldId}-format-id`} value={formatId} onChange={(event) => setFormatId(event.target.value)}>
+              <Field id={`${fieldId}-format-id`} label="รูปแบบไฟล์ธนาคาร" required error={submitError.fields.bankFileFormatId}>
+                <Select
+                  id={`${fieldId}-format-id`}
+                  value={formatId}
+                  onChange={(event) => {
+                    setFormatId(event.target.value)
+                    submitError.clearField('bankFileFormatId')
+                  }}
+                >
                   <option value="">— เลือกรูปแบบ —</option>
                   {formats.map((format) => (
                     <option key={format.id} value={format.id} disabled={!format.usable}>
@@ -245,7 +273,7 @@ export function PaymentFileModal({
                 </Select>
               </Field>
 
-              <Field id={`${fieldId}-account-id`} label="บัญชีบริษัทที่จ่าย" required>
+              <Field id={`${fieldId}-account-id`} label="บัญชีบริษัทที่จ่าย" required error={submitError.fields.bankAccountId}>
                 <Select id={`${fieldId}-account-id`} value={accountId} onChange={(event) => changeAccount(event.target.value)}>
                   <option value="">— เลือกบัญชี —</option>
                   {accounts.map((account) => (
@@ -283,13 +311,16 @@ export function PaymentFileModal({
               <Summary label="ยอดโอนสุทธิ" value={fmtSatangSymbol(batch.transferSatang)} tone="emerald" />
             </div>
 
-            <Field id={`${fieldId}-reason`} label="เหตุผล / อ้างอิงการอนุมัติจ่าย" required>
+            <Field id={`${fieldId}-reason`} label="เหตุผล / อ้างอิงการอนุมัติจ่าย" required error={submitError.fields.reason}>
               <Textarea
                 id={`${fieldId}-reason`}
                 maxLength={500}
                 rows={2}
                 value={reason}
-                onChange={(event) => setReason(event.target.value)}
+                onChange={(event) => {
+                  setReason(event.target.value)
+                  submitError.clearField('reason')
+                }}
                 placeholder="เช่น อนุมัติจ่ายตามมติที่ประชุมการเงิน 05/07/2569"
               />
             </Field>
