@@ -9,6 +9,7 @@ import {
   Input,
   Modal,
   MoneyInput,
+  NumericInput,
   Select,
   Textarea,
   cn,
@@ -362,10 +363,11 @@ export function CompensationPlanFormModal({
             hint="ใช้เมื่อผู้รับเงินยังไม่ได้ตั้งกติกาภาษีของตัวเอง — ถ้าผู้รับเงินตั้งไว้แล้ว ระบบใช้ของผู้รับเงินเสมอ"
             error={errors.whtPct}
           >
-            <Input
+            <NumericInput
+              kind="decimal"
+              maxDigits={3}
               id="plan-wht"
               numeric
-              inputMode="decimal"
               value={form.whtPct}
               onChange={(event) => set('whtPct', event.target.value)}
             />

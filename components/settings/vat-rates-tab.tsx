@@ -12,6 +12,7 @@ import {
   InlineAlert,
   Input,
   Modal,
+  NumericInput,
   StatusBadge,
   TBody,
   THead,
@@ -283,10 +284,11 @@ export function VatRatesTab() {
       >
         <div className="space-y-4">
           <Field id="vat-rate" label="อัตรา VAT (%)" required error={errors.ratePct}>
-            <Input
+            <NumericInput
+              kind="decimal"
+              maxDigits={3}
               id="vat-rate"
               numeric
-              inputMode="decimal"
               value={form.ratePct}
               onChange={(event) => set('ratePct', event.target.value)}
               placeholder="7.00"

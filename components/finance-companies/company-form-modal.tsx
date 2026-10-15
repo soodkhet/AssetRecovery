@@ -5,7 +5,7 @@ import { AddressFields } from '@/components/address/address-fields'
 import { SettingHelp } from '@/components/settings/setting-help'
 import { useCurrentVatRate } from '@/components/settings/use-current-vat-rate'
 import { toFieldErrors } from '@/lib/api/validation'
-import { Button, Field, InlineAlert, Input, Modal, Select, Textarea, useToast } from '@/components/ui'
+import { Button, Field, InlineAlert, Input, Modal, NumericInput, Select, Textarea, useToast } from '@/components/ui'
 import { EMPTY_ADDRESS, formatThaiAddressLineFull, type AddressValue } from '@/lib/address/address-value'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import {
@@ -428,10 +428,11 @@ export function CompanyFormModal({
             error={errors.whtWithheldByCustomerPct}
             hint="เว้นว่าง = ลูกค้าไม่หัก · ใช้จับคู่ยอดเงินเข้ากับบิล (ยอดรวม − ภาษีที่ลูกค้าหัก)"
           >
-            <Input
+            <NumericInput
+              kind="decimal"
+              maxDigits={3}
               id="co-customer-wht"
               numeric
-              inputMode="decimal"
               value={form.whtWithheldByCustomerPct}
               onChange={(event) => set('whtWithheldByCustomerPct', event.target.value)}
               placeholder="เว้นว่าง = ไม่หัก"

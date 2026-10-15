@@ -3,7 +3,7 @@
 import { SettingHelp } from '@/components/settings/setting-help'
 import { pctFromInput, satangFromInput, serviceFeeHelp } from '@/lib/settings/help'
 import { useState } from 'react'
-import { Button, Field, InlineAlert, Input, Modal, MoneyInput, Select, Textarea, useToast } from '@/components/ui'
+import { Button, Field, InlineAlert, Input, Modal, MoneyInput, NumericInput, Select, Textarea, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { serviceFeeTemplateCreateSchema } from '@/lib/service-fee/schemas'
 import {
@@ -218,10 +218,11 @@ export function ServiceFeeFormModal({
         {usesRate && (
           <div className="grid grid-cols-1 gap-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 sm:grid-cols-2">
             <Field id="sf-rate" label="อัตราความสำเร็จ (%)" required error={errors.ratePct}>
-              <Input
+              <NumericInput
+                kind="decimal"
+                maxDigits={3}
                 id="sf-rate"
                 numeric
-                inputMode="decimal"
                 value={form.ratePct}
                 onChange={(event) => set('ratePct', event.target.value)}
                 placeholder="10"

@@ -19,6 +19,7 @@ import {
   Input,
   Modal,
   MoneyInput,
+  NumericInput,
   Select,
   StatusBadge,
   TBody,
@@ -401,10 +402,11 @@ export function TaxProfilesTab() {
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field id="tax-wht-pct" label="อัตราหัก ณ ที่จ่าย (%)" required error={errors.whtPct}>
-              <Input
+              <NumericInput
+                kind="decimal"
+                maxDigits={3}
                 id="tax-wht-pct"
                 numeric
-                inputMode="decimal"
                 value={form.whtPct}
                 onChange={(event) => set('whtPct', event.target.value)}
                 placeholder={String(DEFAULT_WHT_PCT)}

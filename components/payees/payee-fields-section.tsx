@@ -6,7 +6,7 @@ import { useSession } from '@/components/auth/permission-provider'
 import { PayeeIdDocumentField } from '@/components/payees/payee-id-document-field'
 import { SettingHelp } from '@/components/settings/setting-help'
 import { useTaxRuleSettings } from '@/components/teams/use-tax-rule-settings'
-import { Field, InlineAlert, Input, Select } from '@/components/ui'
+import { Field, InlineAlert, Input, NumericInput, Select } from '@/components/ui'
 import type { TeamSide } from '@/lib/teams/team'
 import {
   canOpenTaxProfileTab,
@@ -404,10 +404,11 @@ export function PayeeFieldsSection({
       error={errors.wht402Pct}
       hint="ใช้เมื่อค่าตั้งภาษีจัดผู้รับเป็นเงินได้ 40(1) หรือ 40(2) เท่านั้น — กรอกอัตราที่สำนักงานบัญชีคำนวณให้ (0.00 ได้) · เว้นว่าง = ยังไม่กรอก"
     >
-      <Input
+      <NumericInput
+        kind="decimal"
+        maxDigits={3}
         id="payee-wht-40-2"
         numeric
-        inputMode="decimal"
         value={form.wht402Pct}
         onChange={(event) => onChange('wht402Pct', event.target.value)}
         placeholder="เช่น 2.50"
