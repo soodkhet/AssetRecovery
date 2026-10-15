@@ -41,7 +41,8 @@ describe('label ช่องบังคับใช้ required ไม่เข
     const offenders = ['app', 'components'].flatMap((dir) =>
       sourceFiles(join(ROOT, dir)).flatMap((file) => {
         const text = readFileSync(file, 'utf8')
-        return /label=["{`][^"\n]*\((บังคับ|จำเป็น)\)/.test(text) ? [relative(ROOT, file)] : []
+        // prop label="…(บังคับ)" หรือ <label>…(บังคับ)</label> เขียนเอง
+        return /label=["{`][^"\n]*\((บังคับ|จำเป็น)\)|\((บังคับ|จำเป็น)\)\s*<\/label>/.test(text) ? [relative(ROOT, file)] : []
       }),
     )
     expect(offenders).toEqual([])

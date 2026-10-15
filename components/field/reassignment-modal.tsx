@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { FieldCaseDetailBody } from '@/components/field/field-case-detail'
 import { IconAlert, IconCalendar } from '@/components/field/field-icons'
-import { Button, ErrorState, LoadingState, Modal, Textarea, useToast } from '@/components/ui'
+import { Button, ErrorState, Field, LoadingState, Modal, Textarea, useToast } from '@/components/ui'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
 import { declineReasonError, reassignmentCountdown } from '@/lib/field/reassignment-ui'
@@ -207,10 +207,8 @@ export function ReassignmentModal({
               </div>
             </div>
           ) : declining ? (
-            <div>
-              <label htmlFor="decline-reason" className="mb-1.5 block text-xs font-bold text-slate-600">
-                เหตุผลที่ไม่ยินยอม (จำเป็น)
-              </label>
+            // ช่องบังคับ = `<Field required>` (* + aria-required) · ข้อผิดผูกช่อง (aria-invalid/describedby) — ตรวจซ้ำ staging SV5-P2-03
+            <Field id="decline-reason" label="เหตุผลที่ไม่ยินยอม" required error={reasonError}>
               <Textarea
                 maxLength={1000}
                 id="decline-reason"
@@ -219,8 +217,7 @@ export function ReassignmentModal({
                 onChange={(event) => setReason(event.target.value)}
                 placeholder="ระบุเหตุผล เช่น กำลังเดินทางไปหาลูกหนี้แล้ว ใกล้ถึงแล้ว"
               />
-              {reasonError !== null && <p className="mt-1 text-xs font-bold text-rose-600">{reasonError}</p>}
-            </div>
+            </Field>
           ) : (
             <p className="text-xs text-slate-400">
               ถ้าไม่ตอบภายในเวลาที่กำหนด ระบบจะเปลี่ยนผู้รับผิดชอบให้อัตโนมัติ
