@@ -8,7 +8,7 @@ import { DeviceAttributeSelect } from '@/components/cases/device-attribute-selec
 import { DeviceModelPicker } from '@/components/cases/device-model-picker'
 import { useDeviceAttributeOptions } from '@/components/cases/use-device-attribute-options'
 import { TeamSuggestionPanel } from '@/components/cases/team-suggestion-panel'
-import { Button, ConfirmModal, Field, InlineAlert, Input, Modal, Select, Textarea, useRevealFieldError, useToast } from '@/components/ui'
+import { Button, ConfirmModal, Field, InlineAlert, Input, Modal, MoneyInput, Select, Textarea, useRevealFieldError, useToast } from '@/components/ui'
 import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
 import { apiPath } from '@/lib/api/contract'
 import {
@@ -784,10 +784,8 @@ export function CaseFormModal({
               hint="ระบบไม่มีเกณฑ์ตัดรับอัตโนมัติจากมูลค่า — ใช้ประกอบการพิจารณาเท่านั้น"
               error={fieldErrors.outstandingDebtSatang}
             >
-              <Input
+              <MoneyInput
                 id="asset-debt"
-                numeric
-                inputMode="decimal"
                 value={form.outstandingDebtBaht}
                 placeholder="0.00"
                 invalid={fieldErrors.outstandingDebtSatang !== undefined}
