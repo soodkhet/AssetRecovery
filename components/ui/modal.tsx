@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useId, useRef, useState, type Dra
 import { Button, type ButtonVariant } from '@/components/ui/button'
 import { cn } from '@/components/ui/cn'
 import { installFocusTrap } from '@/components/ui/focus-trap'
+import { FormSubmitFooter } from '@/components/ui/input'
 import { busyElementLocksModal, decideModalClose, discardAndClose, dropMarksDraft } from '@/components/ui/modal-close-guard'
 import { guardModalHistory } from '@/components/ui/modal-history'
 import { isDismissEscape, isTopModal, registerModal, unregisterModal } from '@/components/ui/modal-stack'
@@ -361,6 +362,7 @@ export function ConfirmModal({
   confirmVariant = 'danger',
   loading = false,
   confirmDisabled = false,
+  submitError,
   children,
 }: {
   open: boolean
@@ -374,6 +376,11 @@ export function ConfirmModal({
   confirmVariant?: ButtonVariant
   loading?: boolean
   confirmDisabled?: boolean
+  /**
+   * ข้อผิดจากการกดยืนยัน (`useSubmitError()` — ส่ง `message`/`tick`) ⇒ ขึ้นในกล่องเหนือปุ่ม (role=alert) นอกจาก toast
+   * · ผูก `fields.<ช่อง>` กับ `<Field error>` ของช่องเหตุผลเอง (ตรวจซ้ำ staging SV5-P1-02)
+   */
+  submitError?: { message: string | null; tick: number }
   children?: ReactNode
 }) {
   return (
@@ -387,14 +394,14 @@ export function ConfirmModal({
       confirmDiscard={false}
       size="sm"
       footer={
-        <>
+        <FormSubmitFooter message={submitError?.message ?? null} tick={submitError?.tick ?? 0}>
           <Button variant="secondary" onClick={onClose} disabled={loading}>
             {cancelLabel}
           </Button>
           <Button variant={confirmVariant} onClick={onConfirm} loading={loading} disabled={confirmDisabled}>
             {confirmLabel}
           </Button>
-        </>
+        </FormSubmitFooter>
       }
     >
       {children}

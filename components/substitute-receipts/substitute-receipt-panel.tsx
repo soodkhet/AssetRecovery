@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react'
 import { NoReceiptLinesEditor, type NoReceiptLinesVariant } from '@/components/substitute-receipts/no-receipt-lines'
-import { Button, ConfirmModal, Field, FieldErrorText, FormSubmitFooter, InlineAlert, Modal, StatusBadge, Textarea, useRevealFieldError, useToast } from '@/components/ui'
+import { Button, ConfirmModal, Field, FieldErrorText, FormSubmitFooter, InlineAlert, Modal, StatusBadge, Textarea, useRevealFieldError, useSubmitError, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { REASON_MAX } from '@/lib/api/validation'
 import { EXPENSE_RECEIPT_ACCEPT } from '@/lib/field/media-upload'
@@ -70,6 +70,10 @@ export function SubstituteReceiptPanel({
   const [cancelOpen, setCancelOpen] = useState(false)
   const [cancelReason, setCancelReason] = useState('')
   const [cancelling, setCancelling] = useState(false)
+  // ข้อผิดตอนกดยืนยันยกเลิก ⇒ ในกล่องเหนือปุ่ม (role=alert) + ใต้ช่องเหตุผลถ้า API ชี้ช่อง แล้วโฟกัสช่องนั้น
+  // (ไม่ชี้ช่อง ⇒ focus trap คืนโฟกัสปุ่มยืนยัน) · เดิมขึ้นแค่ toast — ตรวจซ้ำ staging SV5-P1-02
+  const { ref: cancelBodyRef, reveal: revealCancelError } = useRevealFieldError()
+  const cancelError = useSubmitError(revealCancelError)
   const [reissueOpen, setReissueOpen] = useState(false)
   const [reissueLines, setReissueLines] = useState<SubstituteLineDraft[]>([])
   // ข้อผิดตอนกดออกใบ — แสดงใน footer ติดจอ (+ ใต้แถว/ช่องที่ผิดถ้าผูกกับช่อง) · ไม่ขึ้นแถบบนสุดที่มองไม่เห็นเมื่อเลื่อนลงมา
@@ -122,12 +126,14 @@ export function SubstituteReceiptPanel({
 
   async function confirmCancel(): Promise<void> {
     setCancelling(true)
+    cancelError.clear()
     try {
       const result = await callApi<SubstituteReceiptRefDto>(
         `/api/substitute-receipts/${receipt.id}/cancel`,
         jsonRequest('POST', { reason: cancelReason.trim() }),
       )
       if (result.error !== undefined || result.data === undefined) {
+        cancelError.fail(result.error ?? { message: 'ยกเลิกใบไม่สำเร็จ — ลองใหม่อีกครั้ง' })
         showToast({ tone: 'error', title: result.error?.title ?? 'ยกเลิกใบไม่สำเร็จ', description: result.error?.message })
         return
       }
@@ -283,6 +289,7 @@ export function SubstituteReceiptPanel({
             // กล่องยืนยันสั้น (ไม่ถามทิ้ง) ⇒ เปิดใหม่เริ่มเหตุผลว่างเสมอ แบบกล่องยืนยันอื่น (มติผู้ใช้ 15/10/2569)
             onClick={() => {
               setCancelReason('')
+              cancelError.clear()
               setCancelOpen(true)
             }}
             className="focus-ring text-[11px] font-semibold text-red-700 underline inline-flex items-center pointer-coarse:min-h-11 pointer-coarse:px-1"
@@ -343,17 +350,23 @@ export function SubstituteReceiptPanel({
         cancelLabel="ไม่ยกเลิก"
         loading={cancelling}
         confirmDisabled={reasonTooShort}
+        submitError={cancelError}
       >
-        <Field id={`cancel-reason-${receipt.id}`} label="เหตุผลการยกเลิก (บังคับ)">
-          <Textarea
-            id={`cancel-reason-${receipt.id}`}
-            maxLength={REASON_MAX}
-            value={cancelReason}
-            onChange={(event) => setCancelReason(event.target.value)}
-            rows={3}
-            placeholder="เช่น กรอกรายการผิด / ได้ใบเสร็จจริงมาแล้ว"
-          />
-        </Field>
+        <div ref={cancelBodyRef}>
+          <Field id={`cancel-reason-${receipt.id}`} label="เหตุผลการยกเลิก (บังคับ)" error={cancelError.fields.reason}>
+            <Textarea
+              id={`cancel-reason-${receipt.id}`}
+              maxLength={REASON_MAX}
+              value={cancelReason}
+              onChange={(event) => {
+                setCancelReason(event.target.value)
+                cancelError.clearField('reason')
+              }}
+              rows={3}
+              placeholder="เช่น กรอกรายการผิด / ได้ใบเสร็จจริงมาแล้ว"
+            />
+          </Field>
+        </div>
       </ConfirmModal>
 
       <Modal
