@@ -390,14 +390,12 @@ export function ConfirmModal({
       title={title}
       description={description}
       busy={loading}
-      // ช่องเหตุผลสั้นๆ — ไม่ต้องถามยืนยันทิ้ง
-      confirmDiscard={false}
+      // กติกาเดียวกับ Modal (ตรวจซ้ำ staging SV5-P2-02): Back ของ browser/มือถือ ปิดกล่อง (ไม่ออกจากหน้า) ·
+      // พิมพ์เหตุผลไว้แล้วสั่งปิด (ยกเลิก/Esc/X/Back) ⇒ ถามทิ้งก่อน · ไม่ได้พิมพ์ ⇒ ปิดทันทีเหมือนเดิม
       size="sm"
       footer={
         <FormSubmitFooter message={submitError?.message ?? null} tick={submitError?.tick ?? 0}>
-          <Button variant="secondary" onClick={onClose} disabled={loading}>
-            {cancelLabel}
-          </Button>
+          <ModalCancelButton onClose={onClose}>{cancelLabel}</ModalCancelButton>
           <Button variant={confirmVariant} onClick={onConfirm} loading={loading} disabled={confirmDisabled}>
             {confirmLabel}
           </Button>

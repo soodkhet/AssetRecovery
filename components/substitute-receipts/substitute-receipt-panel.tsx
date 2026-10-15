@@ -286,7 +286,7 @@ export function SubstituteReceiptPanel({
         {canCancel && !cancelled && (
           <button
             type="button"
-            // กล่องยืนยันสั้น (ไม่ถามทิ้ง) ⇒ เปิดใหม่เริ่มเหตุผลว่างเสมอ แบบกล่องยืนยันอื่น (มติผู้ใช้ 15/10/2569)
+            // เปิดใหม่เริ่มเหตุผลว่างเสมอ แบบกล่องยืนยันอื่น (มติผู้ใช้ 15/10/2569) · พิมพ์แล้วปิด ⇒ ConfirmModal ถามทิ้งก่อน (SV5-P2-02)
             onClick={() => {
               setCancelReason('')
               cancelError.clear()
