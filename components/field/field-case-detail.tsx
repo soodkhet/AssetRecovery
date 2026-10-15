@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { FileViewerModal, type ViewableFile } from '@/components/cases/file-viewer-modal'
 import { IconFile, IconImage, IconMapPin, IconPhone, IconUser } from '@/components/field/field-icons'
-import { Button, ErrorState, LoadingState, Modal, RefText, StatusBadge, useClearOnClose } from '@/components/ui'
+import { Button, ErrorState, FormSubmitFooter, LoadingState, Modal, RefText, StatusBadge, useClearOnClose, useSubmitError, useToast } from '@/components/ui'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
 import { fmtDate, fmtDateTime } from '@/lib/format/datetime'
@@ -428,11 +428,15 @@ export function FieldCaseDetailModal({
     error?: ApiCallError
   } | null>(null)
   const [accepting, setAccepting] = useState(false)
-  const [actionError, setActionError] = useState<ApiCallError | null>(null)
+  const { showToast } = useToast()
+  // ข้อผิดของ "รับงาน" ขึ้น footer ติดจอเหนือปุ่ม (role=alert) + toast — เดิมขึ้นบนสุดของเนื้อหา มือถือเลื่อนลงมาแล้วมองไม่เห็น
+  // (ตรวจซ้ำ staging SV5-P2-01)
+  const actionError = useSubmitError()
+  const { clear: clearActionError, fail: failAction } = actionError
   /** เพิ่มทีละ 1 เพื่อโหลดใหม่ (ปุ่มลองใหม่ — preship PS-010) */
   const [attempt, setAttempt] = useState(0)
   // ค้าง mount ⇒ ปิดแล้วล้างข้อผิดของ "รับงาน" — เปิดเคสถัดไป/เคสเดิมไม่ขึ้นข้อผิดเก่า (มติผู้ใช้ 15/10/2569)
-  useClearOnClose(open, () => setActionError(null))
+  useClearOnClose(open, clearActionError)
 
   useEffect(() => {
     if (!open || caseId === null) return
@@ -454,14 +458,15 @@ export function FieldCaseDetailModal({
   const accept = useCallback(async () => {
     if (detail === null) return
     setAccepting(true)
-    setActionError(null)
+    clearActionError()
     try {
       const response = await callApi<FieldActionResultDto>(
         apiPath('field.acceptCase', { id: detail.caseId }),
         jsonRequest('POST', {}),
       )
       if (response.error !== undefined) {
-        setActionError(response.error)
+        failAction(response.error)
+        showToast({ tone: 'error', title: response.error.title, description: response.error.message })
         return
       }
       onChanged?.({ caseId: detail.caseId, caseRef: detail.caseRef })
@@ -469,7 +474,7 @@ export function FieldCaseDetailModal({
     } finally {
       setAccepting(false)
     }
-  }, [detail, onChanged, onClose])
+  }, [detail, onChanged, onClose, clearActionError, failAction, showToast])
 
   return (
     <Modal
@@ -479,7 +484,7 @@ export function FieldCaseDetailModal({
       title="รายละเอียดเคส"
       description={detail === null ? undefined : `${detail.caseRef} · รอบที่ ${detail.trackingRound}`}
       footer={
-        <>
+        <FormSubmitFooter message={actionError.message} tick={actionError.tick}>
           {detail !== null && detail.access === 'full' && detail.status === 'pending_accept' && (
             <Button onClick={accept} loading={accepting}>
               รับงาน
@@ -489,7 +494,7 @@ export function FieldCaseDetailModal({
           <Button variant="secondary" onClick={onClose}>
             ปิดหน้าต่าง
           </Button>
-        </>
+        </FormSubmitFooter>
       }
     >
       {loadError !== null ? (
@@ -505,7 +510,6 @@ export function FieldCaseDetailModal({
         <LoadingState message="กำลังโหลดรายละเอียดเคส..." />
       ) : (
         <>
-          {actionError !== null && <ErrorState title={actionError.title} message={actionError.message} />}
           <FieldCaseDetailView detail={detail} onRespondReassignment={onRespondReassignment} />
           {detail.access === 'full' && (
             <>
