@@ -1,3 +1,4 @@
+import { advanceExcessItemLabel, advanceExcessSource } from '@/lib/advances/advance'
 import { ExpenseRecordError } from '@/lib/expenses/errors'
 import { EXPENSE_TYPE_LABEL } from '@/lib/field/expense-ui'
 import type { ExpenseType } from '@/lib/generated/prisma/enums'
@@ -49,9 +50,20 @@ export const ADVANCE_CATEGORY_LABEL = 'เงินทดรองจ่าย'
 /**
  * ประเภทค่าใช้จ่ายของรายการ — ป้ายไทยจากทะเบียนกลาง `EXPENSE_TYPE_LABEL` (`41` §6.6)
  * ห้ามตั้งชื่อประเภทใหม่ที่นี่ (ไม่มี enum ของตัวเองใน `02`)
+ * ตรวจ staging SV5-Y-01 — คำขอเบิกส่วนเกินเงินทดรอง (อ่านจากหมายเหตุ `note`) ⇒ "ส่วนเกินเงินทดรอง ADV-…"
+ * ป้ายเดียวกับคิวอนุมัติ/รอบจ่าย/สลิป (mytester DO-07) แทน "รายการกรอกเอง"
  */
-export function expenseCategoryOf(source: { expenseType: ExpenseType | null }): string {
-  return source.expenseType === null ? ADVANCE_CATEGORY_LABEL : EXPENSE_TYPE_LABEL[source.expenseType]
+export function expenseCategoryOf(source: { expenseType: ExpenseType | null; note?: string | null }): string {
+  if (source.expenseType === null) return ADVANCE_CATEGORY_LABEL
+  return advanceExcessItemLabel(source.note ?? null) ?? EXPENSE_TYPE_LABEL[source.expenseType]
+}
+
+/**
+ * เลขเคสของรายการ — เคสที่ผูก หรือเคสของเงินทดรองสำหรับคำขอเบิกส่วนเกิน (ไม่ผูก `case_id` — เลขเคสอยู่ในหมายเหตุ)
+ * ไม่มี = `null` (ตรวจ staging SV5-Y-01 · ตรรกะเดียวกับคิวอนุมัติ F5-03)
+ */
+export function expenseCaseRefOf(source: { caseRef: string | null; note?: string | null }): string | null {
+  return source.caseRef ?? advanceExcessSource(source.note ?? null)?.caseRef ?? null
 }
 
 // ── ความครบถ้วนของเอกสาร (`32` §6.3) ────────────────────────────────────────

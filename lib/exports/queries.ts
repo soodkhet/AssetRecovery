@@ -119,7 +119,7 @@ import {
 import type { ExportHistoryListQuery, ExportPackInput, ExportStatusInput } from '@/lib/exports/schemas'
 import type { ExportHistoryListDto, ExportRecordDto } from '@/lib/exports/types'
 import { buildZip, type ZipEntry } from '@/lib/exports/zip'
-import { expenseCategoryOf } from '@/lib/expenses/expense-record'
+import { expenseCaseRefOf, expenseCategoryOf } from '@/lib/expenses/expense-record'
 import { signedAdjustmentSatang } from '@/lib/adjustments/adjustment'
 import { CREDIT_NOTE_DOCUMENT_CODE } from '@/lib/credit-notes/credit-note'
 import { Prisma, type ExportRecordStatus } from '@/lib/generated/prisma/client'
@@ -339,6 +339,7 @@ const EXPENSE_RECORD_SELECT = {
         select: {
           id: true,
           expenseType: true,
+          revisionNote: true,
           receiptInCompanyName: true,
           expenseDate: true,
           receiptFileUrl: true,
@@ -382,7 +383,7 @@ function expenseRows(rows: readonly ExpenseRecordRow[], vouchers: PayoutVouchers
     return {
       payeeName: item.payee.user.fullName,
       // รายการที่มาจากเงินทดรอง (A4) ไม่มี `expense_type` ของตัวเอง — ตัวแปลงเดียวกับไฟล์ 32
-      category: expenseCategoryOf({ expenseType: expense?.expenseType ?? null }),
+      category: expenseCategoryOf({ expenseType: expense?.expenseType ?? null, note: expense?.revisionNote ?? null }),
       grossSatang: row.grossSatang,
       whtSatang: row.whtSatang,
       netSatang: row.netSatang,
@@ -397,7 +398,7 @@ function expenseRows(rows: readonly ExpenseRecordRow[], vouchers: PayoutVouchers
       paymentDate: payoutPaymentDateOf(item.payoutBatch),
       payoutBatchRef: payoutBatchRefOf(item.payoutBatch),
       voucherRef: vouchers.voucherRefOf.get(voucherKey(item.payoutBatchId, item.payeeId)) ?? null,
-      caseRef: expense?.case?.caseRef ?? null,
+      caseRef: expenseCaseRefOf({ caseRef: expense?.case?.caseRef ?? null, note: expense?.revisionNote ?? null }),
       costCenter: row.costCenter?.code ?? null,
       // มติ PO U103 — ใช้ใบรับรองแทนใบเสร็จ ⇒ `receipt_file` = ไฟล์ใบรับรองฉบับเซ็น (ปกติคือไฟล์เดียวกับใบเสร็จของใบเบิก)
       // มติ PO U143 — ใช้เฉพาะไฟล์ที่ server ตรวจแล้ว · path เก่าที่พิมพ์เอง (ไม่ผ่านการตรวจ) = ไม่มีไฟล์
@@ -1216,6 +1217,7 @@ async function accruedExpenseRows(
       select: {
         id: true,
         expenseType: true,
+        revisionNote: true,
         grossSatang: true,
         expenseDate: true,
         status: true,
@@ -1289,8 +1291,8 @@ async function accruedExpenseRows(
       expenseId: row.id,
       payeeName: row.payee.user.fullName,
       payeeTaxId: row.payee.nationalId,
-      category: expenseCategoryOf({ expenseType: row.expenseType }),
-      caseRef: row.case?.caseRef ?? null,
+      category: expenseCategoryOf({ expenseType: row.expenseType, note: row.revisionNote }),
+      caseRef: expenseCaseRefOf({ caseRef: row.case?.caseRef ?? null, note: row.revisionNote }),
       workDate: row.expenseDate,
       status: row.status,
       grossSatang: row.grossSatang,

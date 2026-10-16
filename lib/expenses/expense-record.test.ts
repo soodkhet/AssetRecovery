@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
+import { advanceExcessClaimNote } from '@/lib/advances/advance'
 import { ExpenseRecordError } from '@/lib/expenses/errors'
 import {
   ADVANCE_CATEGORY_LABEL,
   assertCostCenterEditable,
   assertNoAmountEdit,
   buildDocumentException,
+  expenseCaseRefOf,
   expenseCategoryOf,
   isSyncableBatchStatus,
   requiresReceipt,
@@ -37,6 +39,28 @@ describe('ประเภทค่าใช้จ่าย (`32` §7.1)', () => 
 
   it('รายการที่มาจากเงินทดรองจ่าย (ไม่มี expense ต้นทาง) ได้ป้ายของตัวเอง', () => {
     expect(expenseCategoryOf({ expenseType: null })).toBe(ADVANCE_CATEGORY_LABEL)
+  })
+
+  // ตรวจ staging SV5-Y-01 — export pack/บัญชีค่าใช้จ่ายใช้ป้ายเดียวกับคิวอนุมัติ (mytester DO-07)
+  const excessNote = advanceExcessClaimNote({
+    purpose: 'ค่าเดินทาง',
+    approvedSatang: 100000,
+    usedSatang: 138075,
+    advanceNumber: 'ADV-2569-0002',
+    caseRef: 'NDP/2569/MT5-04',
+  })
+
+  it('คำขอเบิกส่วนเกินเงินทดรอง ⇒ "ส่วนเกินเงินทดรอง ADV-…" ไม่ใช่ "รายการกรอกเอง"', () => {
+    expect(expenseCategoryOf({ expenseType: 'manual', note: excessNote })).toBe('ส่วนเกินเงินทดรอง ADV-2569-0002')
+    expect(expenseCategoryOf({ expenseType: 'manual', note: 'ซื้ออุปกรณ์' })).toBe(expenseCategoryOf({ expenseType: 'manual' }))
+    expect(expenseCategoryOf({ expenseType: null, note: excessNote })).toBe(ADVANCE_CATEGORY_LABEL)
+  })
+
+  it('เลขเคส: เคสที่ผูกก่อน · ไม่ผูก ⇒ เคสของเงินทดรองจากหมายเหตุ · ไม่มีทั้งคู่ = null', () => {
+    expect(expenseCaseRefOf({ caseRef: 'MTJ-1', note: excessNote })).toBe('MTJ-1')
+    expect(expenseCaseRefOf({ caseRef: null, note: excessNote })).toBe('NDP/2569/MT5-04')
+    expect(expenseCaseRefOf({ caseRef: null, note: 'ซื้ออุปกรณ์' })).toBeNull()
+    expect(expenseCaseRefOf({ caseRef: null })).toBeNull()
   })
 })
 

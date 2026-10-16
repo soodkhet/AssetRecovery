@@ -65,7 +65,13 @@ const RECORD_SELECT = {
       },
       payee: { select: { user: { select: { fullName: true } } } },
       expense: {
-        select: { expenseType: true, receiptFileUrl: true, receiptFileHash: true, receiptFileUnverified: true },
+        select: {
+          expenseType: true,
+          revisionNote: true,
+          receiptFileUrl: true,
+          receiptFileHash: true,
+          receiptFileUnverified: true,
+        },
       },
     },
   },
@@ -102,7 +108,8 @@ function toDto(row: RecordRow): ExpenseRecordDto {
     payoutBatchId: row.payoutBatchItem.payoutBatchId,
     payoutBatchName: row.payoutBatchItem.payoutBatch.name,
     payeeName: row.payoutBatchItem.payee.user.fullName,
-    category: expenseCategoryOf(source),
+    // ตรวจ staging SV5-Y-01 — คำขอเบิกส่วนเกินเงินทดรอง ⇒ ป้ายเดียวกับคิวอนุมัติ
+    category: expenseCategoryOf({ ...source, note: row.payoutBatchItem.expense?.revisionNote ?? null }),
     paymentDate: paymentDateOf(row.payoutBatchItem.payoutBatch).toISOString(),
     grossSatang: row.grossSatang,
     whtSatang: row.whtSatang,
