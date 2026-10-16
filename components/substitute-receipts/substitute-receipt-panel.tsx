@@ -20,7 +20,7 @@ import {
 import {
   SUBSTITUTE_RECEIPT_CANCEL_REASON_MIN,
   SUBSTITUTE_RECEIPT_STATUS_LABEL,
-  substituteReceiptBadgeText,
+  SUBSTITUTE_RECEIPT_LABEL,
   substituteReceiptStatusBadgeGroup,
 } from '@/lib/substitute-receipts/substitute-receipt'
 import type { SubstituteReceiptDetailDto, SubstituteReceiptRefDto } from '@/lib/substitute-receipts/types'
@@ -227,8 +227,9 @@ export function SubstituteReceiptPanel({
       }
     >
       <div className="flex flex-wrap items-center gap-1.5">
-        <span className={`font-mono text-[11px] font-semibold whitespace-nowrap ${cancelled ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
-          {substituteReceiptBadgeText(receipt.receiptNumber)}
+        {/* ตัดบรรทัดได้ที่ป้ายชื่อ — เลขเอกสารไม่ตัดกลางเลข (เดิมทั้งก้อน nowrap ล้นทับคอลัมน์ถัดไปในตารางแคบ) */}
+        <span className={`min-w-0 text-[11px] font-semibold ${cancelled ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
+          {SUBSTITUTE_RECEIPT_LABEL} <span className="font-mono whitespace-nowrap">{receipt.receiptNumber}</span>
         </span>
         <StatusBadge
           status={receipt.status}
@@ -312,8 +313,8 @@ export function SubstituteReceiptPanel({
         <ul className="space-y-0.5 border-t border-slate-200 pt-1" aria-label="ใบรับรองที่ยกเลิกแล้ว">
           {receipt.cancelledHistory.map((entry) => (
             <li key={entry.id} className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500">
-              <span className="font-mono whitespace-nowrap text-slate-400 line-through">
-                {substituteReceiptBadgeText(entry.receiptNumber)}
+              <span className="min-w-0 text-slate-400 line-through">
+                {SUBSTITUTE_RECEIPT_LABEL} <span className="font-mono whitespace-nowrap">{entry.receiptNumber}</span>
               </span>
               <StatusBadge
                 status="cancelled"

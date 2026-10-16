@@ -125,8 +125,11 @@ export function substituteReceiptStatusBadgeGroup(status: SubstituteReceiptStatu
 }
 
 /** ป้ายบนคิวอนุมัติ/รายการเบิก — "ใบรับรองแทนใบเสร็จ CRT-2569-0009" */
+/** ป้ายชื่อเอกสาร — หน้าจอแสดงคู่กับเลขที่ (เลขใช้ `font-mono whitespace-nowrap` แยกช่วง ให้ป้ายตัดบรรทัดได้) */
+export const SUBSTITUTE_RECEIPT_LABEL = 'ใบรับรองแทนใบเสร็จ'
+
 export function substituteReceiptBadgeText(receiptNumber: string): string {
-  return `ใบรับรองแทนใบเสร็จ ${receiptNumber}`
+  return `${SUBSTITUTE_RECEIPT_LABEL} ${receiptNumber}`
 }
 
 /** ชื่อไฟล์ PDF ที่ดาวน์โหลด */

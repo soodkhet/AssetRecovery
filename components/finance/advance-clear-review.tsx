@@ -70,7 +70,10 @@ export function AdvanceClearReviewActions({
           >
             ตรวจแล้ว
           </Button>
-          {reviewWarning !== null && <span className="text-xs text-amber-700">{reviewWarning}</span>}
+          {/* ช่องจัดการของตารางเป็น nowrap — ข้อความเหตุผลต้องตัดบรรทัดเองในกรอบแคบ ไม่งั้นล้นออกนอกตาราง */}
+          {reviewWarning !== null && (
+            <span className="block max-w-[180px] whitespace-normal text-right text-[10px] text-amber-700">{reviewWarning}</span>
+          )}
           <Button size="sm" variant="ghost" onClick={() => setMode('reopen')}>
             ตีกลับการเคลียร์
           </Button>
