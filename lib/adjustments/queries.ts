@@ -810,13 +810,15 @@ export async function approveAdjustment(
     }
 
     // `20` §6.2 แถว `locked` — "Executive + บันทึก audit log แยกชัดเจน"
+    // action = approve (ไม่ใช่ unlock — กรองหา "ปลดล็อก" แล้วต้องไม่ปนกับการปลดล็อกงวดจริง · ตรวจ staging SV5-PC-05)
+    // แถวนี้แยกได้จาก `after.locked_period_adjustment` + เหตุผลขึ้นต้น "อนุมัติรายการปรับปรุงของรอบบัญชีที่ปิดแล้ว"
     if (complete && requiresSeparateAuditEntry(periodStatus)) {
       await emitAudit(
         {
           organizationId: user.organizationId,
           actorId: user.id,
           actorRole: user.roleName,
-          action: 'unlock',
+          action: 'approve',
           targetType: TARGET,
           targetId: adjustmentId,
           after: {

@@ -5,10 +5,12 @@
 export interface BulkMapRow {
   id: string
   mappingRule: string
+  /** งวด `locked` ⇒ map ไม่ได้ (API ปฏิเสธ `PERIOD_LOCKED_DIRECT_EDIT` — ตรวจ staging SV5-PC-03) */
+  periodLocked?: boolean
 }
 
 export function bulkMappableIds(rows: readonly BulkMapRow[]): string[] {
-  return rows.filter((row) => row.mappingRule === 'manual').map((row) => row.id)
+  return rows.filter((row) => row.mappingRule === 'manual' && row.periodLocked !== true).map((row) => row.id)
 }
 
 /** รายการที่เลือกอยู่ซึ่งยังอยู่ในหน้าปัจจุบันและ map ได้ (กรอง/โหลดใหม่แล้วรายการหายไป ⇒ ตัดทิ้ง) */

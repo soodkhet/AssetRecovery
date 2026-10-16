@@ -10,6 +10,7 @@ import {
   assertUnlockAllowed,
   canTransitionPeriod,
   evaluateReadiness,
+  readinessVerdict,
   READINESS_CHECK_LINK,
   READINESS_WARNING_LINK,
   isPeriodEnded,
@@ -383,6 +384,15 @@ describe('งวดสิ้นเดือนแล้วจึงส่ง/ล
     expect(onTime.ready).toBe(true)
     expect(() => assertReadyToSend(onTime)).not.toThrow()
   })
+
+  it('ข้อสรุปท้าย Modal: ติดแค่รอสิ้นเดือน = waiting_period_end · ติดข้ออื่นด้วย = blocked (ตรวจ staging SV5-PC-07)', () => {
+    const clean: ReadinessInput = { criticalOpen: [], warningOpenCount: 0, unmatchedBankCount: 0, billingMismatches: [] }
+    const early = { key: october, now: new Date('2026-10-16T05:00:00Z') }
+    expect(readinessVerdict(evaluateReadiness({ ...clean, periodEnd: early }))).toBe('waiting_period_end')
+    expect(readinessVerdict(evaluateReadiness({ ...clean, unmatchedBankCount: 1, periodEnd: early }))).toBe('blocked')
+    expect(readinessVerdict(evaluateReadiness({ ...clean, unmatchedBankCount: 1 }))).toBe('blocked')
+    expect(readinessVerdict(evaluateReadiness(clean))).toBe('ready')
+  })
 })
 
 describe('BUG-163 — หัว Modal ตรวจความพร้อมนับจำนวนข้อจากรายการจริง', () => {
@@ -472,6 +482,13 @@ describe('staging E-058 — บัญชีค่าใช้จ่ายที�
   it('map ครบ ⇒ ไม่มีคำเตือน', () => {
     expect(unmappedCostCenterWarning({ count: 0, amountSatang: 0 })).toBeNull()
     expect(unmappedCostCenterWarning(undefined)).toBeNull()
+  })
+
+  it('งวด locked ⇒ บอกให้ขอผู้บริหารปลดล็อก ไม่ใช่ "ระบุได้ที่แท็บ" (ตรวจ staging SV5-PC-03)', () => {
+    const locked = unmappedCostCenterWarning({ count: 2, amountSatang: 100, periodLocked: true })
+    expect(locked).toContain('ปลดล็อก')
+    expect(locked).not.toContain('ระบุได้ที่แท็บ')
+    expect(unmappedCostCenterWarning({ count: 2, amountSatang: 100 })).toContain('ระบุได้ที่แท็บ')
   })
 })
 

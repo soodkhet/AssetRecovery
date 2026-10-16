@@ -458,8 +458,12 @@ suite('Phase 3.7 — ระดับอนุมัติตาม `period_statu
     expect(approved.status).toBe('approved')
 
     const logs = await auditRows(created.id)
-    expect(logs.map((log) => log.action)).toEqual(['create', 'approve', 'unlock'])
-    const separate = logs[2]
+    // ตรวจ staging SV5-PC-05 — แถวแยกใช้ approve (ไม่ปนกับการปลดล็อกงวดจริง) · แยกได้จาก after.locked_period_adjustment
+    expect(logs.map((log) => log.action).sort()).toEqual(['approve', 'approve', 'create'])
+    const separate = logs.find(
+      (log) => (log.afterData as Record<string, unknown> | null)?.['locked_period_adjustment'] === true,
+    )
+    expect(separate?.action).toBe('approve')
     expect(separate?.actorRole).toBe('บริหาร')
     expect(separate?.reason).toContain('รอบบัญชีที่ปิดแล้ว')
   })

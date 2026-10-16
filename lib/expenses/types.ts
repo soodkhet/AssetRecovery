@@ -24,6 +24,8 @@ export interface ExpenseRecordDto {
   netSatang: number
   costCenterId: string | null
   costCenterLabel: string | null
+  /** งวดของรายการ `locked` ⇒ ระบุศูนย์ต้นทุนไม่ได้จนกว่าผู้บริหารปลดล็อก (ตรวจ staging SV5-PC-03) */
+  periodLocked: boolean
   mappingRule: CostCenterMappingRule
   documentStatus: DocumentStatus
   documentStatusLabel: string

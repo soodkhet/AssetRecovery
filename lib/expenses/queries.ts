@@ -20,7 +20,7 @@ import type { CostCenterOptionDto, ExpenseRecordDto, ExpenseRecordListDto } from
 import { Prisma } from '@/lib/generated/prisma/client'
 import { prisma } from '@/lib/prisma'
 import { SettingsError } from '@/lib/settings/errors'
-import { assertPeriodEditable } from '@/lib/settings/period-lock'
+import { assertPeriodEditable, isDirectEditBlocked } from '@/lib/settings/period-lock'
 import { syncWhtCertificatesFromPayout, type PayoutSyncOptions } from '@/lib/wht/queries'
 import { assertOrgWideReadable } from '@/lib/auth/scope'
 
@@ -116,6 +116,7 @@ function toDto(row: RecordRow): ExpenseRecordDto {
     netSatang: row.netSatang,
     costCenterId: row.costCenterId,
     costCenterLabel: row.costCenter === null ? null : `${row.costCenter.code} — ${row.costCenter.name}`,
+    periodLocked: isDirectEditBlocked(row.period.status),
     mappingRule,
     documentStatus,
     documentStatusLabel: DOCUMENT_STATUS_LABEL[documentStatus],

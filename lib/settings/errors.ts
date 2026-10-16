@@ -242,6 +242,25 @@ export const PERIOD_LOCKED_CUTOFF_MESSAGE: ErrorMessage = {
     'งวดบัญชีของวันตัดรอบที่เลือกปิดแล้ว (หรือส่งสำนักงานบัญชีแล้ว) — เลือกวันตัดรอบในงวดที่ยังเปิดอยู่ เช่น วันนี้ แล้วสร้างใหม่',
 }
 
+/**
+ * `PERIOD_LOCKED_DIRECT_EDIT` ตอน**บันทึกรายการใหม่**ที่วันที่เกิดรายการอยู่ในงวดที่ปิดแล้ว (ตรวจ staging SV5-PC-04)
+ * — รายการใหม่ใช้ Adjustment แทนไม่ได้ (Adjustment ต้องอ้างรายการที่มีอยู่แล้ว) ⇒ บอกให้ลงวันที่ในงวดที่ยังเปิด
+ */
+export const PERIOD_LOCKED_NEW_ENTRY_MESSAGE: ErrorMessage = {
+  title: 'วันที่ของรายการอยู่ในงวดที่ปิดแล้ว',
+  message:
+    'งวดบัญชีของวันที่ที่เลือกปิดแล้ว (หรือส่งสำนักงานบัญชีแล้ว) — บันทึกด้วยวันที่ในงวดที่ยังเปิดอยู่ แล้วระบุวันที่จริงในหมายเหตุ',
+}
+
+/**
+ * `PERIOD_LOCKED_DIRECT_EDIT` ของงานที่**ไม่กระทบยอด** (เช่นระบุศูนย์ต้นทุน) ในงวด `locked` (ตรวจ staging SV5-PC-03)
+ * — Adjustment ใช้ปรับยอดเงินเท่านั้น ⇒ บอกทางที่ทำได้จริง: ให้ผู้บริหารปลดล็อกงวดก่อน
+ */
+export const PERIOD_LOCKED_NON_AMOUNT_MESSAGE: ErrorMessage = {
+  title: 'รอบบัญชีปิดแล้ว',
+  message: 'รอบบัญชีนี้ปิดแล้ว แก้ไขไม่ได้ — ข้อมูลนี้ไม่กระทบยอดเงิน จึงไม่ต้องทำรายการปรับปรุง ต้องให้ผู้บริหารปลดล็อกรอบก่อนจึงจะแก้ได้',
+}
+
 export function settingsErrorStatus(code: SettingsErrorCode): number {
   return HTTP_STATUS[code]
 }

@@ -53,7 +53,7 @@ import { notifyExpensesAwaitingApproval } from '@/lib/notifications/approval-que
 import { loadPayeeInfoGaps } from '@/lib/payees/queries'
 import { prisma } from '@/lib/prisma'
 import { expenseReceiptRule } from '@/lib/uploads/rules'
-import { verifyUploadedFile } from '@/lib/uploads/verify'
+import { discardUnboundUpload, verifyUploadedFile } from '@/lib/uploads/verify'
 import {
   cancelSubstituteReceiptInTx,
   issueReplacementSubstituteReceiptInTx,
@@ -920,11 +920,18 @@ export async function submitHotelClaim(
   })
 
   // Period Lock (`13` §6.11 · Phase 4.1) — ค่าที่พักกรอกวันที่เองได้ ⇒ ย้อนเข้างวดที่ปิดแล้วไม่ได้
-  await assertPeriodOpenAt({
-    organizationId: user.organizationId,
-    at: input.expenseDate,
-    targetType: 'expenses',
-  })
+  // (บอกให้ลงวันที่ในงวดที่เปิด + ลบใบเสร็จที่เพิ่งอัปโหลด — ตรวจ staging SV5-PC-04)
+  try {
+    await assertPeriodOpenAt({
+      organizationId: user.organizationId,
+      at: input.expenseDate,
+      targetType: 'expenses',
+      newEntryDate: true,
+    })
+  } catch (error) {
+    await discardUnboundUpload(receiptFileUrl, expenseReceiptRule(user.id))
+    throw error
+  }
 
   // ผู้พักร่วมต้องเป็นคนในทีมเดียวกัน — เช็คจากทีมของผู้เบิกเอง (`41` §12)
   const teammates = await prisma.user.findMany({

@@ -1,5 +1,11 @@
 import type { AccountingPeriodStatus } from '@/lib/generated/prisma/enums'
-import { PERIOD_LOCKED_CUTOFF_MESSAGE, PERIOD_LOCKED_MESSAGES_BY_STATUS, SettingsError } from '@/lib/settings/errors'
+import {
+  PERIOD_LOCKED_CUTOFF_MESSAGE,
+  PERIOD_LOCKED_MESSAGES_BY_STATUS,
+  PERIOD_LOCKED_NEW_ENTRY_MESSAGE,
+  PERIOD_LOCKED_NON_AMOUNT_MESSAGE,
+  SettingsError,
+} from '@/lib/settings/errors'
 
 /**
  * นโยบายล็อกรอบบัญชี (`13` §6.11) — **pure ล้วน**
@@ -100,6 +106,8 @@ export function assertPeriodEditable(input: {
   affectsAmount?: boolean
   /** สร้างเอกสารใหม่จาก "วันตัดรอบ" ที่ผู้ใช้เลือก ⇒ บอกให้เปลี่ยนวัน ไม่ใช่ไป Adjustment (preship R7-009) */
   cutoffDate?: boolean
+  /** บันทึกรายการใหม่จาก "วันที่เกิดรายการ" ที่ผู้ใช้เลือก ⇒ บอกให้ลงวันที่ในงวดที่เปิด (SV5-PC-04) */
+  newEntryDate?: boolean
 }): void {
   if (input.periodStatus === null) return
   const affectsAmount = input.affectsAmount ?? true
@@ -111,12 +119,22 @@ export function assertPeriodEditable(input: {
       periodStatus: input.periodStatus,
       affectsAmount,
       ...(input.cutoffDate === true ? { reason: 'cutoff_in_closed_period' } : {}),
+      ...(input.newEntryDate === true ? { reason: 'entry_date_in_closed_period' } : {}),
     },
-    messages:
-      input.cutoffDate === true
-        ? PERIOD_LOCKED_CUTOFF_MESSAGE
-        : input.periodStatus === 'collecting'
-          ? undefined
-          : PERIOD_LOCKED_MESSAGES_BY_STATUS[input.periodStatus],
+    messages: periodLockedMessage(input.periodStatus, affectsAmount, input),
   })
+}
+
+/** ข้อความของ `PERIOD_LOCKED_DIRECT_EDIT` ตามทางที่ผู้ใช้ทำได้จริง (Adjustment · เปลี่ยนวัน · ขอปลดล็อก) */
+function periodLockedMessage(
+  status: AccountingPeriodStatus,
+  affectsAmount: boolean,
+  input: { cutoffDate?: boolean; newEntryDate?: boolean },
+) {
+  if (input.cutoffDate === true) return PERIOD_LOCKED_CUTOFF_MESSAGE
+  if (input.newEntryDate === true) return PERIOD_LOCKED_NEW_ENTRY_MESSAGE
+  if (status === 'collecting') return undefined
+  // ไม่กระทบยอดแต่ถูกปฏิเสธได้เฉพาะงวด locked — Adjustment แก้ไม่ได้ ต้องปลดล็อก (SV5-PC-03)
+  if (!affectsAmount) return PERIOD_LOCKED_NON_AMOUNT_MESSAGE
+  return PERIOD_LOCKED_MESSAGES_BY_STATUS[status]
 }

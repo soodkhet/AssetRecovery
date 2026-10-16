@@ -63,7 +63,7 @@ import { exceptionCreatedMessage, periodSentToAccountantMessage } from '@/lib/no
 import { prisma } from '@/lib/prisma'
 import { exceptionLinkOf, exceptionModuleLabel } from '@/lib/reports/dashboard'
 import { summarizeBillingBatch } from '@/lib/revenue/revenue'
-import { periodLockPolicyFor } from '@/lib/settings/period-lock'
+import { isDirectEditBlocked, periodLockPolicyFor } from '@/lib/settings/period-lock'
 import { assertOrgWideReadable } from '@/lib/auth/scope'
 import { fmtDate } from '@/lib/format/datetime'
 import { ACCRUED_EXPENSE_STATUSES } from '@/lib/exports/pack'
@@ -332,6 +332,19 @@ export async function listPeriods(
   )
 }
 
+/**
+ * DTO ของรอบเดียวชุดเดียวกับ `listPeriods()` (ตัวนับข้อยกเว้น · Export ล่าสุด · ยังไม่ map ศูนย์ต้นทุน)
+ * — ใช้เป็นผลตอบของ send/lock/unlock ให้ตรงกับ GET (ตรวจ staging SV5-PC-02)
+ */
+async function periodDtoOf(organizationId: string, row: PeriodRow, now: Date): Promise<AccountingPeriodDto> {
+  const [counts, exports, unmapped] = await Promise.all([
+    exceptionSummaryByPeriod(organizationId, [row.id]),
+    lastExportByPeriod(organizationId, [row.id]),
+    unmappedCostCenterByPeriod(organizationId, [row.id]),
+  ])
+  return toPeriodDto(row, counts.get(row.id) ?? summarizeExceptionCounts([]), exports.get(row.id), now, unmapped.get(row.id) ?? 0)
+}
+
 /** อ่านรอบบัญชีตาม id ในองค์กรของผู้เรียก — 404 แบบไม่ leak ข้ามองค์กร (ใช้ร่วมกับไฟล์ 36) */
 export async function findPeriodById(user: SessionUser, periodId: string): Promise<PeriodRow> {
   const row = await prisma.accountingPeriod.findFirst({
@@ -579,7 +592,11 @@ async function readinessOf(organizationId: string, row: PeriodRow, now: Date): P
     draftBillingBatches: draftBatches,
     organizationProfileIssues,
     openPayoutBatches,
-    unmappedCostCenter: { count: unmappedCostCenter._count._all, amountSatang: unmappedCostCenter._sum.grossSatang ?? 0 },
+    unmappedCostCenter: {
+      count: unmappedCostCenter._count._all,
+      amountSatang: unmappedCostCenter._sum.grossSatang ?? 0,
+      periodLocked: isDirectEditBlocked(row.status),
+    },
     taxInvoiceCoverage,
     receiptsAwaitingTaxInvoice: awaitingReceiptInvoice,
   })
@@ -755,7 +772,7 @@ async function transitionPeriod(
     )
   }
 
-  return toPeriodDto(updated, summarizeExceptionCounts([]), undefined, extra.simulation?.simulatedNow ?? now)
+  return periodDtoOf(ctx.actor.organizationId, updated, extra.simulation?.simulatedNow ?? now)
 }
 
 /**

@@ -558,6 +558,15 @@ suite('Phase 4.1 — Readiness Check + ปิด/ปลดล็อกงวด 
     const sent = await accounting.sendPeriod(ctx(), periodId, reason)
     expect(sent.status).toBe('sent_to_accountant')
     expect(sent.exportReady).toBe(true)
+    // ตรวจ staging SV5-PC-02 — ผลตอบของ send ใช้ DTO ชุดเดียวกับรายการ (ตัวนับข้อยกเว้นไม่หาย)
+    expect(sent.warningCount).toBe(1)
+    const listed = (await accounting.listPeriods(ctx(), { limit: 36 }, IN_PERIOD)).find((period) => period.id === periodId)
+    expect(sent).toMatchObject({
+      criticalCount: listed?.criticalCount,
+      warningCount: listed?.warningCount,
+      exportedAt: listed?.exportedAt,
+      unmappedCostCenterCount: listed?.unmappedCostCenterCount,
+    })
     expect(sent.sentByName).toBe('บัญชี 4.1')
   })
 

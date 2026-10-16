@@ -6,6 +6,7 @@ import { Button, InlineAlert, LoadingState, Modal } from '@/components/ui'
 import {
   READINESS_CHECK_LINK,
   readinessDescription,
+  readinessVerdict,
   type ReadinessLink,
   type ReadinessWarningItem,
 } from '@/lib/accounting/period'
@@ -190,8 +191,13 @@ export function ReadinessModal({
           )}
 
           <p className="text-center text-xs font-semibold">
-            {data.ready ? (
+            {readinessVerdict(data) === 'ready' ? (
               <span className="text-emerald-600">พร้อมส่งสำนักงานบัญชีแล้ว</span>
+            ) : readinessVerdict(data) === 'waiting_period_end' ? (
+              // ตรวจ staging SV5-PC-07 — ติดแค่รอสิ้นเดือน ไม่มีอะไรให้แก้
+              <span className="text-amber-600">
+                ข้อมูลพร้อมแล้ว — รอสิ้นเดือน ({data.checks.find((check) => check.key === 'period_ended')?.detail})
+              </span>
             ) : (
               <span className="text-red-600">ยังไม่พร้อม — แก้รายการที่ติด ✗ ก่อนจึงจะส่งได้</span>
             )}

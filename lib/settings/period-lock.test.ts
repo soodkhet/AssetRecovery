@@ -147,3 +147,31 @@ describe('assertPeriodEditable — สร้างเอกสารจากว
     expect(() => assertPeriodEditable({ periodStatus: null, targetType: 'payout_batches', cutoffDate: true })).not.toThrow()
   })
 })
+
+describe('assertPeriodEditable — ข้อความตามทางที่ทำได้จริง (ตรวจ staging SV5-PC-03/04)', () => {
+  function messageOf(input: Parameters<typeof assertPeriodEditable>[0]): { message: string; reason: unknown } {
+    try {
+      assertPeriodEditable(input)
+    } catch (error) {
+      const settingsError = error as { userMessage: string; context?: Record<string, unknown> }
+      return { message: settingsError.userMessage, reason: settingsError.context?.reason }
+    }
+    throw new Error('ต้องโยน error')
+  }
+
+  it('รายการใหม่ลงวันที่ในงวดปิด ⇒ บอกให้ลงวันที่ในงวดที่เปิด ไม่ใช่ Adjustment', () => {
+    for (const periodStatus of ['locked', 'sent_to_accountant'] as const) {
+      const { message, reason } = messageOf({ periodStatus, targetType: 'expenses', newEntryDate: true })
+      expect(message).toContain('วันที่ในงวดที่ยังเปิดอยู่')
+      expect(message).not.toContain('Adjustment')
+      expect(reason).toBe('entry_date_in_closed_period')
+    }
+  })
+
+  it('งานไม่กระทบยอดในงวด locked ⇒ บอกให้ขอปลดล็อก ไม่ใช่ Adjustment · งานกระทบยอดยังบอก Adjustment', () => {
+    const nonAmount = messageOf({ periodStatus: 'locked', targetType: 'expense_records', affectsAmount: false }).message
+    expect(nonAmount).toContain('ปลดล็อก')
+    expect(nonAmount).not.toContain('Adjustment')
+    expect(messageOf({ periodStatus: 'locked', targetType: 'expenses' }).message).toContain('Adjustment')
+  })
+})

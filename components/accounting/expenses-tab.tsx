@@ -164,7 +164,7 @@ export function ExpensesTab() {
                 <Tr key={row.id} className={row.documentStatus === 'incomplete' ? 'bg-red-50/30' : undefined}>
                   {canMap && (
                     <Td>
-                      {row.mappingRule === 'manual' && (
+                      {row.mappingRule === 'manual' && !row.periodLocked && (
                         <input
                           type="checkbox"
                           aria-label={`เลือกรายการของ ${row.payeeName}`}
@@ -209,10 +209,14 @@ export function ExpensesTab() {
                   </Td>
                   <Td className="text-right whitespace-nowrap">
                     <div className="inline-flex items-center gap-1.5">
-                      {row.mappingRule === 'manual' && canMap && (
+                      {row.mappingRule === 'manual' && canMap && !row.periodLocked && (
                         <Button size="sm" variant="ghost" onClick={() => setMapping(row)}>
                           Map Cost Center
                         </Button>
+                      )}
+                      {/* ตรวจ staging SV5-PC-03 — งวดปิดแล้ว map ไม่ได้ (Adjustment ปรับศูนย์ต้นทุนไม่ได้) ⇒ บอกทางที่ทำได้ */}
+                      {row.mappingRule === 'manual' && canMap && row.periodLocked && (
+                        <span className="text-[10px] text-slate-400">งวดปิดแล้ว — ขอผู้บริหารปลดล็อกก่อน</span>
                       )}
                       <Button size="sm" variant="ghost" onClick={() => setViewing(row)}>
                         ดู

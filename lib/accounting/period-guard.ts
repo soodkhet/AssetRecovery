@@ -62,6 +62,8 @@ export interface PeriodGuardInput {
   affectsAmount?: boolean
   /** สร้างเอกสารใหม่จากวันตัดรอบ ⇒ ข้อความให้เปลี่ยนวัน (preship R7-009) */
   cutoffDate?: boolean
+  /** บันทึกรายการใหม่จากวันที่เกิดรายการ ⇒ ข้อความให้ลงวันที่ในงวดที่เปิด (SV5-PC-04) */
+  newEntryDate?: boolean
 }
 
 /**
@@ -77,6 +79,7 @@ export async function assertPeriodOpenAt(input: PeriodGuardInput, client: QueryC
     targetId: input.targetId ?? null,
     affectsAmount: input.affectsAmount,
     cutoffDate: input.cutoffDate,
+    newEntryDate: input.newEntryDate,
   })
 }
 

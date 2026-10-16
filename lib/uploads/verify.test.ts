@@ -1,7 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ModuleError } from '@/lib/api/errors'
 import { fieldEvidenceFiles, lotDocumentRule } from '@/lib/uploads/rules'
-import { toVerifiedUploadMap, uploadMapJson, verifyUploadedFile, verifyUploadedFiles } from '@/lib/uploads/verify'
+import {
+  discardUnboundUpload,
+  toVerifiedUploadMap,
+  uploadMapJson,
+  verifyUploadedFile,
+  verifyUploadedFiles,
+} from '@/lib/uploads/verify'
 import { putFakeUpload, resetFakeUploads, sampleBytes, sha256Of, uploadTestState } from '@/tests/helpers/fake-uploads'
 
 vi.mock('@/lib/uploads/storage', async () => (await import('@/tests/helpers/fake-uploads')).fakeStorageModule())
@@ -128,6 +134,29 @@ describe('verifyUploadedFile', () => {
     putFakeUpload(path, sampleBytes('text'))
     uploadTestState.failRemove.add(path)
     expect(await codeOf(() => verifyUploadedFile(path, rule))).toBe('UPLOAD_FILE_TYPE_INVALID')
+  })
+})
+
+/** ตรวจ staging SV5-PC-04 — คำขอถูกปฏิเสธก่อนตรวจไฟล์ (งวดปิด) ⇒ ลบไฟล์ที่เพิ่งอัปโหลด */
+describe('discardUnboundUpload', () => {
+  const rule = lotDocumentRule('lot-1', 'signed_doc')
+  const path = 'handover-lots/lot-1/signed-doc/k1.pdf'
+
+  it('ไฟล์ใหม่ใน prefix ของผู้เรียก ไม่มี record อ้าง ⇒ ลบ', async () => {
+    putFakeUpload(path, sampleBytes('pdf'))
+    await discardUnboundUpload(path, rule)
+    expect(uploadTestState.removed).toEqual([path])
+  })
+
+  it('มี record อ้างอยู่แล้ว / นอก prefix / ไม่มี path / ตรวจการอ้างอิงล้ม ⇒ ไม่ลบ ไม่โยน', async () => {
+    referencedPaths.add(path)
+    await discardUnboundUpload(path, rule)
+    referencedPaths.clear()
+    await discardUnboundUpload('handover-lots/lot-2/signed-doc/k.pdf', rule)
+    await discardUnboundUpload(null, rule)
+    referenceCheckFails = true
+    await discardUnboundUpload(path, rule)
+    expect(uploadTestState.removed).toEqual([])
   })
 })
 

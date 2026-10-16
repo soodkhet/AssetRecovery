@@ -62,6 +62,24 @@ export function shouldRemoveRejectedUpload(error: unknown): boolean {
  */
 async function removeRejectedUpload(path: string, error: unknown, options: VerifyUploadOptions): Promise<void> {
   if (!shouldRemoveRejectedUpload(error)) return
+  await removeUnboundUpload(path, options)
+}
+
+/**
+ * คำขอที่แนบไฟล์ใหม่ถูกปฏิเสธ**ก่อนตรวจไฟล์** (เช่นวันที่อยู่ในงวดที่ปิดแล้ว) ⇒ ลบไฟล์ที่เพิ่งอัปโหลดไม่ให้ค้างใน Storage
+ * (ตรวจ staging SV5-PC-04) · เฉพาะ path ใน prefix ของผู้เรียก + ไม่มี record ใดอ้าง — นอกเงื่อนไข ⇒ ไม่ทำอะไร · ไม่โยน
+ */
+export async function discardUnboundUpload(path: string | null | undefined, rule: Pick<UploadRule, 'prefix'>): Promise<void> {
+  if (path === null || path === undefined) return
+  try {
+    assertUploadPathInScope(path, rule.prefix)
+  } catch {
+    return
+  }
+  await removeUnboundUpload(path, {})
+}
+
+async function removeUnboundUpload(path: string, options: VerifyUploadOptions): Promise<void> {
   if (options.boundPaths?.includes(path) === true) return
   try {
     if (await isUploadPathReferenced(path)) return

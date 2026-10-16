@@ -195,7 +195,12 @@ export function ClosingTab() {
                     </Td>
                     <Td className="text-xs text-slate-500">{fmtDate(period.exportedAt)}</Td>
                     <Td className="text-xs text-slate-500">
-                      <div>{period.sentByName === null ? '—' : `ส่ง: ${period.sentByName}`}</div>
+                      {/* ตรวจ staging SV5-PC-01 — การส่งเป็น action สำคัญ ⇒ แสดงวันเวลาบนรายการเหมือนบรรทัดล็อก */}
+                      <div>
+                        {period.sentByName === null
+                          ? '—'
+                          : `ส่ง: ${period.sentByName}${period.sentAt === null ? '' : ` · ${fmtDateTime(period.sentAt)}`}`}
+                      </div>
                       <div className="text-[10px] text-slate-400">
                         {period.lockedByName === null
                           ? ''

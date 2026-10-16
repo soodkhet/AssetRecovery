@@ -18,7 +18,7 @@ import { notifyExpensesAwaitingApproval } from '@/lib/notifications/approval-que
 import { prisma } from '@/lib/prisma'
 import { issueSubstituteReceipt } from '@/lib/substitute-receipts/queries'
 import { expenseReceiptRule } from '@/lib/uploads/rules'
-import { verifyUploadedFile } from '@/lib/uploads/verify'
+import { discardUnboundUpload, verifyUploadedFile } from '@/lib/uploads/verify'
 
 /**
  * Manual Claim — ชั้น DB (`15` §6.1/§14 · `27` §6.4)
@@ -65,12 +65,19 @@ export async function createManualClaim(
     throw new AuthError('PERMISSION_DENIED', 'บันทึกรายการเบิกแทนผู้อื่นต้องมีสิทธิ์อนุมัติขั้นการเงิน')
   }
 
-  // Period Lock (`13` §6.11 · Phase 4.1) — เบิกย้อนหลังเข้างวดที่ปิดแล้วไม่ได้ ต้องผ่าน Adjustment
-  await assertPeriodOpenAt({
-    organizationId: user.organizationId,
-    at: input.expenseDate,
-    targetType: 'expenses',
-  })
+  // Period Lock (`13` §6.11 · Phase 4.1) — เบิกย้อนหลังเข้างวดที่ปิดแล้วไม่ได้ ⇒ บอกให้ลงวันที่ในงวดที่เปิด
+  // + ลบใบเสร็จที่เพิ่งอัปโหลดก่อนถูกปฏิเสธ ไม่ให้ค้างใน Storage (ตรวจ staging SV5-PC-04)
+  try {
+    await assertPeriodOpenAt({
+      organizationId: user.organizationId,
+      at: input.expenseDate,
+      targetType: 'expenses',
+      newEntryDate: true,
+    })
+  } catch (error) {
+    await discardUnboundUpload(input.receiptFileUrl, expenseReceiptRule(user.id))
+    throw error
+  }
 
   // มติ PO U143 — ใบเสร็จต้องเป็นไฟล์ที่อัปโหลดผ่าน server แล้ว: ดาวน์โหลดมาตรวจเอง (prefix ของผู้บันทึก · มีจริง ·
   // magic bytes รูป/PDF · ขนาด) + SHA-256 ของ server · นอก `$transaction` (I/O เครือข่าย)

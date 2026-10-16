@@ -13,6 +13,10 @@ describe('เลือกหลายรายการ map ศูนย์ต�
     expect(effectiveBulkSelection(new Set(['a', 'b', 'x']), rows)).toEqual(['a'])
   })
 
+  it('รายการในงวด locked เลือกไม่ได้ (ตรวจ staging SV5-PC-03)', () => {
+    expect(bulkMappableIds([...rows, { id: 'd', mappingRule: 'manual', periodLocked: true }])).toEqual(['a', 'c'])
+  })
+
   it('เลือกทั้งหมด ⇒ เลือกทุก manual · กดซ้ำ ⇒ ล้าง', () => {
     const all = toggleAllBulkSelection(new Set(), rows)
     expect([...all]).toEqual(['a', 'c'])
