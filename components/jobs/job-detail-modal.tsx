@@ -14,6 +14,7 @@ import {
   RefText,
   StatusBadge,
   Textarea,
+  useResetOnRecordChange,
   useRevealFieldError,
 } from '@/components/ui'
 import { fmtDateTime } from '@/lib/format/datetime'
@@ -47,6 +48,15 @@ export function JobDetailModal({
   const [reasonError, setReasonError] = useState<string | undefined>(undefined)
   const { detail, loading, error } = useJobDetail(id, refreshToken)
 
+  // ตรวจซ้ำ staging SV5-A11Y-L-01 — component ค้าง mount ⇒ "ทิ้งข้อมูล" ล้างเหตุผลจริง + เปิดงานอื่นได้ฟอร์มว่าง
+  // (เปิดงานเดิมคงร่าง — กติกาเดียวกับฟอร์มที่เก็บร่างอื่น · มติผู้ใช้ 14/10/2569)
+  function resetDraft(): void {
+    setReason('')
+    setReasonError(undefined)
+    setRetryError(null)
+  }
+  useResetOnRecordChange(id, resetDraft)
+
   const canRetry =
     session?.isSuperadmin === true && detail !== null && (detail.status === 'failed' || detail.status === 'dead_letter' || detail.status === 'cancelled')
 
@@ -72,6 +82,7 @@ export function JobDetailModal({
     <Modal
       open={id !== null}
       onClose={onClose}
+      onDiscard={resetDraft}
       // ปุ่ม "สั่งทำงานใหม่" อยู่ใน body ⇒ ล็อกระหว่างส่ง (preship R4-006)
       busy={submitting}
       size="lg"

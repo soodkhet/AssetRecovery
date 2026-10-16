@@ -225,6 +225,8 @@ describe('ฟอร์มใน modal ที่ร่างค้างข้า
       'components/roles/roles-manager.tsx',
       'components/settings/holidays-tab.tsx',
       'components/settings/device-catalog-lists.tsx',
+      // ตรวจซ้ำ staging SV5-A11Y-L-01 — `open={id !== null}` ค้าง mount (ไม่มี early return) ⇒ ต้องส่ง onDiscard
+      'components/jobs/job-detail-modal.tsx',
     ]) {
       expect(files, expected).toContain(expected)
     }
