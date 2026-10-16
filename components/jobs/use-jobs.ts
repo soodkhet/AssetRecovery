@@ -132,7 +132,13 @@ export function useJobDetail(
 }
 
 /** สั่งทำงานใหม่ (`91` §14 — Superadmin เท่านั้น + ต้องมีเหตุผล) */
-export async function requestJobRetry(id: string, reason: string): Promise<ApiUiError | null> {
+/** ตรวจ staging SV5-A11Y-K-03 — คืน `fields` ด้วย ให้หน้าจอผูกข้อผิดกับช่อง "เหตุผล" */
+export async function requestJobRetry(
+  id: string,
+  reason: string,
+): Promise<(ApiUiError & { fields?: Readonly<Record<string, string>> }) | null> {
   const result = await callApi<JobDetailDto>(`/api/jobs/${id}/retry`, jsonRequest('POST', { reason }))
-  return result.error === undefined ? null : { title: result.error.title, message: result.error.message }
+  return result.error === undefined
+    ? null
+    : { title: result.error.title, message: result.error.message, fields: result.error.fields }
 }

@@ -28,10 +28,22 @@ export function TBody({ children }: { children: ReactNode }) {
   return <tbody className="divide-y divide-slate-100">{children}</tbody>
 }
 
+/** ปุ่มที่กดบนแถว (โฟกัสอยู่ที่ตัวแถว) แล้วเท่ากับคลิกแถว — Enter/Space (SV5-A11Y-K-07) */
+export function rowKeyActivates(input: {
+  keyboardOpen: boolean
+  key: string
+  defaultPrevented: boolean
+  onRowItself: boolean
+}): boolean {
+  if (!input.keyboardOpen || input.defaultPrevented || !input.onRowItself) return false
+  return input.key === 'Enter' || input.key === ' '
+}
+
 export function Tr({
   children,
   className,
   interactive = false,
+  onKeyDown,
   ...rest
 }: {
   children: ReactNode
@@ -39,8 +51,33 @@ export function Tr({
   /** แถวที่กดได้ — เพิ่ม hover ตาม mockup */
   interactive?: boolean
 } & React.HTMLAttributes<HTMLTableRowElement>) {
+  // ตรวจ staging SV5-A11Y-K-07 — แถวที่กดเปิดได้ต้องใช้คีย์บอร์ดได้ด้วย: Tab ถึงแถว + Enter/Space = คลิก
+  // (เฉพาะเมื่อโฟกัสอยู่ที่ตัวแถวเอง — ปุ่ม/ลิงก์ข้างในแถวทำงานของตัวเองตามปกติ)
+  const keyboardOpen = interactive && rest.onClick !== undefined
   return (
-    <tr className={cn(interactive && 'cursor-pointer hover:bg-slate-50', className)} {...rest}>
+    <tr
+      tabIndex={keyboardOpen ? 0 : undefined}
+      className={cn(
+        interactive && 'cursor-pointer hover:bg-slate-50',
+        keyboardOpen && 'focus-ring-inset focus-visible:bg-slate-50',
+        className,
+      )}
+      onKeyDown={(event) => {
+        onKeyDown?.(event)
+        if (
+          rowKeyActivates({
+            keyboardOpen,
+            key: event.key,
+            defaultPrevented: event.defaultPrevented,
+            onRowItself: event.target === event.currentTarget,
+          })
+        ) {
+          event.preventDefault()
+          event.currentTarget.click()
+        }
+      }}
+      {...rest}
+    >
       {children}
     </tr>
   )

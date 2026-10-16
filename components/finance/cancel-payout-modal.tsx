@@ -1,7 +1,7 @@
 'use client'
 
 import { useId, useState } from 'react'
-import { Button, Field, InlineAlert, Modal, Textarea, useToast } from '@/components/ui'
+import { Button, Field, InlineAlert, Modal, ModalCancelButton, Textarea, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { fmtDateTime } from '@/lib/format/datetime'
 import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
@@ -67,9 +67,9 @@ export function CancelPayoutModal({
       description="ยกเลิกได้เฉพาะรอบที่ยังไม่ได้โอนเงินจริง รายการทั้งหมดจะกลับไปรอจ่าย"
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>
+          <ModalCancelButton onClose={onClose}>
             ปิด
-          </Button>
+          </ModalCancelButton>
           <Button variant="danger" loading={saving} disabled={!ready} onClick={() => void submit()}>
             ยืนยันยกเลิกรอบจ่าย
           </Button>
@@ -109,8 +109,11 @@ export function CancelPayoutModal({
 
         {fileGenerated && (
           <label className="flex items-start gap-2 text-xs text-slate-700">
+            {/* ตรวจ staging SV5-A11Y-K-06 — ช่องบังคับ (ปุ่มยืนยันปิดจนติ๊ก) ⇒ aria-required + ดอกจัน */}
             <input
               type="checkbox"
+              required
+              aria-required="true"
               className="focus-ring mt-0.5 h-4 w-4 rounded border-slate-300"
               checked={confirmFileNotSent}
               onChange={(event) => setConfirmFileNotSent(event.target.checked)}
@@ -119,6 +122,7 @@ export function CancelPayoutModal({
               ตรวจสอบแล้วว่า<strong>ยังไม่ได้อัปโหลดไฟล์โอน</strong>
               {batch.paymentFileGeneratedAt !== null && ` (สร้างเมื่อ ${fmtDateTime(batch.paymentFileGeneratedAt)})`}
               {' '}เข้าระบบธนาคาร และยังไม่มีการโอนเงินของรอบนี้
+              <span className="ml-0.5 text-red-500">*</span>
             </span>
           </label>
         )}

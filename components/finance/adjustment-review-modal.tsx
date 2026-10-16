@@ -1,7 +1,17 @@
 'use client'
 
 import { useId, useState } from 'react'
-import { Button, Field, InlineAlert, Modal, RefText, StatusBadge, Textarea, useToast } from '@/components/ui'
+import {
+  Button,
+  Field,
+  InlineAlert,
+  Modal,
+  ModalCancelButton,
+  RefText,
+  StatusBadge,
+  Textarea,
+  useToast,
+} from '@/components/ui'
 import {
   ADJUSTMENT_TYPE_TONE,
   adjustmentSignPrefix,
@@ -91,9 +101,9 @@ export function AdjustmentReviewModal({
       description={adjustment.targetLabel}
       footer={
         <>
-          <Button variant="secondary" onClick={close}>
+          <ModalCancelButton onClose={close}>
             ยกเลิก
-          </Button>
+          </ModalCancelButton>
           <Button
             loading={saving}
             variant={mode === 'approve' ? 'primary' : 'danger'}
@@ -157,7 +167,13 @@ export function AdjustmentReviewModal({
             </Field>
           </>
         ) : (
-          <Field id={`${fieldId}-rejection-reason`} label="เหตุผลที่ปฏิเสธ (บังคับกรอก)" required>
+          <Field
+            // ตรวจ staging SV5-A11Y-K-04 — บอกขั้นต่ำ 5 ตัวอักษร (ปุ่มยืนยันปิดจนครบ)
+            id={`${fieldId}-rejection-reason`}
+            label="เหตุผลที่ปฏิเสธ (บังคับกรอก)"
+            required
+            hint="อย่างน้อย 5 ตัวอักษร"
+          >
             <Textarea
               id={`${fieldId}-rejection-reason`}
               maxLength={1000}

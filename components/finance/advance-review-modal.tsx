@@ -1,7 +1,7 @@
 'use client'
 
 import { useId, useState } from 'react'
-import { Button, Field, InlineAlert, Modal, MoneyInput, Textarea, useToast } from '@/components/ui'
+import { Button, Field, InlineAlert, Modal, ModalCancelButton, MoneyInput, Textarea, useToast } from '@/components/ui'
 import { advanceRejectedToastText } from '@/lib/advances/advance-ui'
 import type { AdvanceDto, AdvanceRejectResultDto } from '@/lib/advances/types'
 import { callApi, jsonRequest, type ApiCallResult } from '@/lib/api/types'
@@ -89,9 +89,9 @@ export function AdvanceReviewModal({
       description={advance.caseRef === null ? advance.purpose : `${advance.purpose} · เคส ${advance.caseRef}`}
       footer={
         <>
-          <Button variant="secondary" onClick={close}>
+          <ModalCancelButton onClose={close}>
             ยกเลิก
-          </Button>
+          </ModalCancelButton>
           <Button
             loading={saving}
             disabled={mode === 'approve' ? invalidAmount || exceedsRequest : reason.trim().length < 5}
@@ -118,7 +118,18 @@ export function AdvanceReviewModal({
               อนุมัติแล้วเงินจะ<b>โอนให้ผู้ขอในรอบจ่ายถัดไป</b> — ผู้ขอเคลียร์ยอดได้หลังรอบจ่ายนั้นยืนยันจ่ายแล้ว และจะขอเบิกใหม่ไม่ได้จนกว่าจะเคลียร์ยอดนี้เสร็จ
             </InlineAlert>
 
-            <Field id={`${fieldId}-approved-amount`} label="ยอดที่อนุมัติ (บาท) — เว้นว่าง = อนุมัติเต็มจำนวน">
+            {/* ตรวจ staging SV5-A11Y-K-02 — ข้อผิดยอดผูกกับช่อง (aria-invalid/describedby) · ยอด 0 บอกเหตุแทนปุ่มปิดเงียบ */}
+            <Field
+              id={`${fieldId}-approved-amount`}
+              label="ยอดที่อนุมัติ (บาท) — เว้นว่าง = อนุมัติเต็มจำนวน"
+              error={
+                invalidAmount
+                  ? 'ยอดที่อนุมัติต้องมากกว่า 0 — เว้นว่างเพื่ออนุมัติเต็มจำนวน'
+                  : exceedsRequest
+                    ? 'อนุมัติเกินยอดที่ขอเบิกไม่ได้ — ปรับได้แค่ลดลงเท่านั้น'
+                    : undefined
+              }
+            >
               <MoneyInput
                 id={`${fieldId}-approved-amount`}
                 placeholder={`เต็มจำนวน ${fmtSatangSymbol(advance.requestedSatang)}`}
@@ -127,18 +138,18 @@ export function AdvanceReviewModal({
               />
             </Field>
 
-            {exceedsRequest && (
-              <InlineAlert tone="error">
-                อนุมัติเกินยอดที่ขอเบิกไม่ได้ — ปรับได้แค่ลดลงเท่านั้น
-              </InlineAlert>
-            )}
-
             <Field id={`${fieldId}-note`} label="หมายเหตุ (ถ้ามี)">
               <Textarea id={`${fieldId}-note`} maxLength={500} rows={2} value={note} onChange={(event) => setNote(event.target.value)} />
             </Field>
           </>
         ) : (
-          <Field id={`${fieldId}-reason`} label="เหตุผลที่ปฏิเสธ (บังคับกรอก)" required>
+          <Field
+            // ตรวจ staging SV5-A11Y-K-04 — บอกขั้นต่ำ 5 ตัวอักษร (ปุ่มยืนยันปิดจนครบ)
+            id={`${fieldId}-reason`}
+            label="เหตุผลที่ปฏิเสธ (บังคับกรอก)"
+            required
+            hint="อย่างน้อย 5 ตัวอักษร"
+          >
             <Textarea
               id={`${fieldId}-reason`}
               maxLength={500}

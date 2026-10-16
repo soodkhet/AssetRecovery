@@ -4,7 +4,18 @@ import { buttonClass } from '@/components/ui/button'
 import { useId, useState } from 'react'
 import { useSession } from '@/components/auth/permission-provider'
 import { requestJobRetry, useJobDetail } from '@/components/jobs/use-jobs'
-import { Button, Field, InlineAlert, LoadingState, Modal, RefText, StatusBadge, Textarea } from '@/components/ui'
+import {
+  Button,
+  Field,
+  InlineAlert,
+  LoadingState,
+  Modal,
+  ModalCancelButton,
+  RefText,
+  StatusBadge,
+  Textarea,
+  useRevealFieldError,
+} from '@/components/ui'
 import { fmtDateTime } from '@/lib/format/datetime'
 import { JOB_STATUS_GROUP, JOB_STATUS_LABEL } from '@/lib/jobs/job-state'
 
@@ -29,8 +40,11 @@ export function JobDetailModal({
   const session = useSession()
   const [refreshToken, setRefreshToken] = useState(0)
   const [reason, setReason] = useState('')
+  // ข้อผิดของช่องเหตุผลจาก server ⇒ เลื่อน+โฟกัสช่อง (ไม่ค้างที่ปุ่ม)
+  const { ref: retryRef, reveal: revealRetryError } = useRevealFieldError()
   const [submitting, setSubmitting] = useState(false)
   const [retryError, setRetryError] = useState<{ title: string; message: string } | null>(null)
+  const [reasonError, setReasonError] = useState<string | undefined>(undefined)
   const { detail, loading, error } = useJobDetail(id, refreshToken)
 
   const canRetry =
@@ -43,9 +57,12 @@ export function JobDetailModal({
     setSubmitting(false)
     if (failure !== null) {
       setRetryError(failure)
+      setReasonError(failure.fields?.reason)
+      if (failure.fields?.reason !== undefined) revealRetryError()
       return
     }
     setRetryError(null)
+    setReasonError(undefined)
     setReason('')
     setRefreshToken((token) => token + 1)
     onRetried()
@@ -61,9 +78,9 @@ export function JobDetailModal({
       title="รายละเอียดงานเบื้องหลัง"
       description="สถานะ ผลลัพธ์ และสาเหตุที่ล้มเหลวของงานที่ระบบทำให้เบื้องหลัง"
       footer={
-        <Button variant="secondary" size="sm" onClick={onClose}>
+        <ModalCancelButton onClose={onClose} size="sm">
           ปิด
-        </Button>
+        </ModalCancelButton>
       }
     >
       {loading && <LoadingState message="กำลังโหลดรายละเอียด..." />}
@@ -126,7 +143,7 @@ export function JobDetailModal({
           <JsonBlock label="ผลลัพธ์ (result)" value={detail.result} />
 
           {canRetry && (
-            <div className="space-y-3 rounded-lg border border-slate-200 p-3">
+            <div ref={retryRef} className="space-y-3 rounded-lg border border-slate-200 p-3">
               <p className="text-sm font-semibold text-slate-900">สั่งทำงานใหม่</p>
               <p className="text-xs text-slate-500">
                 งานจะถูกคืนเข้าคิวและถูกหยิบไปทำในรอบถัดไปของตัวตั้งเวลา — ต้องระบุเหตุผลเพื่อบันทึกลง
@@ -137,13 +154,23 @@ export function JobDetailModal({
                   {retryError.message}
                 </InlineAlert>
               )}
-              <Field id={`${fieldId}-reason`} label="เหตุผล" required>
+              {/* ตรวจ staging SV5-A11Y-K-03/K-04 — ข้อผิดจาก server ผูกกับช่อง + บอกขั้นต่ำ 5 ตัวอักษร */}
+              <Field
+                id={`${fieldId}-reason`}
+                label="เหตุผล"
+                required
+                hint="อย่างน้อย 5 ตัวอักษร"
+                error={reasonError}
+              >
                 <Textarea
                   id={`${fieldId}-reason`}
                   maxLength={500}
                   rows={2}
                   value={reason}
-                  onChange={(event) => setReason(event.target.value)}
+                  onChange={(event) => {
+                    setReason(event.target.value)
+                    setReasonError(undefined)
+                  }}
                   placeholder="เช่น ปลายทางล่มชั่วคราว แก้ไขแล้วจึงสั่งทำใหม่"
                 />
               </Field>

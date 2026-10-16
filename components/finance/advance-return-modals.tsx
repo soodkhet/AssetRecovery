@@ -121,6 +121,8 @@ export function RecordSeparateReturnModal({
   const amountError = amount.trim() === '' ? null : bahtInputError(amount, 'ยอดที่รับคืน')
   const amountSatang = amountError === null && parsed !== null && Number.isInteger(parsed) ? parsed : null
   const overOutstanding = amountSatang !== null && amountSatang > advance.returnOutstandingSatang
+  // ตรวจ staging SV5-A11Y-K-05 — ยอด 0 บอกเหตุใต้ช่อง (เดิมปุ่มบันทึกปิดเงียบ)
+  const zeroAmount = amountSatang !== null && amountSatang <= 0
   const canSubmit = amountSatang !== null && amountSatang > 0 && !overOutstanding && file !== null && receivedDate !== ''
 
   async function submit(): Promise<void> {
@@ -187,13 +189,13 @@ export function RecordSeparateReturnModal({
           label="ยอดที่รับคืน (บาท)"
           required
           hint={`เว้นว่าง = รับคืนเต็มยอดค้าง ${fmtSatangSymbol(advance.returnOutstandingSatang)}`}
-          error={amountError ?? (overOutstanding ? 'ยอดเกินยอดคืนค้าง' : null)}
+          error={amountError ?? (overOutstanding ? 'ยอดเกินยอดคืนค้าง' : zeroAmount ? 'ยอดที่รับคืนต้องมากกว่า 0' : null)}
         >
           <MoneyInput
             id="adv-return-amount"
             placeholder="0.00"
             value={amount}
-            invalid={amountError !== null || overOutstanding}
+            invalid={amountError !== null || overOutstanding || zeroAmount}
             onChange={(event) => setAmount(event.target.value)}
           />
         </Field>
