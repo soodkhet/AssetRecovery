@@ -61,7 +61,12 @@ import { advanceClearReopenedMessage, advanceDecidedMessage } from '@/lib/notifi
 import { captureLetterheadSnapshot } from '@/lib/organization/letterhead'
 import { prisma } from '@/lib/prisma'
 import { getFinancePolicy } from '@/lib/settings/queries/finance-policy'
-import { issueSubstituteReceipt, substituteReceiptRefOf, substituteReceiptsRelationSelect } from '@/lib/substitute-receipts/queries'
+import {
+  assertAdvanceSubstituteReceiptSigned,
+  issueSubstituteReceipt,
+  substituteReceiptRefOf,
+  substituteReceiptsRelationSelect,
+} from '@/lib/substitute-receipts/queries'
 import { advanceReturnFileRule, expenseReceiptRule } from '@/lib/uploads/rules'
 import { verifyUploadedFile } from '@/lib/uploads/verify'
 
@@ -846,6 +851,8 @@ export async function reviewAdvanceClear(
   }
   const at = new Date()
   const updated = await prisma.$transaction(async (tx) => {
+    // มติ 16/10/2569 Q1 (F-07) — ใบรับรองแทนใบเสร็จต้องมีฉบับเซ็นก่อน (ตรวจใน transaction เดียวกับการประทับ)
+    await assertAdvanceSubstituteReceiptSigned(tx, advanceId)
     const claimed = await tx.advance.updateMany({
       where: { id: advanceId, organizationId: user.organizationId, status: 'cleared', clearReviewedAt: null, deletedAt: null },
       data: { clearReviewedAt: at, clearReviewedBy: user.id, updatedBy: user.id },

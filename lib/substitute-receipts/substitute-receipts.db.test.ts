@@ -892,6 +892,41 @@ suite('เคลียร์เงินทดรอง "ไม่มีใบ�
       'ADVANCE_NOT_FOUND',
     )
   })
+
+  it('มติ 16/10/2569 Q1 (F-07): ใบรับรองยังไม่มีฉบับเซ็น ⇒ การเงินกด "ตรวจแล้ว" ไม่ได้ · เซ็นแล้ว ⇒ ตรวจได้', async () => {
+    await seedPaidAdvance()
+    await advances.settleAdvance({ actor: agent, meta }, ADV_ID, {
+      usedSatang: 250_000,
+      receiptFileUrl: null,
+      note: null,
+      returnMethod: 'separate',
+      substituteReceipt: { lines: [line(7_000)] },
+    })
+    const crt = await db().substituteReceipt.findFirstOrThrow({ where: { advanceId: ADV_ID } })
+    await expectCode(() => advances.reviewAdvanceClear({ actor: finance, meta }, ADV_ID, { note: null }), 'SUBSTITUTE_RECEIPT_NOT_SIGNED')
+    expect((await db().advance.findUniqueOrThrow({ where: { id: ADV_ID } })).clearReviewedAt).toBeNull()
+
+    const path = `substitute-receipts/${crt.id}/signed/22222222-2222-4222-8222-222222222222.pdf`
+    await receipts.attachSignedSubstituteReceipt({ actor: agent, meta }, crt.id, { signedFilePath: path })
+    const reviewed = await advances.reviewAdvanceClear({ actor: finance, meta }, ADV_ID, { note: null })
+    expect(reviewed.clearReviewedAt).not.toBeNull()
+  })
+
+  it('มติ 16/10/2569 Q1: ใบรับรองถูกยกเลิกโดยยังไม่มีใบใหม่/ใบเสร็จจริง ⇒ "ตรวจแล้ว" ไม่ได้', async () => {
+    await seedPaidAdvance()
+    await advances.settleAdvance({ actor: agent, meta }, ADV_ID, {
+      usedSatang: 250_000,
+      receiptFileUrl: null,
+      note: null,
+      returnMethod: 'separate',
+      substituteReceipt: { lines: [line(7_000)] },
+    })
+    const crt = await db().substituteReceipt.findFirstOrThrow({ where: { advanceId: ADV_ID } })
+    await db().$executeRawUnsafe(
+      `UPDATE substitute_receipts SET status = 'cancelled', cancelled_at = now(), cancelled_by = '${AGENT_ID}', cancel_reason = 'ทดสอบยกเลิก' WHERE id = '${crt.id}'`,
+    )
+    await expectCode(() => advances.reviewAdvanceClear({ actor: finance, meta }, ADV_ID, { note: null }), 'SUBSTITUTE_RECEIPT_NOT_SIGNED')
+  })
 })
 
 suite('U107 — ยกเลิกใบรับรองแทนใบเสร็จ + ออกใบใหม่แทน (มติ PO 06/10/2569)', () => {

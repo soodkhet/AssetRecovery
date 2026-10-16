@@ -281,7 +281,7 @@ describe('advanceCardAmounts (staging E-053)', () => {
   })
 })
 
-describe('คำเตือนก่อน "ตรวจแล้ว" การเคลียร์ (mytester F-07)', () => {
+describe('ปิด "ตรวจแล้ว" การเคลียร์จนกว่าใบรับรองแทนจะมีฉบับเซ็น (mytester F-07 · มติ 16/10/2569 Q1)', () => {
   const crt = {
     id: 'crt-1',
     receiptNumber: 'CRT-2569-0001',
@@ -301,12 +301,16 @@ describe('คำเตือนก่อน "ตรวจแล้ว" การ
     expect(warning).toContain('ฉบับเซ็น')
   })
 
-  it('ไม่มีใบรับรอง / เซ็นแล้ว / ยกเลิกแล้ว ⇒ ไม่เตือน', () => {
+  it('ใบรับรองถูกยกเลิกโดยยังไม่มีใบใหม่/ใบเสร็จจริง ⇒ ปิดพร้อมเหตุผล', () => {
+    expect(advanceClearReviewWarning(advance({ substituteReceipt: { ...crt, status: 'cancelled' } }))).toContain('ถูกยกเลิก')
+  })
+
+  it('ไม่มีใบรับรอง / เซ็นแล้ว / แนบใบเสร็จจริงแล้ว ⇒ กดได้', () => {
     expect(advanceClearReviewWarning(advance({ substituteReceipt: null }))).toBeNull()
     expect(
       advanceClearReviewWarning(advance({ substituteReceipt: { ...crt, status: 'signed', signedAt: '2026-10-11T03:00:00Z' } })),
     ).toBeNull()
-    expect(advanceClearReviewWarning(advance({ substituteReceipt: { ...crt, status: 'cancelled' } }))).toBeNull()
+    expect(advanceClearReviewWarning(advance({ substituteReceipt: crt, receiptFileUrl: 'advances/a1/receipt/k.jpg' }))).toBeNull()
   })
 })
 

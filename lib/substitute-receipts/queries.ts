@@ -587,6 +587,45 @@ export async function assertExpenseSubstituteReceiptSigned(
   }
 }
 
+/**
+ * มติ 16/10/2569 Q1 (mytester F-07) — "ตรวจแล้ว" การเคลียร์เงินทดรองที่ใช้ใบรับรองแทนใบเสร็จ ต้องมีฉบับเซ็นก่อน
+ * (กติกาเดียวกับอนุมัติใบเบิก — ใบรับรองแทนที่ไม่มีลายเซ็นใช้เป็นหลักฐานรายจ่ายไม่ได้ และตรวจแล้วตีกลับไม่ได้อีก)
+ * แนบใบเสร็จจริงแล้ว (`advances.receipt_file_url`) ⇒ ไม่บล็อก · ไม่ผ่าน = `SUBSTITUTE_RECEIPT_NOT_SIGNED`
+ */
+export async function assertAdvanceSubstituteReceiptSigned(
+  client: Pick<ExpenseTxClient, 'substituteReceipt'>,
+  advanceId: string,
+): Promise<void> {
+  const pending = await client.substituteReceipt.findFirst({
+    where: { advanceId, deletedAt: null, status: 'pending_signature', advance: { is: { receiptFileUrl: null } } },
+    select: { receiptNumber: true },
+  })
+  if (pending !== null) {
+    throw new SubstituteReceiptError('SUBSTITUTE_RECEIPT_NOT_SIGNED', {
+      message: `การเคลียร์นี้ใช้ใบรับรองแทนใบเสร็จ ${pending.receiptNumber} — ต้องอัปโหลดฉบับที่เซ็นแล้วก่อนจึงกด "ตรวจแล้ว" ได้`,
+      detail: `advance=${advanceId}`,
+    })
+  }
+  const cancelledOnly = await client.substituteReceipt.findFirst({
+    where: {
+      advanceId,
+      deletedAt: null,
+      status: 'cancelled',
+      advance: {
+        is: { receiptFileUrl: null, substituteReceipts: { none: { deletedAt: null, status: { not: 'cancelled' } } } },
+      },
+    },
+    orderBy: { createdAt: 'desc' },
+    select: { receiptNumber: true },
+  })
+  if (cancelledOnly !== null) {
+    throw new SubstituteReceiptError('SUBSTITUTE_RECEIPT_NOT_SIGNED', {
+      message: `ใบรับรองแทนใบเสร็จ ${cancelledOnly.receiptNumber} ของการเคลียร์นี้ถูกยกเลิกแล้ว — ต้องออกใบใหม่แทน (และอัปโหลดฉบับเซ็น) หรือแนบใบเสร็จจริงก่อนจึงกด "ตรวจแล้ว" ได้`,
+      detail: `advance=${advanceId} substitute_receipt_cancelled`,
+    })
+  }
+}
+
 // ── แหล่งข้อมูลของ PDF ─────────────────────────────────────────────────────────
 
 /** แถว → แหล่งข้อมูลของ builder PDF (pure) */

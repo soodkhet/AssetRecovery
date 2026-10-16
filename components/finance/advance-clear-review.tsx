@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { ReasonConfirmModal } from '@/components/settings/reason-confirm-modal'
-import { Button, ConfirmModal, InlineAlert, useToast } from '@/components/ui'
+import { Button, ConfirmModal, useToast } from '@/components/ui'
 import { StoredFileButton } from '@/components/uploads/stored-file-button'
 import { advanceClearReviewWarning, canReviewAdvanceClear } from '@/lib/advances/advance-ui'
 import type { AdvanceDto } from '@/lib/advances/types'
@@ -11,6 +11,7 @@ import { callApi, jsonRequest } from '@/lib/api/types'
 /**
  * การเงินตรวจการเคลียร์เงินทดรอง (staging E-012 · มติ PO 10/10/2569) — เปิดดูใบเสร็จที่แนบตอนเคลียร์ ·
  * "ตรวจแล้ว" (ประทับผู้ตรวจ ไม่เปลี่ยนสถานะ) · "ตีกลับการเคลียร์" (เหตุผลบังคับ ⇒ กลับรอเคลียร์ + แจ้งผู้ขอ)
+ * ใบรับรองแทนใบเสร็จยังไม่มีฉบับเซ็น ⇒ "ตรวจแล้ว" ถูกปิด (มติ 16/10/2569 Q1)
  * ปุ่มเป็น UX — API ตรวจสิทธิ์/สถานะ/รายการต่อเนื่องซ้ำเสมอ
  */
 export function AdvanceClearReviewActions({
@@ -59,9 +60,17 @@ export function AdvanceClearReviewActions({
       )}
       {reviewable && (
         <>
-          <Button size="sm" variant="success" onClick={() => setMode('review')}>
+          {/* มติ 16/10/2569 Q1 — ใบรับรองแทนยังไม่มีฉบับเซ็น ⇒ ปิดปุ่มพร้อมเหตุผล (server บล็อกซ้ำ) */}
+          <Button
+            size="sm"
+            variant="success"
+            disabled={reviewWarning !== null}
+            title={reviewWarning ?? undefined}
+            onClick={() => setMode('review')}
+          >
             ตรวจแล้ว
           </Button>
+          {reviewWarning !== null && <span className="text-xs text-amber-700">{reviewWarning}</span>}
           <Button size="sm" variant="ghost" onClick={() => setMode('reopen')}>
             ตีกลับการเคลียร์
           </Button>
@@ -77,9 +86,7 @@ export function AdvanceClearReviewActions({
         confirmLabel="ยืนยันตรวจแล้ว"
         confirmVariant="primary"
         loading={saving}
-      >
-        {reviewWarning !== null && <InlineAlert tone="warning">{reviewWarning}</InlineAlert>}
-      </ConfirmModal>
+      />
       <ReasonConfirmModal
         open={mode === 'reopen'}
         title={`ตีกลับการเคลียร์ ${advance.ref}`}

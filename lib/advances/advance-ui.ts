@@ -200,14 +200,20 @@ export function canReviewAdvanceClear(advance: Pick<AdvanceDto, 'status' | 'clea
 }
 
 /**
- * mytester F-07 — คำเตือนก่อนกด "ตรวจแล้ว" เมื่อใบรับรองแทนใบเสร็จของการเคลียร์ยังไม่มีฉบับเซ็น
- * (`15` §9.4 บังคับฉบับเซ็นเฉพาะก่อนอนุมัติใบเบิก — การเคลียร์เงินทดรองยังไม่กำหนด ⇒ เตือน ไม่บล็อก · รอมติ PO)
- * ไม่มีใบรับรอง / ยกเลิกแล้ว / เซ็นแล้ว = `null`
+ * mytester F-07 · มติ 16/10/2569 Q1 — ใบรับรองแทนใบเสร็จของการเคลียร์ยังไม่มีฉบับเซ็น (หรือถูกยกเลิกโดยยังไม่มีใบใหม่)
+ * ⇒ กด "ตรวจแล้ว" ไม่ได้ (server บล็อกด้วย `SUBSTITUTE_RECEIPT_NOT_SIGNED` — ข้อความนี้ใช้ปิดปุ่มและบอกเหตุผลล่วงหน้า)
+ * แนบใบเสร็จจริงแล้ว / ไม่มีใบรับรอง / เซ็นแล้ว = `null`
  */
-export function advanceClearReviewWarning(advance: Pick<AdvanceDto, 'substituteReceipt'>): string | null {
+export function advanceClearReviewWarning(advance: Pick<AdvanceDto, 'substituteReceipt' | 'receiptFileUrl'>): string | null {
   const receipt = advance.substituteReceipt
-  if (receipt === null || receipt.status !== 'pending_signature') return null
-  return `ใบรับรองแทนใบเสร็จ ${receipt.receiptNumber} ยังไม่ได้อัปโหลดฉบับเซ็น — ตรวจแล้วจะตีกลับการเคลียร์นี้ไม่ได้ ควรรอฉบับเซ็นก่อน`
+  if (receipt === null || advance.receiptFileUrl !== null) return null
+  if (receipt.status === 'pending_signature') {
+    return `ใบรับรองแทนใบเสร็จ ${receipt.receiptNumber} ยังไม่ได้อัปโหลดฉบับเซ็น — ต้องอัปโหลดฉบับเซ็นก่อนจึงกด "ตรวจแล้ว" ได้`
+  }
+  if (receipt.status === 'cancelled') {
+    return `ใบรับรองแทนใบเสร็จ ${receipt.receiptNumber} ถูกยกเลิกแล้ว — ต้องออกใบใหม่ (และอัปโหลดฉบับเซ็น) หรือแนบใบเสร็จจริงก่อนจึงกด "ตรวจแล้ว" ได้`
+  }
+  return null
 }
 
 /**
