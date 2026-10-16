@@ -30,6 +30,7 @@
 | v2.15 | 07/10/2569 | **มติ O75**: §6.8 เพิ่มเส้น `paid → partially_paid` เมื่อเอกสาร (ใบเพิ่มหนี้/ยกเลิกใบลดหนี้) ทำให้ยอดตามเอกสารค้าง > 0 · สถานะทั้งตอนรับเงินและตอนเอกสารเปลี่ยนยอดเทียบ**ยอดตามเอกสาร** |
 | v2.16 | 10/10/2569 | **staging E-012 (มติ PO 10/10/2569)** — §6.4 เพิ่ม transition `cleared → approved` (`reopen_clear` — การเงินตีกลับการเคลียร์ · เหตุผลบังคับ · เงื่อนไขในหมายเหตุ) · ไม่เพิ่มสถานะ |
 | v2.17 | 14/10/2569 | **มติ PO 14/10/2569 SV5-R2-01 แนวทาง ก** — §6.17 `cancelled` + ออกใบใหม่แทน เกิดได้ภายใน `resubmit_expense` (§6.3 `needs_revision → pending_approval`) ในทรานแซกชันเดียวกัน — ไม่มี state ใหม่ · transition เดิม |
+| v2.18 | 16/10/2569 | **มติ PO 16/10/2569 (SV5-PC-06 แบบ ก)** — §6.13 `sent_to_accountant → locked`: ผู้ยืนยันปิดงวด = **บัญชี หรือ Executive** (เดิมเขียน Executive อย่างเดียว ขัดกับ `30` §9) — ตรงกับโค้ด (`manage_accounting_period` หรือ `unlock_period`) · ปลดล็อกยังเป็น Executive เท่านั้น |
 
 ขอบเขตเอกสารนี้: รวม state machine ของทุก entity ในโมดูล Finance/Accounting ไว้ในที่เดียว เพื่อให้เห็นภาพรวมและตรวจสอบความสอดคล้องระหว่างกัน
 
@@ -173,7 +174,7 @@ open → authorized (Executive อนุมัติข้ามได้เฉ�
 
 ```
 collecting → sent_to_accountant   (ต้องผ่าน Readiness Check: ไม่มี critical exception + bank reconcile ครบ 100% + billing ตรงกับ revenue)
-sent_to_accountant → locked       (Executive ยืนยันปิดงวด)
+sent_to_accountant → locked       (บัญชี หรือ Executive ยืนยันปิดงวด — มติ PO 16/10/2569 SV5-PC-06 · ตรง `30` §9/§12)
 locked → sent_to_accountant       (ปลดล็อกชั่วคราว — เฉพาะ Executive อนุมัติ + audit log)
 ```
 
