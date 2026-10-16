@@ -1,7 +1,7 @@
 'use client'
 
 import { useId, useState } from 'react'
-import { Button, Field, InlineAlert, Modal, Textarea, useToast } from '@/components/ui'
+import { Button, Field, InlineAlert, Modal, ModalCancelButton, Textarea, useToast } from '@/components/ui'
 import type { AccountantQuestionDto } from '@/lib/accounting/types'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { fmtDateTime } from '@/lib/format/datetime'
@@ -63,9 +63,9 @@ export function AnswerQuestionModal({
           </Button>
         ) : (
           <>
-            <Button variant="secondary" onClick={onClose}>
+            <ModalCancelButton onClose={onClose}>
               ยกเลิก
-            </Button>
+            </ModalCancelButton>
             <Button loading={saving} disabled={!ready} onClick={() => void submit()}>
               ส่งคำตอบ
             </Button>

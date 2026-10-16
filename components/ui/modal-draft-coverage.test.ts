@@ -149,6 +149,34 @@ interface DraftModal {
   clearsOnClose: boolean
 }
 
+/**
+ * ตรวจ staging SV5-A11Y-K-01 — ทุก `<Modal>` ที่มีช่องกรอก: Esc/X ถามเมื่อมีร่างอยู่แล้ว (modal ตรวจช่องที่แก้เอง)
+ * ⇒ ปุ่มยกเลิก/ปิดใน footer ต้องใช้กติกาเดียวกัน (`<ModalCancelButton>`) ไม่ว่าร่างจะค้างข้ามการปิดหรือไม่
+ */
+/** ปุ่มยกเลิกเขียนเองที่ถามยืนยันทิ้งร่างด้วยกติกาของตัวเองอยู่แล้ว (มีเหตุผลกำกับ) */
+const OWN_CANCEL_GUARD: Readonly<Record<string, string>> = {
+  'components/cases/case-form-modal.tsx': 'requestCancel() ถามทิ้งร่างเองเมื่อฟอร์ม/ไฟล์ที่เลือกไว้เปลี่ยน (isCaseFormDirty)',
+}
+
+function formModalsWithHandwrittenCancel(): string[] {
+  const offenders: string[] = []
+  for (const path of [...sourceFiles(join(ROOT, 'components')), ...sourceFiles(join(ROOT, 'app'))]) {
+    const file = relative(ROOT, path)
+    if (file === 'components/ui/modal.tsx') continue
+    const text = readFileSync(path, 'utf8')
+    if (!text.includes('<Modal') || OWN_CANCEL_GUARD[file] !== undefined) continue
+    const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+    walk(source, (node) => {
+      if (!ts.isJsxElement(node) || tagName(node.openingElement) !== 'Modal') return
+      const footer = footerExpression(node.openingElement)
+      if (!containsTag(node, FORM_TAGS) && !containsTag(footer, FORM_TAGS)) return
+      if (handwrittenCancelButtons(footer) === 0) return
+      offenders.push(`${file}:${source.getLineAndCharacterOfPosition(node.openingElement.getStart()).line + 1}`)
+    })
+  }
+  return offenders
+}
+
 function draftModals(): DraftModal[] {
   const result: DraftModal[] = []
   for (const path of [...sourceFiles(join(ROOT, 'components')), ...sourceFiles(join(ROOT, 'app'))]) {
@@ -227,5 +255,11 @@ describe('ฟอร์มใน modal ที่ร่างค้างข้า
       )
       .map((modal) => `${modal.file}:${modal.line}`)
     expect(offenders).toEqual([])
+  })
+})
+
+describe('ทุกฟอร์มใน modal — ปุ่มยกเลิก/ปิดถามเมื่อมีร่างเหมือน Esc/X (ตรวจ staging SV5-A11Y-K-01)', () => {
+  it('ไม่มี <Button>ยกเลิก/ปิด</Button> เขียนเองใน footer ของ modal ที่มีช่องกรอก', () => {
+    expect(formModalsWithHandwrittenCancel()).toEqual([])
   })
 })

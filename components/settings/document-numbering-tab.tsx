@@ -11,16 +11,17 @@ import {
   InlineAlert,
   Input,
   Modal,
+  ModalCancelButton,
   NumericInput,
   Select,
   StatusBadge,
-  TBody,
-  THead,
   Table,
   TableState,
+  TBody,
   Td,
   Textarea,
   Th,
+  THead,
   Tr,
   useToast,
 } from '@/components/ui'
@@ -312,9 +313,9 @@ export function DocumentNumberingTab() {
         description="มีผลกับเอกสารฉบับถัดไป — เอกสารที่ออกแล้วไม่เปลี่ยนเลข"
         footer={
           <>
-            <Button variant="secondary" onClick={closeForm} disabled={saving}>
+            <ModalCancelButton onClose={closeForm} disabled={saving}>
               ยกเลิก
-            </Button>
+            </ModalCancelButton>
             <Button onClick={() => void save()} loading={saving}>
               บันทึกเลขที่เอกสาร
             </Button>

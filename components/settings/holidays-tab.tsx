@@ -16,13 +16,13 @@ import {
   Modal,
   ModalCancelButton,
   Select,
-  TBody,
-  THead,
   Table,
   TableState,
+  TBody,
   Td,
   Textarea,
   Th,
+  THead,
   Tr,
   useRevealFieldError,
   useSubmitError,
@@ -368,9 +368,9 @@ export function HolidaysTab() {
         description="วันที่ซ้ำกับที่มีอยู่แล้วเพิ่มไม่ได้ — ลบรายการเดิมก่อนถ้าต้องการเปลี่ยนชื่อ"
         footer={
           <>
-            <Button variant="secondary" onClick={() => setFormOpen(false)} disabled={saving}>
+            <ModalCancelButton onClose={() => setFormOpen(false)} disabled={saving}>
               ยกเลิก
-            </Button>
+            </ModalCancelButton>
             <Button onClick={() => void save()} loading={saving}>
               เพิ่มวันหยุด
             </Button>

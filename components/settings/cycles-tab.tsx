@@ -15,16 +15,17 @@ import {
   InlineAlert,
   Input,
   Modal,
+  ModalCancelButton,
   NumericInput,
   Select,
   StatusBadge,
-  TBody,
-  THead,
   Table,
   TableState,
+  TBody,
   Td,
   Textarea,
   Th,
+  THead,
   Tr,
   useToast,
 } from '@/components/ui'
@@ -428,9 +429,9 @@ export function CyclesTab() {
         description="ข้อความกำหนดชำระที่แสดงในระบบประกอบมาจากเงื่อนไขที่เลือก — พิมพ์เองไม่ได้เพื่อกันข้อความขัดกับค่าจริง"
         footer={
           <>
-            <Button variant="secondary" onClick={() => setFormOpen(false)} disabled={saving}>
+            <ModalCancelButton onClose={() => setFormOpen(false)} disabled={saving}>
               ยกเลิก
-            </Button>
+            </ModalCancelButton>
             <Button onClick={() => void save()} loading={saving}>
               {editing === null ? 'สร้างรอบ' : 'บันทึกการแก้ไข'}
             </Button>

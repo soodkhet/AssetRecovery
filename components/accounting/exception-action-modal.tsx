@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Button, Field, InlineAlert, Modal, RefText, Textarea, useToast } from '@/components/ui'
+import { Button, Field, InlineAlert, Modal, ModalCancelButton, RefText, Textarea, useToast } from '@/components/ui'
 import type { ExceptionDto } from '@/lib/accounting/types'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { exceptionModuleLabel } from '@/lib/reports/dashboard'
@@ -90,9 +90,9 @@ export function ExceptionActionModal({
       description={`${exception.periodLabel} · ${exceptionModuleLabel(exception.sourceModule)}`}
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>
+          <ModalCancelButton onClose={onClose}>
             ยกเลิก
-          </Button>
+          </ModalCancelButton>
           <Button
             loading={saving}
             disabled={!ready}

@@ -9,15 +9,16 @@ import {
   Field,
   Input,
   Modal,
+  ModalCancelButton,
   NumericInput,
   Select,
   StatusBadge,
-  TBody,
-  THead,
   Table,
   TableState,
+  TBody,
   Td,
   Th,
+  THead,
   Tr,
   useToast,
 } from '@/components/ui'
@@ -271,9 +272,9 @@ function BindTacModal({ initialTac, onClose, onSaved }: { initialTac: string; on
       onClose={onClose}
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>
+          <ModalCancelButton onClose={onClose}>
             ยกเลิก
-          </Button>
+          </ModalCancelButton>
           <Button onClick={() => void save()} loading={saving}>
             บันทึกการผูก
           </Button>

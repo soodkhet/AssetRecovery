@@ -2,7 +2,16 @@
 
 import { useId, useState } from 'react'
 import { AssetSummaryHeader } from '@/components/warehouse/asset-summary-header'
-import { Button, Field, InlineAlert, Modal, Textarea, useRevealFieldError, useToast } from '@/components/ui'
+import {
+  Button,
+  Field,
+  InlineAlert,
+  Modal,
+  ModalCancelButton,
+  Textarea,
+  useRevealFieldError,
+  useToast,
+} from '@/components/ui'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
 import { LOT_REMOVE_ASSET_REASON_MAX } from '@/lib/warehouse/schemas'
@@ -71,9 +80,9 @@ export function RemoveFromLotModal({
       title={`นำเครื่องออกจากล็อต ${lot.lotNumber}`}
       footer={
         <>
-          <Button variant="secondary" onClick={onClose} disabled={submitting}>
+          <ModalCancelButton onClose={onClose} disabled={submitting}>
             ยกเลิก
-          </Button>
+          </ModalCancelButton>
           <Button variant="danger" loading={submitting} onClick={() => void submit()}>
             ยืนยันนำออกจากล็อต
           </Button>

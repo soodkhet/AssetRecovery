@@ -1,7 +1,16 @@
 'use client'
 
 import { useId, useState } from 'react'
-import { Button, Field, InlineAlert, Input, Modal, fieldControlAria, useToast } from '@/components/ui'
+import {
+  Button,
+  Field,
+  InlineAlert,
+  Input,
+  Modal,
+  ModalCancelButton,
+  fieldControlAria,
+  useToast,
+} from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { refundSuspenseInputProblem } from '@/lib/bank-recon/schemas'
 import type { BankTransactionDto } from '@/lib/bank-recon/types'
@@ -99,9 +108,9 @@ export function SuspenseModal({
       }
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>
+          <ModalCancelButton onClose={onClose}>
             ยกเลิก
-          </Button>
+          </ModalCancelButton>
           <Button variant={isRefund ? 'danger' : 'primary'} loading={saving} disabled={!ready} onClick={() => void submit()}>
             {isRefund ? 'ยืนยันคืนเงินผู้โอน' : 'ยืนยันย้ายเป็นเงินรับรอตรวจสอบ'}
           </Button>

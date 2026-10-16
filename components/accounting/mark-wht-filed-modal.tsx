@@ -1,7 +1,7 @@
 'use client'
 
 import { useId, useState } from 'react'
-import { Button, Field, InlineAlert, Modal, Textarea, useToast } from '@/components/ui'
+import { Button, Field, InlineAlert, Modal, ModalCancelButton, Textarea, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { fmtSatangSymbol } from '@/lib/format/money'
 import type { WhtFilingSummaryDto } from '@/lib/wht/types'
@@ -61,9 +61,9 @@ export function MarkWhtFiledModal({
       description="ยืนยันว่ายื่น ภ.ง.ด.1/3/53 ของรอบนี้ต่อกรมสรรพากรเรียบร้อยแล้ว (ยื่นจริงนอกระบบ)"
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>
+          <ModalCancelButton onClose={onClose}>
             ปิด
-          </Button>
+          </ModalCancelButton>
           <Button loading={saving} disabled={!ready} onClick={() => void submit()}>
             ยืนยันว่ายื่นแล้ว
           </Button>

@@ -1,7 +1,7 @@
 'use client'
 
 import { useId, useState } from 'react'
-import { Button, Field, InlineAlert, Modal, Select, Textarea, useToast } from '@/components/ui'
+import { Button, Field, InlineAlert, Modal, ModalCancelButton, Select, Textarea, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import type { CostCenterOptionDto, ExpenseRecordDto } from '@/lib/expenses/types'
 import { fmtCount } from '@/lib/format/money'
@@ -63,9 +63,9 @@ export function CostCenterBulkMapModal({
       description="ใช้ศูนย์ต้นทุนและหมายเหตุเดียวกันกับทุกรายการที่เลือก"
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>
+          <ModalCancelButton onClose={onClose}>
             ยกเลิก
-          </Button>
+          </ModalCancelButton>
           <Button loading={saving} disabled={!ready} onClick={() => void submit()}>
             บันทึกศูนย์ต้นทุน
           </Button>

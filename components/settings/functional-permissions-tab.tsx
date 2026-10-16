@@ -10,14 +10,15 @@ import {
   Field,
   InlineAlert,
   Modal,
+  ModalCancelButton,
   Select,
-  TBody,
-  THead,
   Table,
   TableState,
+  TBody,
   Td,
   Textarea,
   Th,
+  THead,
   Tr,
   useToast,
 } from '@/components/ui'
@@ -289,9 +290,9 @@ export function FunctionalPermissionsTab() {
         description="เลือกระดับสิทธิ์ของแต่ละบทบาทสำหรับฟังก์ชันนี้ — บันทึกครั้งเดียวทุกบทบาทที่เปลี่ยน"
         footer={
           <>
-            <Button variant="secondary" onClick={() => setEditing(null)} disabled={saving}>
+            <ModalCancelButton onClose={() => setEditing(null)} disabled={saving}>
               ยกเลิก
-            </Button>
+            </ModalCancelButton>
             <Button onClick={() => void save()} loading={saving} disabled={changed.length === 0 || reasonTooShort}>
               บันทึกสิทธิ์ ({changed.length})
             </Button>

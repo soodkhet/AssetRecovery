@@ -1,7 +1,18 @@
 'use client'
 
 import { useId, useState } from 'react'
-import { Button, Field, InlineAlert, Input, Modal, MoneyInput, Textarea, fieldControlAria, useToast } from '@/components/ui'
+import {
+  Button,
+  Field,
+  InlineAlert,
+  Input,
+  Modal,
+  ModalCancelButton,
+  MoneyInput,
+  Textarea,
+  fieldControlAria,
+  useToast,
+} from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import type { CustomerWhtDto, CustomerWhtReceiveResultDto } from '@/lib/customer-wht/types'
 import { fmtDate, toInputDate } from '@/lib/format/datetime'
@@ -100,9 +111,9 @@ export function ReceiveCustomerWhtModal({
       description="กรอกตามหนังสือที่ลูกค้าออกให้ และแนบไฟล์สแกน"
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>
+          <ModalCancelButton onClose={onClose}>
             ยกเลิก
-          </Button>
+          </ModalCancelButton>
           <Button loading={saving} disabled={!ready} onClick={() => void submit()}>
             บันทึกได้รับหนังสือ
           </Button>

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Button, Field, InlineAlert, Modal, Textarea, useToast } from '@/components/ui'
+import { Button, Field, InlineAlert, Modal, ModalCancelButton, Textarea, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { toFieldErrors } from '@/lib/api/validation'
 import type { DeviceCatalogStatusCode } from '@/lib/device-catalog/catalog'
@@ -101,9 +101,9 @@ export function DeviceCatalogBulkVisibility({
           title={ACTION_LABEL[pending]}
           footer={
             <>
-              <Button variant="secondary" onClick={() => setPending(null)} disabled={saving}>
+              <ModalCancelButton onClose={() => setPending(null)} disabled={saving}>
                 ยกเลิก
-              </Button>
+              </ModalCancelButton>
               <Button onClick={() => void confirm()} loading={saving}>
                 ยืนยันตั้ง{pending === 'active' ? 'แสดง' : 'ไม่แสดง'} {total.toLocaleString('th-TH')} {unitLabel}
               </Button>

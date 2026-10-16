@@ -5,7 +5,18 @@ import { AddressFields } from '@/components/address/address-fields'
 import { SettingHelp } from '@/components/settings/setting-help'
 import { useCurrentVatRate } from '@/components/settings/use-current-vat-rate'
 import { toFieldErrors } from '@/lib/api/validation'
-import { Button, Field, InlineAlert, Input, Modal, NumericInput, Select, Textarea, useToast } from '@/components/ui'
+import {
+  Button,
+  Field,
+  InlineAlert,
+  Input,
+  Modal,
+  ModalCancelButton,
+  NumericInput,
+  Select,
+  Textarea,
+  useToast,
+} from '@/components/ui'
 import { EMPTY_ADDRESS, formatThaiAddressLineFull, type AddressValue } from '@/lib/address/address-value'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import {
@@ -243,9 +254,9 @@ export function CompanyFormModal({
       description="ข้อมูลนี้ใช้ออกใบกำกับภาษี/ใบวางบิล — ทุกบริษัทต้องผูกเทมเพลตค่าบริการเสมอ"
       footer={
         <>
-          <Button variant="secondary" onClick={onClose} disabled={saving}>
+          <ModalCancelButton onClose={onClose} disabled={saving}>
             ยกเลิก
-          </Button>
+          </ModalCancelButton>
           <Button onClick={() => void save()} loading={saving}>
             {isEdit ? 'บันทึกการแก้ไข' : 'สร้างบริษัท'}
           </Button>

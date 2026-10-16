@@ -12,15 +12,16 @@ import {
   InlineAlert,
   Input,
   Modal,
+  ModalCancelButton,
   Select,
   StatusBadge,
-  TBody,
-  THead,
   Table,
   TableState,
+  TBody,
   Td,
   Textarea,
   Th,
+  THead,
   Tr,
   useToast,
 } from '@/components/ui'
@@ -282,9 +283,9 @@ export function CostCentersTab() {
         description="รหัสศูนย์ต้นทุนระบบเดินให้อัตโนมัติตามลำดับ (CC-001, CC-002, …) — แก้เองไม่ได้"
         footer={
           <>
-            <Button variant="secondary" onClick={() => setFormOpen(false)} disabled={saving}>
+            <ModalCancelButton onClose={() => setFormOpen(false)} disabled={saving}>
               ยกเลิก
-            </Button>
+            </ModalCancelButton>
             <Button onClick={() => void save()} loading={saving}>
               {editing === null ? 'เพิ่มศูนย์ต้นทุน' : 'บันทึกการแก้ไข'}
             </Button>

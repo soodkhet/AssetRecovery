@@ -1,7 +1,21 @@
 'use client'
 
 import { useId, useState } from 'react'
-import { Badge, Button, Field, FieldGroupBox, InlineAlert, Input, Modal, RefText, Textarea, useRevealFieldError, useRovingRadio, useToast } from '@/components/ui'
+import {
+  Badge,
+  Button,
+  Field,
+  FieldGroupBox,
+  InlineAlert,
+  Input,
+  Modal,
+  ModalCancelButton,
+  RefText,
+  Textarea,
+  useRevealFieldError,
+  useRovingRadio,
+  useToast,
+} from '@/components/ui'
 import { cn } from '@/components/ui/cn'
 import { HandoverNotePreview } from '@/components/warehouse/handover-note-preview'
 import { apiPath } from '@/lib/api/contract'
@@ -139,9 +153,9 @@ export function HandoverLotModal({
         description={`${assets.length} เครื่อง · 1 ล็อต = 1 บริษัทไฟแนนซ์เสมอ`}
         footer={
           <>
-            <Button variant="secondary" onClick={onClose} disabled={submitting}>
+            <ModalCancelButton onClose={onClose} disabled={submitting}>
               ยกเลิก
-            </Button>
+            </ModalCancelButton>
             <Button variant="primary" loading={submitting} disabled={type === null} onClick={() => void submit()}>
               บันทึกการนัด
             </Button>

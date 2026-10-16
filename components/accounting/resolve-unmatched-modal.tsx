@@ -2,7 +2,7 @@
 
 import { useId, useState } from 'react'
 import { useBankTransactions } from '@/components/accounting/use-bank-transactions'
-import { Button, Field, InlineAlert, Input, Modal, Select, useToast } from '@/components/ui'
+import { Button, Field, InlineAlert, Input, Modal, ModalCancelButton, Select, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { suspenseRefundCloseNote, suspenseRefundOptions, transactionSide } from '@/lib/bank-recon/matching'
 import type { BankTransactionDto } from '@/lib/bank-recon/types'
@@ -64,9 +64,9 @@ export function ResolveUnmatchedModal({
       description="ใช้กับรายการที่ไม่ใช่รายรับ-รายจ่ายของระบบ เช่น ค่าธรรมเนียมธนาคาร ดอกเบี้ยรับ"
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>
+          <ModalCancelButton onClose={onClose}>
             ยกเลิก
-          </Button>
+          </ModalCancelButton>
           <Button variant="danger" loading={saving} disabled={!ready} onClick={() => void submit()}>
             ยืนยันปิดรายการ
           </Button>

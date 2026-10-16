@@ -8,6 +8,7 @@ import {
   InlineAlert,
   Input,
   Modal,
+  ModalCancelButton,
   MoneyInput,
   NumericInput,
   Select,
@@ -199,9 +200,9 @@ export function CompensationPlanFormModal({
       }
       footer={
         <>
-          <Button variant="secondary" onClick={onClose} disabled={saving}>
+          <ModalCancelButton onClose={onClose} disabled={saving}>
             ยกเลิก
-          </Button>
+          </ModalCancelButton>
           <Button onClick={() => void save()} loading={saving}>
             {isEdit ? 'บันทึกเป็นเวอร์ชันใหม่' : 'สร้างแผน'}
           </Button>

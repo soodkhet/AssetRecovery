@@ -16,16 +16,17 @@ import {
   InlineAlert,
   Input,
   Modal,
+  ModalCancelButton,
   MoneyInput,
   Select,
   StatusBadge,
-  TBody,
-  THead,
   Table,
   TableState,
+  TBody,
   Td,
   Textarea,
   Th,
+  THead,
   Tr,
   useToast,
 } from '@/components/ui'
@@ -394,9 +395,9 @@ export function ApprovalMatrixTab() {
         description={`กำหนดได้สูงสุด ${MAX_APPROVAL_STEPS} ขั้น — เว้นเพดานเงินว่างไว้หมายถึงใช้กับทุกยอด`}
         footer={
           <>
-            <Button variant="secondary" onClick={() => setFormOpen(false)} disabled={saving}>
+            <ModalCancelButton onClose={() => setFormOpen(false)} disabled={saving}>
               ยกเลิก
-            </Button>
+            </ModalCancelButton>
             <Button onClick={() => void save()} loading={saving} disabled={rolesLoading}>
               {editing === null ? 'เพิ่มกติกา' : 'บันทึกการแก้ไข'}
             </Button>

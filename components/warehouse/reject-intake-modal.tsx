@@ -2,7 +2,17 @@
 
 import { useId, useState } from 'react'
 import { AssetSummaryHeader } from '@/components/warehouse/asset-summary-header'
-import { Button, Field, InlineAlert, Modal, Textarea, fieldControlAria, useRevealFieldError, useToast } from '@/components/ui'
+import {
+  Button,
+  Field,
+  InlineAlert,
+  Modal,
+  ModalCancelButton,
+  Textarea,
+  fieldControlAria,
+  useRevealFieldError,
+  useToast,
+} from '@/components/ui'
 import { cn } from '@/components/ui/cn'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
@@ -96,9 +106,9 @@ export function RejectIntakeModal({
       title="ตีกลับ — ไม่รับเครื่องเข้าคลัง"
       footer={
         <>
-          <Button variant="secondary" onClick={onClose} disabled={submitting}>
+          <ModalCancelButton onClose={onClose} disabled={submitting}>
             ยกเลิก
-          </Button>
+          </ModalCancelButton>
           <Button variant="danger" loading={submitting} onClick={() => void submit()}>
             ยืนยันตีกลับ
           </Button>

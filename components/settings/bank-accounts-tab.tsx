@@ -21,16 +21,17 @@ import {
   InlineAlert,
   Input,
   Modal,
+  ModalCancelButton,
   NumericInput,
   Select,
   StatusBadge,
-  TBody,
-  THead,
   Table,
   TableState,
+  TBody,
   Td,
   Textarea,
   Th,
+  THead,
   Tr,
   useToast,
 } from '@/components/ui'
@@ -389,9 +390,9 @@ export function BankAccountsTab() {
         description="การใช้งาน (รับ/จ่าย/ทั้งสอง) เป็นตัวกำหนดว่าบัญชีนี้จะถูกเลือกได้ในรอบจ่ายและการรับชำระ"
         footer={
           <>
-            <Button variant="secondary" onClick={() => setFormOpen(false)} disabled={saving}>
+            <ModalCancelButton onClose={() => setFormOpen(false)} disabled={saving}>
               ยกเลิก
-            </Button>
+            </ModalCancelButton>
             <Button onClick={() => void save()} loading={saving}>
               {editing === null ? 'เพิ่มบัญชี' : 'บันทึกการแก้ไข'}
             </Button>

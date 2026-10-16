@@ -14,6 +14,7 @@ import {
   Input,
   LoadingState,
   Modal,
+  ModalCancelButton,
   Select,
   Textarea,
   useToast,
@@ -236,9 +237,9 @@ export function CompanyDocumentsModal({
               ยกเลิกการอัปโหลด
             </Button>
           ) : (
-            <Button variant="secondary" onClick={onClose}>
+            <ModalCancelButton onClose={onClose}>
               ปิด
-            </Button>
+            </ModalCancelButton>
           )
         }
       >

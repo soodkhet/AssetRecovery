@@ -12,15 +12,16 @@ import {
   InlineAlert,
   Input,
   Modal,
+  ModalCancelButton,
   NumericInput,
   StatusBadge,
-  TBody,
-  THead,
   Table,
   TableState,
+  TBody,
   Td,
   Textarea,
   Th,
+  THead,
   Tr,
   useToast,
 } from '@/components/ui'
@@ -273,9 +274,9 @@ export function VatRatesTab() {
         description="ช่วงวันที่นับแบบรวมปลายทั้งสองด้าน — เว้นวันสิ้นสุดว่างไว้ = ใช้ต่อจนกว่าจะปิดช่วง"
         footer={
           <>
-            <Button variant="secondary" onClick={() => setFormOpen(false)} disabled={saving}>
+            <ModalCancelButton onClose={() => setFormOpen(false)} disabled={saving}>
               ยกเลิก
-            </Button>
+            </ModalCancelButton>
             <Button onClick={() => void save()} loading={saving}>
               {editing === null ? 'เพิ่มอัตรา' : 'บันทึกการแก้ไข'}
             </Button>

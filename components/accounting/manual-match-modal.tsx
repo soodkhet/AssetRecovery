@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useId, useState } from 'react'
-import { Button, Field, InlineAlert, Modal, Select, Textarea, useToast } from '@/components/ui'
+import { Button, Field, InlineAlert, Modal, ModalCancelButton, Select, Textarea, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import {
   MATCH_TARGET_LABEL,
@@ -106,9 +106,9 @@ export function ManualMatchModal({
       description={MATCH_TARGET_LABEL[kind]}
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>
+          <ModalCancelButton onClose={onClose}>
             ยกเลิก
-          </Button>
+          </ModalCancelButton>
           <Button loading={saving} disabled={!ready} onClick={() => void submit()}>
             ยืนยันการจับคู่
           </Button>

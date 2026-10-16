@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Button, Field, InlineAlert, Input, Modal, useToast } from '@/components/ui'
+import { Button, Field, InlineAlert, Input, Modal, ModalCancelButton, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { PASSWORD_MIN_LENGTH } from '@/lib/auth/schemas'
 import { userPasswordResetSchema } from '@/lib/users/schemas'
@@ -69,9 +69,9 @@ export function UserPasswordModal({
       description={user.username === null ? undefined : `ชื่อผู้ใช้: ${user.username}`}
       footer={
         <>
-          <Button variant="secondary" onClick={onClose} disabled={saving}>
+          <ModalCancelButton onClose={onClose} disabled={saving}>
             ยกเลิก
-          </Button>
+          </ModalCancelButton>
           <Button onClick={() => void save()} loading={saving}>
             ตั้งรหัสผ่านใหม่
           </Button>

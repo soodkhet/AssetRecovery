@@ -18,17 +18,18 @@ import {
   InlineAlert,
   Input,
   Modal,
+  ModalCancelButton,
   MoneyInput,
   NumericInput,
   Select,
   StatusBadge,
-  TBody,
-  THead,
   Table,
   TableState,
+  TBody,
   Td,
   Textarea,
   Th,
+  THead,
   Tr,
   useToast,
 } from '@/components/ui'
@@ -350,9 +351,9 @@ export function TaxProfilesTab() {
         description="อัตราและเกณฑ์ทั้งหมดเป็นค่าตั้งได้ — ระบบไม่ได้ฝังอัตราภาษีไว้ตายตัวในการคำนวณ"
         footer={
           <>
-            <Button variant="secondary" onClick={() => setFormOpen(false)} disabled={saving}>
+            <ModalCancelButton onClose={() => setFormOpen(false)} disabled={saving}>
               ยกเลิก
-            </Button>
+            </ModalCancelButton>
             <Button onClick={() => void save()} loading={saving}>
               {editing === null ? 'เพิ่ม Profile' : 'บันทึกการแก้ไข'}
             </Button>

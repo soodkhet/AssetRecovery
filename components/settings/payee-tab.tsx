@@ -20,15 +20,16 @@ import {
   InlineAlert,
   Input,
   Modal,
+  ModalCancelButton,
   Select,
   StatusBadge,
-  TBody,
-  THead,
   Table,
   TableState,
+  TBody,
   Td,
   Textarea,
   Th,
+  THead,
   Tr,
   useToast,
 } from '@/components/ui'
@@ -396,9 +397,9 @@ export function PayeeTab() {
         description="ชื่อผู้รับเงินมาจากชื่อผู้ใช้ในระบบ (ต้องตรงกับหน้าสมุดบัญชี) — แก้ชื่อที่หน้าจัดการผู้ใช้"
         footer={
           <>
-            <Button variant="secondary" onClick={() => setFormOpen(false)} disabled={saving}>
+            <ModalCancelButton onClose={() => setFormOpen(false)} disabled={saving}>
               ยกเลิก
-            </Button>
+            </ModalCancelButton>
             <Button
               onClick={() => void save()}
               loading={saving}

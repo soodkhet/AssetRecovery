@@ -1,7 +1,7 @@
 'use client'
 
 import { type ReactNode, useId, useRef, useState } from 'react'
-import { Button, ConfirmModal, Field, InlineAlert, Input, Modal, useToast } from '@/components/ui'
+import { Button, ConfirmModal, Field, InlineAlert, Input, Modal, ModalCancelButton, useToast } from '@/components/ui'
 import { buttonClass } from '@/components/ui/button'
 import { cn } from '@/components/ui/cn'
 import { FileViewerModal, type ViewableFile } from '@/components/cases/file-viewer-modal'
@@ -164,9 +164,9 @@ export function AttachDocModal({
         description="แนบเอกสารให้ครบแล้วยืนยัน — เป็นขั้นตอนที่ปิดล็อตและปลดล็อกรายการเบิก"
         footer={
           <>
-            <Button variant="secondary" onClick={onClose} disabled={submitting}>
+            <ModalCancelButton onClose={onClose} disabled={submitting}>
               ยกเลิก
-            </Button>
+            </ModalCancelButton>
             <Button
               variant="primary"
               loading={submitting}

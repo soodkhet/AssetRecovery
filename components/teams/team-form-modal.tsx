@@ -1,7 +1,18 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Button, Field, InlineAlert, Input, Modal, Select, Textarea, revealFirstFieldError, useToast } from '@/components/ui'
+import {
+  Button,
+  Field,
+  InlineAlert,
+  Input,
+  Modal,
+  ModalCancelButton,
+  Select,
+  Textarea,
+  revealFirstFieldError,
+  useToast,
+} from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import type { CompensationPlanListDto } from '@/lib/compensation/types'
 import { TeamTaxRuleNotice } from '@/components/teams/team-tax-rule-notice'
@@ -202,9 +213,9 @@ export function TeamFormModal({
       description="ทุกทีมต้องผูกแผนค่าตอบแทนเสมอ — ผู้จัดการดูแลได้หลายทีม ส่วนหัวหน้าทีมสังกัดได้ทีมเดียว"
       footer={
         <>
-          <Button variant="secondary" onClick={onClose} disabled={saving}>
+          <ModalCancelButton onClose={onClose} disabled={saving}>
             ยกเลิก
-          </Button>
+          </ModalCancelButton>
           <Button onClick={() => void save()} loading={saving}>
             {isEdit ? 'บันทึกการแก้ไข' : 'สร้างทีม'}
           </Button>

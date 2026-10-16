@@ -19,15 +19,16 @@ import {
   FieldGroupBox,
   InlineAlert,
   Modal,
+  ModalCancelButton,
   Select,
   StatusBadge,
-  TBody,
-  THead,
   Table,
   TableState,
+  TBody,
   Td,
   Textarea,
   Th,
+  THead,
   Tr,
   useToast,
 } from '@/components/ui'
@@ -483,9 +484,9 @@ export function BankFileFormatsTab() {
         description="เลือกชนิดไฟล์ ธนาคาร และคอลัมน์ตามลำดับที่ธนาคารกำหนดจากรายการ"
         footer={
           <>
-            <Button variant="secondary" onClick={() => setFormOpen(false)} disabled={saving}>
+            <ModalCancelButton onClose={() => setFormOpen(false)} disabled={saving}>
               ยกเลิก
-            </Button>
+            </ModalCancelButton>
             <Button onClick={() => void save()} loading={saving}>
               {editing === null ? 'เพิ่มรูปแบบไฟล์' : 'บันทึกการแก้ไข'}
             </Button>

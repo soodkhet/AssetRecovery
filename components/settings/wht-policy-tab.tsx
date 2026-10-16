@@ -11,15 +11,16 @@ import {
   InlineAlert,
   Input,
   Modal,
+  ModalCancelButton,
   Select,
   StatusBadge,
-  TBody,
-  THead,
   Table,
   TableState,
+  TBody,
   Td,
   Textarea,
   Th,
+  THead,
   Tr,
   useToast,
 } from '@/components/ui'
@@ -379,9 +380,9 @@ export function WhtPolicyTab() {
         description="บันทึกเป็นชุดใหม่พร้อมวันที่มีผล — ชุดเดิมยังอยู่ในประวัติ ไม่ถูกแก้หรือลบ"
         footer={
           <>
-            <Button variant="secondary" onClick={() => setFormOpen(false)} disabled={saving}>
+            <ModalCancelButton onClose={() => setFormOpen(false)} disabled={saving}>
               ยกเลิก
-            </Button>
+            </ModalCancelButton>
             <Button onClick={() => void save()} loading={saving}>
               บันทึกค่าตั้ง
             </Button>

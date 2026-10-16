@@ -2,7 +2,19 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { usePermission } from '@/components/auth/permission-provider'
-import { Badge, Button, ErrorState, Field, InlineAlert, LoadingState, Modal, Select, Textarea, useToast } from '@/components/ui'
+import {
+  Badge,
+  Button,
+  ErrorState,
+  Field,
+  InlineAlert,
+  LoadingState,
+  Modal,
+  ModalCancelButton,
+  Select,
+  Textarea,
+  useToast,
+} from '@/components/ui'
 import {
   MATRIX_LEVELS,
   MATRIX_LEVEL_LABEL,
@@ -145,9 +157,9 @@ export function PermissionMatrixModal({
       description="ระดับสิทธิ์ 3 ระดับ: ✅ ทำได้ / 👁️ ดูอย่างเดียว / — ไม่มีสิทธิ์"
       footer={
         <>
-          <Button variant="secondary" onClick={onClose} disabled={saving}>
+          <ModalCancelButton onClose={onClose} disabled={saving}>
             ยกเลิก
-          </Button>
+          </ModalCancelButton>
           {canManageRoles && (
             <Button
               onClick={() => void save()}

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Button, Field, Input, Modal, Select, Textarea, useToast } from '@/components/ui'
+import { Button, Field, Input, Modal, ModalCancelButton, Select, Textarea, useToast } from '@/components/ui'
 import type { AccountingPeriodDto, ExceptionDto } from '@/lib/accounting/types'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import type { ExceptionLevel } from '@/lib/generated/prisma/enums'
@@ -91,9 +91,9 @@ export function ExceptionFormModal({
       description="ข้อยกเว้นผูกกับรอบบัญชีเสมอ และไม่สืบทอดข้ามรอบ — เดือนถัดไปที่ยังเจอปัญหาเดิมต้องบันทึกใหม่"
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>
+          <ModalCancelButton onClose={onClose}>
             ยกเลิก
-          </Button>
+          </ModalCancelButton>
           <Button loading={saving} disabled={!ready} onClick={() => void submit()}>
             {isEdit ? 'บันทึกการแก้ไข' : 'บันทึกข้อยกเว้น'}
           </Button>

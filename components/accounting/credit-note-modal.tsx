@@ -8,6 +8,7 @@ import {
   InlineAlert,
   Input,
   Modal,
+  ModalCancelButton,
   MoneyInput,
   RefText,
   Select,
@@ -242,9 +243,9 @@ export function CreditNoteModal({
         description={`${invoice.companyName} · ออกเมื่อ ${fmtDate(invoice.invoiceDate)}`}
         footer={
           <>
-            <Button variant="secondary" onClick={onClose}>
+            <ModalCancelButton onClose={onClose}>
               ปิด
-            </Button>
+            </ModalCancelButton>
             {canManage && (
               <Button loading={saving} disabled={!canSubmit} onClick={() => void submit()}>
                 บันทึก{typeLabel}

@@ -1,7 +1,21 @@
 'use client'
 
 import { useId, useState } from 'react'
-import { Button, Field, InlineAlert, Modal, TBody, THead, Table, Td, Textarea, Th, Tr, useToast } from '@/components/ui'
+import {
+  Button,
+  Field,
+  InlineAlert,
+  Modal,
+  ModalCancelButton,
+  TBody,
+  THead,
+  Table,
+  Td,
+  Textarea,
+  Th,
+  Tr,
+  useToast,
+} from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { fmtDateTime } from '@/lib/format/datetime'
 import { fmtSatangSymbol } from '@/lib/format/money'
@@ -72,9 +86,9 @@ export function MarkWhtSupplementaryFiledModal({
       description="ยืนยันว่ายื่นแบบเพิ่มเติมของรอบนี้ต่อกรมสรรพากรเรียบร้อยแล้ว (ยื่นจริงนอกระบบ)"
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>
+          <ModalCancelButton onClose={onClose}>
             ปิด
-          </Button>
+          </ModalCancelButton>
           <Button loading={saving} disabled={!ready} onClick={() => void submit()}>
             ยืนยันว่ายื่นเพิ่มเติมแล้ว
           </Button>

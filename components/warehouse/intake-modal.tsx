@@ -3,7 +3,19 @@
 import { StoredPhotoThumb } from '@/components/ui/stored-photo-thumb'
 import { useId, useState } from 'react'
 import { AssetSummaryHeader } from '@/components/warehouse/asset-summary-header'
-import { Button, Field, FieldGroupBox, InlineAlert, Modal, Textarea, fieldControlAria, useRevealFieldError, useRovingRadio, useToast } from '@/components/ui'
+import {
+  Button,
+  Field,
+  FieldGroupBox,
+  InlineAlert,
+  Modal,
+  ModalCancelButton,
+  Textarea,
+  fieldControlAria,
+  useRevealFieldError,
+  useRovingRadio,
+  useToast,
+} from '@/components/ui'
 import { cn } from '@/components/ui/cn'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
@@ -231,9 +243,9 @@ export function IntakeModal({
       description="ตรวจ IMEI → บันทึกสภาพ → ถ่ายรูปหลักฐาน 7 มุม"
       footer={
         <>
-          <Button variant="secondary" onClick={onClose} disabled={submitting}>
+          <ModalCancelButton onClose={onClose} disabled={submitting}>
             ยกเลิก
-          </Button>
+          </ModalCancelButton>
           <Button
             variant={mismatch && forceProceed ? 'danger' : 'primary'}
             loading={submitting}

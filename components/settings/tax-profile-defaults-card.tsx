@@ -10,14 +10,15 @@ import {
   Field,
   InlineAlert,
   Modal,
+  ModalCancelButton,
   Select,
-  TBody,
-  THead,
   Table,
   TableState,
+  TBody,
   Td,
   Textarea,
   Th,
+  THead,
   Tr,
   useToast,
 } from '@/components/ui'
@@ -260,9 +261,9 @@ export function TaxProfileDefaultsCard() {
         description="มีผลทันทีกับคิวอนุมัติและรอบจ่ายที่สร้างหลังบันทึก — รอบจ่ายเดิมไม่คิดใหม่"
         footer={
           <>
-            <Button variant="secondary" onClick={() => setFormOpen(false)} disabled={saving}>
+            <ModalCancelButton onClose={() => setFormOpen(false)} disabled={saving}>
               ยกเลิก
-            </Button>
+            </ModalCancelButton>
             <Button onClick={() => void save()} loading={saving}>
               บันทึกค่าเริ่มต้น
             </Button>

@@ -8,13 +8,14 @@ import {
   Field,
   InlineAlert,
   Modal,
-  TBody,
-  THead,
+  ModalCancelButton,
   Table,
   TableState,
+  TBody,
   Td,
   Textarea,
   Th,
+  THead,
   Tr,
   useToast,
 } from '@/components/ui'
@@ -176,9 +177,9 @@ export function LockedFieldDaysCard() {
         }
         footer={
           <>
-            <Button variant="secondary" onClick={() => setTarget(null)} disabled={saving}>
+            <ModalCancelButton onClose={() => setTarget(null)} disabled={saving}>
               ยกเลิก
-            </Button>
+            </ModalCancelButton>
             <Button onClick={() => void submit()} loading={saving}>
               ยืนยันสร้างรายการ
             </Button>

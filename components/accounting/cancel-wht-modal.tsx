@@ -1,7 +1,7 @@
 'use client'
 
 import { useId, useState } from 'react'
-import { Button, Field, InlineAlert, Modal, Textarea, useToast } from '@/components/ui'
+import { Button, Field, InlineAlert, Modal, ModalCancelButton, Textarea, useToast } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { fmtDate } from '@/lib/format/datetime'
 import { fmtSatangSymbol } from '@/lib/format/money'
@@ -68,9 +68,9 @@ export function CancelWhtModal({
       description="ใบที่ยกเลิกยังเก็บไว้เป็นหลักฐาน แต่ยอดจะไม่ถูกนับในแบบ ภ.ง.ด. ของรอบอีก"
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>
+          <ModalCancelButton onClose={onClose}>
             ปิด
-          </Button>
+          </ModalCancelButton>
           <Button variant="danger" loading={saving} disabled={!ready} onClick={() => void submit()}>
             ยืนยันยกเลิก
           </Button>

@@ -11,16 +11,17 @@ import { MANAGE_INVOICE_NUMBERING } from '@/components/settings/shared'
 import {
   Button,
   Card,
+  cn,
   ErrorState,
   Field,
   InlineAlert,
   Input,
   LoadingState,
   Modal,
+  ModalCancelButton,
   NumericInput,
   Select,
   Textarea,
-  cn,
   useToast,
 } from '@/components/ui'
 import { TOUCH_TARGET_CLASS } from '@/components/ui/button'
@@ -525,9 +526,9 @@ export function OrganizationProfileTab() {
         size="lg"
         footer={
           <>
-            <Button variant="secondary" onClick={() => setForm(null)} disabled={saving}>
+            <ModalCancelButton onClose={() => setForm(null)} disabled={saving}>
               ยกเลิก
-            </Button>
+            </ModalCancelButton>
             <Button onClick={() => void save()} loading={saving}>
               บันทึก
             </Button>
@@ -680,9 +681,9 @@ export function OrganizationProfileTab() {
         title={imageKind === null ? '' : IMAGE_CONFIG[imageKind].modalTitle}
         footer={
           <>
-            <Button variant="secondary" onClick={() => setImageKind(null)} disabled={logoSaving}>
+            <ModalCancelButton onClose={() => setImageKind(null)} disabled={logoSaving}>
               ยกเลิก
-            </Button>
+            </ModalCancelButton>
             <Button
               onClick={() => {
                 if (imageKind !== null) void saveImage(imageKind, profile.organizationId)

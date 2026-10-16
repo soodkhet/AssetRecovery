@@ -3,7 +3,19 @@
 import { SettingHelp } from '@/components/settings/setting-help'
 import { pctFromInput, satangFromInput, serviceFeeHelp } from '@/lib/settings/help'
 import { useState } from 'react'
-import { Button, Field, InlineAlert, Input, Modal, MoneyInput, NumericInput, Select, Textarea, useToast } from '@/components/ui'
+import {
+  Button,
+  Field,
+  InlineAlert,
+  Input,
+  Modal,
+  ModalCancelButton,
+  MoneyInput,
+  NumericInput,
+  Select,
+  Textarea,
+  useToast,
+} from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { serviceFeeTemplateCreateSchema } from '@/lib/service-fee/schemas'
 import {
@@ -161,9 +173,9 @@ export function ServiceFeeFormModal({
       }
       footer={
         <>
-          <Button variant="secondary" onClick={onClose} disabled={saving}>
+          <ModalCancelButton onClose={onClose} disabled={saving}>
             ยกเลิก
-          </Button>
+          </ModalCancelButton>
           <Button onClick={() => void save()} loading={saving}>
             {isEdit ? 'บันทึกเป็นเวอร์ชันใหม่' : 'สร้างเทมเพลต'}
           </Button>

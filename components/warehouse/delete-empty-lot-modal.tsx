@@ -1,7 +1,16 @@
 'use client'
 
 import { useId, useState } from 'react'
-import { Button, Field, InlineAlert, Modal, Textarea, useRevealFieldError, useToast } from '@/components/ui'
+import {
+  Button,
+  Field,
+  InlineAlert,
+  Modal,
+  ModalCancelButton,
+  Textarea,
+  useRevealFieldError,
+  useToast,
+} from '@/components/ui'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
 import { LOT_REMOVE_ASSET_REASON_MAX } from '@/lib/warehouse/schemas'
@@ -65,9 +74,9 @@ export function DeleteEmptyLotModal({
       title={`ลบล็อตว่าง ${lot.lotNumber}`}
       footer={
         <>
-          <Button variant="secondary" onClick={onClose} disabled={submitting}>
+          <ModalCancelButton onClose={onClose} disabled={submitting}>
             ยกเลิก
-          </Button>
+          </ModalCancelButton>
           <Button variant="danger" loading={submitting} onClick={() => void submit()}>
             ยืนยันลบล็อต
           </Button>

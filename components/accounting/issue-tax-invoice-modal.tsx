@@ -2,7 +2,17 @@
 
 import { useEffect, useState } from 'react'
 import { OrganizationProfileNotice } from '@/components/settings/organization-profile-notice'
-import { Button, Field, InlineAlert, Input, LoadingState, Modal, StatusBadge, useToast } from '@/components/ui'
+import {
+  Button,
+  Field,
+  InlineAlert,
+  Input,
+  LoadingState,
+  Modal,
+  ModalCancelButton,
+  StatusBadge,
+  useToast,
+} from '@/components/ui'
 import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
 import { fmtDate, toInputDate } from '@/lib/format/datetime'
 import { fmtRatePct, fmtSatangSymbol } from '@/lib/format/money'
@@ -114,9 +124,9 @@ export function IssueTaxInvoiceModal({
       description={description}
       footer={
         <>
-          <Button variant="secondary" onClick={onClose}>
+          <ModalCancelButton onClose={onClose}>
             ยกเลิก
-          </Button>
+          </ModalCancelButton>
           <Button loading={saving} disabled={preview.status !== 'ready'} onClick={() => void submit()}>
             ยืนยันออกเอกสาร
           </Button>

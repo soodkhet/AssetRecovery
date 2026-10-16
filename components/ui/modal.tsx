@@ -1,7 +1,7 @@
 'use client'
 
 import { createContext, useContext, useEffect, useId, useRef, useState, type DragEvent, type ReactNode, type SyntheticEvent } from 'react'
-import { Button, type ButtonVariant } from '@/components/ui/button'
+import { Button, type ButtonProps, type ButtonVariant } from '@/components/ui/button'
 import { cn } from '@/components/ui/cn'
 import { installFocusTrap } from '@/components/ui/focus-trap'
 import { FormSubmitFooter } from '@/components/ui/input'
@@ -338,10 +338,15 @@ export function Modal({
  * ปุ่ม "ยกเลิก" ของฟอร์มใน modal ที่ปิด**ผ่านกติกาเดียวกับ Esc/X** — กรอกแล้วถามยืนยันทิ้งก่อน · "ทิ้งข้อมูล" ล้างร่าง
  * (`onDiscard` ของ `<Modal>`) · ใช้กับฟอร์มที่เก็บร่าง (ตรวจซ้ำ staging SV5-J1-01) · นอก `<Modal>` ⇒ เรียก `onClose` ตรง
  */
-export function ModalCancelButton({ onClose, children = 'ยกเลิก' }: { onClose: () => void; children?: ReactNode }) {
+export function ModalCancelButton({
+  onClose,
+  children = 'ยกเลิก',
+  variant = 'secondary',
+  ...rest
+}: Omit<ButtonProps, 'onClick' | 'children'> & { onClose: () => void; children?: ReactNode }) {
   const requestClose = useContext(ModalRequestCloseContext)
   return (
-    <Button variant="secondary" onClick={requestClose ?? onClose}>
+    <Button {...rest} variant={variant} onClick={requestClose ?? onClose}>
       {children}
     </Button>
   )

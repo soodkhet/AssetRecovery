@@ -1,7 +1,17 @@
 'use client'
 
 import { useState } from 'react'
-import { Button, Field, InlineAlert, Input, Modal, NumericInput, Select, useToast } from '@/components/ui'
+import {
+  Button,
+  Field,
+  InlineAlert,
+  Input,
+  Modal,
+  ModalCancelButton,
+  NumericInput,
+  Select,
+  useToast,
+} from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import type { RoleGroup } from '@/lib/generated/prisma/enums'
 import type { FinanceCompanyDto } from '@/lib/finance-companies/types'
@@ -245,9 +255,9 @@ export function UserFormModal({
       description="เลือกกลุ่ม → บทบาท → สังกัด (ทีมสำหรับ Inhouse/Outsource · บริษัทสำหรับกลุ่มไฟแนนซ์)"
       footer={
         <>
-          <Button variant="secondary" onClick={onClose} disabled={saving}>
+          <ModalCancelButton onClose={onClose} disabled={saving}>
             ยกเลิก
-          </Button>
+          </ModalCancelButton>
           <Button onClick={() => void save()} loading={saving}>
             {isEdit ? 'บันทึกการแก้ไข' : 'สร้างบัญชี'}
           </Button>
