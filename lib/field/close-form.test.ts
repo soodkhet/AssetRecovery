@@ -119,6 +119,12 @@ describe('closeFormMode (`41` §7.6)', () => {
     })
   })
 
+  // มติผู้ใช้ 16/10/2569 แบบ ก — โหมดปกติ autosave เป็น Draft ⇒ ปิดไม่ถามทิ้ง · โหมดตีกลับไม่มี Draft ⇒ ถาม
+  it('ถามทิ้งข้อมูลตอนปิดเฉพาะโหมดตีกลับ', () => {
+    expect(closeFormMode(detailOf()).confirmDiscardOnClose).toBe(false)
+    expect(closeFormMode(detailOf({ status: 'needs_revision' })).confirmDiscardOnClose).toBe(true)
+  })
+
   it('กล่องจุดเริ่มเดินทางแสดงเฉพาะทีม PER_KM (§6.4.1)', () => {
     expect(closeFormMode(detailOf({ fuelMode: 'PER_KM' })).showTravelOrigin).toBe(true)
     expect(closeFormMode(detailOf({ fuelMode: 'DAILY_FLAT' })).showTravelOrigin).toBe(false)

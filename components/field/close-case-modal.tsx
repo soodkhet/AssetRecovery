@@ -943,6 +943,8 @@ export function CloseCaseModal({
       size="lg"
       // อัปโหลดสื่อ/check-in/บันทึกต้นทางอยู่ ⇒ ห้ามปิด (ไฟล์จะค้างโดยไม่ผูกเคส) แต่ยังแก้โน้ต/ผลลัพธ์ต่อได้ — R2-005
       lockClose={busy}
+      // โหมดปกติเก็บเป็น Draft อัตโนมัติ ⇒ ปิดได้เลยไม่ถาม · โหมดตีกลับยังถามก่อนทิ้ง (มติผู้ใช้ 16/10/2569 แบบ ก)
+      confirmDiscard={mode === null || mode.confirmDiscardOnClose}
       title={mode?.revision === true ? 'แก้ไขหลักฐานปิดงาน' : 'ปิดงาน'}
       description={detail === null ? undefined : `${detail.debtorName ?? '—'} · ${detail.caseRef}`}
       footer={

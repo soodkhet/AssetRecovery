@@ -59,6 +59,11 @@ export interface CloseFormMode {
   checkinLocked: boolean
   /** โหมดตีกลับไม่มีปุ่มบันทึก Draft (เคสนี้ไม่ใช่งานที่ยังไม่เคยปิด — §7.6) */
   canSaveDraft: boolean
+  /**
+   * ปิดฟอร์มที่กรอกแล้วต้องถาม "ทิ้งข้อมูล?" ไหม — โหมดปกติ autosave เป็น Draft บน server (ปิดแล้วเปิดเคสเดิมได้ค่าเดิม)
+   * จึงไม่ถาม (ทิ้งไม่ได้จริง) · โหมดตีกลับไม่มี Draft ⇒ ถาม (มติผู้ใช้ 16/10/2569 แบบ ก — ไล่ตรวจโมดัลค้าง mount)
+   */
+  confirmDiscardOnClose: boolean
   /** กล่องจุดเริ่มเดินทาง — เฉพาะทีมที่คิดค่าน้ำมันโหมด `PER_KM` (§6.4.1) */
   showTravelOrigin: boolean
   submitLabel: string
@@ -74,6 +79,7 @@ export function closeFormMode(
     // เช็คอินล็อก**ตลอด**อยู่แล้ว (พิกัด GPS จริง ณ เวลานั้น — §6.4) โหมดตีกลับแค่ซ่อนปุ่มเพิ่มด้วย
     checkinLocked: revision,
     canSaveDraft: !revision,
+    confirmDiscardOnClose: revision,
     showTravelOrigin: detail.fuelMode === 'PER_KM',
     submitLabel: revision ? 'ส่งกลับยืนยันอีกครั้ง' : 'ยืนยันปิดงาน',
   }
