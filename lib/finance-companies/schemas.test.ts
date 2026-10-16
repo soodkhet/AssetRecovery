@@ -29,6 +29,22 @@ function fieldsOf(input: unknown): string[] {
 }
 
 describe('financeCompanyCreateSchema', () => {
+  // มติผู้ใช้ 16/10/2569 (แบบ ก) — เบอร์บริษัทไฟแนนซ์ใช้กติกาเดียวกับเบอร์สำนักงานขององค์กร
+  it('เบอร์โทรสำนักงาน/ผู้ติดต่อ: รับเบอร์ไทย + ตัวคั่น + เบอร์ต่อ · ว่าง = null', () => {
+    for (const phone of ['02-111-2233', '02-111-2233 ต่อ 12', '021112233 ext. 5', '(02) 111 2233 #12', '+66 81 234 5678']) {
+      expect(fieldsOf({ ...validInput, phone, contactPhone: phone })).toEqual([])
+    }
+    const parsed = financeCompanyCreateSchema.parse({ ...validInput, phone: '', contactPhone: '   ' })
+    expect(parsed.phone).toBeNull()
+    expect(parsed.contactPhone).toBeNull()
+  })
+
+  it('เบอร์โทรสำนักงาน/ผู้ติดต่อ: ปฏิเสธข้อความอิสระ ตัวอักษร และจำนวนหลักผิด', () => {
+    for (const phone of ['โทรหาคุณเอ', '02-111-22', '12345678901', '081-234-5678a', '021112233 ต่อ']) {
+      expect(fieldsOf({ ...validInput, phone, contactPhone: phone })).toEqual(['phone', 'contactPhone'])
+    }
+  })
+
   it('normalize tax_id เป็นตัวเลขล้วน และเติม default ของ VAT/รูปแบบส่งเอกสาร/รอบบิล', () => {
     const parsed = financeCompanyCreateSchema.parse(validInput)
     expect(parsed.taxId).toBe('0105512345678')

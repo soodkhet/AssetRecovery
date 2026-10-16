@@ -293,7 +293,14 @@ export function CompanyFormModal({
             />
           </Field>
           <Field id="co-phone" label="เบอร์โทรสำนักงาน" error={errors.phone}>
-            <Input id="co-phone" value={form.phone} onChange={(event) => set('phone', event.target.value)} placeholder="021234567" />
+            <Input
+              id="co-phone"
+              type="tel"
+              maxLength={20}
+              value={form.phone}
+              onChange={(event) => set('phone', event.target.value)}
+              placeholder="02-xxx-xxxx"
+            />
           </Field>
         </div>
 
@@ -355,6 +362,8 @@ export function CompanyFormModal({
           <Field id="co-contact-phone" label="เบอร์ผู้ติดต่อ" error={errors.contactPhone}>
             <Input
               id="co-contact-phone"
+              type="tel"
+              maxLength={20}
               value={form.contactPhone}
               onChange={(event) => set('contactPhone', event.target.value)}
             />

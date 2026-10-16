@@ -36,8 +36,8 @@ const NUMERIC_ALLOWLIST: Record<string, string> = {
   'components/warehouse/intake-modal.tsx:imeiActual': 'IMEI — กติกาเฉพาะ (Rule 10: ตัดได้แค่ช่องว่าง/ขีด/จุด ต้องเหลือ 15 หลักพอดี ผ่าน parseImei จุดเดียว)',
   'components/warehouse/reject-intake-modal.tsx:imeiActual': 'IMEI — กติกาเฉพาะ (Rule 10 · parseImei)',
   'components/settings/organization-profile-tab.tsx:form.phone': 'เบอร์สำนักงานรับเบอร์ต่อ "ต่อ 12"/"ext. 12"/"#12" ตาม isThaiPhone — ไม่ใช่ตัวเลขล้วน',
-  'components/finance-companies/company-form-modal.tsx:form.phone': 'เบอร์สำนักงานบริษัทไฟแนนซ์ — spec เป็นข้อความอิสระ ≤ 20 ตัว (อาจมีเบอร์ต่อ) รอมติ',
-  'components/finance-companies/company-form-modal.tsx:form.contactPhone': 'เบอร์ผู้ติดต่อบริษัทไฟแนนซ์ — spec เป็นข้อความอิสระ ≤ 20 ตัว รอมติ',
+  'components/finance-companies/company-form-modal.tsx:form.phone': 'เบอร์สำนักงานบริษัทไฟแนนซ์รับเบอร์ต่อตาม isThaiPhone (มติผู้ใช้ 16/10/2569 แบบ ก) — ไม่ใช่ตัวเลขล้วน',
+  'components/finance-companies/company-form-modal.tsx:form.contactPhone': 'เบอร์ผู้ติดต่อบริษัทไฟแนนซ์รับเบอร์ต่อตาม isThaiPhone (มติผู้ใช้ 16/10/2569 แบบ ก) — ไม่ใช่ตัวเลขล้วน',
 }
 
 function sourceFiles(dir: string, out: string[] = []): string[] {

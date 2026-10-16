@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { pctSchema, reasonSchema, requiredIdSchema } from '@/lib/api/validation'
 import { DEFAULT_CUSTOMER_WHT_PCT, DEFAULT_VAT_MODE, normalizeTaxId } from '@/lib/finance-companies/company'
 import { branchCodeSchema } from '@/lib/format/branch'
+import { isThaiPhone } from '@/lib/format/phone'
 
 /**
  * Zod schema ชุดเดียวใช้ร่วม FE/BE ของโมดูลบริษัทไฟแนนซ์ (ไฟล์ 10 · Rule 04 · Rule 13)
@@ -43,6 +44,16 @@ const optionalText = (max: number) =>
     .nullish()
     .transform((value) => (value === undefined || value === null || value === '' ? null : value))
 
+/**
+ * มติผู้ใช้ 16/10/2569 (แบบ ก) — เบอร์โทรบริษัทไฟแนนซ์ใช้กติกาเดียวกับเบอร์สำนักงานขององค์กร (`isThaiPhone`):
+ * เบอร์ไทร 9–10 หลัก/`+66` คั่นด้วยช่องว่าง/ขีด/วงเล็บ/จุดได้ ต่อท้ายเบอร์ต่อได้ (`ต่อ 12`) · ไม่บังคับกรอก
+ */
+const optionalPhone = (label: string) =>
+  optionalText(20).refine(
+    (value) => value === null || isThaiPhone(value),
+    `${label}ไม่ถูกต้อง — กรอกเบอร์ 9–10 หลัก ขึ้นต้นด้วย 0 (เช่น 02-111-2233 ต่อ 12)`,
+  )
+
 const companyFields = z.object({
   name: z.string().trim().min(2, 'ชื่อบริษัทสั้นเกินไป').max(200, 'ชื่อบริษัทยาวเกินไป'),
   shortName: z.string().trim().min(1, 'ต้องระบุชื่อย่อ').max(20, 'ชื่อย่อยาวเกินไป'),
@@ -50,14 +61,14 @@ const companyFields = z.object({
   branchCode: branchCodeSchema,
   // `10` §7.1 — ที่อยู่ตามที่จดทะเบียนเป็นช่องบังคับ (พิมพ์บนใบกำกับภาษี/ใบแจ้งหนี้ — ม.86/4) · mytester A-08
   address: z.string().trim().min(10, 'กรุณากรอกที่อยู่ตามที่จดทะเบียนให้ครบ (ใช้ออกใบกำกับภาษี)').max(500, 'ที่อยู่ยาวเกินไป'),
-  phone: optionalText(20),
+  phone: optionalPhone('เบอร์โทรสำนักงาน'),
   // ฟอร์มส่ง '' มาเมื่อไม่กรอก — แปลงเป็น null **ก่อน** ตรวจรูปแบบ ไม่งั้นค่าว่างจะติด error อีเมล
   email: z.preprocess(
     (value) => (value === '' || value === undefined ? null : value),
     z.string().trim().max(255).email('รูปแบบอีเมลไม่ถูกต้อง').nullable().default(null),
   ),
   contactName: optionalText(200),
-  contactPhone: optionalText(20),
+  contactPhone: optionalPhone('เบอร์ผู้ติดต่อ'),
   signerName: optionalText(200),
   serviceFeeTemplateId: requiredIdSchema('เทมเพลตค่าบริการ'),
   vatRegistered: z.boolean().default(true),
