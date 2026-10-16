@@ -2007,6 +2007,8 @@ model Case {
   @@index([organizationId, outcome, closedAt], map: "idx_cases_closed")
   /// FK ON DELETE SET NULL — ให้การลบรุ่นใน device_models ไม่ seq scan ทั้งตาราง (`02` v4.65)
   @@index([deviceModelId], map: "idx_cases_device_model")
+  // มติ 16/10/2569 Q8 — เตือน IMEI ซ้ำกับเคสที่ยังดำเนินการอยู่ (ตอนเปิดเคส/นำเข้าไฟล์) ค้นด้วย index แทน seq scan
+  @@index([organizationId, imei], map: "idx_cases_org_imei")
   @@map("cases")
 }
 

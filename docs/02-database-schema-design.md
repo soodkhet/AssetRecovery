@@ -100,6 +100,7 @@
 | v4.73 | 12/10/2569 | **มติผู้ใช้ 12/10/2569 B3-02 (mytester3 — ลบเคสร่าง)** — migration `20261012110000_case_ref_unique_partial`: `UNIQUE(organization_id, company_id, case_ref, tracking_round)` และ `uniq_cases_company_case_ref` เปลี่ยนเป็น **partial `WHERE deleted_at IS NULL` ทั้งคู่** (แทนมติ v4.0 ที่ให้เคสที่ลบยังจองเลข — ตอนนั้นยังไม่มีทางลบเคส) ⇒ เคสร่างที่ลบแล้ว (soft delete) ไม่จองเลขที่สัญญา · index ใหม่หลวมกว่าเดิม ไม่กระทบข้อมูลเดิม · recycle ยังเพิ่ม `tracking_round` บนแถวเดิม · Prisma ประกาศ unique แบบ partial ไม่ได้ ⇒ ถอด `@@unique` ออกจาก schema.prisma (index อยู่ใน raw SQL) |
 | v4.74 | 13/10/2569 | **mytester DO-07 (มติ 13/10/2569 — Claude ตัดสินแทน PO)** — migration `20261013100000_advance_case_ref`: `advances` + `case_id UUID REFERENCES cases(id) ON DELETE SET NULL` (nullable · additive) + index `idx_advances_org_case(organization_id, case_id)` — ช่อง "อ้างอิงเคส (ไม่บังคับ)" ของฟอร์มขอเงินทดรอง (`15` §7.2 เดิมเขียน `case_ref` free text) · เลือกได้เฉพาะเคสที่ผู้รับเงินมีงานค้าง (`case_assignments` สถานะ active — ตรวจที่ service · ไม่ใช่ = `CASE_NOT_FOUND`) · ข้อมูลอ้างอิงเท่านั้น: ไม่กระทบยอด/สถานะ/เกตรายได้ของเคส · คำขอเบิกส่วนเกินตอนเคลียร์ยังไม่ผูก `expenses.case_id` (เลขเคสอยู่ในหมายเหตุ) · เงินทดรองเดิม = NULL |
 | v4.75 | 13/10/2569 | **known Q7/M2 (รีวิวโค้ด — Claude ตัดสินแทน PO)** — migration `20261013110000_hotel_receipt_required_default_false`: `compensation_plans.hotel_receipt_required` ค่าเริ่มต้นเปลี่ยน `true` → **`false`** (ไม่บังคับ — คงพฤติกรรมใบรับรองแทนใบเสร็จตามมติ PO U103 · องค์กรเปิดเองเป็นรายแผน) · เปลี่ยนเฉพาะ DEFAULT ของแถวใหม่ ไม่แก้แถวเดิม (แผนเดิมคงค่าที่ตั้งไว้) · ฟอร์มสร้างแผนใหม่ค่าเริ่มต้นไม่ติ๊ก |
+| v4.76 | 16/10/2569 | **มติ 16/10/2569 Q8 (mytester M1/B-03)** — migration `20261016100000_cases_org_imei_index` เพิ่ม `idx_cases_org_imei (organization_id, imei)` เท่านั้น ไม่เปลี่ยนคอลัมน์: คำเตือน IMEI ซ้ำกับเคสที่ยังดำเนินการอยู่ (เปิดเคส/นำเข้าไฟล์) ค้น `WHERE organization_id = ? AND imei = ?` / `imei IN (…)` ทุกครั้ง · เดิม seq scan |
 
 ขอบเขตเอกสารนี้: Full Production Database Schema — ทุก table, column, type, FK, index, unique constraint, enum, migration order และ seed data สรุปจาก spec ไฟล์ทั้งหมดไว้ในที่เดียว ใช้เป็น source of truth เดียวก่อนเขียน Prisma schema
 
@@ -1170,6 +1171,7 @@ CREATE INDEX idx_cases_org_company    ON cases(organization_id, company_id);
 CREATE INDEX idx_cases_org_team       ON cases(organization_id, assigned_team_id);
 CREATE INDEX idx_cases_closed         ON cases(organization_id, outcome, closed_at);
 CREATE INDEX idx_cases_device_model   ON cases(device_model_id);  -- v4.65 FK ON DELETE SET NULL (ลบรุ่นไม่ seq scan)
+CREATE INDEX idx_cases_org_imei        ON cases(organization_id, imei);  -- v4.76 เตือน IMEI ซ้ำกับเคสที่ยังดำเนินการอยู่
 
 -- ── case_documents ───────────────────────────────────────────
 -- เอกสารแนบต่อเคส (ตามไฟล์ 38 §6.3)
