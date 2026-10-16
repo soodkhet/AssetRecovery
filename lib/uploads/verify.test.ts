@@ -77,6 +77,22 @@ describe('verifyUploadedFile', () => {
     expect(uploadTestState.removed).toEqual([path])
   })
 
+  it('ไฟล์ใหญ่เกินเกณฑ์ = ลบไฟล์ออกจาก Storage ไม่ให้ค้าง (มติ 16/10/2569 Q5)', async () => {
+    putFakeUpload(path, sampleBytes('pdf', 'x'.repeat(64)))
+    expect(await codeOf(() => verifyUploadedFile(path, { ...rule, maxBytes: 16 }))).toBe('UPLOAD_FILE_TOO_LARGE')
+    expect(uploadTestState.removed).toEqual([path])
+  })
+
+  it('ไฟล์ใหญ่เกินแต่เป็นไฟล์เดิมที่ผูกอยู่ (เกณฑ์ขนาดเปลี่ยนภายหลัง) ⇒ ไม่ลบ', async () => {
+    putFakeUpload(path, sampleBytes('pdf', 'x'.repeat(64)))
+    referencedPaths.add(path)
+    expect(await codeOf(() => verifyUploadedFile(path, { ...rule, maxBytes: 16 }))).toBe('UPLOAD_FILE_TOO_LARGE')
+    expect(await codeOf(() => verifyUploadedFile(path, { ...rule, maxBytes: 16 }, null, { boundPaths: [path] }))).toBe(
+      'UPLOAD_FILE_TOO_LARGE',
+    )
+    expect(uploadTestState.removed).toEqual([])
+  })
+
   it('hash ไม่ตรง / path นอกขอบเขต = ไม่ลบไฟล์ (อาจเป็นไฟล์ที่ผูกอยู่แล้ว)', async () => {
     putFakeUpload(path, sampleBytes('pdf'))
     await codeOf(() => verifyUploadedFile(path, rule, sha256Of('อื่น')))

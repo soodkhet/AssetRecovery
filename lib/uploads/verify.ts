@@ -45,13 +45,15 @@ export async function verifyUploadedFile(
 }
 
 /**
- * ไฟล์ที่เนื้อไม่ตรงชนิดที่รับ ⇒ ลบทิ้งไม่ให้ค้างใน Storage (mytester A-14) · เฉพาะ path ที่ผ่าน prefix ของผู้เรียกแล้ว
- * · hash ไม่ตรง/ไฟล์ใหญ่เกิน **ไม่ลบ** (อาจเป็นไฟล์เดิมที่ผูกอยู่แล้วถูกส่งซ้ำด้วยค่าผิด หรือเกณฑ์ขนาดเปลี่ยน)
- * · ชนิดไม่ตรงก็อาจเป็นไฟล์ที่ผูกอยู่แล้ว (ข้อมูลเก่าที่ไม่เคยผ่านการตรวจ — `receipt_file_unverified`/
- *   `id_document_unverified`) ⇒ ลบได้เฉพาะไฟล์ที่ "เพิ่งอัปโหลดในคำขอนี้" ดู {@link removeRejectedUpload}
+ * ไฟล์ที่เนื้อไม่ตรงชนิดที่รับ (mytester A-14) หรือใหญ่เกินเกณฑ์ (มติ 16/10/2569 Q5) ⇒ ลบทิ้งไม่ให้ค้างใน Storage
+ * · เฉพาะ path ที่ผ่าน prefix ของผู้เรียกแล้ว · hash ไม่ตรง **ไม่ลบ** (อาจเป็นไฟล์เดิมที่ผูกอยู่แล้วถูกส่งซ้ำด้วยค่าผิด)
+ * · ไฟล์ที่ผูกอยู่แล้ว (ข้อมูลเก่าที่ไม่เคยผ่านการตรวจ — `receipt_file_unverified`/`id_document_unverified` ·
+ *   หรือเกณฑ์ขนาดเปลี่ยนภายหลัง) ไม่ถูกลบ — ลบได้เฉพาะไฟล์ที่ "เพิ่งอัปโหลดในคำขอนี้" ดู {@link removeRejectedUpload}
  */
+const REMOVABLE_REJECTION_CODES: ReadonlySet<string> = new Set(['UPLOAD_FILE_TYPE_INVALID', 'UPLOAD_FILE_TOO_LARGE'])
+
 export function shouldRemoveRejectedUpload(error: unknown): boolean {
-  return error instanceof UploadError && error.code === 'UPLOAD_FILE_TYPE_INVALID'
+  return error instanceof UploadError && REMOVABLE_REJECTION_CODES.has(error.code)
 }
 
 /**
