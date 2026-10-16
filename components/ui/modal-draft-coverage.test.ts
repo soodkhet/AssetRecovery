@@ -20,7 +20,7 @@ import { describe, expect, it } from 'vitest'
  */
 const ROOT = join(__dirname, '..', '..')
 const FORM_TAGS = new Set(['Input', 'MoneyInput', 'Select', 'Textarea', 'StagedFileInput', 'FileDropzone', 'input', 'select', 'textarea'])
-const CANCEL_TEXTS = new Set(['ยกเลิก', 'ปิด'])
+const CANCEL_TEXTS = new Set(['ยกเลิก', 'ปิด', 'ปิดหน้าต่าง'])
 
 const PARENT_KEY = 'ผู้เรียกใส่ key `<x>-${id ?? \'none\'}` ⇒ remount ทุกครั้งที่เปิด/ปิด ร่างไม่ค้าง'
 

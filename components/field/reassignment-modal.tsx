@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { FieldCaseDetailBody } from '@/components/field/field-case-detail'
 import { IconAlert, IconCalendar } from '@/components/field/field-icons'
-import { Button, ErrorState, Field, LoadingState, Modal, Textarea, useToast } from '@/components/ui'
+import { Button, ErrorState, Field, LoadingState, Modal, ModalCancelButton, Textarea, useToast } from '@/components/ui'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
 import { declineReasonError, reassignmentCountdown } from '@/lib/field/reassignment-ui'
@@ -109,9 +109,7 @@ export function ReassignmentModal({
       description={detail === null ? undefined : `${detail.debtorName ?? '—'} · ${detail.caseRef}`}
       footer={
         pending === null ? (
-          <Button variant="secondary" onClick={onClose}>
-            ปิดหน้าต่าง
-          </Button>
+          <ModalCancelButton onClose={onClose}>ปิดหน้าต่าง</ModalCancelButton>
         ) : consenting ? (
           <>
             <Button variant="secondary" onClick={() => setConsenting(false)} disabled={submitting}>

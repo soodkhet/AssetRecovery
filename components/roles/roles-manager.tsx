@@ -151,9 +151,8 @@ export function RolesManager() {
 
       showToast({ tone: 'success', title: 'สร้างบทบาทแล้ว', description: createName })
       setCreateOpen(false)
-      setCreateName('')
-      setCreateReason('')
-      createError.clear()
+      // สร้างเสร็จ ⇒ ฟอร์มครั้งถัดไปเริ่มจากค่าเริ่มต้นทั้งหมด (รวมกลุ่มบทบาท)
+      resetCreateDraft()
       await load()
     } finally {
       setCreating(false)

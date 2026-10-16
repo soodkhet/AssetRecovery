@@ -120,6 +120,8 @@ export function ManualClaimModal({
   if (!open) return null
 
   function reset(): void {
+    // ไล่ตรวจโมดัลค้าง mount 16/10/2569 — ทิ้งข้อมูลคืนประเภทรายการเป็นค่าเริ่มต้นด้วย
+    setClaimType(MANUAL_CLAIM_TYPES[0] ?? 'manual')
     setAmount('')
     setExpenseDate('')
     setPayeeId('')

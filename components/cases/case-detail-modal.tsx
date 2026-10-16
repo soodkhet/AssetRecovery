@@ -18,6 +18,7 @@ import {
   InlineAlert,
   LoadingState,
   Modal,
+  ModalCancelButton,
   RefText,
   StatusBadge,
   Textarea,
@@ -316,9 +317,9 @@ export function CaseDetailModal({
         footer={
           <>
             {/* จอแคบสูง ≥ 44px เท่าปุ่มหลักที่ผู้เรียกส่งมา (mytester C-07 · C3-01 — modal เปลี่ยนผู้รับผิดชอบบนมือถือ) */}
-            <Button variant="secondary" className="max-sm:min-h-11" onClick={onClose} disabled={busyAction !== null}>
+            <ModalCancelButton className="max-sm:min-h-11" onClose={onClose} disabled={busyAction !== null}>
               ปิดหน้าต่าง
-            </Button>
+            </ModalCancelButton>
             {actions.map((button) => (
               <Button
                 key={button.action}

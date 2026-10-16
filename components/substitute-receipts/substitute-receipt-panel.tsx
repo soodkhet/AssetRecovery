@@ -2,7 +2,21 @@
 
 import { useRef, useState } from 'react'
 import { NoReceiptLinesEditor, type NoReceiptLinesVariant } from '@/components/substitute-receipts/no-receipt-lines'
-import { Button, ConfirmModal, Field, FieldErrorText, FormSubmitFooter, InlineAlert, Modal, StatusBadge, Textarea, useRevealFieldError, useSubmitError, useToast } from '@/components/ui'
+import {
+  Button,
+  ConfirmModal,
+  Field,
+  FieldErrorText,
+  FormSubmitFooter,
+  InlineAlert,
+  Modal,
+  ModalCancelButton,
+  StatusBadge,
+  Textarea,
+  useRevealFieldError,
+  useSubmitError,
+  useToast,
+} from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { REASON_MAX } from '@/lib/api/validation'
 import { EXPENSE_RECEIPT_ACCEPT } from '@/lib/field/media-upload'
@@ -378,9 +392,7 @@ export function SubstituteReceiptPanel({
         size="lg"
         footer={
           <FormSubmitFooter message={reissueError} tick={reissueTick}>
-            <Button variant="secondary" onClick={() => setReissueOpen(false)}>
-              ปิด
-            </Button>
+            <ModalCancelButton onClose={() => setReissueOpen(false)}>ปิด</ModalCancelButton>
             <Button onClick={() => void confirmReissue()} loading={reissuing} disabled={loadingLines}>
               ออกใบรับรองใหม่
             </Button>

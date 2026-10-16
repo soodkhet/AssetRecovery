@@ -8,6 +8,7 @@ import {
   Field,
   InlineAlert,
   Modal,
+  ModalCancelButton,
   RefText,
   Select,
   StatusBadge,
@@ -97,6 +98,8 @@ export function CaseImportWizard({
 
   function reset(): void {
     setStep('file')
+    // ไล่ตรวจโมดัลค้าง mount 16/10/2569 — ทิ้งข้อมูล/นำเข้าเสร็จแล้วเปิดใหม่ ห้ามค้างบริษัทเดิม (กันนำเข้าไฟล์ถัดไปผิดบริษัท)
+    setCompanyId('')
     setFileName(null)
     setRows([])
     setMapping({})
@@ -172,16 +175,15 @@ export function CaseImportWizard({
       description="อัปโหลดไฟล์ → จับคู่คอลัมน์ → ตรวจสอบผลก่อนยืนยัน — เคสที่นำเข้าได้จะเป็นสถานะ “ร่าง” ทั้งหมด"
       footer={
         <>
-          <Button
-            variant="secondary"
+          <ModalCancelButton
             disabled={busy}
-            onClick={() => {
+            onClose={() => {
               reset()
               onClose()
             }}
           >
             ปิดหน้าต่าง
-          </Button>
+          </ModalCancelButton>
           {step === 'mapping' && (
             <Button loading={busy} disabled={!canPreview} onClick={() => void runImport(true)}>
               ตรวจสอบข้อมูล (ไม่บันทึก)

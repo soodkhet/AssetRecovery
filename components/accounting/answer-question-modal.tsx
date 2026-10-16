@@ -58,9 +58,7 @@ export function AnswerQuestionModal({
       description={`รอบบัญชี ${question.periodLabel}`}
       footer={
         readOnly ? (
-          <Button variant="secondary" onClick={onClose}>
-            ปิดหน้าต่าง
-          </Button>
+          <ModalCancelButton onClose={onClose}>ปิดหน้าต่าง</ModalCancelButton>
         ) : (
           <>
             <ModalCancelButton onClose={onClose}>
