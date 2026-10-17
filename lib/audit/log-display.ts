@@ -517,17 +517,16 @@ function auditNestedValue(
   return auditItemDisplay(value, field, targetType, refLabels)
 }
 
-/** อ็อบเจกต์ในบรรทัดเดียว: "ป้าย: ค่า, ป้าย: ค่า" (ต่อท้ายป้ายของบรรทัดแม่ใช้ `pairSeparator` = " " — "แนบแล้ว 8") */
+/** อ็อบเจกต์ในบรรทัดเดียว: "ป้าย: ค่า, ป้าย: ค่า" — ทุกคู่มี ": " (ตรวจซ้ำ staging SV6-R3-03) */
 function auditInlineRecord(
   record: Record<string, unknown>,
   targetType: string | null,
   refLabels: Readonly<Record<string, string>>,
-  pairSeparator = ': ',
 ): string {
   const entries = Object.entries(record)
   if (entries.length === 0) return 'ไม่มี'
   return entries
-    .map(([key, item]) => `${auditRecordKeyLabel(key, targetType)}${pairSeparator}${auditNestedValue(item, key, targetType, refLabels)}`)
+    .map(([key, item]) => `${auditRecordKeyLabel(key, targetType)}: ${auditNestedValue(item, key, targetType, refLabels)}`)
     .join(', ')
 }
 
@@ -538,7 +537,8 @@ function auditRecordKeyLabel(key: string, targetType: string | null): string {
 
 /**
  * ตรวจซ้ำ staging SV6-R-03 — อ็อบเจกต์ ⇒ บรรทัดละคีย์ "ป้าย: ค่า" (ชื่อคีย์/ค่าแปลแล้ว)
- * ค่าที่เป็นอ็อบเจกต์อีกชั้น (เช่นจำนวนเอกสารแนบต่อชนิดของชุดส่งบัญชี) แสดงในบรรทัดเดียว · ลึกกว่านั้นสรุป "n รายการ"
+ * ค่าที่เป็นอ็อบเจกต์อีกชั้น (เช่นจำนวนเอกสารแนบต่อชนิดของชุดส่งบัญชี) แสดงในบรรทัดเดียวต่อจาก " — "
+ * ("ใบสำคัญจ่าย — แนบแล้ว: 8, ยังไม่ได้แนบ: ไม่มี" · SV6-R3-03) · ลึกกว่านั้นสรุป "n รายการ"
  */
 function auditRecordLines(
   record: Record<string, unknown>,
@@ -548,12 +548,11 @@ function auditRecordLines(
   const entries = Object.entries(record)
   if (entries.length === 0) return 'ไม่มี'
   return entries
-    .map(([key, item]) => {
-      const text = isPlainObject(item)
-        ? auditInlineRecord(item, targetType, refLabels, ' ')
-        : auditNestedValue(item, key, targetType, refLabels)
-      return `${auditRecordKeyLabel(key, targetType)}: ${text}`
-    })
+    .map(([key, item]) =>
+      isPlainObject(item)
+        ? `${auditRecordKeyLabel(key, targetType)} — ${auditInlineRecord(item, targetType, refLabels)}`
+        : `${auditRecordKeyLabel(key, targetType)}: ${auditNestedValue(item, key, targetType, refLabels)}`,
+    )
     .join('\n')
 }
 

@@ -304,7 +304,7 @@ describe('ตรวจซ้ำ staging SV6-R-03 — รายการ/อ็�
       'export_records',
     )
     expect(text).toBe(
-      'ใบสำคัญจ่าย: แนบแล้ว 8, ยังไม่ได้แนบ ไม่มี\nใบกำกับภาษี: แนบแล้ว 4, ยังไม่ได้แนบ INV-0009',
+      'ใบสำคัญจ่าย — แนบแล้ว: 8, ยังไม่ได้แนบ: ไม่มี\nใบกำกับภาษี — แนบแล้ว: 4, ยังไม่ได้แนบ: INV-0009',
     )
     noRawJson(text)
   })
@@ -400,5 +400,19 @@ describe('ตรวจซ้ำ staging SV6-R3-02 — ป้ายฟิลด�
     expect(auditFieldLabel('model', 'service_fee_templates')).toBe('โมเดลเก็บเงิน')
     // ตารางอื่นไม่ถูกกระทบ
     expect(auditFieldLabel('name')).toBe('ชื่อ')
+  })
+})
+
+describe('ตรวจซ้ำ staging SV6-R3-03 — อ็อบเจกต์ชั้น 2 มี ": " ทุกคู่', () => {
+  it('ชุดส่งบัญชี: "ใบสำคัญจ่าย — แนบแล้ว: 8, ยังไม่ได้แนบ: ไม่มี"', () => {
+    expect(auditValueDisplay({ vouchers: { attached: 8, not_attached: [] } }, 'attachments', 'export_records')).toBe(
+      'ใบสำคัญจ่าย — แนบแล้ว: 8, ยังไม่ได้แนบ: ไม่มี',
+    )
+  })
+
+  it('รายการอ็อบเจกต์ในบรรทัดเดียวใช้ ": " เช่นกัน', () => {
+    expect(auditValueDisplay([{ attached: 1, not_attached: ['A'] }], 'items', 'export_records')).toBe(
+      'แนบแล้ว: 1, ยังไม่ได้แนบ: A',
+    )
   })
 })
