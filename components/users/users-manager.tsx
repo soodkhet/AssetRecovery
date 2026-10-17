@@ -33,6 +33,7 @@ import type { RoleGroup } from '@/lib/generated/prisma/enums'
 import { ROLE_GROUP_LABEL, ROLE_GROUP_TABS, roleGroupsForTab, type RoleGroupTabId } from '@/lib/roles/role-groups'
 import type { RoleListItem } from '@/lib/roles/types'
 import { canManageAccountIn, canViewAccountsIn } from '@/lib/users/auth-account'
+import { userAffiliationText } from '@/lib/users/affiliation'
 import type { TeamDto } from '@/lib/teams/types'
 import type { UserDto } from '@/lib/users/types'
 
@@ -323,7 +324,7 @@ export function UsersManager() {
                     <Badge className={`mt-1 ${ROLE_GROUP_BADGE_CLASS[user.roleGroup]}`}>{ROLE_GROUP_LABEL[user.roleGroup]}</Badge>
                   </Td>
                   <Td>
-                    <div className="text-xs text-slate-600">{user.teamName ?? user.companyName ?? '—'}</div>
+                    <div className="text-xs text-slate-600">{userAffiliationText(user)}</div>
                     {user.activeCaseCount > 0 && (
                       <div className="mt-0.5 text-[10px] text-amber-600">งานค้าง {user.activeCaseCount} เคส</div>
                     )}
