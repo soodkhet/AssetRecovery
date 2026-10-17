@@ -5,6 +5,7 @@ import { ReasonConfirmModal } from '@/components/settings/reason-confirm-modal'
 import {
   Button,
   Field,
+  FormSubmitFooter,
   InlineAlert,
   Input,
   Modal,
@@ -20,8 +21,11 @@ import {
   Textarea,
   Th,
   Tr,
+  useRevealFieldError,
+  useSubmitError,
   useToast,
 } from '@/components/ui'
+import { creditNoteAmountLimitIssue, creditNoteApiFieldErrors } from '@/lib/credit-notes/credit-note-form'
 import { PERIOD_CLOSED_CANCEL_HINT } from '@/lib/accounting/period'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import {
@@ -111,6 +115,9 @@ export function CreditNoteModal({
   const [saving, setSaving] = useState(false)
   const [cancelling, setCancelling] = useState<CreditNoteDto | null>(null)
   const [cancelReason, setCancelReason] = useState('')
+  // mytester6 T-022 — ข้อผิดตอนกดบันทึก: ใต้ช่อง + footer + เลื่อน/โฟกัสช่องที่ผิด
+  const { ref: formRef, reveal } = useRevealFieldError()
+  const submitError = useSubmitError(reveal)
 
   if (invoice === null) return null
 
@@ -146,6 +153,16 @@ export function CreditNoteModal({
   })
   const maxCreditTotal = limit.maxTotalSatang
   const blockedReason = isDebit ? null : limit.blocked
+  // mytester6 T-022 — เพดานที่ฟอร์มรู้อยู่แล้ว ตรวจตั้งแต่หน้าจอ (ภาษีเว้นว่าง = ค่าที่ระบบเสนอ ถ้ามี)
+  const limitIssue = creditNoteAmountLimitIssue({
+    isDebit,
+    amountSatang: amountError === null ? amountSatang : null,
+    vatSatang: vatError === null ? (vatSatang ?? suggestedVatSatang) : null,
+    maxBeforeVatSatang: limit.maxBeforeVatSatang,
+    maxTotalSatang: maxCreditTotal,
+  })
+  const amountFieldError = amountError ?? limitIssue ?? submitError.fields.amount
+  // ยอดเกินเพดานไม่ปิดปุ่ม — กดแล้วขึ้น footer + โฟกัสช่องยอด (ไม่ส่งคำขอ)
   const canSubmit =
     blockedReason === null &&
     creditNoteNumber.trim() !== '' &&
@@ -158,6 +175,11 @@ export function CreditNoteModal({
 
   async function submit(): Promise<void> {
     if (invoice === null || !canSubmit) return
+    submitError.clear()
+    if (limitIssue !== null) {
+      submitError.fail({ message: limitIssue })
+      return
+    }
     setSaving(true)
     let filePath: string | null = null
     try {
@@ -166,6 +188,7 @@ export function CreditNoteModal({
       setSaving(false)
       const message = error instanceof StorageUploadError ? error.message : 'อัปโหลดไฟล์ไม่สำเร็จ'
       showToast({ tone: 'error', title: 'แนบไฟล์ไม่สำเร็จ', description: message })
+      submitError.fail({ message })
       return
     }
 
@@ -185,6 +208,7 @@ export function CreditNoteModal({
     )
     setSaving(false)
     if (result.error !== undefined) {
+      submitError.fail({ message: result.error.message, fields: creditNoteApiFieldErrors(result.error) })
       showToast({ tone: 'error', title: result.error.title, description: result.error.message })
       return
     }
@@ -242,7 +266,7 @@ export function CreditNoteModal({
         title={`ใบลดหนี้ / ใบเพิ่มหนี้ — ใบกำกับ ${invoice.invoiceNumber}`}
         description={`${invoice.companyName} · ออกเมื่อ ${fmtDate(invoice.invoiceDate)}`}
         footer={
-          <>
+          <FormSubmitFooter message={submitError.message} tick={submitError.tick}>
             <ModalCancelButton onClose={onClose}>
               ปิด
             </ModalCancelButton>
@@ -251,10 +275,10 @@ export function CreditNoteModal({
                 บันทึก{typeLabel}
               </Button>
             )}
-          </>
+          </FormSubmitFooter>
         }
       >
-        <div className="space-y-4">
+        <div ref={formRef} className="space-y-4">
           <div className="grid grid-cols-1 gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs sm:grid-cols-2">
             <div className="flex justify-between">
               <span className="text-slate-500">ยอดตามใบกำกับ</span>
@@ -407,6 +431,7 @@ export function CreditNoteModal({
                   onChange={(event) => {
                     setNoteType(event.target.value === 'debit' ? 'debit' : 'credit')
                     setAdjustmentId('')
+                    submitError.clear()
                   }}
                 >
                   <option value="credit">{CREDIT_NOTE_TYPE_LABEL.credit}</option>
@@ -414,28 +439,48 @@ export function CreditNoteModal({
                 </Select>
               </Field>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <Field id="cn-number" label={`เลขที่${typeLabel}`} hint="ตามเอกสารที่สำนักงานบัญชีออก">
+                <Field
+                  id="cn-number"
+                  label={`เลขที่${typeLabel}`}
+                  hint="ตามเอกสารที่สำนักงานบัญชีออก"
+                  error={submitError.fields.number}
+                >
                   <Input
                     id="cn-number"
                     className="font-mono"
                     value={creditNoteNumber}
                     maxLength={50}
-                    onChange={(event) => setCreditNoteNumber(event.target.value)}
+                    onChange={(event) => {
+                      setCreditNoteNumber(event.target.value)
+                      submitError.clearField('number')
+                    }}
                   />
                 </Field>
                 <Field
                   id="cn-date"
                   label={`วันที่ออก${typeLabel}`}
                   hint={`ภาษีขาย${isDebit ? 'เพิ่ม' : 'ลด'}ในเดือนที่ออก — งวดที่ปิดแล้วบันทึกไม่ได้ · ช่องนี้ใช้ ค.ศ. ตามที่เบราว์เซอร์บังคับ`}
+                  error={submitError.fields.date}
                 >
-                  <Input id="cn-date" type="date" value={issueDate} onChange={(event) => setIssueDate(event.target.value)} />
+                  <Input
+                    id="cn-date"
+                    type="date"
+                    value={issueDate}
+                    onChange={(event) => {
+                      setIssueDate(event.target.value)
+                      submitError.clearField('date')
+                    }}
+                  />
                 </Field>
-                <Field id="cn-amount" label={`มูลค่าที่${isDebit ? 'เพิ่ม' : 'ลด'} (ก่อนภาษี, บาท)`} error={amountError ?? undefined}>
+                <Field id="cn-amount" label={`มูลค่าที่${isDebit ? 'เพิ่ม' : 'ลด'} (ก่อนภาษี, บาท)`} error={amountFieldError}>
                   <MoneyInput
                     id="cn-amount"
                     value={amountText}
-                    invalid={amountError !== null}
-                    onChange={(event) => setAmountText(event.target.value)}
+                    invalid={amountFieldError !== undefined}
+                    onChange={(event) => {
+                      setAmountText(event.target.value)
+                      submitError.clearField('amount')
+                    }}
                   />
                 </Field>
                 <Field
@@ -446,14 +491,17 @@ export function CreditNoteModal({
                       ? 'เว้นว่าง = คำนวณจากอัตราภาษีของใบกำกับเดิม · กรอกตามเอกสารได้ (คลาดได้ไม่เกิน 1 สตางค์)'
                       : `เว้นว่าง = ${fmtSatangSymbol(suggestedVatSatang)} (ระบบเสนอให้ยอดหลังลดตรงมูลค่าสุทธิของรอบทุกสตางค์) · กรอกตามเอกสารได้ (คลาดได้ไม่เกิน 1 สตางค์)`
                   }
-                  error={vatError ?? undefined}
+                  error={vatError ?? submitError.fields.vat}
                 >
                   <MoneyInput
                     id="cn-vat"
                     placeholder={suggestedVatSatang === null ? undefined : toBahtInput(suggestedVatSatang)}
                     value={vatText}
-                    invalid={vatError !== null}
-                    onChange={(event) => setVatText(event.target.value)}
+                    invalid={vatError !== null || submitError.fields.vat !== undefined}
+                    onChange={(event) => {
+                      setVatText(event.target.value)
+                      submitError.clearField('vat')
+                    }}
                   />
                 </Field>
               </div>
@@ -488,14 +536,17 @@ export function CreditNoteModal({
                   </InlineAlert>
                 )
               })()}
-              <Field id="cn-reason" label="เหตุผล" required>
+              <Field id="cn-reason" label="เหตุผล" required error={submitError.fields.reason}>
                 <Textarea
                   id="cn-reason"
                   rows={2}
                   value={reason}
                   maxLength={1000}
                   placeholder={isDebit ? 'เช่น เพิ่มค่าบริการตามที่ตกลงกับลูกค้า' : 'เช่น ลดค่าบริการตามที่ตกลงกับลูกค้า'}
-                  onChange={(event) => setReason(event.target.value)}
+                  onChange={(event) => {
+                    setReason(event.target.value)
+                    submitError.clearField('reason')
+                  }}
                 />
               </Field>
               <Field id="cn-file" label={`ไฟล์สแกน${typeLabel} (PDF/รูป)`} hint="ไม่บังคับ แต่ควรแนบเพื่อเป็นหลักฐาน">

@@ -98,6 +98,21 @@ export function refundSuspenseInputProblem(input: { refundDate: string; reason: 
   return result.success ? null : (result.error.issues[0]?.message ?? 'ข้อมูลไม่ถูกต้อง')
 }
 
+/**
+ * mytester6 T-023 — ข้อผิดรายช่องของการคืนเงินผู้โอน (schema เดียวกับ server) ⇒ ผูกใต้ช่อง + โฟกัสช่องที่ผิด
+ * คีย์ = ชื่อช่องของ API (`refundDate` / `reason`) · ผ่าน = `{}`
+ */
+export function refundSuspenseInputIssues(input: { refundDate: string; reason: string }): Record<string, string> {
+  const result = refundSuspenseSchema.omit({ filePath: true }).safeParse(input)
+  if (result.success) return {}
+  const issues: Record<string, string> = {}
+  for (const issue of result.error.issues) {
+    const key = String(issue.path[0] ?? '')
+    if (key !== '' && issues[key] === undefined) issues[key] = issue.message
+  }
+  return issues
+}
+
 export const matchCandidateQuerySchema = z.object({
   transactionId: uuidSchema,
   /** คำค้นจาก dropdown (`35` §8) — เลขที่รอบ/ชื่อบริษัท */

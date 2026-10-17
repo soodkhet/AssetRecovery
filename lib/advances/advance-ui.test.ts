@@ -301,16 +301,42 @@ describe('ปิด "ตรวจแล้ว" การเคลียร์จ
     expect(warning).toContain('ฉบับเซ็น')
   })
 
-  it('ใบรับรองถูกยกเลิกโดยยังไม่มีใบใหม่/ใบเสร็จจริง ⇒ ปิดพร้อมเหตุผล', () => {
-    expect(advanceClearReviewWarning(advance({ substituteReceipt: { ...crt, status: 'cancelled' } }))).toContain('ถูกยกเลิก')
+  it('ใบรับรองถูกยกเลิกหลังเคลียร์รอบนี้โดยยังไม่มีใบใหม่ ⇒ ปิดพร้อมเหตุผล (แนบใบเสร็จจริงก็ยังปิด)', () => {
+    const cancelled = { ...crt, status: 'cancelled' as const, cancelledAt: '2026-10-12T03:00:00Z' }
+    const clearedAt = '2026-10-11T03:00:00Z'
+    expect(advanceClearReviewWarning(advance({ clearedAt, substituteReceipt: cancelled }))).toContain('ถูกยกเลิก')
+    expect(
+      advanceClearReviewWarning(advance({ clearedAt, substituteReceipt: cancelled, receiptFileUrl: 'advances/a1/receipt/k.jpg' })),
+    ).toContain('ถูกยกเลิก')
   })
 
-  it('ไม่มีใบรับรอง / เซ็นแล้ว / แนบใบเสร็จจริงแล้ว ⇒ กดได้', () => {
-    expect(advanceClearReviewWarning(advance({ substituteReceipt: null }))).toBeNull()
+  it('ใบรับรองที่ยกเลิกก่อนเคลียร์รอบนี้ (ของรอบที่ถูกตีกลับ) ⇒ ไม่นับ', () => {
+    const cancelled = { ...crt, status: 'cancelled' as const, cancelledAt: '2026-10-10T03:00:00Z' }
+    expect(
+      advanceClearReviewWarning(
+        advance({ clearedAt: '2026-10-11T03:00:00Z', substituteReceipt: cancelled, receiptFileUrl: 'advances/a1/receipt/k.jpg' }),
+      ),
+    ).toBeNull()
+  })
+
+  it('mytester6 T-003 (D6-01 แบบ ก) — เคลียร์ผสม: แนบใบเสร็จจริง + ใบรับรองยังรอเซ็น ⇒ ยังปิด', () => {
+    const warning = advanceClearReviewWarning(advance({ substituteReceipt: crt, receiptFileUrl: 'advances/a1/receipt/k.jpg' }))
+    expect(warning).toContain('CRT-2569-0001')
+  })
+
+  it('ไม่มีใบรับรอง (ใบเสร็จล้วน) / เซ็นแล้ว ⇒ กดได้', () => {
+    expect(advanceClearReviewWarning(advance({ substituteReceipt: null, receiptFileUrl: 'advances/a1/receipt/k.jpg' }))).toBeNull()
     expect(
       advanceClearReviewWarning(advance({ substituteReceipt: { ...crt, status: 'signed', signedAt: '2026-10-11T03:00:00Z' } })),
     ).toBeNull()
-    expect(advanceClearReviewWarning(advance({ substituteReceipt: crt, receiptFileUrl: 'advances/a1/receipt/k.jpg' }))).toBeNull()
+    expect(
+      advanceClearReviewWarning(
+        advance({
+          substituteReceipt: { ...crt, status: 'signed', signedAt: '2026-10-11T03:00:00Z' },
+          receiptFileUrl: 'advances/a1/receipt/k.jpg',
+        }),
+      ),
+    ).toBeNull()
   })
 })
 

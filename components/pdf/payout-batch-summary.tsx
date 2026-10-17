@@ -23,17 +23,20 @@ import type { PayoutSummaryDoc } from '@/lib/payout/payout-doc'
  * ⚠️ ยอดทุกช่องเป็นข้อความที่ประกอบมาแล้วจาก `buildPayoutSummaryDoc()` (pure) — ห้ามคำนวณ/format เอง (Rule 01)
  */
 
-const COLUMNS: readonly DocColumn[] = [
-  { label: 'ลำดับ', width: '5%', align: 'center' },
-  { label: 'ชื่อผู้รับเงิน', width: '19%' },
+// mytester6 T-020 — คำไทยไม่มีจุดตัดคำ ⇒ หัวคอลัมน์ยาวใส่ช่องว่างเป็นจุดตัดบรรทัด (ไม่ให้อักษรท้ายถูกตัดทิ้ง/ชนเส้น)
+// และ "ลำดับ" กว้างพอไม่ชิดเส้น — `PAYOUT_SUMMARY_COLUMNS` export ให้ test ตรวจ
+export const PAYOUT_SUMMARY_COLUMNS: readonly DocColumn[] = [
+  { label: 'ลำดับ', width: '7%', align: 'center' },
+  { label: 'ชื่อผู้รับเงิน', width: '17%' },
   { label: 'ค่าตอบแทน', width: '12%', align: 'right' },
   // mytester F-04 — เงินทดรองไม่ใช่เงินได้ ⇒ แยกคอลัมน์จากค่าตอบแทน
-  { label: 'เงินทดรองจ่าย', width: '12%', align: 'right' },
-  { label: 'ภาษีที่บริษัทออกให้', width: '13%', align: 'right' },
+  { label: 'เงินทดรอง จ่าย', width: '12%', align: 'right' },
+  { label: 'ภาษีที่บริษัท ออกให้', width: '13%', align: 'right' },
   { label: 'หักภาษี ณ ที่จ่าย', width: '12%', align: 'right' },
-  { label: 'หักคืนเงินทดรอง', width: '13%', align: 'right' },
+  { label: 'หักคืน เงินทดรอง', width: '13%', align: 'right' },
   { label: 'โอนสุทธิ', width: '14%', align: 'right' },
 ]
+const COLUMNS = PAYOUT_SUMMARY_COLUMNS
 
 const styles = StyleSheet.create({
   meta: { flexDirection: 'row', flexWrap: 'wrap', fontSize: 9 },

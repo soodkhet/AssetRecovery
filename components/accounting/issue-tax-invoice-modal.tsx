@@ -5,12 +5,15 @@ import { OrganizationProfileNotice } from '@/components/settings/organization-pr
 import {
   Button,
   Field,
+  FormSubmitFooter,
   InlineAlert,
   Input,
   LoadingState,
   Modal,
   ModalCancelButton,
   StatusBadge,
+  useRevealFieldError,
+  useSubmitError,
   useToast,
 } from '@/components/ui'
 import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
@@ -54,6 +57,10 @@ export function IssueTaxInvoiceModal({
     toInputDate(target?.kind === 'receipt' ? target.receipt.receivedDate : new Date()),
   )
   const [saving, setSaving] = useState(false)
+  // mytester6 T-021 — แพ้การออกพร้อมกัน (อีกแท็บ/ผู้ใช้อื่นออกไปก่อน) ⇒ ข้อความใน footer + ซ่อนพรีวิวเดิม/ปุ่มยืนยัน
+  const [issuedElsewhere, setIssuedElsewhere] = useState<string | null>(null)
+  const { ref: formRef, reveal } = useRevealFieldError()
+  const submitError = useSubmitError(reveal)
   const [preview, setPreview] = useState<PreviewState>({ status: 'loading' })
   const previewQuery =
     target === null
@@ -93,6 +100,7 @@ export function IssueTaxInvoiceModal({
 
   async function submit(): Promise<void> {
     if (target === null) return
+    submitError.clear()
     setSaving(true)
     const result = await callApi<TaxInvoiceDto>(
       '/api/accounting/tax-invoices',
@@ -104,7 +112,16 @@ export function IssueTaxInvoiceModal({
     setSaving(false)
 
     if (result.error !== undefined) {
+      const elsewhere = alreadyIssuedMessage(result.error)
+      if (elsewhere !== null) {
+        setIssuedElsewhere(elsewhere)
+        submitError.fail({ message: elsewhere })
+        // ใบที่อีกฝั่งออกไปถูกต้องแล้ว ⇒ รีเฟรชแถวให้เห็นเลขใบ (ไม่ต้องยกเลิกอะไร)
+        onIssued()
+        return
+      }
       showToast({ tone: 'error', title: result.error.title, description: result.error.message })
+      submitError.fail({ message: result.error.message, fields: result.error.fields })
       return
     }
     showToast({
@@ -123,23 +140,30 @@ export function IssueTaxInvoiceModal({
       title={title}
       description={description}
       footer={
-        <>
-          <ModalCancelButton onClose={onClose}>
-            ยกเลิก
-          </ModalCancelButton>
-          <Button loading={saving} disabled={preview.status !== 'ready'} onClick={() => void submit()}>
-            ยืนยันออกเอกสาร
-          </Button>
-        </>
+        <FormSubmitFooter message={submitError.message} tick={submitError.tick}>
+          <ModalCancelButton onClose={onClose}>{issuedElsewhere === null ? 'ยกเลิก' : 'ปิด'}</ModalCancelButton>
+          {issuedElsewhere === null ? (
+            <Button loading={saving} disabled={preview.status !== 'ready'} onClick={() => void submit()}>
+              ยืนยันออกเอกสาร
+            </Button>
+          ) : null}
+        </FormSubmitFooter>
       }
     >
-      <div className="space-y-4">
+      <div ref={formRef} className="space-y-4">
         {/* มติ PO U99 — ข้อมูลผู้ขายยังเป็นค่าตัวอย่าง ⇒ เตือน (ไม่บล็อก) */}
         <OrganizationProfileNotice />
-        <TaxInvoicePreviewSummary preview={preview} />
+        {issuedElsewhere === null ? (
+          <TaxInvoicePreviewSummary preview={preview} />
+        ) : (
+          <InlineAlert tone="info" title="ออกเอกสารนี้ไปแล้ว">
+            {issuedElsewhere}
+          </InlineAlert>
+        )}
 
         <Field
           id="invoice-date"
+          error={submitError.fields.invoiceDate}
           label="วันที่เอกสาร"
           hint={
             target.kind === 'receipt'
@@ -147,7 +171,16 @@ export function IssueTaxInvoiceModal({
               : 'ต้องไม่ก่อนใบเลขก่อนหน้าและไม่เกินวันนี้ · ช่องนี้ใช้ ค.ศ. ตามที่เบราว์เซอร์บังคับ'
           }
         >
-          <Input id="invoice-date" type="date" value={invoiceDate} onChange={(event) => setInvoiceDate(event.target.value)} />
+          <Input
+            id="invoice-date"
+            type="date"
+            value={invoiceDate}
+            disabled={issuedElsewhere !== null}
+            onChange={(event) => {
+              setInvoiceDate(event.target.value)
+              submitError.clearField('invoiceDate')
+            }}
+          />
         </Field>
 
         <InlineAlert tone="warning" title="ออกแล้วแก้ไม่ได้">
@@ -156,6 +189,17 @@ export function IssueTaxInvoiceModal({
       </div>
     </Modal>
   )
+}
+
+/**
+ * mytester6 T-021 — แพ้การออกพร้อมกัน (`TAX_INVOICE_ALREADY_ISSUED`) ⇒ ข้อความบอกว่าออกไปแล้ว + เลขใบ (ถ้า API ส่ง
+ * `invoiceNumber` มา) แทนข้อความกลางที่ชวนให้ยกเลิกใบเดิม · code อื่น = `null`
+ */
+export function alreadyIssuedMessage(error: Pick<ApiCallError, 'code' | 'payload'>): string | null {
+  if (error.code !== 'TAX_INVOICE_ALREADY_ISSUED') return null
+  const invoiceNumber = error.payload?.invoiceNumber
+  const numberText = typeof invoiceNumber === 'string' && invoiceNumber !== '' ? ` เลขที่ ${invoiceNumber}` : ''
+  return `รายการนี้ออกเอกสารไปแล้ว${numberText} (ออกจากหน้าต่างอื่นหรือผู้ใช้อื่นพร้อมกัน) — ใบนั้นใช้ได้ตามปกติ ไม่ต้องออกซ้ำหรือยกเลิก · รายการในตารางรีเฟรชแล้ว`
 }
 
 export type PreviewState =

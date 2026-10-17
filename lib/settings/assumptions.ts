@@ -1,4 +1,7 @@
 import { z } from 'zod'
+import { fmtSatangSymbol } from '@/lib/format/money'
+import { DEFAULT_WRITE_OFF_TOLERANCE_SATANG } from '@/lib/settings/finance-policy'
+import { DEFAULT_WHT_MIN_THRESHOLD_SATANG } from '@/lib/settings/tax-profile'
 
 /**
  * ทะเบียน "ค่าตั้งที่เป็นสมมติฐาน รอนักบัญชียืนยัน" (มติ PO 07/10/2569 U140) — pure
@@ -83,7 +86,7 @@ export const SETTING_ASSUMPTIONS: Readonly<Record<SettingAssumptionKey, SettingA
     key: 'wht_threshold',
     label: 'เกณฑ์ขั้นต่ำไม่หักภาษี',
     question:
-      'ไม่หักเมื่อยอดต่ำกว่า ฿1,000 (อัตรา 3% ค่าเริ่มต้น) โดยนับยอดสะสมต่อผู้รับต่อเดือนปฏิทิน (ค่าเริ่มต้น — ท.ป.4/2528) รอบที่ถึงเกณฑ์หักรวมส่วนของรอบก่อน · เลือกนับต่อรอบจ่ายได้ — ใช้วิธีไหน',
+      `ไม่หักเมื่อยอดต่ำกว่า ${fmtSatangSymbol(DEFAULT_WHT_MIN_THRESHOLD_SATANG)} (อัตรา 3% ค่าเริ่มต้น) โดยนับยอดสะสมต่อผู้รับต่อเดือนปฏิทิน (ค่าเริ่มต้น — ท.ป.4/2528) รอบที่ถึงเกณฑ์หักรวมส่วนของรอบก่อน · เลือกนับต่อรอบจ่ายได้ — ใช้วิธีไหน`,
     source: 'ส่วนที่ 2 A1/A3 · มติ A4 · staging E-054',
   },
   wht_filing_method: {
@@ -171,7 +174,7 @@ export const SETTING_ASSUMPTIONS: Readonly<Record<SettingAssumptionKey, SettingA
     key: 'bank_fee_write_off',
     label: 'ตัดส่วนต่างรับเงินเป็นค่าธรรมเนียมธนาคาร',
     question:
-      'ลูกค้าโอนขาดไม่เกินเพดาน (ค่าเริ่มต้น ฿50) บันทึกส่วนต่างเป็นค่าธรรมเนียมธนาคารและปิดบิลเป็นชำระครบ — เพดานและการบันทึกบัญชีถูกต้องหรือไม่',
+      `ลูกค้าโอนขาดไม่เกินเพดาน (ค่าเริ่มต้น ${fmtSatangSymbol(DEFAULT_WRITE_OFF_TOLERANCE_SATANG)}) บันทึกส่วนต่างเป็นค่าธรรมเนียมธนาคารและปิดบิลเป็นชำระครบ — เพดานและการบันทึกบัญชีถูกต้องหรือไม่`,
     source: 'B4 · U144',
   },
   customer_wht_bank_fee: {

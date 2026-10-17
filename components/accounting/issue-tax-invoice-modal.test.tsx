@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import { TaxInvoicePreviewSummary } from '@/components/accounting/issue-tax-invoice-modal'
+import { alreadyIssuedMessage, TaxInvoicePreviewSummary } from '@/components/accounting/issue-tax-invoice-modal'
 import type { TaxInvoicePreviewDto } from '@/lib/sales/types'
 
 /** mytester3 LR3-02 — พรีวิวแสดงยอด/ป้ายตามผลจาก server (สูตรเดียวกับตอนออก) ไม่คิดเงินเอง */
@@ -86,5 +86,24 @@ describe('<TaxInvoicePreviewSummary>', () => {
     )
     expect(error).toContain('ออกใบไปแล้ว')
     expect(error).not.toContain('฿')
+  })
+})
+
+/** mytester6 T-021 — แท็บที่แพ้การออกพร้อมกันบอกว่าออกไปแล้ว + เลขใบ ไม่ชวนยกเลิกใบเดิม */
+describe('alreadyIssuedMessage()', () => {
+  it('TAX_INVOICE_ALREADY_ISSUED + invoiceNumber ⇒ ข้อความมีเลขใบ ไม่บอกให้ยกเลิก', () => {
+    const text = alreadyIssuedMessage({
+      code: 'TAX_INVOICE_ALREADY_ISSUED',
+      payload: { code: 'TAX_INVOICE_ALREADY_ISSUED', title: 'ออกเอกสารนี้ไปแล้ว', message: 'x', invoiceNumber: 'IV-2569-0003' },
+    })
+    expect(text).toContain('IV-2569-0003')
+    expect(text).toContain('ไม่ต้องออกซ้ำ')
+    expect(text).not.toContain('ต้องยกเลิกใบเดิม')
+  })
+
+  it('ไม่มีเลขใบ (แข่งที่ DB) ⇒ ยังบอกว่าออกไปแล้ว · code อื่น ⇒ null', () => {
+    expect(alreadyIssuedMessage({ code: 'TAX_INVOICE_ALREADY_ISSUED' })).toContain('ออกเอกสารไปแล้ว')
+    expect(alreadyIssuedMessage({ code: 'TAX_INVOICE_ALREADY_ISSUED' })).not.toContain('เลขที่')
+    expect(alreadyIssuedMessage({ code: 'PERIOD_LOCKED_DIRECT_EDIT' })).toBeNull()
   })
 })

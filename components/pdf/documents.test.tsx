@@ -7,7 +7,7 @@ import { extractPdfText } from '@/components/pdf/extract-text'
 import { renderHandoverNote } from '@/components/pdf/handover-note'
 import { renderPackCover } from '@/components/pdf/pack-cover'
 import { renderPaymentVouchers } from '@/components/pdf/payment-voucher'
-import { renderPayoutBatchSummary } from '@/components/pdf/payout-batch-summary'
+import { PAYOUT_SUMMARY_COLUMNS, renderPayoutBatchSummary } from '@/components/pdf/payout-batch-summary'
 import { renderPayslips } from '@/components/pdf/payslip'
 import { renderReportPdf } from '@/components/pdf/report-doc'
 import { renderTaxInvoice } from '@/components/pdf/tax-invoice'
@@ -550,7 +550,7 @@ describe('เอกสารภายใน — แถบหัวตามแ�
     expect(text).toContain('5,356.00')
     expect(text).toContain('ผู้อนุมัติโอนเงิน')
     expect(text).toContain('ค่าตอบแทน')
-    expect(text).toContain('ภาษีที่บริษัทออกให้')
+    expect(text).toContain('ภาษีที่บริษัท ออกให้')
     // รอบที่หักตามปกติทั้งหมด ⇒ ไม่มีหมายเหตุภาษีที่บริษัทออกให้
     expect(text).not.toContain('ไม่หักจากผู้รับ')
   })
@@ -574,6 +574,15 @@ describe('เอกสารภายใน — แถบหัวตามแ�
     expect(text).not.toContain('10,309.28')
     expect(text).not.toContain('31,309.28')
     expect(text).toContain('ไม่หักจากผู้รับ')
+  })
+
+  it('mytester6 T-020 — สรุปรอบจ่าย: หัวคอลัมน์ไทยยาวมีจุดตัดบรรทัด (ไม่ถูกตัดทิ้ง) · ความกว้างรวม 100%', () => {
+    // คำไทยต่อเนื่องยาว (เช่น "ภาษีที่บริษัทออกให้" 19 อักษร) ในคอลัมน์ตัวเลขแคบไม่มีจุดตัด ⇒ ล้นเซลล์ (อักษรท้ายหาย)
+    for (const column of PAYOUT_SUMMARY_COLUMNS.filter((entry) => Number.parseFloat(entry.width) <= 14)) {
+      for (const word of column.label.split(' ')) expect(word.length, column.label).toBeLessThanOrEqual(13)
+    }
+    expect(PAYOUT_SUMMARY_COLUMNS.find((column) => column.label === 'ลำดับ')?.width).toBe('7%')
+    expect(PAYOUT_SUMMARY_COLUMNS.reduce((sum, column) => sum + Number.parseFloat(column.width), 0)).toBe(100)
   })
 
   it('หน้าปกชุดเอกสารบัญชี + รายงาน — แถบหัวเดียวกัน', async () => {

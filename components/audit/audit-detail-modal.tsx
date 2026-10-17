@@ -21,7 +21,6 @@ import {
   auditFieldChanges,
   auditFieldLabel,
   auditRefLabel,
-  auditTargetLabel,
   auditValueDisplay,
 } from '@/lib/audit/log-display'
 import { fmtDateTime } from '@/lib/format/datetime'
@@ -65,7 +64,7 @@ export function AuditDetailModal({ id, onClose }: { id: string | null; onClose: 
             </Item>
             <Item label="ผู้ดำเนินการ">{auditActorLabel(detail.actorName, detail.actorRole, detail.loginFailure)}</Item>
             <Item label="เป้าหมาย">
-              {auditTargetLabel(detail.targetType)}
+              {detail.targetLabel}
               {detail.targetRef !== null && (
                 <>
                   {' '}

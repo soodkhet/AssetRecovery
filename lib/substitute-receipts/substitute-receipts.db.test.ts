@@ -927,6 +927,55 @@ suite('เคลียร์เงินทดรอง "ไม่มีใบ�
     )
     await expectCode(() => advances.reviewAdvanceClear({ actor: finance, meta }, ADV_ID, { note: null }), 'SUBSTITUTE_RECEIPT_NOT_SIGNED')
   })
+
+  it('mytester6 T-003 (D6-01 แบบ ก): เคลียร์ผสม ใบเสร็จจริง + ใบรับรองรอเซ็น ⇒ "ตรวจแล้ว" ไม่ได้ · เซ็นแล้ว ⇒ ได้', async () => {
+    await seedPaidAdvance()
+    await advances.settleAdvance({ actor: agent, meta }, ADV_ID, {
+      usedSatang: 250_000,
+      receiptFileUrl: null,
+      note: null,
+      returnMethod: 'separate',
+      substituteReceipt: { lines: [line(7_000)] },
+    })
+    // จำลองใบเคลียร์ที่แนบใบเสร็จจริงด้วย (ตรวจไฟล์ storage อยู่นอกขอบเขต test นี้)
+    await db().$executeRawUnsafe(
+      `UPDATE advances SET receipt_file_url = 'expense-receipts/${AGENT_ID}/44444444-4444-4444-8444-444444444444.jpg' WHERE id = '${ADV_ID}'`,
+    )
+    const crt = await db().substituteReceipt.findFirstOrThrow({ where: { advanceId: ADV_ID } })
+    await expectCode(() => advances.reviewAdvanceClear({ actor: finance, meta }, ADV_ID, { note: null }), 'SUBSTITUTE_RECEIPT_NOT_SIGNED')
+    expect((await db().advance.findUniqueOrThrow({ where: { id: ADV_ID } })).clearReviewedAt).toBeNull()
+
+    const path = `substitute-receipts/${crt.id}/signed/55555555-5555-4555-8555-555555555555.pdf`
+    await receipts.attachSignedSubstituteReceipt({ actor: agent, meta }, crt.id, { signedFilePath: path })
+    const reviewed = await advances.reviewAdvanceClear({ actor: finance, meta }, ADV_ID, { note: null })
+    expect(reviewed.clearReviewedAt).not.toBeNull()
+  })
+
+  it('mytester6 T-003: ใบรับรองยกเลิกหลังเคลียร์ + แนบใบเสร็จจริง ⇒ ยังตรวจไม่ได้ · ยกเลิกก่อนเคลียร์รอบนี้ ⇒ ไม่นับ', async () => {
+    await seedPaidAdvance()
+    await advances.settleAdvance({ actor: agent, meta }, ADV_ID, {
+      usedSatang: 250_000,
+      receiptFileUrl: null,
+      note: null,
+      returnMethod: 'separate',
+      substituteReceipt: { lines: [line(7_000)] },
+    })
+    const crt = await db().substituteReceipt.findFirstOrThrow({ where: { advanceId: ADV_ID } })
+    await db().$executeRawUnsafe(
+      `UPDATE advances SET receipt_file_url = 'expense-receipts/${AGENT_ID}/44444444-4444-4444-8444-444444444444.jpg' WHERE id = '${ADV_ID}'`,
+    )
+    await db().$executeRawUnsafe(
+      `UPDATE substitute_receipts SET status = 'cancelled', cancelled_at = now() + interval '1 minute', cancelled_by = '${AGENT_ID}', cancel_reason = 'ทดสอบยกเลิก' WHERE id = '${crt.id}'`,
+    )
+    await expectCode(() => advances.reviewAdvanceClear({ actor: finance, meta }, ADV_ID, { note: null }), 'SUBSTITUTE_RECEIPT_NOT_SIGNED')
+
+    // ใบที่ยกเลิกก่อนเคลียร์รอบปัจจุบัน (ของรอบที่ถูกตีกลับ) — เคลียร์รอบนี้ใช้ใบเสร็จล้วน ⇒ ตรวจได้
+    await db().$executeRawUnsafe(
+      `UPDATE substitute_receipts SET cancelled_at = (SELECT cleared_at FROM advances WHERE id = '${ADV_ID}') - interval '1 hour' WHERE id = '${crt.id}'`,
+    )
+    const reviewed = await advances.reviewAdvanceClear({ actor: finance, meta }, ADV_ID, { note: null })
+    expect(reviewed.clearReviewedAt).not.toBeNull()
+  })
 })
 
 suite('U107 — ยกเลิกใบรับรองแทนใบเสร็จ + ออกใบใหม่แทน (มติ PO 06/10/2569)', () => {

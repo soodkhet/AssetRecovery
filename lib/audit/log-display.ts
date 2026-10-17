@@ -1,4 +1,5 @@
 import { fmtDate, fmtDateTime } from '@/lib/format/datetime'
+import { auditEnumValueLabel } from '@/lib/audit/field-display'
 import {
   AUDIT_LIST_REF_DISPLAY_LIMIT,
   auditListFieldRefType,
@@ -94,7 +95,8 @@ const TARGET_TYPE_LABEL: Readonly<Record<string, string>> = {
   exceptions: 'ข้อยกเว้น',
   accountant_questions: 'ข้อซักถามสำนักงานบัญชี',
   tax_invoices: 'ใบกำกับภาษี',
-  credit_notes: 'ใบลดหนี้',
+  // mytester6 T-024 — ตารางเดียวเก็บทั้งสองชนิด (ป้ายรายแถวแยกด้วย `auditTargetLabelOf()`)
+  credit_notes: 'ใบลดหนี้/ใบเพิ่มหนี้',
   wht_certificates: 'หนังสือรับรองหัก ณ ที่จ่าย',
   wht_filing_summaries: 'สรุปยื่น ภ.ง.ด.',
   sales_records: 'รายการขาย',
@@ -153,6 +155,26 @@ const TARGET_TYPE_LABEL: Readonly<Record<string, string>> = {
 
 export function auditTargetLabel(targetType: string): string {
   return TARGET_TYPE_LABEL[targetType] ?? targetType
+}
+
+/**
+ * mytester6 T-024 — ป้ายชนิดเป้าหมายของ "แถว" ที่ขึ้นกับชนิดเอกสาร: `credit_notes` เก็บทั้งใบลดหนี้และใบเพิ่มหนี้
+ * (`note_type` = credit/debit — มติ PO U19) ⇒ อ่าน `note_type` ใน after/before · ไม่มีข้อมูล = ป้ายของตาราง
+ * (server คำนวณใส่ `targetLabel` ของ DTO — รายการไม่ได้ส่ง before/after มาหน้าจอ)
+ */
+export function auditTargetLabelOf(targetType: string, after: unknown, before: unknown = null): string {
+  if (targetType === 'credit_notes') {
+    const noteType = payloadString(after, 'note_type') ?? payloadString(before, 'note_type')
+    if (noteType === 'debit') return 'ใบเพิ่มหนี้'
+    if (noteType === 'credit') return 'ใบลดหนี้'
+  }
+  return auditTargetLabel(targetType)
+}
+
+function payloadString(payload: unknown, key: string): string | null {
+  if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) return null
+  const value = (payload as Record<string, unknown>)[key]
+  return typeof value === 'string' ? value : null
 }
 
 /**
@@ -309,40 +331,10 @@ export function auditValueText(value: unknown, field?: string): string {
 }
 
 /**
- * mytester H-06 — ชื่อฟิลด์ภาษาไทยในตาราง "ค่าก่อน / หลัง" (ชื่อคอลัมน์ภายในเช่น `authorize_note`/`period_id`)
- * ฟิลด์ที่ไม่อยู่ในรายการ ⇒ คืนชื่อเดิม (ผู้ตรวจยังอ่านเทียบกับระบบได้)
+ * mytester H-06 → mytester6 T-009 — ชื่อฟิลด์ภาษาไทยในตาราง "ค่าก่อน / หลัง" ย้ายไป `lib/audit/field-display.ts`
+ * (ป้ายเฉพาะ → แปลทีละคำ → ชื่อเดิม) · export ต่อจากที่นี่ให้ผู้เรียกเดิม
  */
-const AUDIT_FIELD_LABEL: Readonly<Record<string, string>> = {
-  status: 'สถานะ',
-  level: 'ระดับ',
-  reason: 'เหตุผล',
-  note: 'หมายเหตุ',
-  title: 'หัวข้อ',
-  description: 'รายละเอียด',
-  period_id: 'รอบบัญชี',
-  authorize_note: 'เหตุผลที่อนุมัติยกเว้น',
-  authorized_at: 'เวลาอนุมัติยกเว้น',
-  authorized_by: 'ผู้อนุมัติยกเว้น',
-  resolution_note: 'หมายเหตุการแก้ไข',
-  resolved_at: 'เวลาแก้ไข',
-  resolved_by: 'ผู้แก้ไข',
-  source_module: 'โมดูลต้นทาง',
-  amount_satang: 'ยอดเงิน',
-  source_ref: 'ที่มา',
-  match_note: 'หมายเหตุการจับคู่',
-  rejection_reason: 'เหตุผลที่ปฏิเสธ',
-  cancel_reason: 'เหตุผลที่ยกเลิก',
-}
-
-export function auditFieldLabel(field: string): string {
-  return AUDIT_FIELD_LABEL[field] ?? field
-}
-
-/** ค่าสถานะ/ระดับของข้อยกเว้นเป็นข้อความไทย (mytester H-06 — เดิมแสดง `open → authorized`) */
-const EXCEPTION_VALUE_LABEL: Readonly<Record<string, Readonly<Record<string, string>>>> = {
-  status: { open: 'เปิดอยู่', authorized: 'อนุมัติยกเว้นแล้ว', resolved: 'แก้ไขแล้ว' },
-  level: { critical: 'ต้องแก้ก่อนปิดงวด', warning: 'ควรแก้ไข', info: 'ข้อมูลทั่วไป' },
-}
+export { auditFieldLabel } from '@/lib/audit/field-display'
 
 /**
  * known H-06 — id ในค่าก่อน/หลังที่ระบบหาชื่อได้ (`refLabels` จาก server) ⇒ ชื่อ/เลขเอกสาร · ไม่พบ = `null`
@@ -374,7 +366,7 @@ function auditRefListLabel(
   return rest > 0 ? `${text} +${rest} รายการ` : text
 }
 
-/** `auditValueText()` + แปลค่า enum ของเป้าหมายที่รู้จัก (ตอนนี้: ข้อยกเว้น) + ชื่อของ id ที่อ้างถึง (known H-06) */
+/** `auditValueText()` + แปลค่า enum/boolean (`auditEnumValueLabel()`) + ชื่อของ id ที่อ้างถึง (known H-06) */
 export function auditValueDisplay(
   value: unknown,
   field: string,
@@ -383,10 +375,9 @@ export function auditValueDisplay(
 ): string {
   const refLabel = auditRefLabel(value, field, refLabels)
   if (refLabel !== null) return refLabel
-  if (targetType === 'exceptions' && typeof value === 'string') {
-    const label = EXCEPTION_VALUE_LABEL[field]?.[value]
-    if (label !== undefined) return label
-  }
+  // mytester H-06 → mytester6 T-026 — enum/boolean ⇒ ป้ายไทยชุดเดียวกับหน้าจอ (สถานะแยกตามชนิดเป้าหมาย)
+  const enumText = auditEnumValueLabel(value, field, targetType)
+  if (enumText !== null) return enumText
   // ตรวจซ้ำ staging SV5-R-02 — id ในค่าซ้อน (`revenueByCase[].caseId` · `payload.actorId`) ⇒ ชื่อ (แปลงตอนแสดงเท่านั้น)
   if (value !== null && typeof value === 'object') return JSON.stringify(auditReplaceNestedRefs(value, refLabels))
   // ตรวจซ้ำ staging SV5-R-03 — `source_ref` "bank_transaction:<id>" ⇒ ป้ายรายการเดินบัญชี
