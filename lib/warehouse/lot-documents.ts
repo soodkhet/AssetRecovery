@@ -31,7 +31,7 @@ export const LOT_DOCUMENT_ORDINAL: Readonly<Record<LotDocument, string>> = {
 }
 
 /** ชื่อไฟล์ตายตัวใน bucket ต่อชนิดเอกสาร (`44` §6.4) */
-const LOT_DOCUMENT_BASENAME: Readonly<Record<LotDocument, string>> = {
+export const LOT_DOCUMENT_BASENAME: Readonly<Record<LotDocument, string>> = {
   signed_doc: 'signed-doc',
   delivery_proof: 'delivery-proof',
 }

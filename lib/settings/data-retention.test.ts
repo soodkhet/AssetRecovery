@@ -62,7 +62,7 @@ describe('ข้อความ', () => {
   it('หน้าเคส + เหตุผล audit ระบุ job id ไม่มีเลขอ้างอิงสเปค', () => {
     expect(debtorDocumentsPurgedText('06/10/2569')).toBe('เอกสารถูกลบตามนโยบายเก็บข้อมูลเมื่อ 06/10/2569')
     const reason = debtorDocumentPurgeReason('job-123', 5)
-    expect(reason).toContain('[job:job-123]')
+    expect(reason).toContain('(งานเบื้องหลัง #job-123)')
     expect(reason).not.toMatch(/§|`\d{2}`/)
   })
 })

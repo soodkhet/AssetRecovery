@@ -8,6 +8,13 @@ import {
   isAuditRefField,
 } from '@/lib/audit/target-refs'
 import { fmtSatangSymbol } from '@/lib/format/money'
+import {
+  auditColumnMappingText,
+  auditStoragePathText,
+  auditSystemReasonText,
+  auditThrottleKeyText,
+} from '@/lib/audit/system-text'
+import { normalizeFieldName } from '@/lib/audit/diff'
 import type { AuditAction } from '@/lib/generated/prisma/enums'
 import type { AuditLoginFailure } from '@/lib/audit/log-types'
 import type { StatusBadgeGroup } from '@/lib/ui/status-badge'
@@ -237,7 +244,8 @@ const LOGIN_FAILURE_REASON = AUDIT_RESULT_CODE_LABEL
 const REASON_ISO_DATE = /(?<![\w-])(\d{4}-\d{2}-\d{2})(?![\w-])/g
 
 export function auditReasonText(reason: string): string {
-  return reason.replace(REASON_ISO_DATE, (whole: string, date: string) => {
+  // ตรวจซ้ำ staging SV6-R3-01 — ศัพท์ระบบในเหตุผลที่ระบบสร้าง (snapshot/[job:…]/job id) ⇒ ข้อความไทย + id ย่อ
+  return auditSystemReasonText(reason).replace(REASON_ISO_DATE, (whole: string, date: string) => {
     const parsed = new Date(`${date}T00:00:00Z`)
     return Number.isNaN(parsed.getTime()) ? whole : fmtDate(parsed)
   })
@@ -407,11 +415,22 @@ function auditScalarDisplay(
   const enumText = auditEnumValueLabel(value, field, targetType)
   if (enumText !== null) return enumText
   if (typeof value === 'string') {
+    // ตรวจซ้ำ staging SV6-R3-01 — ค่าที่ระบบสร้าง: กุญแจจำกัดความถี่ · คอลัมน์ไฟล์โอน · path ไฟล์ในที่เก็บ
+    const systemText = auditSystemValueText(value, field)
+    if (systemText !== null) return systemText
     // ตรวจซ้ำ staging SV5-R-03 — `source_ref` "bank_transaction:<id>" ⇒ ป้ายรายการเดินบัญชี
     const replaced = auditReplaceTextRefs(value, (ref) => refLabels[ref.id.toLowerCase()] ?? null)
     if (replaced !== value) return replaced
   }
   return auditValueText(value, field)
+}
+
+/** ค่าข้อความที่ระบบสร้างซึ่งแปลงเป็นข้อความไทยได้ (path เต็มยังดูได้ใน tooltip) · ไม่ใช่ = `null` */
+export function auditSystemValueText(value: string, field: string): string | null {
+  const key = normalizeFieldName(field)
+  if (key === normalizeFieldName('throttle_key')) return auditThrottleKeyText(value)
+  if (key === normalizeFieldName('column_mapping')) return auditColumnMappingText(value)
+  return auditStoragePathText(value)
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -503,8 +522,13 @@ function auditInlineRecord(
   const entries = Object.entries(record)
   if (entries.length === 0) return 'ไม่มี'
   return entries
-    .map(([key, item]) => `${auditFieldLabel(key)}${pairSeparator}${auditNestedValue(item, key, targetType, refLabels)}`)
+    .map(([key, item]) => `${auditRecordKeyLabel(key)}${pairSeparator}${auditNestedValue(item, key, targetType, refLabels)}`)
     .join(', ')
+}
+
+/** คีย์ของอ็อบเจกต์ — บางชุดใช้ path ไฟล์เป็นคีย์ (ค่าตรวจสอบไฟล์ต่อไฟล์) ⇒ ชื่อไฟล์แทน path ดิบ (SV6-R3-01) */
+function auditRecordKeyLabel(key: string): string {
+  return auditStoragePathText(key) ?? auditFieldLabel(key)
 }
 
 /**
@@ -523,7 +547,17 @@ function auditRecordLines(
       const text = isPlainObject(item)
         ? auditInlineRecord(item, targetType, refLabels, ' ')
         : auditNestedValue(item, key, targetType, refLabels)
-      return `${auditFieldLabel(key)}: ${text}`
+      return `${auditRecordKeyLabel(key)}: ${text}`
     })
     .join('\n')
+}
+
+/** tooltip ของค่า — id ที่แสดงเป็นชื่อ ⇒ UUID เดิม · path ไฟล์ที่แสดงเป็นชื่อไฟล์ ⇒ path เต็ม (หลักฐาน) */
+export function auditValueTooltip(value: unknown, field: string, refLabels: Readonly<Record<string, string>>): string | undefined {
+  if (auditRefLabel(value, field, refLabels) !== null) {
+    if (typeof value === 'string') return value
+    return Array.isArray(value) ? value.join(', ') : undefined
+  }
+  if (typeof value === 'string' && auditSystemValueText(value, field) !== null) return value
+  return undefined
 }

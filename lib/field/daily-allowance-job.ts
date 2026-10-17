@@ -29,6 +29,7 @@ import { prisma } from '@/lib/prisma'
 import { isDirectEditRejected } from '@/lib/settings/period-lock'
 import type { WarehouseTxClient } from '@/lib/warehouse/asset-hook'
 import { tryCreateRevenue } from '@/lib/warehouse/revenue-service'
+import { jobTraceTag } from '@/lib/audit/system-text'
 
 /**
  * Job `daily_field_allowance` — มติ PO 03/10/2569 (UAT Q21 · DEC-012 · `22` §6.2/§6.3 · `41` §6.6 · `91` §6.1)
@@ -396,7 +397,7 @@ export async function persistFieldDaySettlement(
   // ตรวจซ้ำ staging SV6-R-04 — ข้อความที่ระบบสร้างแสดงวันที่ พ.ศ. (`fmtDate`) ไม่ใช่ ISO ค.ศ. (Rule 01)
   const reasonPrefix =
     backdated === null
-      ? `[job:${mode.kind === 'job' ? mode.jobId : ''}] คำนวณค่าน้ำมันเหมาจ่าย/เบี้ยเลี้ยงรายวันของวันที่ ${fmtDate(day.fieldDate)}`
+      ? `คำนวณค่าน้ำมันเหมาจ่าย/เบี้ยเลี้ยงรายวันของวันที่ ${fmtDate(day.fieldDate)}${mode.kind === 'job' ? ` ${jobTraceTag(mode.jobId)}` : ''}`
       : `${backdated.reason} — สร้างรายการเบิกย้อนหลังของวันลงพื้นที่ ${fmtDate(day.fieldDate)} (งวดของวันนั้นปิดแล้ว) ลงวันที่ ${fmtDate(expenseDate)}`
   const actor =
     backdated === null

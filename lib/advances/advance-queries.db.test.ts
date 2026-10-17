@@ -697,7 +697,7 @@ suite('job auto-overdue (`15` §9.1/§10 · `91` idempotent)', () => {
     })
     const systemLog = logs.find((log) => log.actorId === null)
     expect(systemLog).toBeDefined()
-    expect(systemLog?.reason).toContain('[job:advance_overdue_test]')
+    expect(systemLog?.reason).toContain('(งานเบื้องหลัง #advance_overdue_test)')
   })
 
   it('จำลองวันที่ (dev trigger asOf = พรุ่งนี้ไทย): ใบที่ครบกำหนดวันนี้ถูกมาร์ค · ไม่จำลอง = ไม่แตะ · reason ระบุการจำลอง', async () => {
@@ -731,7 +731,8 @@ suite('job auto-overdue (`15` §9.1/§10 · `91` idempotent)', () => {
       where: { targetType: 'advances', targetId: created.id, action: 'status_change', actorId: null },
       select: { reason: true },
     })
-    expect(log?.reason).toContain(`[job:advance_overdue_sim] [จำลองวันที่ ${fmtDate(simulatedNow)}]`)
+    expect(log?.reason).toContain(`[จำลองวันที่ ${fmtDate(simulatedNow)}] เลยกำหนดเคลียร์ยอด`)
+    expect(log?.reason).toContain('(งานเบื้องหลัง #advance_overdue_sim)')
     expect(log?.reason).toMatch(/\[จำลองวันที่ \d{2}\/\d{2}\/25\d{2}\]/)
   })
 })

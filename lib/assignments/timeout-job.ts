@@ -3,6 +3,7 @@ import { reassignmentTimeoutMessage } from '@/lib/notifications/messages'
 import { drainNotificationOutboxSafely, enqueueNotificationOutbox, type OutboxDrainResult } from '@/lib/notifications/outbox'
 import { outboxMessageEntries } from '@/lib/notifications/outbox-core'
 import { prisma } from '@/lib/prisma'
+import { jobTraceTag } from '@/lib/audit/system-text'
 
 /**
  * Job `reassign_timeout` (`40` §8 · §16 · `91` §6.1) — คำขอที่ไม่มีใครตอบจนเลย `expires_at`
@@ -98,7 +99,7 @@ export async function resolveExpiredReassignments(
         requestedBy: pending.requestedBy,
         pendingReassignmentId: pending.id,
         events: ['assignment.reassignment_timeout_resolved'],
-        auditReason: `[job:${jobId}] หมดเวลารอความยินยอม — ${pending.reason}`,
+        auditReason: `หมดเวลารอความยินยอม — ${pending.reason} ${jobTraceTag(jobId)}`,
       })
 
       // ทั้งสามคนต้องรู้ผลที่ job ตัดสินให้: คนเดิม คนใหม่ และผู้จัดการที่ขอ (`90` §6.3 แถว 3)

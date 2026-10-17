@@ -13,6 +13,7 @@ import { JOB_HANDLERS, SWEEPER_JOB_TYPES, type JobHandlerResult } from '@/lib/jo
 import type { JobRunSummaryDto } from '@/lib/jobs/types'
 import { prisma } from '@/lib/prisma'
 import { JOB_SELECT, JOB_TARGET_TYPE, enqueueJob, type JobOutcome, type JobRow } from '@/lib/jobs/enqueue'
+import { jobRefText } from '@/lib/audit/system-text'
 
 /**
  * ตัวรันงานเบื้องหลังกลาง (`91` §6.2/§9/§10/§17) — **ทางเดียว**ที่ job ถูกสร้างและถูกรัน
@@ -265,7 +266,7 @@ async function auditJobOutcome(after: JobRow, before: JobRow, headline: string):
       errorMessage: after.errorMessage,
       result: after.result,
     },
-    reason: `งานเบื้องหลัง "${jobTypeLabel(after.jobType)}" ${headline} (job id ${after.id})`,
+    reason: `งานเบื้องหลัง "${jobTypeLabel(after.jobType)}" ${headline} (${jobRefText(after.id)})`,
   })
 }
 

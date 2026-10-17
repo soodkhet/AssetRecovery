@@ -13,6 +13,7 @@ import { enqueueNotificationOutbox } from '@/lib/notifications/outbox'
 import { outboxMessageEntries } from '@/lib/notifications/outbox-core'
 import { usersWithCapability } from '@/lib/notifications/recipients'
 import { prisma } from '@/lib/prisma'
+import { jobTraceTag } from '@/lib/audit/system-text'
 
 /**
  * Job `device_tac_sync` — อัปเดตฐาน TAC ของ Model Phone (มติ PO U166 → U167 → U168 · DEC-017 · `91` §6.1)
@@ -110,12 +111,14 @@ export async function runDeviceTacSyncJob(options: DeviceTacSyncOptions = {}): P
   const jobRef = options.jobId ?? DEVICE_TAC_SYNC_JOB_TYPE
   const trigger: TacSyncTrigger = options.filePath === undefined ? (options.trigger ?? 'daily') : 'file'
   const actor = options.actor ?? null
+  // ตรวจซ้ำ staging SV6-R3-01 — ข้อความไทย + เลขงานเต็ม (ไม่ใส่รหัสชนิดงานภาษาอังกฤษ)
+  const jobTag = options.jobId === undefined ? '' : ` ${jobTraceTag(options.jobId)}`
   const reason =
     actor === null
-      ? `งานเบื้องหลัง ${DEVICE_TAC_SYNC_JOB_TYPE} (${jobRef}) อัปเดตฐาน TAC`
+      ? `อัปเดตฐาน TAC อัตโนมัติ${jobTag}`
       : trigger === 'file'
-        ? `นำเข้าไฟล์ TAC เอง (${jobRef})`
-        : `ผู้ดูแลสั่งอัปเดตฐาน TAC (${jobRef})`
+        ? `นำเข้าไฟล์ TAC เอง${jobTag}`
+        : `ผู้ดูแลสั่งอัปเดตฐาน TAC${jobTag}`
 
   if (trigger === 'file' && options.organizationId === undefined) {
     throw new Error('นำเข้าไฟล์ TAC ต้องระบุองค์กร')

@@ -43,9 +43,9 @@ const BANNED: readonly { phrase: RegExp; issue: string; inThaiText?: boolean }[]
 
 /**
  * ไฟล์ที่ข้อความไม่ขึ้นจอผู้ใช้ทั่วไป — ทะเบียน event (คำอธิบายสำหรับนักพัฒนา มีเลขอ้างอิงสเปคปนอยู่แล้ว)
- * · เหตุผล audit ที่ระบบเขียนเองตอนอนุมัติเคส (ซ่อนจากไทม์ไลน์ และ DB test ตรึงถ้อยคำไว้ — ข้อมูลเก่าใช้ถ้อยคำเดิม)
+ * · ตัวแปลงเหตุผลแถวเก่าของบันทึกการใช้งาน (ต้องมีถ้อยคำเดิมไว้จับคู่ — ผลที่ขึ้นจอเป็นข้อความไทยใหม่ · SV6-R3-01)
  */
-const NOT_ON_SCREEN = new Set(['lib/api/events.ts', 'lib/notifications/events.ts', 'lib/cases/status-queries.ts'])
+const NOT_ON_SCREEN = new Set(['lib/api/events.ts', 'lib/notifications/events.ts', 'lib/audit/system-text.ts'])
 
 function walk(dir: string, filter: (file: string) => boolean, out: string[] = []): string[] {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {

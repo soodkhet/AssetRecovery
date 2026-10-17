@@ -7,6 +7,7 @@ import { advanceOverdueMessage } from '@/lib/notifications/messages'
 import { drainNotificationOutboxSafely, enqueueNotificationOutbox, type OutboxDrainResult } from '@/lib/notifications/outbox'
 import { outboxMessageEntries } from '@/lib/notifications/outbox-core'
 import { prisma } from '@/lib/prisma'
+import { jobTraceTag } from '@/lib/audit/system-text'
 
 /**
  * Job `advance_overdue` (`15` §9.1/§10/§13 · `91` — ทุก job ต้อง idempotent)
@@ -111,7 +112,7 @@ export async function runAdvanceOverdueJob(
             payee_id: advance.payeeId,
             auto_marked: true,
           },
-          reason: `[job:${jobId}]${simulatedTag} เลยกำหนดเคลียร์ยอดแล้วยังไม่เคลียร์ — มาร์คเป็น overdue อัตโนมัติ`,
+          reason: `${simulatedTag === '' ? '' : `${simulatedTag.trim()} `}เลยกำหนดเคลียร์ยอดแล้วยังไม่เคลียร์ — เปลี่ยนเป็นเลยกำหนดเคลียร์อัตโนมัติ ${jobTraceTag(jobId)}`,
           diffOnly: false,
         },
         tx,

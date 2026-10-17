@@ -29,6 +29,7 @@ import { drainNotificationOutboxSafely, enqueueNotificationOutbox } from '@/lib/
 import { outboxExpenseApprovalEntries } from '@/lib/notifications/outbox-core'
 import { prisma } from '@/lib/prisma'
 import { isDirectEditRejected } from '@/lib/settings/period-lock'
+import { jobTraceTag } from '@/lib/audit/system-text'
 
 /**
  * Job `fuel_distance_retry` (มติ PO 14/08/2569 — D10 · `91` §17)
@@ -414,7 +415,7 @@ async function persistFuelExpense(params: {
         },
         reason:
           backdated === null
-            ? `[job:${mode.kind === 'job' ? mode.jobId : ''}] คำนวณระยะทางย้อนหลังสำเร็จ — สร้างรายการค่าน้ำมันที่ค้างจากตอนปิดงาน` // D10
+            ? `คำนวณระยะทางย้อนหลังสำเร็จ — สร้างรายการค่าน้ำมันที่ค้างจากตอนปิดงาน${mode.kind === 'job' ? ` ${jobTraceTag(mode.jobId)}` : ''}` // D10
             : `${backdated.reason} — สร้างรายการค่าน้ำมันย้อนหลังของงานที่ปิดเมื่อ ${fmtDate(basis.workDate)} (งวดของวันนั้นปิดแล้ว) ลงวันที่ ${fmtDate(params.expenseDate)}`,
         ...(backdated === null ? {} : { ipAddress: backdated.meta.ipAddress, userAgent: backdated.meta.userAgent }),
         diffOnly: false,

@@ -3,6 +3,7 @@ import { enqueueJob, type RunJobById } from '@/lib/jobs/enqueue'
 import type { SessionUser } from '@/lib/auth/types'
 import { finishPayoutPostCompletion, type PayoutPostCompletionResult } from '@/lib/payout/post-completion'
 import { prisma } from '@/lib/prisma'
+import { jobRefText } from '@/lib/audit/system-text'
 
 /**
  * ตัวกวาดขั้นหลังรอบจ่าย `completed` (มติ PO 07/10/2569 U134 · แนวเดียวกับ outbox — DEC-015)
@@ -136,7 +137,7 @@ export async function runPayoutCompletionRepair(input: {
   const outcome = await finishPayoutPostCompletion(
     { actor, meta: { ipAddress: null, userAgent: null } },
     batch.id,
-    { missingOnly: true, traceNote: ` (ทำต่อโดยงานเบื้องหลัง job id ${input.jobId})` },
+    { missingOnly: true, traceNote: ` (ทำต่อโดยงานเบื้องหลัง ${jobRefText(input.jobId)})` },
   )
   return { batchId: batch.id, alreadyDone: false, ...outcome }
 }

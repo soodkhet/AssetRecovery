@@ -20,8 +20,8 @@ import {
   auditActorLabel,
   auditFieldChanges,
   auditFieldLabel,
-  auditRefLabel,
   auditValueDisplay,
+  auditValueTooltip,
 } from '@/lib/audit/log-display'
 import { fmtDateTime } from '@/lib/format/datetime'
 
@@ -107,13 +107,13 @@ export function AuditDetailModal({ id, onClose }: { id: string | null; onClose: 
                       <Td className="px-3 py-2 text-xs">{auditFieldLabel(change.field)}</Td>
                       <Td
                         className="px-3 py-2 text-xs break-all whitespace-pre-line text-slate-500"
-                        title={refTooltip(change.before, change.field, detail.refLabels)}
+                        title={auditValueTooltip(change.before, change.field, detail.refLabels)}
                       >
                         {auditValueDisplay(change.before, change.field, detail.targetType, detail.refLabels)}
                       </Td>
                       <Td
                         className="px-3 py-2 text-xs font-medium break-all whitespace-pre-line text-slate-800"
-                        title={refTooltip(change.after, change.field, detail.refLabels)}
+                        title={auditValueTooltip(change.after, change.field, detail.refLabels)}
                       >
                         {auditValueDisplay(change.after, change.field, detail.targetType, detail.refLabels)}
                       </Td>
@@ -136,12 +136,4 @@ function Item({ label, children }: { label: string; children: React.ReactNode })
       <dd className="mt-0.5 text-sm text-slate-800">{children}</dd>
     </div>
   )
-}
-
-/** known H-06 — ค่าที่แสดงเป็นชื่อแทน id ⇒ tooltip บอก UUID เดิม */
-function refTooltip(value: unknown, field: string, refLabels: Readonly<Record<string, string>>): string | undefined {
-  if (auditRefLabel(value, field, refLabels) === null) return undefined
-  if (typeof value === 'string') return value
-  // ทดสอบซ้ำ local LR6-01 — รายการ id ⇒ tooltip บอก UUID ทุกตัว
-  return Array.isArray(value) ? value.join(', ') : undefined
 }

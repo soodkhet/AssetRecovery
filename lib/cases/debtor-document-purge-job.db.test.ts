@@ -179,7 +179,7 @@ suite('job purge_debtor_documents (มติ PO U97 — PDPA)', () => {
     const audits = await db().auditLog.findMany({ where: { targetId: caseId, targetType: 'cases', action: 'delete' } })
     expect(audits).toHaveLength(1)
     expect(audits[0]?.actorId).toBeNull()
-    expect(audits[0]?.reason).toContain('[job:job-pdpa-1]')
+    expect(audits[0]?.reason).toContain('(งานเบื้องหลัง #job-pdpa-1)')
     expect(audits[0]?.afterData).toMatchObject({ files_purged: 5, retention_years: 5 })
   })
 

@@ -493,7 +493,7 @@ const FIELD_LABELS: LabelMap = {
   refund_file_path: 'ไฟล์หลักฐานคืนเงิน',
   refund_file_sha256: 'ค่าตรวจสอบไฟล์หลักฐานคืนเงิน',
   refund_note: 'หมายเหตุการคืนเงิน',
-  column_mapping: 'การจับคู่คอลัมน์',
+  column_mapping: 'คอลัมน์ในไฟล์ (เรียงตามลำดับ)',
   // รายได้/ค่าบริการ
   service_fee_base_satang: 'ฐานค่าบริการ',
   service_fee_basis_snapshot: 'ฐานค่าบริการที่บันทึกไว้',
@@ -582,7 +582,8 @@ const FIELD_LABELS: LabelMap = {
   cache_key: 'คีย์แคช',
   dedupe_key: 'คีย์กันซ้ำ',
   idempotency_key: 'คีย์กันทำซ้ำ',
-  throttle_key: 'คีย์จำกัดความถี่',
+  // ตรวจซ้ำ staging SV6-R3-01 — ค่าแปลงเป็น "ชื่อผู้ใช้ …"/"บัญชีผู้ใช้ #…" ที่ `auditThrottleKeyText()`
+  throttle_key: 'จำกัดจำนวนครั้งตาม',
   event_code: 'รหัสเหตุการณ์',
   post_completion_synced_at: 'เวลาซิงก์หลังเสร็จสิ้น',
   schedule_order: 'ลำดับในกำหนดการ',
@@ -722,6 +723,8 @@ const FIELD_LABELS: LabelMap = {
   attached: 'แนบแล้ว',
   not_attached: 'ยังไม่ได้แนบ',
   // การเข้าถึงที่ถูกปฏิเสธ (พอร์ทัล/ทรัพย์ในคลัง)
+  // ตรวจซ้ำ staging SV6-R3-01 — บันทึกความปลอดภัย: คง path จริงไว้ แต่บอกว่าเป็นค่าของระบบ
+  endpoint: 'ที่อยู่ที่เรียก (ระบบ)',
   requested_id: 'รหัสที่ขอเปิด',
   section: 'หมวดข้อมูล',
   slot: 'ช่องเอกสาร',

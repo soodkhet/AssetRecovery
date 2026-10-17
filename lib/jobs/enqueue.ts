@@ -4,6 +4,7 @@ import type { JobStatus } from '@/lib/generated/prisma/enums'
 import { JOB_MAX_RETRIES_DEFAULT } from '@/lib/jobs/job-state'
 import { jobTypeLabel, type JobTypeCode } from '@/lib/jobs/job-types'
 import { prisma } from '@/lib/prisma'
+import { jobRefText } from '@/lib/audit/system-text'
 
 /**
  * สร้างงานเบื้องหลัง (`91` §11/§14) — แยกจาก `lib/jobs/engine.ts` (ตัวรันงาน) เพราะตัวรันงาน import ทะเบียน handler
@@ -134,7 +135,7 @@ export async function enqueueJob(input: EnqueueJobInput): Promise<EnqueueJobResu
         after: { jobType: job.jobType, payload: job.payload, scheduledAt: job.scheduledAt },
         reason:
           input.reason ??
-          `ตั้งงานเบื้องหลัง "${jobTypeLabel(job.jobType)}" (job id ${job.id} · คีย์กันซ้ำ ${input.idempotencyKey})`,
+          `ตั้งงานเบื้องหลัง "${jobTypeLabel(job.jobType)}" (${jobRefText(job.id)} · คีย์กันทำซ้ำ ${input.idempotencyKey})`,
       })
     }
 

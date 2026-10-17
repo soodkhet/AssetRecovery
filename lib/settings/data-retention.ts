@@ -1,5 +1,6 @@
 import type { CaseStatus } from '@/lib/generated/prisma/enums'
 import { toBangkokParts } from '@/lib/format/datetime'
+import { jobTraceTag } from '@/lib/audit/system-text'
 
 /**
  * นโยบายระยะเก็บเอกสารลูกหนี้ (PDPA — มติ PO 06/10/2569 U97 · `13` §6.16 · `90` §6.2) — **pure ล้วน ไม่มี I/O**
@@ -84,5 +85,5 @@ export function debtorDocumentsPurgedText(purgedDateLabel: string): string {
 
 /** เหตุผลมาตรฐานของ audit การลบโดย job — ระบุ job id ให้ trace ได้ (actor = ระบบ) */
 export function debtorDocumentPurgeReason(jobId: string, years: number): string {
-  return `[job:${jobId}] ลบไฟล์เอกสารลูกหนี้ตามนโยบายระยะเก็บข้อมูล ${years} ปีหลังปิดเคส`
+  return `ลบไฟล์เอกสารลูกหนี้ตามนโยบายระยะเก็บข้อมูล ${years} ปีหลังปิดเคส ${jobTraceTag(jobId)}`
 }

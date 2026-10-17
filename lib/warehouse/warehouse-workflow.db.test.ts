@@ -1809,7 +1809,7 @@ suite('UAT Q21 — job `daily_field_allowance` (รายวันต่อพ�
     expect(sumOf('allowance')).toBe(settlement.allowanceTotalSatang)
     const audit = await db().auditLog.findFirst({ where: { targetType: 'field_day_settlements', targetId: settlement.id } })
     expect(audit?.actorId).toBeNull()
-    expect(audit?.reason).toContain(`[job:${queued.id}]`)
+    expect(audit?.reason).toContain(`(งานเบื้องหลัง #${queued.id})`)
 
     // รันซ้ำ = ไม่เพิ่มอะไรเลย (idempotent ต่อ พนักงาน×วัน)
     const again = await job.runDailyFieldAllowanceJob({ organizationId: ORG_ID, date: todayIso() })

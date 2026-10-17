@@ -7,6 +7,7 @@ import {
   auditActionLabel,
   auditActorLabel,
   auditFieldChanges,
+  auditValueTooltip,
   auditLoginFailureOf,
   auditReasonText,
   auditRowDisplay,
@@ -254,7 +255,7 @@ describe('ตรวจซ้ำ staging SV5-R-02/R-03 — auditValueDisplay ก�
 describe('ตรวจซ้ำ staging SV6-R-04 — วันที่ ISO ในเหตุผลเดิมแสดงเป็น พ.ศ.', () => {
   it('วันที่ล้วน ⇒ DD/MM/YYYY พ.ศ. · เลขอ้างอิง/ชื่อไฟล์ที่มีตัวเลขติดกันไม่ถูกแตะ', () => {
     expect(auditReasonText('[job:x] คำนวณค่าน้ำมันเหมาจ่าย/เบี้ยเลี้ยงรายวันของวันที่ 2026-10-17 — กระจาย')).toBe(
-      '[job:x] คำนวณค่าน้ำมันเหมาจ่าย/เบี้ยเลี้ยงรายวันของวันที่ 17/10/2569 — กระจาย',
+      'คำนวณค่าน้ำมันเหมาจ่าย/เบี้ยเลี้ยงรายวันของวันที่ 17/10/2569 — กระจาย (งานเบื้องหลัง #x)',
     )
     expect(auditReasonText('คีย์ PB-IN-25691004-CB4FD7202879')).toBe('คีย์ PB-IN-25691004-CB4FD7202879')
     expect(auditReasonText('ไฟล์ AccountingPack_2569-10_v1.0.zip')).toBe('ไฟล์ AccountingPack_2569-10_v1.0.zip')
@@ -311,5 +312,52 @@ describe('ตรวจซ้ำ staging SV6-R-03 — รายการ/อ็�
     expect(text).toContain('2 รายการ')
     noRawJson(text)
     expect(auditValueDisplay({}, 'payload', 'jobs')).toBe('ไม่มี')
+  })
+})
+
+describe('ตรวจซ้ำ staging SV6-R3-01 — ค่าที่ระบบสร้างในรายละเอียดบันทึกการใช้งาน', () => {
+  const CASE_ID = 'c5af5ab9-fb40-4d26-8e1c-a7f2443d09b9'
+  const PATH = `cases/${CASE_ID}/national_id_doc/b00d2446-e9b2-4289-a5d9-ce330daa1c71-idcard8.jpg`
+
+  it('ช่องไฟล์ ⇒ ชนิดเอกสาร · ชื่อไฟล์ (ไม่โชว์ path เต็ม) · tooltip ยังเป็น path เต็ม', () => {
+    expect(auditValueDisplay(PATH, 'path', 'cases')).toBe('บัตรประชาชน/Passport ลูกหนี้ · idcard8.jpg')
+    expect(auditValueDisplay(PATH, 'fileUrl', 'case_documents')).toBe('บัตรประชาชน/Passport ลูกหนี้ · idcard8.jpg')
+    expect(auditValueTooltip(PATH, 'path', {})).toBe(PATH)
+    expect(auditValueTooltip('ข้อความ', 'note', {})).toBeUndefined()
+  })
+
+  it('path เป็นคีย์ของอ็อบเจกต์ (ค่าตรวจสอบไฟล์ต่อไฟล์) ⇒ ชื่อไฟล์แทน path', () => {
+    expect(auditValueDisplay({ [PATH]: 'abc' }, 'file_hashes', 'case_evidences')).toBe(
+      'บัตรประชาชน/Passport ลูกหนี้ · idcard8.jpg: abc',
+    )
+  })
+
+  it('กุญแจจำกัดจำนวนครั้ง ⇒ "จำกัดจำนวนครั้งตาม" — ชื่อผู้ใช้ …', () => {
+    expect(auditFieldLabel('throttle_key')).toBe('จำกัดจำนวนครั้งตาม')
+    expect(auditValueDisplay('identifier:uat.temp2', 'throttle_key', 'users')).toBe('ชื่อผู้ใช้ uat.temp2')
+  })
+
+  it('คอลัมน์ของรูปแบบไฟล์โอน ⇒ ป้ายของหน้าตั้งค่า', () => {
+    expect(
+      auditValueDisplay(
+        'receiving_bank_code,receiving_account_no,receiving_account_name,amount,reference_no',
+        'column_mapping',
+        'bank_file_formats',
+      ),
+    ).toBe('รหัสธนาคารผู้รับ, เลขบัญชีผู้รับ, ชื่อบัญชีผู้รับ, จำนวนเงิน, เลขที่อ้างอิง')
+  })
+
+  it('ที่อยู่ที่ถูกปฏิเสธการเข้าถึง ⇒ คง path จริง (บันทึกความปลอดภัย) ป้ายบอกว่าเป็นค่าของระบบ', () => {
+    expect(auditFieldLabel('endpoint')).toBe('ที่อยู่ที่เรียก (ระบบ)')
+    expect(auditValueDisplay('GET /api/portal/cases', 'endpoint', 'cases')).toBe('GET /api/portal/cases')
+  })
+
+  it('เหตุผลอนุมัติเคส/งานเบื้องหลังแบบเดิม ⇒ ข้อความไทย (ผ่าน auditReasonText)', () => {
+    expect(auditReasonText('snapshot ค่าบริการอัตโนมัติตอนอนุมัติเคส — เทมเพลต "A" v1')).toBe(
+      'บันทึกค่าบริการอัตโนมัติตอนอนุมัติเคส — เทมเพลต "A" เวอร์ชัน 1',
+    )
+    const text = auditReasonText('งานเบื้องหลัง "X" ทำงานสำเร็จ (job id 58536284-a2c3-4178-b9f4-4e8bc91fd0d7)')
+    expect(text).toBe('งานเบื้องหลัง "X" ทำงานสำเร็จ (งานเบื้องหลัง #58536284)')
+    expect(text).not.toMatch(/job/)
   })
 })

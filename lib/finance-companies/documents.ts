@@ -40,8 +40,8 @@ export const COMPANY_DOCUMENT_HINT: Readonly<Record<CompanyDocumentType, string>
   other: 'ระบุชื่อเอกสารเอง เช่น หนังสือมอบอำนาจ',
 }
 
-/** ชื่อโฟลเดอร์ใน bucket ต่อชนิด */
-const PATH_SEGMENT: Readonly<Record<CompanyDocumentType, string>> = {
+/** ชื่อโฟลเดอร์ใน bucket ต่อชนิด (export ให้บันทึกการใช้งานแปลง path กลับเป็นชนิดเอกสาร) */
+export const COMPANY_DOCUMENT_PATH_SEGMENT: Readonly<Record<CompanyDocumentType, string>> = {
   company_certificate: 'certificate',
   vat_registration: 'vat-registration',
   service_contract: 'contract',
@@ -60,7 +60,7 @@ export const CERTIFICATE_MAX_AGE_MONTHS = 6
 export const COMPANY_DOCUMENT_TITLE_MAX = 120
 
 export function companyDocumentPrefix(companyId: string, type: CompanyDocumentType): string {
-  return `finance-companies/${companyId}/documents/${PATH_SEGMENT[type]}/`
+  return `finance-companies/${companyId}/documents/${COMPANY_DOCUMENT_PATH_SEGMENT[type]}/`
 }
 
 /** path ต่อเวอร์ชัน — `uniqueKey` ให้ผู้เรียกส่งเข้ามา (`crypto.randomUUID()`) เพื่อให้ยัง pure */

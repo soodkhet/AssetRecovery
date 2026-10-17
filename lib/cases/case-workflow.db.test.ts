@@ -253,7 +253,7 @@ suite('Phase 2.3 — state machine + snapshot + recycle (DB จริง)', () =
         orderBy: { createdAt: 'desc' },
       })
       expect(audit.reason).toContain('ลูกหนี้ย้ายมาอยู่พื้นที่ทีมนี้')
-      expect(audit.reason).toContain('snapshot ค่าบริการ')
+      expect(audit.reason).toContain('บันทึกค่าบริการอัตโนมัติตอนอนุมัติเคส')
       expect((audit.afterData as Record<string, unknown>)['teamChangeReason']).toBe('ลูกหนี้ย้ายมาอยู่พื้นที่ทีมนี้')
     } finally {
       await db().$executeRawUnsafe(`UPDATE cases SET suggested_team_id = NULL WHERE suggested_team_id = '${OTHER_TEAM}'`)
@@ -1002,7 +1002,7 @@ suite('Phase 2.3 — state machine + snapshot + recycle (DB จริง)', () =
       `SELECT reason FROM audit_logs WHERE target_id = '${caseId}' AND action = 'approve' AND created_at >= $1`,
       startedAt,
     )
-    expect(audits[0]?.reason).toContain('snapshot ค่าบริการอัตโนมัติ')
+    expect(audits[0]?.reason).toContain('บันทึกค่าบริการอัตโนมัติตอนอนุมัติเคส')
 
     const notificationBodies = async (): Promise<Array<string | null>> => {
       const rows = await db().$queryRawUnsafe<Array<{ body: string | null }>>(

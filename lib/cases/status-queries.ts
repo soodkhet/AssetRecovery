@@ -36,6 +36,7 @@ import type { Prisma } from '@/lib/generated/prisma/client'
 import { caseSubmitterIds, dispatchNotification } from '@/lib/notifications/dispatch'
 import { caseDecisionMessage, type CaseDecisionEvent } from '@/lib/notifications/messages'
 import { prisma } from '@/lib/prisma'
+import { serviceFeeSnapshotReason } from '@/lib/audit/system-text'
 
 /**
  * State machine + routing + recycle ของโมดูลรับเคส (ไฟล์ 38 §6.5, §6.6, §8–10)
@@ -504,5 +505,6 @@ export function joinAuditReasons(...parts: readonly (string | null)[]): string |
  * จึงเติมเหตุผลเชิงระบบที่ระบุ template/version ที่ใช้ (ยัง trace กลับได้ว่าใช้เงื่อนไขไหน)
  */
 function snapshotReason(templateName: string, version: number): string {
-  return `snapshot ค่าบริการอัตโนมัติตอนอนุมัติเคส — เทมเพลต "${templateName}" v${version}`
+  // ตรวจซ้ำ staging SV6-R3-01 — ข้อความไทยล้วน (แถวเก่า "snapshot … v1" แปลงตอนแสดงที่ `auditSystemReasonText()`)
+  return serviceFeeSnapshotReason(templateName, version)
 }
