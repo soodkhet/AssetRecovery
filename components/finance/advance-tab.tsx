@@ -190,7 +190,8 @@ export function AdvanceTab() {
                           receipt={advance.substituteReceipt}
                           compact
                           canUpload={canApproveAdvance}
-                          canCancel={canApproveAdvance}
+                          // ตรวจการเคลียร์แล้ว ⇒ ยกเลิกใบไม่ได้ (แก้ผ่านรายการปรับปรุง — มติ D6-02 · server ปัดซ้ำ)
+                          canCancel={canApproveAdvance && advance.clearReviewedAt === null}
                           onSigned={() => void reload()}
                           onChanged={() => void reload()}
                         />

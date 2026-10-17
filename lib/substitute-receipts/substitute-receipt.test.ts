@@ -240,7 +240,7 @@ describe('มติ PO U107 — ยกเลิก / ออกใบใหม่
     expect(substituteReceiptCancelProblem('pending_signature', expenseLink())).toBeNull()
     expect(substituteReceiptCancelProblem('signed', expenseLink({ expenseStatus: 'needs_revision' }))).toBeNull()
     expect(substituteReceiptCancelProblem('signed', expenseLink({ expenseStatus: 'rejected' }))).toBeNull()
-    expect(substituteReceiptCancelProblem('signed', { kind: 'advance', usedSatang: 10_000 })).toBeNull()
+    expect(substituteReceiptCancelProblem('signed', { kind: 'advance', usedSatang: 10_000, clearReviewed: false })).toBeNull()
   })
 
   it('ยกเลิกไม่ได้: ยกเลิกแล้ว (terminal) · ใบเบิกอนุมัติจ่ายแล้ว · อยู่ในรอบจ่ายที่จ่ายแล้ว', () => {
@@ -249,6 +249,19 @@ describe('มติ PO U107 — ยกเลิก / ออกใบใหม่
     expect(substituteReceiptCancelProblem('signed', expenseLink({ inCompletedPayout: true }))).toBe('linked_paid')
     expect(substituteReceiptCancelProblemMessage('linked_paid', 'CRT-2569-0001')).toContain('อนุมัติจ่ายแล้ว')
     expect(substituteReceiptCancelProblemMessage('already_cancelled', 'CRT-2569-0001')).toContain('ถูกยกเลิกไปแล้ว')
+  })
+
+  it('มติ D6-02: เงินทดรองที่การเงินตรวจการเคลียร์แล้ว ⇒ ยกเลิกไม่ได้ (ข้อความไทยบอกทางแก้)', () => {
+    expect(substituteReceiptCancelProblem('signed', { kind: 'advance', usedSatang: 10_000, clearReviewed: true })).toBe(
+      'clear_reviewed',
+    )
+    expect(substituteReceiptCancelProblem('cancelled', { kind: 'advance', usedSatang: 10_000, clearReviewed: true })).toBe(
+      'already_cancelled',
+    )
+    const message = substituteReceiptCancelProblemMessage('clear_reviewed', 'CRT-2569-0001')
+    expect(message).toContain('ตรวจการเคลียร์แล้ว')
+    expect(message).toContain('รายการปรับปรุง')
+    expect(message).not.toMatch(/§|D6-/)
   })
 
   it('เหตุผลบังคับอย่างน้อย 5 ตัวอักษร (ตัดช่องว่าง) — ไม่ผ่าน = CANCEL_REQUIRES_REASON', () => {
@@ -312,9 +325,9 @@ describe('มติ PO U107 — ยกเลิก / ออกใบใหม่
     const receiptLink = { ...expenseLink(), expenseType: 'receipt' as const }
     expect(substituteReceiptReissueTotalProblem(receiptLink, 9_000)).toBeNull()
     expect(substituteReceiptReissueTotalProblem(receiptLink, 10_001)).toContain('ไม่เกินยอดเบิก')
-    expect(substituteReceiptReissueTotalProblem({ kind: 'advance', usedSatang: 5_000 }, 5_000)).toBeNull()
-    expect(substituteReceiptReissueTotalProblem({ kind: 'advance', usedSatang: 5_000 }, 5_001)).toContain('ยอดที่ใช้จริง')
-    expect(substituteReceiptReissueTotalProblem({ kind: 'advance', usedSatang: null }, 1)).not.toBeNull()
+    expect(substituteReceiptReissueTotalProblem({ kind: 'advance', usedSatang: 5_000, clearReviewed: false }, 5_000)).toBeNull()
+    expect(substituteReceiptReissueTotalProblem({ kind: 'advance', usedSatang: 5_000, clearReviewed: false }, 5_001)).toContain('ยอดที่ใช้จริง')
+    expect(substituteReceiptReissueTotalProblem({ kind: 'advance', usedSatang: null, clearReviewed: false }, 1)).not.toBeNull()
   })
 
   it('staging SV5-01 — ส่งใหม่ขณะมีใบที่ใช้งานอยู่: ค่าที่พักยอดต้องเท่าใบ · ชนิดอื่นไม่ต่ำกว่ายอดใบ · แนบไฟล์ใหม่ทับไม่ได้', () => {

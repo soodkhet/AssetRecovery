@@ -349,7 +349,7 @@ const docSourceSelect = {
       user: { select: { fullName: true, phone: true, teamId: true, team: { select: { name: true } } } },
     },
   },
-  advance: { select: { advanceNumber: true, usedSatang: true } },
+  advance: { select: { advanceNumber: true, usedSatang: true, clearReviewedAt: true } },
   expense: {
     select: {
       id: true,
@@ -384,7 +384,11 @@ function linkStateOf(row: SubstituteReceiptSourceRow): SubstituteReceiptLinkStat
       inCompletedPayout: row.expense.payoutItems.length > 0,
     }
   }
-  return { kind: 'advance', usedSatang: row.advance?.usedSatang ?? null }
+  return {
+    kind: 'advance',
+    usedSatang: row.advance?.usedSatang ?? null,
+    clearReviewed: (row.advance?.clearReviewedAt ?? null) !== null,
+  }
 }
 
 async function findForViewer(
@@ -710,6 +714,22 @@ export async function cancelSubstituteReceiptInTx(
 ): Promise<void> {
   const user = context.actor
   const id = current.id
+  if (current.advanceId !== null) {
+    // ล็อกเงินทดรองแล้วตรวจซ้ำ — กันแข่งกับ "ตรวจการเคลียร์" (`reviewAdvanceClear` ล็อกแถวเดียวกัน) ⇒ ฝั่งใดได้ล็อกก่อน
+    // อีกฝั่งเห็นผลที่ commit แล้ว: ตรวจก่อน ⇒ ยกเลิกไม่ได้ (มติ D6-02) · ยกเลิกก่อน ⇒ ตรวจไม่ผ่านเพราะไม่มีฉบับเซ็น (รีวิว T-1)
+    await tx.$queryRaw`SELECT id FROM advances WHERE id = ${current.advanceId}::uuid FOR UPDATE`
+    const advance = await tx.advance.findUniqueOrThrow({
+      where: { id: current.advanceId },
+      select: { clearReviewedAt: true },
+    })
+    if (advance.clearReviewedAt !== null) {
+      throw new SubstituteReceiptError('SUBSTITUTE_RECEIPT_NOT_CANCELLABLE', {
+        message: substituteReceiptCancelProblemMessage('clear_reviewed', current.receiptNumber),
+        detail: `substitute_receipt=${id} advance clear reviewed concurrently`,
+        context: { problem: 'clear_reviewed' },
+      })
+    }
+  }
   // ผูกสถานะเดิม — ยกเลิกพร้อมกัน/แข่งกับการอัปโหลดฉบับเซ็นได้ผลแค่คำขอเดียว
   const claimed = await tx.substituteReceipt.updateMany({
     where: { id, organizationId: user.organizationId, status: current.status, deletedAt: null },

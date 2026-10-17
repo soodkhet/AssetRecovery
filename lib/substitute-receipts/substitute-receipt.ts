@@ -228,16 +228,22 @@ export type SubstituteReceiptLinkState =
       /** ใบเบิกอยู่ในรอบจ่ายที่ `completed` แล้ว (เงินออกจริง) */
       inCompletedPayout: boolean
     }
-  | { kind: 'advance'; usedSatang: number | null }
+  | {
+      kind: 'advance'
+      usedSatang: number | null
+      /** การเงิน "ตรวจแล้ว" การเคลียร์ (`advances.clear_reviewed_at` มีค่า — ตีกลับไม่ได้แล้ว) */
+      clearReviewed: boolean
+    }
 
-export type SubstituteReceiptCancelProblem = 'already_cancelled' | 'linked_paid'
+export type SubstituteReceiptCancelProblem = 'already_cancelled' | 'linked_paid' | 'clear_reviewed'
 
 /**
  * ยกเลิกได้ไหม (ไม่รวมสิทธิ์ของผู้เรียก) — `null` = ได้
  * - ยกเลิกแล้ว = terminal ยกเลิกซ้ำไม่ได้
  * - ใบเบิกที่ **อนุมัติจ่ายแล้ว** (`approved`) หรืออยู่ในรอบจ่ายที่จ่ายสำเร็จแล้ว ⇒ ยกเลิกไม่ได้ (หลักฐานของเงินที่จ่ายไปแล้ว
  *   — ต้องแก้ผ่านรายการปรับปรุง) · ใบเบิกที่ถูกปฏิเสธ/แทนที่ ⇒ ยกเลิกได้ (ไม่ได้เบิกจริงอยู่แล้ว)
- * - เงินทดรอง: การเคลียร์ยอดไม่มีขั้นอนุมัติ ⇒ ยกเลิกได้ (การเงินเท่านั้น — `canCancelSubstituteReceipt()`) ภายใต้ Period Lock
+ * - เงินทดรอง: ยกเลิกได้ (การเงินเท่านั้น — `canCancelSubstituteReceipt()`) ภายใต้ Period Lock **จนกว่าการเงินจะ
+ *   "ตรวจแล้ว" การเคลียร์** (`clear_reviewed_at` มีค่า — ตีกลับไม่ได้) ⇒ ยกเลิกไม่ได้ ต้องแก้ผ่านรายการปรับปรุง (มติ D6-02)
  */
 export function substituteReceiptCancelProblem(
   status: SubstituteReceiptStatus,
@@ -245,6 +251,7 @@ export function substituteReceiptCancelProblem(
 ): SubstituteReceiptCancelProblem | null {
   if (status === 'cancelled') return 'already_cancelled'
   if (link.kind === 'expense' && (link.expenseStatus === 'approved' || link.inCompletedPayout)) return 'linked_paid'
+  if (link.kind === 'advance' && link.clearReviewed) return 'clear_reviewed'
   return null
 }
 
@@ -258,6 +265,9 @@ export function requireSubstituteReceiptCancelReason(reason: string | null | und
 /** ข้อความของปัญหาการยกเลิก — ใช้ทั้ง error ฝั่ง server และคำอธิบายบนหน้าจอ */
 export function substituteReceiptCancelProblemMessage(problem: SubstituteReceiptCancelProblem, receiptNumber: string): string {
   if (problem === 'already_cancelled') return `ใบรับรองแทนใบเสร็จ ${receiptNumber} ถูกยกเลิกไปแล้ว`
+  if (problem === 'clear_reviewed') {
+    return `ใบรับรองแทนใบเสร็จ ${receiptNumber} ผูกกับเงินทดรองที่การเงินตรวจการเคลียร์แล้ว — ยกเลิกไม่ได้ (แก้ไขผ่านรายการปรับปรุง)`
+  }
   return `ใบรับรองแทนใบเสร็จ ${receiptNumber} ผูกกับรายการเบิกที่อนุมัติจ่ายแล้ว — ยกเลิกไม่ได้ (แก้ไขผ่านรายการปรับปรุง)`
 }
 

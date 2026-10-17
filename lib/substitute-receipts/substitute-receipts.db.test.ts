@@ -912,6 +912,44 @@ suite('เคลียร์เงินทดรอง "ไม่มีใบ�
     expect(reviewed.clearReviewedAt).not.toBeNull()
   })
 
+  it('มติ D6-02: การเคลียร์ "ตรวจแล้ว" ⇒ ยกเลิกใบรับรองที่ผูกเงินทดรองไม่ได้ (ทั้งทางปกติและทางในทรานแซกชันที่อ่านค่าก่อนตรวจ)', async () => {
+    await seedPaidAdvance()
+    await advances.settleAdvance({ actor: agent, meta }, ADV_ID, {
+      usedSatang: 250_000,
+      receiptFileUrl: null,
+      note: null,
+      returnMethod: 'separate',
+      substituteReceipt: { lines: [line(7_000)] },
+    })
+    const crt = await db().substituteReceipt.findFirstOrThrow({ where: { advanceId: ADV_ID } })
+    const path = `substitute-receipts/${crt.id}/signed/66666666-6666-4666-8666-666666666666.pdf`
+    await receipts.attachSignedSubstituteReceipt({ actor: agent, meta }, crt.id, { signedFilePath: path })
+    // ค่าที่ทางยกเลิกอ่านไว้ "ก่อน" การตรวจ (จำลองคำขอที่แข่งกัน — รีวิว security T-1)
+    const staleCurrent = {
+      id: crt.id,
+      receiptNumber: crt.receiptNumber,
+      status: 'signed' as const,
+      signedFilePath: path,
+      expenseId: null,
+      advanceId: ADV_ID,
+      totalSatang: crt.totalSatang,
+    }
+    await advances.reviewAdvanceClear({ actor: finance, meta }, ADV_ID, { note: null })
+
+    await expectCode(
+      () => receipts.cancelSubstituteReceipt({ actor: finance, meta }, crt.id, { reason: 'ขอยกเลิกหลังตรวจแล้ว' }),
+      'SUBSTITUTE_RECEIPT_NOT_CANCELLABLE',
+    )
+    await expectCode(
+      () =>
+        db().$transaction((tx) =>
+          receipts.cancelSubstituteReceiptInTx(tx as never, { actor: finance, meta }, staleCurrent, 'แข่งกับการตรวจ', new Date()),
+        ),
+      'SUBSTITUTE_RECEIPT_NOT_CANCELLABLE',
+    )
+    expect((await db().substituteReceipt.findUniqueOrThrow({ where: { id: crt.id } })).status).toBe('signed')
+  })
+
   it('มติ 16/10/2569 Q1: ใบรับรองถูกยกเลิกโดยยังไม่มีใบใหม่/ใบเสร็จจริง ⇒ "ตรวจแล้ว" ไม่ได้', async () => {
     await seedPaidAdvance()
     await advances.settleAdvance({ actor: agent, meta }, ADV_ID, {
