@@ -292,6 +292,27 @@ suite('การหยิบงานและรอบ retry (`91` §6.2/§10)'
     }
   })
 
+  it('mytester6 T-005 — completed_at = เวลาที่ handler จบจริง ไม่ใช่เวลาหยิบงาน', async () => {
+    const registry = await import('@/lib/jobs/registry')
+    const handlers = registry.JOB_HANDLERS as Record<string, unknown>
+    const original = handlers['wht_summary']
+    handlers['wht_summary'] = async () => {
+      await new Promise((resolve) => setTimeout(resolve, 60))
+      return { refreshed: 0 }
+    }
+
+    try {
+      const { job } = await seedJob({ jobType: 'wht_summary', idempotencyKey: 'test53:finished-at' })
+      expect(await engine.runJob(job)).toBe('completed')
+      const row = await db().job.findUniqueOrThrow({ where: { id: job.id } })
+      expect(row.startedAt).not.toBeNull()
+      expect(row.completedAt).not.toBeNull()
+      expect(row.completedAt!.getTime() - row.startedAt!.getTime()).toBeGreaterThanOrEqual(50)
+    } finally {
+      handlers['wht_summary'] = original
+    }
+  })
+
   it('Final Test ด่าน 6 — ถูกตัวกวาดดันกลับคิวระหว่าง handler ทำงาน ⇒ ตัวเดิมไม่เขียนทับเป็น "สำเร็จ"', async () => {
     const registry = await import('@/lib/jobs/registry')
     const handlers = registry.JOB_HANDLERS as Record<string, unknown>

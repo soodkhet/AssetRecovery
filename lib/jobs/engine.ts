@@ -1,6 +1,6 @@
 import { emitAudit } from '@/lib/audit/audit'
 import { Prisma } from '@/lib/generated/prisma/client'
-import { nextAttemptAfterFailure } from '@/lib/jobs/job-state'
+import { jobFinishedAt, nextAttemptAfterFailure } from '@/lib/jobs/job-state'
 import {
   JOB_TYPE_SPECS,
   SCHEDULED_JOB_TYPES,
@@ -153,6 +153,10 @@ export async function runJobById(id: string, now: Date = new Date()): Promise<Jo
  * ⚠️ ตัว handler เป็นคนดูแล side effect ของตัวเองให้ idempotent (`91` §10) — ที่นี่คุมแค่สถานะ/retry
  */
 export async function runJob(job: JobRow, now: Date = new Date()): Promise<JobOutcome> {
+  // เวลาจบจริง = เวลาเริ่ม + เวลาที่ handler ใช้จริง (mytester6 T-005 — เดิมบันทึก `completed_at`
+  // เท่ากับเวลาหยิบงาน) · อิงนาฬิกาจาก `now` เพื่อให้ test ที่ฉีดเวลายังกำหนดผลได้
+  const claimedAtMs = Date.now()
+  const finishedAt = (): Date => jobFinishedAt(now, Date.now() - claimedAtMs)
   const claimed = await prisma.job.updateMany({
     where: { id: job.id, status: 'pending' },
     data: { status: 'running', startedAt: now, errorMessage: null },
@@ -164,7 +168,7 @@ export async function runJob(job: JobRow, now: Date = new Date()): Promise<JobOu
     const handler = isKnownJobType(job.jobType) ? JOB_HANDLERS[job.jobType] : undefined
     if (handler === undefined) {
       // job_type ที่ไม่มี handler = ปัญหาการตั้งค่า ไม่ใช่ error ชั่วคราว ⇒ ไม่ retry ให้เสียรอบ
-      return await failJob(job, now, `ไม่รู้จัก job_type "${job.jobType}" — ไม่มี handler ในทะเบียน`, true)
+      return await failJob(job, now, `ไม่รู้จัก job_type "${job.jobType}" — ไม่มี handler ในทะเบียน`, true, finishedAt())
     }
     const result = await handler({ job, now })
     outcome = { kind: 'completed', result }
@@ -177,8 +181,8 @@ export async function runJob(job: JobRow, now: Date = new Date()): Promise<JobOu
   // ใน `completeJob()` โยน (DB สะดุด) จะตกเข้า catch แล้ว `failJob()` ทับงานที่ `completed`
   // ไปแล้วให้กลับเข้าคิว ⇒ handler ทำงานซ้ำทั้งที่ผลลัพธ์ออกไปแล้ว
   return outcome.kind === 'completed'
-    ? await completeJob(job, now, outcome.result)
-    : await failJob(job, now, outcome.message, false)
+    ? await completeJob(job, finishedAt(), outcome.result)
+    : await failJob(job, now, outcome.message, false, finishedAt())
 }
 
 /**
@@ -188,12 +192,12 @@ export async function runJob(job: JobRow, now: Date = new Date()): Promise<JobOu
  * (เช่น `reclaimStaleJobs()` คืนงานเป็น `pending` แล้วอีกตัวหยิบไปรันก่อนที่ตัวเดิมจะเขียนผล)
  * ⇒ ใครไม่ได้ถือ claim อยู่ ให้เงียบไป ไม่เขียนทับ (แพตเทิร์นเดียวกับ `confirmLot()`)
  */
-async function completeJob(job: JobRow, now: Date, result: JobHandlerResult): Promise<JobOutcome> {
+async function completeJob(job: JobRow, finishedAt: Date, result: JobHandlerResult): Promise<JobOutcome> {
   const claimed = await prisma.job.updateMany({
     where: { id: job.id, status: 'running' },
     data: {
       status: 'completed',
-      completedAt: now,
+      completedAt: finishedAt,
       errorMessage: null,
       result: (result ?? {}) as Prisma.InputJsonValue,
     },
@@ -205,7 +209,13 @@ async function completeJob(job: JobRow, now: Date, result: JobHandlerResult): Pr
   return 'completed'
 }
 
-async function failJob(job: JobRow, now: Date, message: string, terminal: boolean): Promise<JobOutcome> {
+async function failJob(
+  job: JobRow,
+  now: Date,
+  message: string,
+  terminal: boolean,
+  finishedAt: Date = now,
+): Promise<JobOutcome> {
   const next = terminal
     ? { status: 'failed' as const, retryCount: job.maxRetries, scheduledAt: null, deadLetter: true }
     : nextAttemptAfterFailure(job, now)
@@ -219,7 +229,7 @@ async function failJob(job: JobRow, now: Date, message: string, terminal: boolea
       retryCount: next.retryCount,
       scheduledAt: next.scheduledAt,
       errorMessage: message,
-      completedAt: next.deadLetter ? now : null,
+      completedAt: next.deadLetter ? finishedAt : null,
     },
   })
   if (claimed.count === 0) return 'skipped'

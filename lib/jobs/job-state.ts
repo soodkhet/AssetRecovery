@@ -97,3 +97,11 @@ export function nextAttemptAfterFailure(job: JobAttemptState, now: Date): NextAt
 export function canManualRetry(job: JobAttemptState): boolean {
   return job.status === 'failed' || job.status === 'cancelled'
 }
+
+/**
+ * เวลาจบงาน = เวลาเริ่ม (`started_at`) + เวลาที่ใช้จริง — ติดลบ (นาฬิกาเครื่องถอย) ปัดเป็น 0
+ * ⇒ `completed_at` ไม่มีทางก่อน `started_at`
+ */
+export function jobFinishedAt(startedAt: Date, elapsedMs: number): Date {
+  return new Date(startedAt.getTime() + Math.max(0, elapsedMs))
+}

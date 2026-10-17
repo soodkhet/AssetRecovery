@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   canManualRetry,
   isDeadLetter,
+  jobFinishedAt,
   jobViewStatus,
   JOB_MAX_RETRIES_DEFAULT,
   JOB_STATUS_GROUP,
@@ -86,5 +87,15 @@ describe('สั่งทำงานใหม่ด้วยมือ (`91` §1
     expect(canManualRetry(job({ status: 'pending' }))).toBe(false)
     expect(canManualRetry(job({ status: 'running' }))).toBe(false)
     expect(canManualRetry(job({ status: 'completed' }))).toBe(false)
+  })
+})
+
+describe('jobFinishedAt — เวลาจบจริง (mytester6 T-005)', () => {
+  it('งานใช้ 3 นาที ⇒ completed_at = started_at + 3 นาที (ไม่ใช่เวลาหยิบงาน)', () => {
+    expect(jobFinishedAt(NOW, 3 * 60_000).toISOString()).toBe('2026-08-15T10:03:00.000Z')
+  })
+
+  it('นาฬิกาถอย (elapsed ติดลบ) ⇒ ไม่ก่อนเวลาเริ่ม', () => {
+    expect(jobFinishedAt(NOW, -500).getTime()).toBe(NOW.getTime())
   })
 })
