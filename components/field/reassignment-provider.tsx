@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { useFieldCases } from '@/components/field/field-cases-provider'
 import { IconAlert, IconCalendar } from '@/components/field/field-icons'
 import { ReassignmentModal } from '@/components/field/reassignment-modal'
-import { useToast } from '@/components/ui'
+import { Button, Modal, useToast } from '@/components/ui'
 import {
   EMPTY_REASSIGNMENT_WATCH,
   nextReassignmentPopup,
@@ -70,6 +70,11 @@ export function FieldReassignmentProvider({ children }: { children: ReactNode })
 
   const popupCase = openCaseId !== null || paused ? null : nextReassignmentPopup(items, dismissed)
 
+  /** "ดูทีหลัง" — ปิดเฉพาะ popup ในเซสชันนี้ (badge ม่วงยังค้าง) */
+  function dismissPopup(caseId: string): void {
+    setDismissed((current) => (current.includes(caseId) ? current : [...current, caseId]))
+  }
+
   function respondFromPopup(caseId: string): void {
     setDismissed((current) => (current.includes(caseId) ? current : [...current, caseId]))
     setOpenCaseId(caseId)
@@ -84,13 +89,43 @@ export function FieldReassignmentProvider({ children }: { children: ReactNode })
     <ReassignmentContext.Provider value={value}>
       {children}
 
-      {popupCase !== null && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/60 p-5">
-          <div className="fade-in w-full max-w-[420px] rounded-2xl bg-white p-5 shadow-lg">
-            <div className="mb-3 flex items-center gap-2.5">
-              <IconAlert className="h-5 w-5 text-purple-600" />
-              <div className="text-base font-extrabold text-slate-900">มีคำขอเปลี่ยนผู้รับผิดชอบ</div>
+      {/*
+        โมดัลกลาง (role=dialog · aria-modal · กักโฟกัส · คืนโฟกัส) — เดิมเป็น div ธรรมดา โฟกัสหลุดไปหลังจอ (mytester6 T-001)
+        · คำขอนี้เลื่อนตอบได้ ("ดูทีหลัง" — badge ยังค้าง) ⇒ Esc/X/Back = "ดูทีหลัง" · ไม่มีช่องกรอก จึงไม่ถามทิ้งข้อมูล
+      */}
+      <Modal
+        open={popupCase !== null}
+        onClose={() => {
+          if (popupCase !== null) dismissPopup(popupCase.caseId)
+        }}
+        size="sm"
+        confirmDiscard={false}
+        title={
+          <span className="flex items-center gap-2.5">
+            <IconAlert className="h-5 w-5 text-purple-600" />
+            มีคำขอเปลี่ยนผู้รับผิดชอบ
+          </span>
+        }
+        footer={
+          popupCase === null ? undefined : (
+            <div className="flex w-full flex-col gap-2">
+              <Button
+                variant="primary"
+                className="w-full justify-center py-3.5"
+                data-autofocus
+                onClick={() => respondFromPopup(popupCase.caseId)}
+              >
+                ตอบเลย
+              </Button>
+              <Button variant="ghost" className="w-full justify-center" onClick={() => dismissPopup(popupCase.caseId)}>
+                ดูทีหลัง
+              </Button>
             </div>
+          )
+        }
+      >
+        {popupCase !== null && (
+          <>
             <div className="mb-3 rounded-2xl border-2 border-purple-200 bg-purple-50 p-3.5">
               <div className="text-sm font-bold text-slate-800">{popupCase.debtorName ?? '—'}</div>
               <div className="mb-2 text-xs text-slate-500">
@@ -100,30 +135,10 @@ export function FieldReassignmentProvider({ children }: { children: ReactNode })
                 <IconCalendar className="h-4 w-4" /> เปิดดูรายละเอียดคำขอและเวลาหมดเขตได้ที่ปุ่ม &ldquo;ตอบเลย&rdquo;
               </div>
             </div>
-            <p className="mb-4 text-xs text-slate-400">
-              ถ้าไม่ตอบภายในเวลาที่กำหนด ระบบจะเปลี่ยนผู้รับผิดชอบให้อัตโนมัติ
-            </p>
-            <button
-              type="button"
-              onClick={() => respondFromPopup(popupCase.caseId)}
-              className="focus-ring mb-2 w-full rounded-xl bg-slate-900 py-3.5 text-sm font-extrabold text-white hover:bg-slate-800"
-            >
-              ตอบเลย
-            </button>
-            <button
-              type="button"
-              onClick={() =>
-                setDismissed((current) =>
-                  current.includes(popupCase.caseId) ? current : [...current, popupCase.caseId],
-                )
-              }
-              className="focus-ring w-full py-2.5 text-xs font-bold text-slate-400 hover:text-slate-600 pointer-coarse:min-h-11"
-            >
-              ดูทีหลัง
-            </button>
-          </div>
-        </div>
-      )}
+            <p className="text-xs text-slate-500">ถ้าไม่ตอบภายในเวลาที่กำหนด ระบบจะเปลี่ยนผู้รับผิดชอบให้อัตโนมัติ</p>
+          </>
+        )}
+      </Modal>
 
       {openCaseId !== null && (
         <ReassignmentModal
