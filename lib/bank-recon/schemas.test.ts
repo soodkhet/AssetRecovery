@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   isDateOnlyAfterBangkokToday,
   REFUND_DATE_IN_FUTURE_MESSAGE,
+  refundSuspenseInputIssues,
   refundSuspenseInputProblem,
   refundSuspenseSchema,
 } from '@/lib/bank-recon/schemas'
@@ -34,5 +35,18 @@ describe('refundSuspenseInputProblem — ตรวจก่อนอัปโห
     expect(refundSuspenseInputProblem({ refundDate: '2999-01-01', reason: 'โอนผิดบัญชี' })).toBe(REFUND_DATE_IN_FUTURE_MESSAGE)
     expect(refundSuspenseInputProblem({ refundDate: '2020-01-01', reason: '   ' })).toBe('ต้องระบุเหตุผลที่คืนเงิน')
     expect(refundSuspenseInputProblem({ refundDate: '2020-01-01', reason: 'โอนผิดบัญชี' })).toBeNull()
+  })
+})
+
+describe('refundSuspenseInputIssues — ข้อผิดรายช่อง (mytester6 T-023)', () => {
+  it('วันที่อนาคต ⇒ ผูกช่อง refundDate · เหตุผลว่าง ⇒ ช่อง reason · ถูกต้อง ⇒ {}', () => {
+    expect(refundSuspenseInputIssues({ refundDate: '2999-01-01', reason: 'โอนผิดบัญชี' })).toEqual({
+      refundDate: REFUND_DATE_IN_FUTURE_MESSAGE,
+    })
+    expect(refundSuspenseInputIssues({ refundDate: '2999-01-01', reason: ' ' })).toEqual({
+      refundDate: REFUND_DATE_IN_FUTURE_MESSAGE,
+      reason: 'ต้องระบุเหตุผลที่คืนเงิน',
+    })
+    expect(refundSuspenseInputIssues({ refundDate: '2020-01-01', reason: 'โอนผิดบัญชี' })).toEqual({})
   })
 })

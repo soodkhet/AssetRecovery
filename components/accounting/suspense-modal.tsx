@@ -3,16 +3,21 @@
 import { useId, useState } from 'react'
 import {
   Button,
+  cn,
   Field,
+  FormSubmitFooter,
   InlineAlert,
   Input,
   Modal,
   ModalCancelButton,
   fieldControlAria,
+  fieldErrorClass,
+  useRevealFieldError,
+  useSubmitError,
   useToast,
 } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
-import { refundSuspenseInputProblem } from '@/lib/bank-recon/schemas'
+import { refundSuspenseInputIssues } from '@/lib/bank-recon/schemas'
 import type { BankTransactionDto } from '@/lib/bank-recon/types'
 import { fmtDate, toInputDate } from '@/lib/format/datetime'
 import { fmtSatangSymbol } from '@/lib/format/money'
@@ -43,6 +48,9 @@ export function SuspenseModal({
   const [refundDate, setRefundDate] = useState(toInputDate(new Date()))
   const [file, setFile] = useState<File | null>(null)
   const [saving, setSaving] = useState(false)
+  // mytester6 T-023 — ข้อผิดตอนกดยืนยัน: ใต้ช่อง + footer + เลื่อน/โฟกัสช่องที่ผิด (แทน toast อย่างเดียว)
+  const { ref: formRef, reveal } = useRevealFieldError()
+  const submitError = useSubmitError(reveal)
 
   if (transaction === null) return null
 
@@ -51,18 +59,19 @@ export function SuspenseModal({
 
   async function submit(): Promise<void> {
     if (!ready || transaction === null) return
-    setSaving(true)
+    submitError.clear()
 
     let body: Record<string, unknown> = { reason: reason.trim() }
     if (isRefund) {
       if (file === null) return
       // mytester2 H2-02 — ตรวจวันที่/เหตุผลด้วย schema เดียวกับ server ก่อนอัปโหลด ไม่ให้สลิปค้างใน Storage เมื่อถูกปฏิเสธ
-      const problem = refundSuspenseInputProblem({ refundDate, reason })
-      if (problem !== null) {
-        setSaving(false)
-        showToast({ tone: 'error', title: 'ข้อมูลการคืนเงินไม่ถูกต้อง', description: problem })
+      const issues = refundSuspenseInputIssues({ refundDate, reason })
+      const first = Object.values(issues)[0]
+      if (first !== undefined) {
+        submitError.fail({ message: first, fields: issues })
         return
       }
+      setSaving(true)
       let filePath: string
       try {
         filePath = await uploadToStorage({ kind: 'bank_refund', transactionId: transaction.id }, file)
@@ -70,11 +79,13 @@ export function SuspenseModal({
         setSaving(false)
         const message = error instanceof StorageUploadError ? error.message : 'อัปโหลดไฟล์ไม่สำเร็จ'
         showToast({ tone: 'error', title: 'แนบหลักฐานไม่สำเร็จ', description: message })
+        submitError.fail({ message, fields: { filePath: message } })
         return
       }
       // บันทึกคืนเงินล้มหลังอัปโหลด ⇒ server ลบสลิปที่ยังไม่ผูกนี้ให้เอง (รีวิว H2-02) — หน้าจอไม่ต้องสั่งลบ
       body = { ...body, refundDate, filePath }
     }
+    setSaving(true)
 
     const result = await callApi<BankTransactionDto>(
       `/api/bank-reconciliation/transactions/${transaction.id}/${isRefund ? 'refund' : 'suspense'}`,
@@ -83,6 +94,7 @@ export function SuspenseModal({
     setSaving(false)
     if (result.error !== undefined) {
       showToast({ tone: 'error', title: result.error.title, description: result.error.message })
+      submitError.fail(result.error)
       return
     }
     showToast({
@@ -107,17 +119,17 @@ export function SuspenseModal({
           : 'ใช้กับเงินเข้าที่ยังไม่ทราบว่าลูกค้ารายใดโอนหรือโอนเพื่ออะไร'
       }
       footer={
-        <>
+        <FormSubmitFooter message={submitError.message} tick={submitError.tick}>
           <ModalCancelButton onClose={onClose}>
             ยกเลิก
           </ModalCancelButton>
           <Button variant={isRefund ? 'danger' : 'primary'} loading={saving} disabled={!ready} onClick={() => void submit()}>
             {isRefund ? 'ยืนยันคืนเงินผู้โอน' : 'ยืนยันย้ายเป็นเงินรับรอตรวจสอบ'}
           </Button>
-        </>
+        </FormSubmitFooter>
       }
     >
-      <div className="space-y-4">
+      <div ref={formRef} className="space-y-4">
         <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs">
           <div className="flex justify-between">
             <span className="text-slate-400">รายการ:</span>
@@ -143,33 +155,54 @@ export function SuspenseModal({
 
         {isRefund && (
           <>
-            <Field id={`${fieldId}-refund-date`} label="วันที่โอนคืน" required>
+            <Field id={`${fieldId}-refund-date`} label="วันที่โอนคืน" required error={submitError.fields.refundDate}>
               <Input
                 id={`${fieldId}-refund-date`}
                 type="date"
                 value={refundDate}
                 max={toInputDate(new Date())}
-                onChange={(event) => setRefundDate(event.target.value)}
+                onChange={(event) => {
+                  setRefundDate(event.target.value)
+                  submitError.clearField('refundDate')
+                }}
               />
             </Field>
-            <Field id={`${fieldId}-file`} label="หลักฐานการโอนคืน" required hint="PDF หรือรูปภาพ (สลิปโอนคืน/หนังสือแจ้ง) ไม่เกิน 10 MB">
+            <Field
+              id={`${fieldId}-file`}
+              label="หลักฐานการโอนคืน"
+              required
+              hint="PDF หรือรูปภาพ (สลิปโอนคืน/หนังสือแจ้ง) ไม่เกิน 10 MB"
+              error={submitError.fields.filePath}
+            >
               <input
                 id={`${fieldId}-file`}
-                {...fieldControlAria(`${fieldId}-file`, { hasHint: true, required: true })}
+                {...fieldControlAria(`${fieldId}-file`, { hasHint: true, required: true, error: submitError.fields.filePath })}
                 type="file"
                 accept="application/pdf,image/*"
-                className="block w-full text-xs text-slate-600"
-                onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+                className={cn('block w-full text-xs text-slate-600', fieldErrorClass(submitError.fields.filePath))}
+                onChange={(event) => {
+                  setFile(event.target.files?.[0] ?? null)
+                  submitError.clearField('filePath')
+                }}
               />
             </Field>
           </>
         )}
 
-        <Field id={`${fieldId}-reason`} label={isRefund ? 'เหตุผลที่คืนเงิน' : 'เหตุผล'} required hint="บังคับกรอกเสมอ — บันทึกไว้ในประวัติการใช้งาน">
+        <Field
+          id={`${fieldId}-reason`}
+          label={isRefund ? 'เหตุผลที่คืนเงิน' : 'เหตุผล'}
+          required
+          hint="บังคับกรอกเสมอ — บันทึกไว้ในประวัติการใช้งาน"
+          error={submitError.fields.reason}
+        >
           <Input
             id={`${fieldId}-reason`}
             value={reason}
-            onChange={(event) => setReason(event.target.value)}
+            onChange={(event) => {
+              setReason(event.target.value)
+              submitError.clearField('reason')
+            }}
             placeholder={
               isRefund
                 ? 'เช่น ผู้โอนแจ้งว่าโอนผิดบัญชี ขอคืนพร้อมหลักฐาน'
