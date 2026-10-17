@@ -33,6 +33,21 @@ export function decideModalClose({
 }
 
 /**
+ * modal นี้ผูกปุ่ม Back ของ browser (วาง sentinel ใน history — `modal-history.ts`) ไหม
+ * ค่าเริ่มต้นตาม `confirmDiscard` (พฤติกรรมเดิม: modal ตัวกรองที่ปิดการถามไม่ยุ่งกับ history) · ผู้เรียกบังคับได้ผ่าน
+ * `closeOnBack` — เช่น popup ที่ไม่มีช่องกรอก (ปิดการถาม) แต่ Back ต้องเท่ากับ "ปิด/ดูทีหลัง" ไม่ใช่ออกจากหน้า (mytester6 SV6-01)
+ */
+export function modalGuardsBack({
+  closeOnBack,
+  confirmDiscard,
+}: {
+  closeOnBack: boolean | undefined
+  confirmDiscard: boolean
+}): boolean {
+  return closeOnBack ?? confirmDiscard
+}
+
+/**
  * ปุ่มที่กำลังหมุน (`aria-busy`) ถือเป็น "กำลังบันทึก" ของ modal ไหม — preship R3-002 → R4-006
  * ค่าเริ่มต้น = ล็อกเสมอ (ปุ่มบันทึกจริงอยู่ใน body ก็มี — R4-006: เดิมดูจากตำแหน่ง ทำให้ modal เอกสารบริษัท
  * ปิด/ทิ้งได้ระหว่างบันทึกแต่คำขอยังถูกส่ง) · ยกเว้นปุ่มย่อยที่ติด `data-modal-busy="ignore"` (ค้นหา/ดาวน์โหลด/โหลดตัวเลือก)

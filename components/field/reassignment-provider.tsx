@@ -92,6 +92,7 @@ export function FieldReassignmentProvider({ children }: { children: ReactNode })
       {/*
         โมดัลกลาง (role=dialog · aria-modal · กักโฟกัส · คืนโฟกัส) — เดิมเป็น div ธรรมดา โฟกัสหลุดไปหลังจอ (mytester6 T-001)
         · คำขอนี้เลื่อนตอบได้ ("ดูทีหลัง" — badge ยังค้าง) ⇒ Esc/X/Back = "ดูทีหลัง" · ไม่มีช่องกรอก จึงไม่ถามทิ้งข้อมูล
+        · `closeOnBack` = ผูก Back แม้ปิดการถาม (เดิม Back ออกจากหน้าแล้ว popup เด้งใหม่ที่หน้าก่อนหน้า — mytester6 SV6-01)
       */}
       <Modal
         open={popupCase !== null}
@@ -100,6 +101,7 @@ export function FieldReassignmentProvider({ children }: { children: ReactNode })
         }}
         size="sm"
         confirmDiscard={false}
+        closeOnBack
         title={
           <span className="flex items-center gap-2.5">
             <IconAlert className="h-5 w-5 text-purple-600" />

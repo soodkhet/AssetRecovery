@@ -5,7 +5,7 @@ import { Button, type ButtonProps, type ButtonVariant } from '@/components/ui/bu
 import { cn } from '@/components/ui/cn'
 import { installFocusTrap } from '@/components/ui/focus-trap'
 import { FormSubmitFooter } from '@/components/ui/input'
-import { busyElementLocksModal, decideModalClose, discardAndClose, dropMarksDraft, inputMarksDraft, modalHasDraft, MODAL_DRAFT_IGNORE_SELECTOR } from '@/components/ui/modal-close-guard'
+import { busyElementLocksModal, decideModalClose, discardAndClose, dropMarksDraft, inputMarksDraft, modalGuardsBack, modalHasDraft, MODAL_DRAFT_IGNORE_SELECTOR } from '@/components/ui/modal-close-guard'
 import { guardModalHistory } from '@/components/ui/modal-history'
 import { isDismissEscape, isTopModal, registerModal, unregisterModal } from '@/components/ui/modal-stack'
 
@@ -46,6 +46,7 @@ export function Modal({
   busy = false,
   lockClose = false,
   confirmDiscard = true,
+  closeOnBack,
   dirty = false,
   onDiscard,
 }: {
@@ -65,6 +66,11 @@ export function Modal({
   lockClose?: boolean
   /** ถามยืนยันก่อนปิดเมื่อผู้ใช้กรอก/เปลี่ยนค่าใน modal แล้ว — ปิดได้สำหรับ modal ที่ช่องกรอกเป็นแค่ตัวกรอง */
   confirmDiscard?: boolean
+  /**
+   * ปุ่ม Back ของ browser/มือถือ = สั่งปิด modal (ผ่าน guard เดียวกับ Esc) แทนการออกจากหน้า · ไม่ส่ง = ตาม `confirmDiscard`
+   * (พฤติกรรมเดิม) · ส่ง `true` ให้ modal ที่ปิดการถามแต่ Back ต้องปิดอยู่หน้าเดิม เช่น popup คำขอ (mytester6 SV6-01)
+   */
+  closeOnBack?: boolean
   /**
    * ผู้เรียกบอกเองว่ามีข้อมูลที่ยังไม่บันทึก — สำหรับการแก้ที่**ไม่เกิด input/change** (กดปุ่มย้ายจุด/ลบไฟล์/เลือกตัวเลือก
    * ที่เป็นปุ่ม) ซึ่ง modal ตรวจเองไม่เจอ · รวม (OR) กับที่ modal ตรวจจาก input/change · ไม่ส่ง = พฤติกรรมเดิม (mytester6 T-002)
@@ -106,6 +112,11 @@ export function Modal({
   useEffect(() => {
     onCloseRef.current = onClose
   }, [onClose])
+  /** อ่านตอนเปิด (effect ผูกกับ `open` อย่างเดียว) — เหมือน `confirmDiscard` ใน guardRef */
+  const closeOnBackRef = useRef(closeOnBack)
+  useEffect(() => {
+    closeOnBackRef.current = closeOnBack
+  }, [closeOnBack])
   const onDiscardRef = useRef(onDiscard)
   useEffect(() => {
     onDiscardRef.current = onDiscard
@@ -158,8 +169,8 @@ export function Modal({
     }
 
     // ปุ่ม Back ของ browser = สั่งปิด modal (ผ่าน guard เดียวกับ Esc) แทนการออกจากหน้า — preship R3-014 / R4-005
-    // modal ที่ปิดการถามยืนยัน (ช่องกรอกเป็นแค่ตัวกรอง) ไม่ยุ่งกับ history
-    const releaseHistory = guardRef.current.confirmDiscard
+    // modal ที่ปิดการถามยืนยัน (ช่องกรอกเป็นแค่ตัวกรอง) ไม่ยุ่งกับ history — เว้นแต่ผู้เรียกขอผ่าน `closeOnBack` (SV6-01)
+    const releaseHistory = modalGuardsBack({ closeOnBack: closeOnBackRef.current, confirmDiscard: guardRef.current.confirmDiscard })
       ? guardModalHistory({
           onBack: () => {
             // มี modal อื่นซ้อนอยู่ข้างบน (เช่นหน้าดูไฟล์) ⇒ ไม่ปิดตัวข้างหลังทะลุ — อยู่หน้าเดิม

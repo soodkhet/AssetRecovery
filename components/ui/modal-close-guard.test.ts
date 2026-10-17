@@ -10,6 +10,7 @@ import {
   MODAL_BUSY_IGNORE,
   MODAL_DRAFT_IGNORE,
   MODAL_DRAFT_IGNORE_SELECTOR,
+  modalGuardsBack,
   modalHasDraft,
 } from '@/components/ui/modal-close-guard'
 
@@ -98,5 +99,24 @@ describe('inputMarksDraft — ส่วนที่บันทึกทัน�
     expect(MODAL_DRAFT_IGNORE_SELECTOR).toBe(`[data-modal-draft="${MODAL_DRAFT_IGNORE['data-modal-draft']}"]`)
     const source = readFileSync(join(__dirname, '..', 'warehouse', 'attach-doc-modal.tsx'), 'utf8')
     expect(source).toMatch(/<input\s+\{\.\.\.MODAL_DRAFT_IGNORE\}\s+type="file"/)
+  })
+})
+
+describe('modalGuardsBack — ปุ่ม Back ปิด modal แทนออกจากหน้า (mytester6 SV6-01)', () => {
+  it('ไม่ส่ง closeOnBack ⇒ ตาม confirmDiscard (พฤติกรรมเดิมของ modal อื่น)', () => {
+    expect(modalGuardsBack({ closeOnBack: undefined, confirmDiscard: true })).toBe(true)
+    expect(modalGuardsBack({ closeOnBack: undefined, confirmDiscard: false })).toBe(false)
+  })
+
+  it('closeOnBack ชนะ confirmDiscard ทั้งสองทาง', () => {
+    expect(modalGuardsBack({ closeOnBack: true, confirmDiscard: false })).toBe(true)
+    expect(modalGuardsBack({ closeOnBack: false, confirmDiscard: true })).toBe(false)
+  })
+
+  it('Modal ผูก guardModalHistory ผ่าน modalGuardsBack · popup คำขอเปลี่ยนผู้รับผิดชอบส่ง closeOnBack', () => {
+    const modal = readFileSync(join(__dirname, 'modal.tsx'), 'utf8')
+    expect(modal).toMatch(/modalGuardsBack\(\{ closeOnBack: closeOnBackRef\.current, confirmDiscard: guardRef\.current\.confirmDiscard \}\)\s*\?\s*guardModalHistory\(/)
+    const provider = readFileSync(join(__dirname, '..', 'field', 'reassignment-provider.tsx'), 'utf8')
+    expect(provider).toMatch(/confirmDiscard=\{false\}\s+closeOnBack\s/)
   })
 })
