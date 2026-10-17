@@ -4,8 +4,7 @@ import { resolveHotelReceiptRequiredForUser } from '@/lib/field/expense-queries'
 import { listFieldTeammates } from '@/lib/field/queries'
 import { FIELD_CAPABILITY } from '@/lib/field/permissions'
 import type { FieldTeammateDto } from '@/lib/field/types'
-import { prisma } from '@/lib/prisma'
-import { substituteReceiptLimitsOf } from '@/lib/substitute-receipts/queries'
+import { substituteReceiptMaxPerDocSatangOf } from '@/lib/substitute-receipts/queries'
 
 /**
  * `GET /api/field/teammates` (`41` §6.6)
@@ -24,11 +23,11 @@ export const GET = withEndpoint<
   action: 'view',
   resource: FIELD_CAPABILITY,
   handler: async (_request: NextRequest, _context, user) => {
-    const [items, hotelReceiptRequired, limits] = await Promise.all([
+    const [items, hotelReceiptRequired, substituteReceiptMaxPerDocSatang] = await Promise.all([
       listFieldTeammates(user),
       resolveHotelReceiptRequiredForUser(user, new Date()),
-      substituteReceiptLimitsOf(prisma, user.organizationId),
+      substituteReceiptMaxPerDocSatangOf(user.organizationId),
     ])
-    return { data: { items, hotelReceiptRequired, substituteReceiptMaxPerDocSatang: limits.maxPerDocSatang } }
+    return { data: { items, hotelReceiptRequired, substituteReceiptMaxPerDocSatang } }
   },
 })

@@ -298,9 +298,12 @@ suite('เพดานต่อใบ / ต่อคนต่อเดือน 
   })
 
   it('ค่าตั้งขององค์กรมีผลทันที', async () => {
+    // ยังไม่ตั้งค่า ⇒ เพดานต่อใบค่าเริ่มต้น (฿500) — ตัวที่ `GET /api/field/teammates` ส่งให้ฟอร์ม
+    expect(await receipts.substituteReceiptMaxPerDocSatangOf(ORG_ID)).toBe(50_000)
     await db().financePolicySettings.create({
       data: { organizationId: ORG_ID, substituteReceiptMaxPerDocSatang: 10_000, substituteReceiptMaxPerMonthSatang: 15_000 },
     })
+    expect(await receipts.substituteReceiptMaxPerDocSatangOf(ORG_ID)).toBe(10_000)
     await expectCode(() => issueFor(seedHotelExpenseSync(), [10_001]), 'SUBSTITUTE_RECEIPT_EXCEEDS_LIMIT')
     await issueFor(await seedHotelExpense(), [10_000])
     await expectCode(async () => issueFor(await seedHotelExpense(), [5_001]), 'SUBSTITUTE_RECEIPT_EXCEEDS_LIMIT')

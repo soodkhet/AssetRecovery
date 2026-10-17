@@ -205,6 +205,14 @@ export async function substituteReceiptLimitsOf(
 }
 
 /**
+ * เพดานต่อใบขององค์กร (นอกทรานแซกชัน) — ให้ฟอร์มเตือนที่ช่องยอดก่อนส่ง (`GET /api/field/teammates` — mytester6 T-016)
+ * route ไม่แตะ prisma ตรง (mytester6 รีวิว) · การบังคับจริงอยู่ตอนออกใบ
+ */
+export async function substituteReceiptMaxPerDocSatangOf(organizationId: string): Promise<number> {
+  return (await substituteReceiptLimitsOf(prisma, organizationId)).maxPerDocSatang
+}
+
+/**
  * ออกใบรับรองแทนใบเสร็จ + บรรทัด + audit **ภายในทรานแซกชันของผู้เรียก**
  * ผู้เรียกต้องตรวจ scope ของ payee/ใบเบิก/เงินทดรองมาก่อน · เกินเพดาน = `SUBSTITUTE_RECEIPT_EXCEEDS_LIMIT`
  */
