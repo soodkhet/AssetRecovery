@@ -218,7 +218,9 @@ async function failJob(
 ): Promise<JobOutcome> {
   const next = terminal
     ? { status: 'failed' as const, retryCount: job.maxRetries, scheduledAt: null, deadLetter: true }
-    : nextAttemptAfterFailure(job, now)
+    : // เวลาถอยนับจากเวลาที่ handler จบจริง ไม่ใช่เวลาหยิบงาน (mytester6 T-005 รีวิว) — handler ที่ใช้เวลานาน
+      // ไม่ทำให้รอบถัดไปถึงกำหนดเร็วกว่าที่บันไดถอยตั้งใจ
+      nextAttemptAfterFailure(job, finishedAt)
 
   // ยามเดียวกับ `completeJob()` — เขียนได้เฉพาะตอนที่ยังถือ claim อยู่จริง
   // (`reclaimStaleJobs()` เปลี่ยนงานเป็น `pending` ก่อนเรียกที่นี่ จึงอนุญาต `pending` ด้วย)

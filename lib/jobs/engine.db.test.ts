@@ -274,8 +274,10 @@ suite('การหยิบงานและรอบ retry (`91` §6.2/§10)'
       expect(afterFirst.status).toBe('pending')
       expect(afterFirst.retryCount).toBe(1)
       expect(afterFirst.errorMessage).toContain('ปลายทางล่ม')
-      // ถอย 1 นาทีก่อนหยิบใหม่ ⇒ รอบที่ยิงทันทีต้องยังไม่หยิบงานนี้
-      expect(afterFirst.scheduledAt?.toISOString()).toBe('2026-08-15T10:01:00.000Z')
+      // ถอย 1 นาที (นับจากเวลาจบจริง — มิลลิวินาทีหลัง now) ก่อนหยิบใหม่ ⇒ รอบที่ยิงทันทีต้องยังไม่หยิบงานนี้
+      const scheduledMs = afterFirst.scheduledAt?.getTime() ?? 0
+      expect(scheduledMs).toBeGreaterThanOrEqual(Date.parse('2026-08-15T10:01:00.000Z'))
+      expect(scheduledMs).toBeLessThan(Date.parse('2026-08-15T10:01:05.000Z'))
       expect(await engine.runDueJobs({ now, organizationId: ORG_ID })).toMatchObject({ picked: 0 })
 
       const later = new Date('2026-08-15T10:02:00Z')
@@ -308,6 +310,27 @@ suite('การหยิบงานและรอบ retry (`91` §6.2/§10)'
       expect(row.startedAt).not.toBeNull()
       expect(row.completedAt).not.toBeNull()
       expect(row.completedAt!.getTime() - row.startedAt!.getTime()).toBeGreaterThanOrEqual(50)
+    } finally {
+      handlers['wht_summary'] = original
+    }
+  })
+
+  it('mytester6 T-005 รีวิว — ล้มแล้วเข้าคิวใหม่: เวลาถอยนับจากเวลาที่ handler จบจริง', async () => {
+    const registry = await import('@/lib/jobs/registry')
+    const handlers = registry.JOB_HANDLERS as Record<string, unknown>
+    const original = handlers['wht_summary']
+    handlers['wht_summary'] = async () => {
+      await new Promise((resolve) => setTimeout(resolve, 80))
+      throw new Error('ล้มหลังทำงานนาน')
+    }
+
+    try {
+      const { job } = await seedJob({ jobType: 'wht_summary', idempotencyKey: 'test53:retry-from-finish' })
+      const now = new Date()
+      expect(await engine.runJob(job, now)).toBe('retry_scheduled')
+      const row = await db().job.findUniqueOrThrow({ where: { id: job.id } })
+      // บันไดถอยรอบแรก 1 นาที — นับจากเวลาจบ (≥ now + 80ms) ไม่ใช่ now
+      expect(row.scheduledAt!.getTime() - now.getTime()).toBeGreaterThanOrEqual(60_000 + 70)
     } finally {
       handlers['wht_summary'] = original
     }
