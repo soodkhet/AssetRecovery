@@ -9,6 +9,7 @@ import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
 import { fmtDate, fmtDateTime } from '@/lib/format/datetime'
 import { fmtSatangSymbol } from '@/lib/format/money'
 import {
+  acceptCaseStaleNotice,
   assetSummary,
   facebookHref,
   fieldStatusBadgeGroup,
@@ -410,12 +411,15 @@ export function FieldCaseDetailModal({
   caseId,
   onClose,
   onChanged,
+  onStale,
   onRespondReassignment,
   footerActions,
 }: {
   open: boolean
   caseId: string | null
   onClose: () => void
+  /** กด "รับงาน" แล้วพบว่างานเปลี่ยนไปแล้ว — ผู้เรียกรีโหลดรายการของตัวเอง (mytester6 T-012) */
+  onStale?: () => void
   /** เรียกหลังรับงานสำเร็จ (ส่งเคสที่รับมาด้วย ให้ toast มีเลขเคส — UAT BUG-065) — ผู้เรียกรีโหลดรายการของตัวเอง */
   onChanged?: (accepted: Pick<FieldCaseDetailDto, 'caseId' | 'caseRef'>) => void
   onRespondReassignment?: (detail: FieldCaseDetailDto) => void
@@ -465,6 +469,15 @@ export function FieldCaseDetailModal({
         jsonRequest('POST', {}),
       )
       if (response.error !== undefined) {
+        // งานเปลี่ยนไปแล้ว ⇒ ข้อความภาษาคน + โหลดรายละเอียด/รายการใหม่ (ปุ่ม "รับงาน" หายตามสถานะจริง — mytester6 T-012)
+        const stale = acceptCaseStaleNotice(response.error.code, detail.caseRef)
+        if (stale !== null) {
+          failAction({ message: `${stale.title} — ${stale.description}` })
+          showToast({ tone: 'error', ...stale })
+          setAttempt((value) => value + 1)
+          onStale?.()
+          return
+        }
         failAction(response.error)
         showToast({ tone: 'error', title: response.error.title, description: response.error.message })
         return
@@ -474,7 +487,7 @@ export function FieldCaseDetailModal({
     } finally {
       setAccepting(false)
     }
-  }, [detail, onChanged, onClose, clearActionError, failAction, showToast])
+  }, [detail, onChanged, onStale, onClose, clearActionError, failAction, showToast])
 
   return (
     <Modal

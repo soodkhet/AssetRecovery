@@ -125,6 +125,24 @@ export interface FieldDaySection {
 }
 
 /**
+ * code ของ "รับงาน" ที่แปลว่า**งานนั้นเปลี่ยนไปแล้ว**ระหว่างที่หน้าจอยังแสดงของเก่า (กดรับจากอีกเครื่อง/ถูกเปลี่ยนผู้รับผิดชอบ/
+ * ถูกถอนการมอบหมาย) — ไม่ใช่ความผิดของผู้ใช้ ⇒ บอกเป็นภาษาคน + ให้ผู้เรียกโหลดรายการใหม่ (mytester6 T-012)
+ */
+const ACCEPT_STALE_CODES: ReadonlySet<string> = new Set(['ASSIGNMENT_INVALID_STATUS', 'ASSIGNMENT_NOT_FOUND', 'CASE_NOT_FOUND'])
+
+/** ข้อความเมื่อกด "รับงาน" กับงานที่สถานะเปลี่ยนไปแล้ว — `null` = error อื่น (แสดงข้อความจาก server ตามเดิม) */
+export function acceptCaseStaleNotice(
+  code: string | undefined,
+  caseRef: string,
+): { title: string; description: string } | null {
+  if (code === undefined || !ACCEPT_STALE_CODES.has(code)) return null
+  return {
+    title: 'งานนี้ถูกรับหรือเปลี่ยนแปลงไปแล้ว',
+    description: `${caseRef} — อาจกดรับจากเครื่องอื่นแล้ว หรือถูกเปลี่ยนผู้รับผิดชอบ · โหลดรายการล่าสุดให้แล้ว`,
+  }
+}
+
+/**
  * จัดกลุ่มเคสตามวันลงพื้นที่ เรียงวันจากใกล้ไปไกล และในวันเรียงตาม `scheduleOrder` (`41` §7.5)
  * เคสที่ยังไม่มี `scheduleDate` ถูกตัดออก (ยังไม่ถึงแท็บนี้)
  */

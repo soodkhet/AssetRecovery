@@ -9,7 +9,7 @@ import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest } from '@/lib/api/types'
 import { fmtDateTime } from '@/lib/format/datetime'
 import { fmtSatangSymbol } from '@/lib/format/money'
-import { assetSummary, fieldCardAction } from '@/lib/field/field-ui'
+import { acceptCaseStaleNotice, assetSummary, fieldCardAction } from '@/lib/field/field-ui'
 import type { FieldActionResultDto, FieldCaseListItemDto } from '@/lib/field/types'
 
 /**
@@ -32,6 +32,13 @@ export function PendingAcceptTab() {
         jsonRequest('POST', {}),
       )
       if (response.error !== undefined) {
+        // งานเปลี่ยนไปแล้ว (รับจากเครื่องอื่น/ถูกเปลี่ยนผู้รับผิดชอบ) ⇒ ข้อความภาษาคน + โหลดรายการใหม่ ไม่ให้การ์ดค้าง (mytester6 T-012)
+        const stale = acceptCaseStaleNotice(response.error.code, item.caseRef)
+        if (stale !== null) {
+          showToast({ tone: 'error', ...stale })
+          await reload()
+          return
+        }
         showToast({ tone: 'error', title: response.error.title, description: response.error.message })
         return
       }
@@ -121,6 +128,7 @@ export function PendingAcceptTab() {
         open={detailCaseId !== null}
         caseId={detailCaseId}
         onClose={() => setDetailCaseId(null)}
+        onStale={() => void reload()}
         onChanged={(accepted) => {
           showToast({
             tone: 'success',

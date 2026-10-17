@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { FIELD_STATUSES } from '@/lib/field/field-status'
 import {
+  acceptCaseStaleNotice,
   googleMapsRouteUrl,
   FIELD_STATUS_LABEL,
   assetSummary,
@@ -276,5 +277,21 @@ describe('googleMapsRouteUrl (staging E-044)', () => {
       ]),
     ).toBe('https://www.google.com/maps/dir/13.756300,100.501800/13.800000,100.550000')
     expect(googleMapsRouteUrl([{ label: 'x', latitude: 1, longitude: 2 }])).toBeNull()
+  })
+})
+
+describe('mytester6 T-012 — กด "รับงาน" กับงานที่เปลี่ยนไปแล้ว', () => {
+  it('code ที่แปลว่างานเปลี่ยนไปแล้ว ⇒ ข้อความภาษาคน (ไม่ใช้ศัพท์ระบบ) พร้อมเลขเคส', () => {
+    for (const code of ['ASSIGNMENT_INVALID_STATUS', 'ASSIGNMENT_NOT_FOUND', 'CASE_NOT_FOUND']) {
+      const notice = acceptCaseStaleNotice(code, 'MTJ-001')
+      expect(notice?.title).toBe('งานนี้ถูกรับหรือเปลี่ยนแปลงไปแล้ว')
+      expect(notice?.description).toContain('MTJ-001')
+      expect(`${notice?.title} ${notice?.description}`).not.toContain('การมอบหมาย')
+    }
+  })
+
+  it('error อื่น/ไม่มี code ⇒ null (ใช้ข้อความจาก server ตามเดิม)', () => {
+    expect(acceptCaseStaleNotice('FORBIDDEN', 'MTJ-001')).toBeNull()
+    expect(acceptCaseStaleNotice(undefined, 'MTJ-001')).toBeNull()
   })
 })
