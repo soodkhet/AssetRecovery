@@ -26,6 +26,17 @@ describe('U140 — ทะเบียนค่าตั้งที่เป็�
     }
   })
 
+  it('mytester6 T-028 — เงินในข้อความแสดงครบ 2 ตำแหน่ง (formatter กลาง) ไม่มี "฿1,000"/"฿50" แบบไม่มีสตางค์', () => {
+    for (const key of SETTING_ASSUMPTION_KEYS) {
+      const { label, question } = SETTING_ASSUMPTIONS[key]
+      for (const text of [label, question]) {
+        for (const amount of text.match(/฿[\d,]+(?:\.\d+)?/g) ?? []) expect(amount, `${key}: ${amount}`).toMatch(/\.\d{2}$/)
+      }
+    }
+    expect(SETTING_ASSUMPTIONS.wht_threshold.question).toContain('฿1,000.00')
+    expect(SETTING_ASSUMPTIONS.bank_fee_write_off.question).toContain('฿50.00')
+  })
+
   it('สถานะ: ไม่มีแถว = ยังไม่ยืนยัน (แสดงป้าย) · มีแถว = ยืนยันแล้ว · ลำดับตามทะเบียน', () => {
     const statuses = settingAssumptionStatuses([
       { assumptionKey: 'wht_base', confirmedAt: new Date('2026-10-07T03:00:00Z'), confirmedByName: 'บัญชี', reason: 'ยืนยันทางอีเมล' },
