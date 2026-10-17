@@ -48,6 +48,14 @@ import { WHT_CERTIFICATE_STATUS_LABEL, WHT_FILING_FORM_LABEL, WHT_FILING_STATUS_
 
 type LabelMap = Readonly<Record<string, string>>
 
+/**
+ * อ่านค่าจาก map ด้วยคีย์ที่มาจากข้อมูล (ชื่อฟิลด์/ค่า enum ใน audit) — เฉพาะคีย์ของ map เอง (`Object.hasOwn`)
+ * กันคีย์อย่าง `constructor`/`__proto__`/`toString` ได้ของจาก prototype แทนป้าย (mytester6 รีวิว)
+ */
+function ownValue<T>(map: Readonly<Record<string, T>>, key: string): T | undefined {
+  return Object.hasOwn(map, key) ? map[key] : undefined
+}
+
 /** ป้ายเฉพาะของฟิลด์ที่พบบ่อย (คีย์ snake_case — เทียบแบบ normalize) */
 const FIELD_LABELS: LabelMap = {
   // ทั่วไป
@@ -245,13 +253,14 @@ export function auditComposedFieldLabel(field: string): string | null {
   if (tokens[0] === 'is' && tokens.length > 1) tokens.shift()
   const last = tokens[tokens.length - 1]
   let lead = ''
-  if (last !== undefined && tokens.length > 1 && LEADING_FROM_SUFFIX[last] !== undefined) {
-    lead = LEADING_FROM_SUFFIX[last]
+  const leading = last !== undefined && tokens.length > 1 ? ownValue(LEADING_FROM_SUFFIX, last) : undefined
+  if (leading !== undefined) {
+    lead = leading
     tokens.pop()
   }
   const words: string[] = []
   for (const token of tokens) {
-    const word = AUDIT_FIELD_TOKEN_LABEL[token]
+    const word = ownValue(AUDIT_FIELD_TOKEN_LABEL, token)
     if (word === undefined) return null
     if (word !== '') words.push(word)
   }
@@ -388,10 +397,12 @@ const VALUE_LABEL_BY_FIELD: ReadonlyMap<string, LabelMap> = new Map(
 function enumLabel(value: string, field: string, targetType: string | null): string | null {
   const key = normalizeFieldName(field)
   if (key === 'status') {
-    const byTarget = targetType === null ? undefined : STATUS_LABEL_BY_TARGET[targetType]?.[value]
-    return byTarget ?? GENERIC_STATUS_LABEL[value] ?? null
+    const targetLabels = targetType === null ? undefined : ownValue(STATUS_LABEL_BY_TARGET, targetType)
+    const byTarget = targetLabels === undefined ? undefined : ownValue(targetLabels, value)
+    return byTarget ?? ownValue(GENERIC_STATUS_LABEL, value) ?? null
   }
-  return VALUE_LABEL_BY_FIELD.get(key)?.[value] ?? null
+  const labels = VALUE_LABEL_BY_FIELD.get(key)
+  return labels === undefined ? null : (ownValue(labels, value) ?? null)
 }
 
 /**

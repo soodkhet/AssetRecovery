@@ -66,3 +66,17 @@ describe('auditEnumValueLabel() / auditValueDisplay()', () => {
     expect(auditEnumValueLabel([], 'failed_checks', null)).toBeNull()
   })
 })
+
+describe('คีย์จากข้อมูลที่ชนชื่อใน prototype (mytester6 รีวิว)', () => {
+  it('ค่า enum/ฟิลด์ชื่อ constructor · toString · __proto__ ⇒ ไม่ได้ฟังก์ชันจาก prototype', () => {
+    for (const value of ['constructor', 'toString', '__proto__', 'hasOwnProperty']) {
+      expect(auditEnumValueLabel(value, 'status', 'expenses')).toBeNull()
+      expect(auditEnumValueLabel(value, 'status', null)).toBeNull()
+      expect(auditEnumValueLabel(value, 'expense_type', null)).toBeNull()
+      expect(auditEnumValueLabel('approved', 'status', value)).toBe(auditEnumValueLabel('approved', 'status', null))
+      expect(auditComposedFieldLabel(value)).toBeNull()
+      expect(auditFieldLabel(value)).toBe(value)
+    }
+    expect(auditComposedFieldLabel('amount_constructor')).toBeNull()
+  })
+})
