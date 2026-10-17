@@ -15,6 +15,8 @@ export interface AuditLogListItemDto {
   actorRole: string | null
   /** ชื่อตารางปลายทาง (snake_case ตาม `02`) */
   targetType: string
+  /** mytester6 T-024 — ป้ายชนิดเป้าหมายของแถวนี้ (ภาษาไทย · แยกใบลด/ใบเพิ่มหนี้ตาม `note_type`) — `auditTargetLabelOf()` */
+  targetLabel: string
   targetId: string | null
   /** known H-06 — ชื่อ/เลขเอกสารที่อ่านได้ของเป้าหมาย (เลขเคส/เลขล็อต/ชื่องวด ฯลฯ) · หาไม่พบ/ชนิดที่ไม่รู้จัก = `null` */
   targetRef: string | null

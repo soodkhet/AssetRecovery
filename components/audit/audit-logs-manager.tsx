@@ -176,7 +176,7 @@ export function AuditLogsManager() {
                   <Td className="text-slate-600">{auditActorLabel(row.actorName, row.actorRole, row.loginFailure)}</Td>
                   <Td className="text-slate-600">
                     {/* ชื่อชนิดเป้าหมายกับรหัสแยกบรรทัด — เดิมต่อกันเป็น "ผู้ใช้งานa880581e" (UAT BUG-006) */}
-                    <div>{auditTargetLabel(row.targetType)}</div>
+                    <div>{row.targetLabel}</div>
                     {/* known H-06 — ชื่อ/เลขเอกสารที่อ่านได้ · UUID ดูได้ใน tooltip */}
                     {row.targetId !== null && (
                       <RefText className="block text-[11px] text-slate-400" title={row.targetId}>

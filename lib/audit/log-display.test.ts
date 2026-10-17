@@ -10,6 +10,7 @@ import {
   auditLoginFailureOf,
   auditRowDisplay,
   auditTargetLabel,
+  auditTargetLabelOf,
   auditValueText,
   AUDIT_ACTION_GROUP,
   AUDIT_ACTION_LABEL,
@@ -191,6 +192,16 @@ describe('login ที่ล้มเหลวแยกจาก login สำเ
   })
 })
 
+describe('mytester6 T-024 — ป้ายชนิดเป้าหมายของใบเพิ่มหนี้', () => {
+  it('credit_notes แยกตาม note_type ใน after/before · ไม่มีข้อมูล ⇒ ป้ายรวมของตาราง', () => {
+    expect(auditTargetLabelOf('credit_notes', { note_type: 'debit', credit_note_number: 'DN-MT6-2569-0001' })).toBe('ใบเพิ่มหนี้')
+    expect(auditTargetLabelOf('credit_notes', { note_type: 'credit' })).toBe('ใบลดหนี้')
+    expect(auditTargetLabelOf('credit_notes', { status: 'cancelled' }, { note_type: 'debit' })).toBe('ใบเพิ่มหนี้')
+    expect(auditTargetLabelOf('credit_notes', null)).toBe('ใบลดหนี้/ใบเพิ่มหนี้')
+    expect(auditTargetLabelOf('cases', { note_type: 'debit' })).toBe('เคส')
+  })
+})
+
 describe('mytester H-06 — ชื่อฟิลด์/ค่าในรายละเอียดบันทึกการใช้งาน', () => {
   it('ฟิลด์ที่รู้จักเป็นไทย · ไม่รู้จักคงชื่อเดิม', () => {
     expect(auditFieldLabel('authorize_note')).toBe('เหตุผลที่อนุมัติยกเว้น')
@@ -198,10 +209,11 @@ describe('mytester H-06 — ชื่อฟิลด์/ค่าในราย
     expect(auditFieldLabel('custom_x')).toBe('custom_x')
   })
 
-  it('สถานะ/ระดับของข้อยกเว้นเป็นไทย · เป้าหมายอื่นคงค่าเดิม', () => {
+  it('สถานะ/ระดับของข้อยกเว้นเป็นไทย · ค่าที่ไม่รู้จักคงค่าเดิม', () => {
     expect(auditValueDisplay('authorized', 'status', 'exceptions')).toBe('อนุมัติยกเว้นแล้ว')
     expect(auditValueDisplay('critical', 'level', 'exceptions')).toBe('ต้องแก้ก่อนปิดงวด')
-    expect(auditValueDisplay('open', 'status', 'cases')).toBe('open')
+    // mytester6 T-026 — สถานะของเป้าหมายอื่นก็แปลแล้ว · ค่าที่ไม่รู้จักยังแสดงดิบ (ไม่พัง)
+    expect(auditValueDisplay('weird_state', 'status', 'cases')).toBe('weird_state')
     expect(auditValueDisplay(150_000, 'amount_satang', 'exceptions')).toBe('฿1,500.00')
   })
 })
