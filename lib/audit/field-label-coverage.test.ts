@@ -1,20 +1,30 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { auditComposedFieldLabel, auditEnumValueLabel, auditFieldLabel } from '@/lib/audit/field-display'
+import {
+  auditComposedFieldLabel,
+  auditEnumValueLabel,
+  auditFieldLabel,
+  auditFieldLabelIsWordByWord,
+} from '@/lib/audit/field-display'
 
 /**
- * mytester6 T-009 — ล็อกความครบ (แนวเดียวกับ `target-ref-coverage.test.ts`): ชื่อฟิลด์ที่ขึ้นตาราง "ค่าก่อน / หลัง"
- * ต้องแปลเป็นภาษาไทยได้ทุกตัว (ป้ายเฉพาะ หรือแปลทีละคำ) — ไม่หลุดเป็นชื่อคอลัมน์ภายใน
+ * mytester6 T-009 → ตรวจซ้ำ staging SV6-R-01 — ล็อกความครบ (แนวเดียวกับ `target-ref-coverage.test.ts`): ชื่อฟิลด์ที่ขึ้นตาราง
+ * "ค่าก่อน / หลัง" ต้องแปลเป็นภาษาไทยที่อ่านรู้เรื่องได้ทุกตัว — ไม่หลุดเป็นชื่อภายใน และไม่เป็นผลแปลทีละคำหลายคำต่อกัน
+ * ("รอบ ชื่อ" · "ทีม เปลี่ยน") ⇒ คีย์แบบนั้นต้องมีป้ายเฉพาะใน `field-display.ts`
  *
  * แหล่งชื่อฟิลด์ 2 ทาง:
- *  1. คีย์ใน object literal ของ `before: { … }` / `after: { … }` ในซอร์สที่เขียน audit (`app` · `lib` · `components` ไม่รวมเทสต์)
- *  2. ทุกคอลัมน์ในสคีมา (`prisma/schema.prisma`) — payload แบบ snapshot แถว/diff ใช้ชื่อคอลัมน์ตรง ๆ
- * เพิ่มคอลัมน์/คีย์ใหม่ที่มีคำใหม่ ⇒ เพิ่มคำใน `lib/audit/field-tokens.ts` หรือป้ายเฉพาะใน `field-display.ts`
+ *  1. คีย์ที่ซอร์สเขียนลง audit (`app` · `lib` · `components` ไม่รวมเทสต์ · ไฟล์ที่เรียก audit helper) — ทุกรูปแบบชื่อ
+ *     (snake/camel/คำเดียว · คีย์ย่อ `{ name }` · คีย์ในเงื่อนไข `...(x ? { k: v } : {})` · คีย์ของอ็อบเจกต์ซ้อน) จาก
+ *     `before: { … }` / `after: { … }` / `details: { … }` (ข้อมูลเสริมของ `emitDocumentExportAudit`) /
+ *     ตัวแปร `audit*` ที่ประกอบ payload (`const auditAfter = { … }` · `auditAfter.teamChanged = …`)
+ *  2. ทุกคอลัมน์ในสคีมา (`prisma/schema.prisma` ไม่รวม relation) — payload แบบ snapshot แถว/diff ใช้ชื่อคอลัมน์ตรง ๆ
+ * เพิ่มคีย์/คอลัมน์ใหม่ ⇒ ป้ายเฉพาะใน `field-display.ts` (หรือคำเดียวใน `field-tokens.ts`)
  */
 
 const ROOT = resolve(__dirname, '..', '..')
 const SOURCE_DIRS = ['app', 'lib', 'components']
+const AUDIT_CALL = /emitAudit|AuditEntry|DocumentExportAudit/
 
 function walk(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
@@ -37,24 +47,45 @@ function braceBlock(source: string, start: number): string {
   return source.slice(start, index)
 }
 
+/** ไฟล์ซอร์สที่เขียน audit (ไม่รวมโมดูลแสดงผลของ audit เอง) */
+function auditSourceFiles(): { file: string; source: string }[] {
+  return SOURCE_DIRS.flatMap((dir) => walk(join(ROOT, dir)))
+    .filter((file) => !relative(ROOT, file).startsWith(join('lib', 'audit')))
+    .map((file) => ({ file, source: readFileSync(file, 'utf8') }))
+    .filter(({ source }) => AUDIT_CALL.test(source))
+}
+
+/** บล็อก payload ของ audit: `before|after|details: { … }` และ `audit<ชื่อ> = { … }` */
+function auditPayloadBlocks(source: string): string[] {
+  return [...source.matchAll(/\b(?:before|after|details|audit[A-Z]\w*)\s*(?::|=)\s*\{/g)].map((match) =>
+    braceBlock(source, (match.index ?? 0) + match[0].length),
+  )
+}
+
+/** ตัดข้อความใน string/template ทิ้ง (กันคำในข้อความถูกนับเป็นคีย์) */
+function stripStrings(block: string): string {
+  return block.replace(/'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|`(?:[^`\\]|\\.)*`/g, "''")
+}
+
 function collectSourceKeys(): Map<string, string> {
   const found = new Map<string, string>()
-  for (const file of SOURCE_DIRS.flatMap((dir) => walk(join(ROOT, dir)))) {
-    const source = readFileSync(file, 'utf8')
-    if (!/emitAudit|AuditEntry|DocumentExportAudit/.test(source)) continue
-    for (const match of source.matchAll(/\b(?:before|after)\s*:\s*\{/g)) {
-      const block = braceBlock(source, (match.index ?? 0) + match[0].length)
-      for (const key of block.matchAll(/(?:^|[\s,{])([a-z][A-Za-z0-9]*_[a-z0-9_]+)\s*:/g)) {
-        const name = key[1]
-        if (name !== undefined && !found.has(name)) found.set(name, relative(ROOT, file))
-      }
+  for (const { file, source } of auditSourceFiles()) {
+    const add = (name: string | undefined): void => {
+      if (name !== undefined && !found.has(name)) found.set(name, relative(ROOT, file))
     }
+    for (const block of auditPayloadBlocks(source).map(stripStrings)) {
+      for (const key of block.matchAll(/(?:^|[\s,{(])([A-Za-z_]\w*)\??\s*:(?!:)/g)) add(key[1])
+      // คีย์ย่อ `{ name, status }`
+      for (const key of block.matchAll(/(?:^|[{,])\s*([A-Za-z_]\w*)\s*(?=[,}])/g)) add(key[1])
+    }
+    for (const assign of source.matchAll(/\baudit(?:After|Before|Payload|Data|Details)\w*\.(\w+)\s*=(?!=)/g)) add(assign[1])
   }
   return found
 }
 
 function collectSchemaColumns(): string[] {
   const schema = readFileSync(join(ROOT, 'prisma', 'schema.prisma'), 'utf8')
+  const models = new Set([...schema.matchAll(/^model (\w+) \{/gm)].map((match) => match[1]))
   const columns = new Set<string>()
   let inModel = false
   for (const line of schema.split('\n')) {
@@ -67,8 +98,10 @@ function collectSchemaColumns(): string[] {
       continue
     }
     if (!inModel || line.includes('@relation')) continue
-    const field = /^\s+(\w+)\s+[A-Za-z]+/.exec(line)?.[1]
-    if (field === undefined) continue
+    const parsed = /^\s+(\w+)\s+([A-Za-z]+)/.exec(line)
+    const field = parsed?.[1]
+    // relation ไม่มี `@relation` (ฝั่งรายการ `Case[]`) — ไม่ใช่คอลัมน์ ไม่ขึ้นใน payload
+    if (field === undefined || models.has(parsed?.[2])) continue
     const mapped = /@map\("(\w+)"\)/.exec(line)?.[1]
     columns.add(mapped ?? field.replace(/([A-Z])/g, '_$1').toLowerCase())
   }
@@ -77,33 +110,53 @@ function collectSchemaColumns(): string[] {
 
 const THAI = /[฀-๿]/
 
+/** แปลไม่ได้ (ชื่อเดิม/มี `_`/ไม่มีภาษาไทย) หรือได้แค่ผลแปลทีละคำหลายคำต่อกัน */
 function untranslated(fields: Iterable<string>): string[] {
   return [...fields].filter((field) => {
     const label = auditFieldLabel(field)
-    return label === field || label.includes('_') || !THAI.test(label)
+    return label === field || label.includes('_') || !THAI.test(label) || auditFieldLabelIsWordByWord(field)
   })
 }
 
-describe('mytester6 T-009 — ทุกชื่อฟิลด์ใน audit แปลเป็นไทยได้', () => {
+describe('mytester6 T-009 / SV6-R-01 — ทุกชื่อฟิลด์ใน audit แปลเป็นไทยที่อ่านรู้เรื่อง', () => {
   const sourceKeys = collectSourceKeys()
   const schemaColumns = collectSchemaColumns()
 
   it('ตัวเก็บเจอคีย์/คอลัมน์หลักจริง (กันรูปแบบสแกนเพี้ยนแล้วเทสต์ผ่านลอย ๆ)', () => {
-    for (const key of ['note_type', 'failed_checks', 'source_module', 'mapping_rule']) expect(sourceKeys.has(key), key).toBe(true)
+    for (const key of [
+      'note_type',
+      'failed_checks',
+      'source_module',
+      'mapping_rule',
+      // SV6-R-01 — camel/คำเดียว/ข้อมูลเสริม/คีย์ในเงื่อนไข/ตัวแปร audit*
+      'batch_name',
+      'redownload',
+      'attachments',
+      'requested_id',
+      'teamChanged',
+      'travelOrigin',
+      'invoice_status',
+    ]) {
+      expect(sourceKeys.has(key), key).toBe(true)
+    }
     for (const column of ['allowance_satang', 'holiday_date', 'supervisor_can_assign_outsource', 'account_name']) {
       expect(schemaColumns.includes(column), column).toBe(true)
     }
-    expect(sourceKeys.size).toBeGreaterThan(200)
+    // relation ไม่ใช่คอลัมน์
+    expect(schemaColumns.includes('case_assignments')).toBe(false)
+    expect(sourceKeys.size).toBeGreaterThan(450)
     expect(schemaColumns.length).toBeGreaterThan(500)
   })
 
-  it('คีย์ที่โค้ดเขียนลง before/after ไม่ตกหล่น', () => {
-    const missing = untranslated(sourceKeys.keys()).map((key) => `${key} ← ${sourceKeys.get(key) ?? ''}`)
+  it('คีย์ที่โค้ดเขียนลง audit ไม่ตกหล่น', () => {
+    const missing = untranslated(sourceKeys.keys()).map(
+      (key) => `${key} → ${auditFieldLabel(key)} ← ${sourceKeys.get(key) ?? ''}`,
+    )
     expect(missing).toEqual([])
   })
 
   it('คอลัมน์ทุกตัวในสคีมาไม่ตกหล่น', () => {
-    expect(untranslated(schemaColumns)).toEqual([])
+    expect(untranslated(schemaColumns).map((column) => `${column} → ${auditFieldLabel(column)}`)).toEqual([])
   })
 })
 
@@ -194,5 +247,29 @@ describe('mytester6 SV6-03 — ฟิลด์ผู้รับเงิน/ท
     'legacy_case_ids',
   ])('%s', (field) => {
     expect(auditFieldLabel(field)).not.toBe(auditComposedFieldLabel(field))
+  })
+})
+
+/** ตรวจซ้ำ staging SV6-R-01 — ตัวอย่างที่หลุดบน staging (ข้อมูลเสริมของการส่งออก · คีย์ camel · คำเดียวที่อ่านไม่รู้เรื่อง) */
+describe('ตรวจซ้ำ staging SV6-R-01 — ป้ายเฉพาะของคีย์ที่เคยแปลทีละคำ/เป็นอังกฤษ', () => {
+  it.each([
+    ['batch_name', 'ชื่อรอบจ่าย'],
+    ['batch_status', 'สถานะรอบจ่าย'],
+    ['invoice_status', 'สถานะใบกำกับภาษี'],
+    ['company_status', 'สถานะบริษัท'],
+    ['teamChanged', 'เปลี่ยนทีมจากที่ระบบเสนอ'],
+    ['travelOrigin', 'จุดเริ่มเดินทาง'],
+    ['requested_id', 'รหัสที่ขอเปิด'],
+    ['redownload', 'ดาวน์โหลดซ้ำ'],
+    ['attachments', 'เอกสารแนบในชุด'],
+  ])('%s ⇒ %s', (field, label) => {
+    expect(auditFieldLabel(field)).toBe(label)
+    expect(auditFieldLabelIsWordByWord(field)).toBe(false)
+  })
+
+  it('ตัวตรวจผลแปลทีละคำ: หลายคำ = จริง · คำเดียว + คำนำหน้าจากคำท้าย = ไม่ใช่', () => {
+    expect(auditFieldLabelIsWordByWord('zz_payee_team')).toBe(false) // แปลไม่ได้ (คำแรกไม่รู้จัก)
+    expect(auditFieldLabelIsWordByWord('payee_team')).toBe(true)
+    expect(auditFieldLabelIsWordByWord('cancelled_at')).toBe(false)
   })
 })

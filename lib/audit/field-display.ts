@@ -623,7 +623,6 @@ const FIELD_LABELS: LabelMap = {
   travel_origin_lng: 'ลองจิจูดจุดเริ่มเดินทาง',
   travel_origin_source: 'ที่มาของจุดเริ่มเดินทาง',
   distance_km: 'ระยะทาง (กม.)',
-  product_photo_in_contract: 'รูปสินค้าในสัญญา',
   product_photos: 'รูปสินค้า',
   imei_actual: 'IMEI จริง',
   imei_contract: 'IMEI ตามสัญญา',
@@ -690,6 +689,105 @@ const FIELD_LABELS: LabelMap = {
   format: 'รูปแบบไฟล์',
   // id ภายนอก/ไฟล์ทั่วไป (camelCase จากโค้ดบางจุด)
   fileName: 'ชื่อไฟล์',
+
+  // ── ตรวจซ้ำ staging SV6-R-01 — คีย์ที่เดิมได้ผลแปลทีละคำ/อังกฤษ (ข้อมูลเสริมของการส่งออก · คีย์ camel · ผลงานเบื้องหลัง)
+  // ข้อมูลเสริมของการนำเอกสารออก (`emitDocumentExportAudit` · `details`)
+  batch_name: 'ชื่อรอบจ่าย',
+  batch_status: 'สถานะรอบจ่าย',
+  invoice_status: 'สถานะใบกำกับภาษี',
+  lot_status: 'สถานะล็อต',
+  company_status: 'สถานะบริษัท',
+  case_status: 'สถานะเคส',
+  redownload: 'ดาวน์โหลดซ้ำ',
+  attachments: 'เอกสารแนบในชุด',
+  content_type: 'ชนิดไฟล์',
+  storage_path: 'ตำแหน่งไฟล์ในที่เก็บ',
+  export_record_id: 'ประวัติการส่งออก',
+  criteria: 'เงื่อนไขที่ใช้',
+  // ชุดส่งบัญชี: จำนวนเอกสารที่แนบต่อชนิด
+  vouchers: 'ใบสำคัญจ่าย',
+  billing_invoices: 'ใบแจ้งหนี้',
+  tax_invoices: 'ใบกำกับภาษี',
+  wht_certificates: 'หนังสือรับรองหัก ณ ที่จ่าย',
+  billing_cycle_id: 'รอบวางบิล',
+  is_primary: 'บัญชีหลัก',
+  attached: 'แนบแล้ว',
+  not_attached: 'ยังไม่ได้แนบ',
+  // การเข้าถึงที่ถูกปฏิเสธ (พอร์ทัล/ทรัพย์ในคลัง)
+  requested_id: 'รหัสที่ขอเปิด',
+  section: 'หมวดข้อมูล',
+  slot: 'ช่องเอกสาร',
+  trigger: 'ที่มาของการสั่งงาน',
+  // เคส / การมอบหมาย / ภาคสนาม
+  team_changed: 'เปลี่ยนทีมจากที่ระบบเสนอ',
+  bundle_documents_confirmed: 'ยืนยันว่าเอกสารชุดมีสัญญาและบัตรครบ',
+  product_photo_in_contract: 'รูปสินค้ารวมอยู่ในไฟล์สัญญา',
+  new_assignment_id: 'การมอบหมายใหม่',
+  finance_company_id: 'บริษัทไฟแนนซ์',
+  total_rows: 'จำนวนแถวทั้งหมด',
+  failed_rows: 'แถวที่ไม่ผ่าน',
+  asset_brand_model: 'ยี่ห้อ/รุ่นทรัพย์',
+  asset_imei_serial: 'IMEI/หมายเลขเครื่อง',
+  asset_type: 'ประเภททรัพย์',
+  document_mode_before: 'รูปแบบเอกสารเดิม',
+  storage_file_kept: 'เก็บไฟล์ไว้ในที่เก็บ',
+  debtor_documents: 'เอกสารลูกหนี้',
+  substitute_receipt_cancelled: 'ยกเลิกใบรับรองแทนใบเสร็จ',
+  substitute_receipt_issued: 'ออกใบรับรองแทนใบเสร็จ',
+  travel_origin: 'จุดเริ่มเดินทาง',
+  travel_origin_before: 'จุดเริ่มเดินทางเดิม',
+  fuel_distance_pending: 'ค่าน้ำมันรอคำนวณระยะทาง',
+  field_day_expenses_held: 'รายการเบิกรายวันที่พักไว้',
+  field_day_expenses_not_held: 'รายการเบิกรายวันที่ไม่ได้พัก',
+  superseded_expense_ids: 'รายการเบิกเดิมที่ถูกแทนที่',
+  scheduled_at: 'เวลาที่กำหนด',
+  scheduled_date: 'วันนัดลงพื้นที่',
+  address_current: 'ที่อยู่ปัจจุบัน',
+  address_id_card: 'ที่อยู่ตามบัตรประชาชน',
+  address_work: 'ที่อยู่ที่ทำงาน',
+  postal_code: 'รหัสไปรษณีย์',
+  outstanding_debt_satang: 'ยอดหนี้คงเหลือ',
+  source_channel: 'ช่องทางที่ส่งเคส',
+  // คลัง / ล็อต
+  imei_match: 'IMEI ตรงกัน',
+  removed_asset_id: 'ทรัพย์ที่นำออก',
+  asset_ids_handed_over: 'ทรัพย์ที่ส่งมอบแล้ว',
+  revenue_by_case: 'ผลการสร้างรายได้รายเคส',
+  expense_ids_unlocked: 'รายการเบิกที่ปลดล็อก',
+  // การเงิน / ภาษี / ผู้ใช้
+  suspended_reason: 'เหตุผลที่ระงับ',
+  advance_offsets: 'หักกลบเงินทดรอง',
+  sales_record_id: 'รายการขาย',
+  reversal_reason: 'เหตุผลที่กลับรายการ',
+  ar_aging_buckets: 'ช่วงอายุลูกหนี้ (วัน)',
+  role_name: 'บทบาท',
+  user_full_name: 'ชื่อผู้ใช้',
+  signer_title: 'ตำแหน่งผู้ลงนาม',
+  // ผลของงานเบื้องหลัง (`jobs.result`) และข้อมูลแนบ (`jobs.payload`)
+  due: 'ถึงกำหนด',
+  resolved: 'จัดการแล้ว',
+  skipped: 'ข้าม',
+  sent: 'ส่งแล้ว',
+  retried: 'ลองใหม่',
+  failed: 'ไม่สำเร็จ',
+  marked: 'ทำเครื่องหมายแล้ว',
+  notified: 'แจ้งเตือนแล้ว',
+  refreshed: 'ปรับปรุงแล้ว',
+  settled: 'คำนวณแล้ว',
+  already_settled: 'คำนวณไว้แล้ว (ข้าม)',
+  period_locked: 'งวดปิดแล้ว (รอสร้างย้อนหลัง)',
+  period_locked_notified: 'แจ้งเรื่องงวดปิดแล้ว',
+  approval_notified: 'แจ้งผู้อนุมัติแล้ว',
+  expenses_created: 'รายการเบิกที่สร้าง',
+  cases_purged: 'เคสที่ลบเอกสารถาวร',
+  files_failed: 'ไฟล์ที่ลบไม่สำเร็จ',
+  organizations: 'จำนวนองค์กร',
+  already_done: 'ทำไว้แล้ว (ข้าม)',
+  expense_record_count: 'จำนวนรายการเบิก',
+  dev_trigger: 'สั่งจากเครื่องมือทดสอบ',
+  as_of: 'ณ วันที่',
+  force: 'บังคับทำใหม่',
+  confirm_duplicate: 'ยืนยันสร้างซ้ำ',
 }
 
 const NORMALIZED_FIELD_LABELS: ReadonlyMap<string, string> = new Map(
@@ -717,8 +815,13 @@ const LEADING_FROM_SUFFIX: LabelMap = {
   ids: '',
 }
 
-/** ป้ายจากการแปลทีละคำ · มีคำที่ไม่รู้จัก ⇒ `null` */
-export function auditComposedFieldLabel(field: string): string | null {
+interface ComposedFieldLabel {
+  label: string
+  /** จำนวนคำที่แปลมาต่อกัน (ไม่นับคำนำหน้าจากคำท้าย เช่น "เวลา"/"วันที่") */
+  words: number
+}
+
+function composeFieldLabel(field: string): ComposedFieldLabel | null {
   const tokens = auditFieldTokens(field)
   if (tokens[0] === 'is' && tokens.length > 1) tokens.shift()
   const last = tokens[tokens.length - 1]
@@ -735,12 +838,32 @@ export function auditComposedFieldLabel(field: string): string | null {
     if (word !== '') words.push(word)
   }
   const label = `${lead}${words.join(' ')}`.trim()
-  return label === '' ? null : label
+  return label === '' ? null : { label, words: words.length }
+}
+
+/** ป้ายจากการแปลทีละคำ · มีคำที่ไม่รู้จัก ⇒ `null` */
+export function auditComposedFieldLabel(field: string): string | null {
+  return composeFieldLabel(field)?.label ?? null
+}
+
+function specificFieldLabel(field: string): string | undefined {
+  return NORMALIZED_FIELD_LABELS.get(normalizeFieldName(field))
 }
 
 /** ชื่อฟิลด์ภาษาไทยของตาราง "ค่าก่อน / หลัง" — ป้ายเฉพาะ → แปลทีละคำ → ชื่อเดิม (ไม่พัง) */
 export function auditFieldLabel(field: string): string {
-  return NORMALIZED_FIELD_LABELS.get(normalizeFieldName(field)) ?? auditComposedFieldLabel(field) ?? field
+  return specificFieldLabel(field) ?? auditComposedFieldLabel(field) ?? field
+}
+
+/**
+ * ตรวจซ้ำ staging SV6-R-01 — ป้ายของฟิลด์นี้มาจากการแปลทีละคำตั้งแต่ 2 คำขึ้นไป (เช่น "รอบ ชื่อ" · "ทีม เปลี่ยน")
+ * ซึ่งมักอ่านไม่รู้เรื่อง ⇒ คีย์ที่รู้จักในซอร์ส/สคีมาต้องมีป้ายเฉพาะ (`field-label-coverage.test.ts` ล็อก)
+ * คำเดียว + คำนำหน้าจากคำท้าย (`cancelled_at` ⇒ "เวลายกเลิก") ถือว่าอ่านได้
+ */
+export function auditFieldLabelIsWordByWord(field: string): boolean {
+  if (specificFieldLabel(field) !== undefined) return false
+  const composed = composeFieldLabel(field)
+  return composed !== null && composed.words >= 2
 }
 
 // ── ค่า enum / boolean ─────────────────────────────────────────────────────────
