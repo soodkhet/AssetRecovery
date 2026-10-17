@@ -970,8 +970,9 @@ suite('เคลียร์เงินทดรอง "ไม่มีใบ�
     await expectCode(() => advances.reviewAdvanceClear({ actor: finance, meta }, ADV_ID, { note: null }), 'SUBSTITUTE_RECEIPT_NOT_SIGNED')
 
     // ใบที่ยกเลิกก่อนเคลียร์รอบปัจจุบัน (ของรอบที่ถูกตีกลับ) — เคลียร์รอบนี้ใช้ใบเสร็จล้วน ⇒ ตรวจได้
+    // ใบที่ยกเลิกแล้วแก้ไม่ได้ (trigger immutable) ⇒ เลื่อนเวลาเคลียร์ของรอบปัจจุบันให้อยู่หลังการยกเลิกแทน
     await db().$executeRawUnsafe(
-      `UPDATE substitute_receipts SET cancelled_at = (SELECT cleared_at FROM advances WHERE id = '${ADV_ID}') - interval '1 hour' WHERE id = '${crt.id}'`,
+      `UPDATE advances SET cleared_at = (SELECT cancelled_at FROM substitute_receipts WHERE id = '${crt.id}') + interval '1 hour' WHERE id = '${ADV_ID}'`,
     )
     const reviewed = await advances.reviewAdvanceClear({ actor: finance, meta }, ADV_ID, { note: null })
     expect(reviewed.clearReviewedAt).not.toBeNull()

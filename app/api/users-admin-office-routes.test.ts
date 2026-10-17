@@ -80,6 +80,8 @@ function userRow(id: string, roleGroup: 'system' | 'inhouse') {
     updatedAt: new Date('2026-10-03T00:00:00Z'),
     role: { name: roleGroup === 'system' ? 'การเงิน' : 'พนักงานภาคสนาม', roleGroup },
     team: roleGroup === 'system' ? null : { name: 'ทีม A' },
+    supervisedTeams: [],
+    managedTeams: [],
     company: null,
     _count: { assignmentsAsAgent: 0 },
     payeeProfile: [],
