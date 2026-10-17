@@ -200,20 +200,26 @@ export function canReviewAdvanceClear(advance: Pick<AdvanceDto, 'status' | 'clea
 }
 
 /**
- * mytester F-07 · มติ 16/10/2569 Q1 — ใบรับรองแทนใบเสร็จของการเคลียร์ยังไม่มีฉบับเซ็น (หรือถูกยกเลิกโดยยังไม่มีใบใหม่)
+ * mytester F-07 · มติ 16/10/2569 Q1 — ใบรับรองแทนใบเสร็จของการเคลียร์ยังไม่มีฉบับเซ็น (หรือถูกยกเลิกหลังเคลียร์โดยยังไม่มีใบใหม่)
  * ⇒ กด "ตรวจแล้ว" ไม่ได้ (server บล็อกด้วย `SUBSTITUTE_RECEIPT_NOT_SIGNED` — ข้อความนี้ใช้ปิดปุ่มและบอกเหตุผลล่วงหน้า)
- * แนบใบเสร็จจริงแล้ว / ไม่มีใบรับรอง / เซ็นแล้ว = `null`
+ * mytester6 T-003 · D6-01 แบบ ก — ตรวจรายบรรทัด: แนบใบเสร็จจริงแล้วก็ยังต้องมีฉบับเซ็นของใบรับรอง (ใบเสร็จครอบเฉพาะรายการของมัน)
+ * ไม่มีใบรับรอง / เซ็นแล้ว / ยกเลิกก่อนเคลียร์รอบนี้ (ของรอบที่ถูกตีกลับ) = `null` — ต้องตรงกับ `assertAdvanceSubstituteReceiptSigned()`
  */
-export function advanceClearReviewWarning(advance: Pick<AdvanceDto, 'substituteReceipt' | 'receiptFileUrl'>): string | null {
+export function advanceClearReviewWarning(advance: Pick<AdvanceDto, 'substituteReceipt' | 'clearedAt'>): string | null {
   const receipt = advance.substituteReceipt
-  if (receipt === null || advance.receiptFileUrl !== null) return null
+  if (receipt === null) return null
   if (receipt.status === 'pending_signature') {
-    return `ใบรับรองแทนใบเสร็จ ${receipt.receiptNumber} ยังไม่ได้อัปโหลดฉบับเซ็น — ต้องอัปโหลดฉบับเซ็นก่อนจึงกด "ตรวจแล้ว" ได้`
+    return `ใบรับรองแทนใบเสร็จ ${receipt.receiptNumber} ยังไม่ได้อัปโหลดฉบับเซ็น — ต้องอัปโหลดฉบับเซ็นก่อนจึงกด "ตรวจแล้ว" ได้ (ใบเสร็จจริงที่แนบใช้แทนรายการในใบรับรองไม่ได้)`
   }
-  if (receipt.status === 'cancelled') {
-    return `ใบรับรองแทนใบเสร็จ ${receipt.receiptNumber} ถูกยกเลิกแล้ว — ต้องออกใบใหม่ (และอัปโหลดฉบับเซ็น) หรือแนบใบเสร็จจริงก่อนจึงกด "ตรวจแล้ว" ได้`
+  if (receipt.status === 'cancelled' && cancelledInThisClearRound(receipt.cancelledAt, advance.clearedAt)) {
+    return `ใบรับรองแทนใบเสร็จ ${receipt.receiptNumber} ถูกยกเลิกแล้ว — ต้องออกใบใหม่ (และอัปโหลดฉบับเซ็น) หรือตีกลับการเคลียร์ให้แนบใบเสร็จจริงก่อนจึงกด "ตรวจแล้ว" ได้`
   }
   return null
+}
+
+function cancelledInThisClearRound(cancelledAt: string | null, clearedAt: string | null): boolean {
+  if (cancelledAt === null || clearedAt === null) return false
+  return new Date(cancelledAt).getTime() >= new Date(clearedAt).getTime()
 }
 
 /**
