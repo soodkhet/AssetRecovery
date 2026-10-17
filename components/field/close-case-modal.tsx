@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { signedFileUrl } from '@/lib/cases/upload-client'
 import {
   IconAlert,
@@ -17,7 +17,7 @@ import {
   IconTrash,
   IconVideo,
 } from '@/components/field/field-icons'
-import { Button, ErrorState, LoadingState, Modal, Textarea, useRovingRadio, useToast } from '@/components/ui'
+import { Button, ErrorState, Field, LoadingState, Modal, Textarea, useRovingRadio, useToast } from '@/components/ui'
 import { cn } from '@/components/ui/cn'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest, type ApiCallError, type ApiCallResult } from '@/lib/api/types'
@@ -472,6 +472,8 @@ export function CloseCaseModal({
   onDone: () => void
 }) {
   const { showToast } = useToast()
+  /** id ช่อง "บันทึกเพิ่มเติม" — label ผูกช่องผ่าน `<Field id>` (mytester6 SV6-02) */
+  const noteId = useId()
   const [detail, setDetail] = useState<FieldCaseDetailDto | null>(null)
   const [loadError, setLoadError] = useState<ApiCallError | null>(null)
   /** เพิ่มทีละ 1 เพื่อโหลดฟอร์มใหม่ (ปุ่มลองใหม่ — preship PS-010) */
@@ -1283,9 +1285,10 @@ export function CloseCaseModal({
                 />
               )}
 
-              <div>
-                <SectionTitle>บันทึกเพิ่มเติม (ไม่บังคับ)</SectionTitle>
+              {/* หัวข้อเดิมเป็น <SectionTitle> แยก ⇒ ช่องไม่มีชื่อ (เหลือแค่ placeholder) — ผูกผ่าน <Field id> (mytester6 SV6-02) */}
+              <Field id={noteId} label="บันทึกเพิ่มเติม (ไม่บังคับ)" labelClassName="mb-2 font-extrabold text-slate-600">
                 <Textarea
+                  id={noteId}
                   rows={2}
                   maxLength={2000}
                   value={form.note ?? ''}
@@ -1293,7 +1296,7 @@ export function CloseCaseModal({
                   onBlur={() => scheduleDraft(form, { revision: mode.revision })}
                   placeholder="รายละเอียดที่อยากบันทึกไว้กับการปิดงานครั้งนี้"
                 />
-              </div>
+              </Field>
 
               {/* ── C. สรุปสิ่งที่ยังขาด — §20 บังคับให้บอกครบในครั้งเดียว ── */}
               {showMissing && missingSummary !== null && (

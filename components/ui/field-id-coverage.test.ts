@@ -270,3 +270,66 @@ describe('<Field required> ที่ห่อช่อง native ส่ง aria-
     expect(problems).toEqual([])
   })
 })
+
+/**
+ * กันถดถอย mytester6 SV6-02 — ช่องกรอกที่**ไม่ได้อยู่ใน `<Field>`/`<label>`** ต้องมีชื่อให้โปรแกรมอ่านจอ:
+ * `aria-label` / `aria-labelledby` / `id` (ผูกกับ label ภายนอก เช่น component ห่อที่รับ id จาก `<Field id>` ของผู้เรียก) /
+ * spread props (component ห่อ) — เดิมช่อง "บันทึกเพิ่มเติม" ในฟอร์มปิดงานใช้หัวข้อ `<SectionTitle>` แยก ไม่มี `<Field>`
+ * ตัวสแกนข้อ 1–4 ตรวจเฉพาะสิ่งที่อยู่ใน `<Field>` จึงไม่เห็น ⇒ เหลือชื่อจาก placeholder อย่างเดียว
+ * (ช่อง `type="hidden"`/`type="file"` ไม่นับ — ไฟล์เลือกผ่านปุ่มที่มีชื่อของตัวเอง)
+ */
+const NAMED_CONTROL_TAGS = new Set(['Input', 'MoneyInput', 'NumericInput', 'Select', 'Textarea', 'input', 'select', 'textarea'])
+
+function scanUnnamedControls(file: string, text: string): string[] {
+  const problems: string[] = []
+  const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+  const visit = (node: ts.Node, labelled: boolean): void => {
+    let inside = labelled
+    if (ts.isJsxElement(node)) {
+      const tag = node.openingElement.tagName.getText()
+      if (tag === 'Field' || tag === 'label') inside = true
+    }
+    const open = ts.isJsxElement(node) ? node.openingElement : ts.isJsxSelfClosingElement(node) ? node : null
+    if (open !== null && !inside && NAMED_CONTROL_TAGS.has(open.tagName.getText())) {
+      const typeAttr = attr(open, 'type')
+      const type = typeAttr === undefined ? undefined : attrText(typeAttr)
+      const named =
+        ['aria-label', 'aria-labelledby', 'id'].some((name) => attr(open, name) !== undefined) ||
+        open.attributes.properties.some((property) => ts.isJsxSpreadAttribute(property))
+      if (type !== '"hidden"' && type !== '"file"' && !named) {
+        problems.push(`${relative(ROOT, file)}:${source.getLineAndCharacterOfPosition(open.getStart()).line + 1}`)
+      }
+    }
+    ts.forEachChild(node, (child) => visit(child, inside))
+  }
+  visit(source, false)
+  return problems
+}
+
+describe('ช่องกรอกนอก <Field> มีชื่อให้โปรแกรมอ่านจอ (mytester6 SV6-02)', () => {
+  it('ตัวสแกนจับได้จริง', () => {
+    const problems = scanUnnamedControls(
+      join(ROOT, 'components', 'fixture.tsx'),
+      `const a = (
+        <>
+          <Textarea rows={2} placeholder="แค่ placeholder" />
+          <Field id={noteId} label="บันทึก"><Textarea id={noteId} /></Field>
+          <Textarea aria-label="อธิบาย" />
+          <label>ค้นหา <input type="text" /></label>
+          <input type="file" className="hidden" />
+          <Select id={id} />
+          <input {...props} />
+          <select value={v} onChange={f} />
+        </>
+      )`,
+    )
+    expect(problems.map((problem) => problem.split(':')[1])).toEqual(['3', '10'])
+  })
+
+  it('ทุกจุดในระบบ', () => {
+    const problems = [...sourceFiles(join(ROOT, 'components')), ...sourceFiles(join(ROOT, 'app'))].flatMap((file) =>
+      scanUnnamedControls(file, readFileSync(file, 'utf8')),
+    )
+    expect(problems).toEqual([])
+  })
+})
