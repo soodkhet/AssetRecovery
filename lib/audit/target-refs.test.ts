@@ -378,7 +378,8 @@ describe('ทดสอบซ้ำ local LR6-01 — target_id แบบ polymorp
     expect(auditValueDisplay([ids[0], ids[6]], 'company_ids', null, { [ids[0] ?? '']: 'ไฟแนนซ์ A' })).toBe(
       `ไฟแนนซ์ A, ${ids[6]?.slice(0, 8)}`,
     )
-    expect(auditValueDisplay([ids[0]], 'company_ids', null, {})).toBe(JSON.stringify([ids[0]]))
+    // ตรวจซ้ำ staging SV6-R-03 — หาชื่อไม่พบเลย ⇒ id ย่อ (ไม่ใช่ JSON ดิบ)
+    expect(auditValueDisplay([ids[0]], 'company_ids', null, {})).toBe(ids[0]?.slice(0, 8))
     expect(auditValueDisplay([], 'company_ids', null, labels)).toBe('ไม่มี')
     expect(auditRefLabel([ids[0]], 'tags', labels)).toBeNull()
     expect(auditValueDisplay(ids[1], 'target_id', 'adjustments', { [ids[1] ?? '']: 'BL-2569-001' })).toBe('BL-2569-001')
@@ -430,12 +431,12 @@ describe('ตรวจซ้ำ staging SV5-R-02 — id ในค่าซ้อ
     expect(source.rows[0]?.caseId).toBe(CASE)
   })
 
-  it('auditValueDisplay แสดงค่าซ้อนเป็น JSON ที่แทนชื่อแล้ว', () => {
+  it('auditValueDisplay แสดงค่าซ้อนเป็นข้อความที่แทนชื่อแล้ว (SV6-R-03 — ไม่ใช่ JSON ดิบ)', () => {
     const labels = { [CASE.toLowerCase()]: 'CS-2569-0001' }
     expect(auditValueDisplay([{ caseId: CASE, result: 'skipped' }], 'revenueByCase', 'handover_lots', labels)).toBe(
-      '[{"caseId":"CS-2569-0001","result":"skipped"}]',
+      'เคส: CS-2569-0001, ผล: ข้าม',
     )
-    expect(auditValueDisplay({ a: 1 }, 'payload', 'jobs', {})).toBe('{"a":1}')
+    expect(auditValueDisplay({ settled: 1 }, 'result', 'jobs', {})).toBe('คำนวณแล้ว: 1')
   })
 })
 

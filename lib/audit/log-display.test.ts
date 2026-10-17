@@ -224,7 +224,7 @@ describe('ตรวจซ้ำ staging SV5-R-02/R-03 — auditValueDisplay ก�
   const TX = '0a1b2c3d-0000-4000-8000-0000000000c2'
   const labels = { [CASE]: 'CS-2569-0001', [TX]: '13/10/2569 · ฿1,000.00 · กสิกรไทย' }
 
-  it('object ซ้อน ⇒ JSON ที่แทน id และข้อความอ้างอิงแล้ว · id ที่หาไม่พบคงเดิม', () => {
+  it('object ซ้อน ⇒ ข้อความที่แทน id และข้อความอ้างอิงแล้ว (SV6-R-03) · id ที่หาไม่พบแสดงย่อ', () => {
     const unknown = '0a1b2c3d-0000-4000-8000-0000000000ff'
     expect(
       auditValueDisplay(
@@ -233,8 +233,9 @@ describe('ตรวจซ้ำ staging SV5-R-02/R-03 — auditValueDisplay ก�
         'jobs',
         labels,
       ),
-    ).toBe(
-      `{"revenueByCase":[{"caseId":"CS-2569-0001"},{"caseId":"${unknown}"}],"reason":"จาก รายการเดินบัญชี 13/10/2569 · ฿1,000.00 · กสิกรไทย"}`,
+    ).toBe('ผลการสร้างรายได้รายเคส: 2 รายการ\nเหตุผล: จาก รายการเดินบัญชี 13/10/2569 · ฿1,000.00 · กสิกรไทย')
+    expect(auditValueDisplay([{ caseId: CASE }, { caseId: unknown }], 'revenueByCase', 'handover_lots', labels)).toBe(
+      'เคส: CS-2569-0001\nเคส: 0a1b2c3d',
     )
   })
 
@@ -258,5 +259,57 @@ describe('ตรวจซ้ำ staging SV6-R-04 — วันที่ ISO ใ�
     expect(auditReasonText('คีย์ PB-IN-25691004-CB4FD7202879')).toBe('คีย์ PB-IN-25691004-CB4FD7202879')
     expect(auditReasonText('ไฟล์ AccountingPack_2569-10_v1.0.zip')).toBe('ไฟล์ AccountingPack_2569-10_v1.0.zip')
     expect(auditReasonText('id 0a1b2c3d-0000-4000-8000-0000000000c1')).toBe('id 0a1b2c3d-0000-4000-8000-0000000000c1')
+  })
+})
+
+describe('ตรวจซ้ำ staging SV6-R-03 — รายการ/อ็อบเจกต์ไม่แสดง JSON ดิบ', () => {
+  const noRawJson = (text: string): void => {
+    expect(text).not.toMatch(/[[\]{}"]/)
+  }
+
+  it('รายชื่อเหตุการณ์ ⇒ ป้ายไทยคั่นด้วย " · "', () => {
+    expect(auditValueDisplay(['case.status_changed', 'case.approved'], 'events', 'cases')).toBe(
+      'เปลี่ยนสถานะเคส · อนุมัติเคส',
+    )
+    expect(auditValueDisplay(['case.close_draft_saved'], 'events', 'close_case_drafts')).toBe('บันทึกร่างปิดงาน')
+  })
+
+  it('รายการข้อความ (จังหวัด/ชื่อไฟล์) ⇒ คั่นด้วย " · " · ยาวเกินย่อ "+n รายการ"', () => {
+    expect(auditValueDisplay(['กรุงเทพมหานคร', 'นครปฐม', 'สมุทรสาคร'], 'provinces', 'teams')).toBe(
+      'กรุงเทพมหานคร · นครปฐม · สมุทรสาคร',
+    )
+    const files = Array.from({ length: 35 }, (_, index) => `f${index}.pdf`)
+    const text = auditValueDisplay(files, 'file_names', 'export_records')
+    expect(text.startsWith('f0.pdf · f1.pdf')).toBe(true)
+    expect(text.endsWith('+5 รายการ')).toBe(true)
+  })
+
+  it('ผลงานเบื้องหลัง/ข้อมูลแนบ ⇒ บรรทัดละคีย์ "ป้าย: ค่า" ที่แปลแล้ว (วันที่ พ.ศ.)', () => {
+    const result = auditValueDisplay({ settled: 4, periodLocked: 0, revenueIdsCreated: [] }, 'result', 'jobs')
+    expect(result).toBe('คำนวณแล้ว: 4\nงวดปิดแล้ว (รอสร้างย้อนหลัง): 0\nรายได้ที่สร้าง: ไม่มี')
+    const payload = auditValueDisplay({ date: '2026-10-17', devTrigger: true }, 'payload', 'jobs')
+    expect(payload).toBe('วันที่: 17/10/2569\nสั่งจากเครื่องมือทดสอบ: ใช่')
+  })
+
+  it('เอกสารแนบของชุดส่งบัญชี ⇒ ชนิดเอกสารละบรรทัด + จำนวนในบรรทัดเดียว', () => {
+    const text = auditValueDisplay(
+      {
+        vouchers: { attached: 8, not_attached: [] },
+        tax_invoices: { attached: 4, not_attached: ['INV-0009'] },
+      },
+      'attachments',
+      'export_records',
+    )
+    expect(text).toBe(
+      'ใบสำคัญจ่าย: แนบแล้ว 8, ยังไม่ได้แนบ ไม่มี\nใบกำกับภาษี: แนบแล้ว 4, ยังไม่ได้แนบ INV-0009',
+    )
+    noRawJson(text)
+  })
+
+  it('ซ้อนลึกเกินชั้นที่แสดง ⇒ สรุปจำนวน · อ็อบเจกต์ว่าง ⇒ ไม่มี', () => {
+    const text = auditValueDisplay({ a_deep: { inner: { x: 1, y: 2 } } }, 'payload', 'jobs')
+    expect(text).toContain('2 รายการ')
+    noRawJson(text)
+    expect(auditValueDisplay({}, 'payload', 'jobs')).toBe('ไม่มี')
   })
 })

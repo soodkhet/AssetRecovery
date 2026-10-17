@@ -1,5 +1,5 @@
 import { fmtDate, fmtDateTime } from '@/lib/format/datetime'
-import { AUDIT_RESULT_CODE_LABEL, auditEnumValueLabel } from '@/lib/audit/field-display'
+import { AUDIT_RESULT_CODE_LABEL, auditEnumValueLabel, auditFieldLabel } from '@/lib/audit/field-display'
 import {
   AUDIT_LIST_REF_DISPLAY_LIMIT,
   auditListFieldRefType,
@@ -386,17 +386,144 @@ export function auditValueDisplay(
 ): string {
   const refLabel = auditRefLabel(value, field, refLabels)
   if (refLabel !== null) return refLabel
+  // ตรวจซ้ำ staging SV6-R-03 — รายการ/อ็อบเจกต์ ⇒ ข้อความที่แปลแล้ว ไม่ใช่ JSON ดิบ
+  if (Array.isArray(value)) return auditListText(value, field, targetType, refLabels)
+  if (isPlainObject(value)) {
+    // ตรวจซ้ำ staging SV5-R-02 — id ในค่าซ้อน (`revenueByCase[].caseId` · `payload.actorId`) ⇒ ชื่อ (แปลงตอนแสดงเท่านั้น)
+    const replaced = auditReplaceNestedRefs(value, refLabels)
+    return auditRecordLines(isPlainObject(replaced) ? replaced : value, targetType, refLabels)
+  }
+  return auditScalarDisplay(value, field, targetType, refLabels)
+}
+
+/** ค่าเดี่ยว (ไม่ใช่ object/array) — enum/boolean · อ้างอิงรายการเดินบัญชีในข้อความ · เงิน/วันที่ */
+function auditScalarDisplay(
+  value: unknown,
+  field: string,
+  targetType: string | null,
+  refLabels: Readonly<Record<string, string>>,
+): string {
   // mytester H-06 → mytester6 T-026 — enum/boolean ⇒ ป้ายไทยชุดเดียวกับหน้าจอ (สถานะแยกตามชนิดเป้าหมาย)
   const enumText = auditEnumValueLabel(value, field, targetType)
   if (enumText !== null) return enumText
-  // รายการว่าง ⇒ "ไม่มี" (ก่อนแปลงค่าซ้อนซึ่งจะได้ `[]` ดิบ — mytester6 SV6-03)
-  if (Array.isArray(value) && value.length === 0) return auditValueText(value, field)
-  // ตรวจซ้ำ staging SV5-R-02 — id ในค่าซ้อน (`revenueByCase[].caseId` · `payload.actorId`) ⇒ ชื่อ (แปลงตอนแสดงเท่านั้น)
-  if (value !== null && typeof value === 'object') return JSON.stringify(auditReplaceNestedRefs(value, refLabels))
-  // ตรวจซ้ำ staging SV5-R-03 — `source_ref` "bank_transaction:<id>" ⇒ ป้ายรายการเดินบัญชี
   if (typeof value === 'string') {
+    // ตรวจซ้ำ staging SV5-R-03 — `source_ref` "bank_transaction:<id>" ⇒ ป้ายรายการเดินบัญชี
     const replaced = auditReplaceTextRefs(value, (ref) => refLabels[ref.id.toLowerCase()] ?? null)
     if (replaced !== value) return replaced
   }
   return auditValueText(value, field)
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+/** จำนวนรายการสูงสุดที่แสดงต่อรายการ (ที่เหลือย่อ "+n รายการ") */
+export const AUDIT_LIST_DISPLAY_LIMIT = 30
+/** จำนวนแถวสูงสุดของรายการอ็อบเจกต์ (เช่น `revenueByCase` · บรรทัดใบรับรองแทนใบเสร็จ) */
+export const AUDIT_OBJECT_LIST_DISPLAY_LIMIT = 10
+
+const UUID_TEXT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+function moreSuffix(total: number, shown: number): string {
+  return total > shown ? ` +${total - shown} รายการ` : ''
+}
+
+/** ค่าย่อยของรายการ — id ที่หาชื่อไม่พบแสดงย่อ 8 ตัว (UUID เต็มยังอยู่ในข้อมูลดิบ) */
+function auditItemDisplay(
+  item: unknown,
+  field: string,
+  targetType: string | null,
+  refLabels: Readonly<Record<string, string>>,
+): string {
+  if (typeof item === 'string' && UUID_TEXT.test(item)) return refLabels[item.toLowerCase()] ?? item.slice(0, 8)
+  return auditScalarDisplay(item, field, targetType, refLabels)
+}
+
+/**
+ * ตรวจซ้ำ staging SV6-R-03 — รายการ (array):
+ * - ค่าเดี่ยว ⇒ แปลทีละตัว (enum ตามชื่อฟิลด์ · ชื่อเหตุการณ์ · ชื่อของ id) ต่อด้วย " · "
+ * - อ็อบเจกต์ ⇒ บรรทัดละรายการ แบบ "ป้าย: ค่า, ป้าย: ค่า"
+ */
+function auditListText(
+  value: readonly unknown[],
+  field: string,
+  targetType: string | null,
+  refLabels: Readonly<Record<string, string>>,
+): string {
+  if (value.length === 0) return 'ไม่มี'
+  if (value.every(isPlainObject)) {
+    const shown = value.slice(0, AUDIT_OBJECT_LIST_DISPLAY_LIMIT)
+    const replaced = auditReplaceNestedRefs(shown, refLabels)
+    const rows = (Array.isArray(replaced) ? replaced : shown).map((item) =>
+      isPlainObject(item) ? auditInlineRecord(item, targetType, refLabels) : auditItemDisplay(item, field, targetType, refLabels),
+    )
+    const rest = moreSuffix(value.length, shown.length)
+    return rest === '' ? rows.join('\n') : `${rows.join('\n')}\n${rest.trim()}`
+  }
+  const shown = value.slice(0, AUDIT_LIST_DISPLAY_LIMIT)
+  const items = shown.map((item) =>
+    isPlainObject(item) || Array.isArray(item) ? auditNestedSummary(item) : auditItemDisplay(item, field, targetType, refLabels),
+  )
+  return `${items.join(' · ')}${moreSuffix(value.length, shown.length)}`
+}
+
+/** ค่าที่ลึกเกินชั้นที่แสดง ⇒ สรุปจำนวน */
+function auditNestedSummary(value: unknown): string {
+  if (Array.isArray(value)) return value.length === 0 ? 'ไม่มี' : `${value.length} รายการ`
+  if (isPlainObject(value)) return `${Object.keys(value).length} รายการ`
+  return '—'
+}
+
+/** ค่าในชั้นซ้อน (ค่าของคีย์ในอ็อบเจกต์) — ค่าเดี่ยว/รายการค่าเดี่ยวแปลเต็ม · ลึกกว่านั้นสรุปจำนวน */
+function auditNestedValue(
+  value: unknown,
+  field: string,
+  targetType: string | null,
+  refLabels: Readonly<Record<string, string>>,
+): string {
+  if (Array.isArray(value)) {
+    if (value.length === 0) return 'ไม่มี'
+    if (value.every((item) => !isPlainObject(item) && !Array.isArray(item))) {
+      return auditListText(value, field, targetType, refLabels)
+    }
+    return auditNestedSummary(value)
+  }
+  if (isPlainObject(value)) return auditNestedSummary(value)
+  return auditItemDisplay(value, field, targetType, refLabels)
+}
+
+/** อ็อบเจกต์ในบรรทัดเดียว: "ป้าย: ค่า, ป้าย: ค่า" (ต่อท้ายป้ายของบรรทัดแม่ใช้ `pairSeparator` = " " — "แนบแล้ว 8") */
+function auditInlineRecord(
+  record: Record<string, unknown>,
+  targetType: string | null,
+  refLabels: Readonly<Record<string, string>>,
+  pairSeparator = ': ',
+): string {
+  const entries = Object.entries(record)
+  if (entries.length === 0) return 'ไม่มี'
+  return entries
+    .map(([key, item]) => `${auditFieldLabel(key)}${pairSeparator}${auditNestedValue(item, key, targetType, refLabels)}`)
+    .join(', ')
+}
+
+/**
+ * ตรวจซ้ำ staging SV6-R-03 — อ็อบเจกต์ ⇒ บรรทัดละคีย์ "ป้าย: ค่า" (ชื่อคีย์/ค่าแปลแล้ว)
+ * ค่าที่เป็นอ็อบเจกต์อีกชั้น (เช่นจำนวนเอกสารแนบต่อชนิดของชุดส่งบัญชี) แสดงในบรรทัดเดียว · ลึกกว่านั้นสรุป "n รายการ"
+ */
+function auditRecordLines(
+  record: Record<string, unknown>,
+  targetType: string | null,
+  refLabels: Readonly<Record<string, string>>,
+): string {
+  const entries = Object.entries(record)
+  if (entries.length === 0) return 'ไม่มี'
+  return entries
+    .map(([key, item]) => {
+      const text = isPlainObject(item)
+        ? auditInlineRecord(item, targetType, refLabels, ' ')
+        : auditNestedValue(item, key, targetType, refLabels)
+      return `${auditFieldLabel(key)}: ${text}`
+    })
+    .join('\n')
 }

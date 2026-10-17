@@ -106,13 +106,13 @@ export function AuditDetailModal({ id, onClose }: { id: string | null; onClose: 
                       {/* mytester H-06 — ชื่อฟิลด์/ค่าเป็นภาษาไทยเมื่อรู้จัก */}
                       <Td className="px-3 py-2 text-xs">{auditFieldLabel(change.field)}</Td>
                       <Td
-                        className="px-3 py-2 text-xs break-all text-slate-500"
+                        className="px-3 py-2 text-xs break-all whitespace-pre-line text-slate-500"
                         title={refTooltip(change.before, change.field, detail.refLabels)}
                       >
                         {auditValueDisplay(change.before, change.field, detail.targetType, detail.refLabels)}
                       </Td>
                       <Td
-                        className="px-3 py-2 text-xs font-medium break-all text-slate-800"
+                        className="px-3 py-2 text-xs font-medium break-all whitespace-pre-line text-slate-800"
                         title={refTooltip(change.after, change.field, detail.refLabels)}
                       >
                         {auditValueDisplay(change.after, change.field, detail.targetType, detail.refLabels)}

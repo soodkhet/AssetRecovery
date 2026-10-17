@@ -1,5 +1,5 @@
 import { QUESTION_STATUS_LABEL } from '@/lib/accounting/question'
-import { ADJUSTMENT_TYPE_LABEL } from '@/lib/adjustments/adjustment'
+import { ADJUSTMENT_TARGET_LABEL, ADJUSTMENT_TYPE_LABEL } from '@/lib/adjustments/adjustment'
 import { DEBTOR_NATIONALITY_LABEL, DOCUMENT_MODE_LABEL, DOCUMENT_SLOT_LABEL } from '@/lib/cases/case'
 import { CASE_STATUS_ACTIONS, CASE_STATUS_RULES, type CaseStatusAction } from '@/lib/cases/state-machine'
 import { AUDIT_EVENT_LABEL } from '@/lib/audit/event-labels'
@@ -1084,7 +1084,7 @@ const PORTAL_SECTION_VALUE_LABEL: Readonly<Record<PortalSection, string>> = {
 const RESULT_VALUE_LABEL: LabelMap = { success: 'สำเร็จ', failed: 'ไม่สำเร็จ', created: 'สร้างแล้ว', skipped: 'ข้าม' }
 /** เหตุผลที่ยังไม่เกิดรายได้ (`revenueByCase[].reason`) — ค่าข้อความอิสระอื่นของ `reason` ไม่ตรงคีย์ จึงไม่ถูกแตะ */
 const REVENUE_SKIP_REASON_LABEL: Readonly<Record<RevenueSkipReason, string>> = {
-  no_snapshot: 'ยังไม่มี snapshot ค่าบริการ',
+  no_snapshot: 'ยังไม่ได้บันทึกค่าบริการตอนอนุมัติเคส',
   no_outcome: 'เคสยังไม่ปิดงาน',
   model_excludes_fail: 'รูปแบบค่าบริการไม่คิดเคสไม่สำเร็จ',
   field_days_not_settled: 'ค่าเบี้ยเลี้ยงรายวันยังคำนวณไม่ครบ',
@@ -1252,6 +1252,8 @@ const VALUE_LABEL_BY_FIELD: ReadonlyMap<string, LabelMap> = new Map(
     changed_from: CHANGED_FROM_VALUE_LABEL,
     path: TAC_SYNC_PATH_VALUE_LABEL,
     events: AUDIT_EVENT_LABEL,
+    // ชนิดเป้าหมายของรายการปรับปรุง (`after.target_type` — ค่าเอกพจน์ `revenue`/`expense`)
+    target_type: ADJUSTMENT_TARGET_LABEL,
   } satisfies Record<string, LabelMap>).map(([field, labels]) => [normalizeFieldName(field), labels]),
 )
 
