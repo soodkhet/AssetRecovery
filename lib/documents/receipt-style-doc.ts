@@ -1,6 +1,9 @@
 import { formatThaiAddressLine } from '@/lib/address/address-value'
+import { formatBranch, HEAD_OFFICE_BRANCH_CODE } from '@/lib/format/branch'
 import { fmtSatang } from '@/lib/format/money'
+import type { PayeeType } from '@/lib/generated/prisma/enums'
 import { letterheadContactLine, letterheadTaxLine, type DocLetterhead } from '@/lib/organization/profile'
+import { payeeLegalName } from '@/lib/payees/payee'
 import { bahtInWords } from '@/lib/payout/baht-text'
 
 /**
@@ -118,6 +121,12 @@ export interface DocPayeeSource {
   addressPostalCode: string | null
   bankName?: string | null
   accountNumber?: string | null
+  /** ประเภทผู้รับ — ไม่ส่ง = บุคคลธรรมดา · นิติบุคคลใช้ชื่อตามทะเบียน + เลขผู้เสียภาษี + สาขา (mytester6 T-017) */
+  payeeType?: PayeeType
+  /** ชื่อนิติบุคคลตามหนังสือรับรอง (`payee_profiles.legal_name`) */
+  legalName?: string | null
+  /** สำนักงานใหญ่/สาขาของนิติบุคคล (`00000` = สำนักงานใหญ่) */
+  branchCode?: string | null
 }
 
 /** ชื่อเต็มพร้อมคำนำหน้า (ถ้ามี และชื่อยังไม่ขึ้นต้นด้วยคำนำหน้านั้น) */
@@ -135,7 +144,19 @@ export function payeeBankLine(payee: Pick<DocPayeeSource, 'bankName' | 'accountN
   return [bank, account].filter((part) => part !== '').join(' ')
 }
 
-/** ฝ่ายพนักงาน — โทร / ที่อยู่ / เลขประจำตัวประชาชน (+ บรรทัดเพิ่ม เช่น บัญชีรับโอน) */
+/**
+ * ชื่อในกล่องฝ่ายผู้รับเงิน — นิติบุคคลใช้ชื่อตามทะเบียน (helper เดียวกับ 50 ทวิ/ใบสำคัญจ่าย) ให้ตรงกับเลขผู้เสียภาษีที่แสดง
+ * · บุคคลธรรมดา = ชื่อพร้อมคำนำหน้า (mytester6 T-017) · ช่องลายเซ็น/คำรับรองยังเป็นชื่อบุคคลผู้เซ็น (`payeeDisplayName()`)
+ */
+export function payeeDocPartyName(payee: DocPayeeSource): string {
+  if (payee.payeeType !== 'corporate') return payeeDisplayName(payee)
+  return payeeLegalName({ payeeType: 'corporate', legalName: payee.legalName ?? null, userFullName: payee.fullName.trim() })
+}
+
+/**
+ * ฝ่ายผู้รับเงิน — โทร / ที่อยู่ / เลขประจำตัว (+ บรรทัดเพิ่ม เช่น บัญชีรับโอน)
+ * บุคคลธรรมดา = "เลขประจำตัวประชาชน" · นิติบุคคล = "เลขประจำตัวผู้เสียภาษี … · สำนักงานใหญ่/สาขา" (แบบใบสำคัญจ่าย — mytester6 T-017)
+ */
 export function payeeDocParty(label: string, payee: DocPayeeSource, extra: readonly string[] = []): ReceiptDocParty {
   const address = formatThaiAddressLine({
     detail: payee.addressDetail,
@@ -148,8 +169,14 @@ export function payeeDocParty(label: string, payee: DocPayeeSource, extra: reado
   const lines = [
     payee.phone === null || payee.phone.trim() === '' ? null : `โทร. ${payee.phone.trim()}`,
     address,
-    nationalId === '' ? null : `เลขประจำตัวประชาชน ${nationalId}`,
+    nationalId === '' ? null : payeeTaxIdLine(payee, nationalId),
     ...extra,
   ].filter((line): line is string => line !== null)
-  return { label, name: payeeDisplayName(payee), lines }
+  return { label, name: payeeDocPartyName(payee), lines }
+}
+
+function payeeTaxIdLine(payee: DocPayeeSource, taxId: string): string {
+  if (payee.payeeType !== 'corporate') return `เลขประจำตัวประชาชน ${taxId}`
+  const branch = (payee.branchCode ?? '').trim()
+  return `เลขประจำตัวผู้เสียภาษี ${taxId} · ${formatBranch(branch === '' ? HEAD_OFFICE_BRANCH_CODE : branch)}`
 }

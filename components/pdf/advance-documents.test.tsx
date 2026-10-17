@@ -146,6 +146,37 @@ describe('ข้อมูลผู้เบิกบนเอกสาร', () =
   it('ชื่อขึ้นต้นด้วยคำนำหน้าแล้วไม่เติมซ้ำ', () => {
     expect(payeeDisplayName({ fullName: 'นายสมชาย', nameTitle: 'นาย' })).toBe('นายสมชาย')
   })
+
+  it('mytester6 T-017: ผู้รับนิติบุคคล — ชื่อตามทะเบียน + "เลขประจำตัวผู้เสียภาษี" + สาขา (ไม่ใช่ชื่อคน/เลขประจำตัวประชาชน)', () => {
+    const corporate = {
+      ...PAYEE,
+      fullName: 'สมพร นิติรับเหมา',
+      nameTitle: null,
+      nationalId: '0105568444441',
+      payeeType: 'corporate' as const,
+      legalName: 'บริษัท สมพรรับเหมาติดตาม จำกัด',
+      branchCode: '00000',
+    }
+    const party = payeeDocParty('ผู้จ่ายเงิน (ในนามบริษัท)', corporate)
+    expect(party.name).toBe('บริษัท สมพรรับเหมาติดตาม จำกัด')
+    expect(party.lines).toContain('เลขประจำตัวผู้เสียภาษี 0105568444441 · สำนักงานใหญ่')
+    expect(party.lines.join('\n')).not.toContain('เลขประจำตัวประชาชน')
+    expect(payeeDocParty('ผู้เบิก', { ...corporate, branchCode: '00012' }).lines).toContain(
+      'เลขประจำตัวผู้เสียภาษี 0105568444441 · สาขาที่ 00012',
+    )
+
+    // ใช้ร่วมทุกเอกสารแบบใบเสร็จ — ใบรับรองแทนใบเสร็จ + ใบเบิก/ใบรับคืนเงินทดรอง
+    const crt = buildSubstituteReceiptDoc({ ...CRT, payee: corporate }, LH)
+    expect(crt.parties[0].name).toBe('บริษัท สมพรรับเหมาติดตาม จำกัด')
+    const adv = buildAdvanceRequestDoc({ ...ADVANCE, payee: corporate }, LH)
+    expect(adv.parties[1].lines).toContain('เลขประจำตัวผู้เสียภาษี 0105568444441 · สำนักงานใหญ่')
+  })
+
+  it('บุคคลธรรมดาที่ส่ง payeeType มา — คงชื่อพร้อมคำนำหน้า + เลขประจำตัวประชาชน (legalName ไม่มีผล)', () => {
+    const party = payeeDocParty('ผู้เบิก', { ...PAYEE, payeeType: 'individual', legalName: 'ไม่ควรใช้', branchCode: '00000' })
+    expect(party.name).toBe('นายสมชาย ภาคสนาม')
+    expect(party.lines).toContain('เลขประจำตัวประชาชน 1100100100011')
+  })
 })
 
 describe('ใบเบิกเงินทดรอง', () => {
