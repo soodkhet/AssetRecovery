@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { callApi } from '@/lib/api/types'
 import type { ReportPayload } from '@/lib/reports/payload'
-import { reportRangeQuery, type ReportRangeValue } from '@/components/reports/date-range-picker'
+import { isReportRangeReady, reportRangeQuery, type ReportRangeValue } from '@/components/reports/date-range-picker'
 
 /**
  * ตัวโหลดข้อมูลของ **ทุกรายงาน** ในเมนูรายงาน (ไฟล์ 96) — endpoint กลางตัวเดียว
@@ -20,6 +20,22 @@ export interface ReportDataState {
   reload: (refresh?: boolean) => Promise<void>
 }
 
+/**
+ * mytester6 T-027 — URL ของคำขอรายงาน · ช่วง "กำหนดเอง" ที่ยังเลือกไม่ครบ/กลับหัว ⇒ `null` (ไม่ยิงคำขอที่รู้อยู่แล้วว่าได้ 400)
+ */
+export function reportDataUrl(
+  reportId: string,
+  range: ReportRangeValue,
+  params: Readonly<Record<string, string>> = {},
+  refresh = false,
+): string | null {
+  if (!isReportRangeReady(range)) return null
+  const query = reportRangeQuery(range)
+  for (const [key, value] of Object.entries(params)) query.set(key, value)
+  if (refresh) query.set('refresh', 'true')
+  return `/api/reports/${reportId}?${query.toString()}`
+}
+
 export function useReportData(
   reportId: string,
   range: ReportRangeValue,
@@ -32,14 +48,7 @@ export function useReportData(
   const paramsKey = JSON.stringify(params)
 
   const buildUrl = useCallback(
-    (refresh: boolean) => {
-      const query = reportRangeQuery(range)
-      for (const [key, value] of Object.entries(JSON.parse(paramsKey) as Record<string, string>)) {
-        query.set(key, value)
-      }
-      if (refresh) query.set('refresh', 'true')
-      return `/api/reports/${reportId}?${query.toString()}`
-    },
+    (refresh: boolean) => reportDataUrl(reportId, range, JSON.parse(paramsKey) as Record<string, string>, refresh),
     [paramsKey, range, reportId],
   )
 
@@ -47,8 +56,10 @@ export function useReportData(
 
   const reload = useCallback(
     async (refresh = false) => {
+      const target = buildUrl(refresh)
+      if (target === null) return
       setLoading(true)
-      const result = await callApi<ReportPayload>(buildUrl(refresh))
+      const result = await callApi<ReportPayload>(target)
       if (result.error !== undefined) {
         setError({ title: result.error.title, message: result.error.message })
         setLoading(false)
@@ -62,6 +73,8 @@ export function useReportData(
   )
 
   useEffect(() => {
+    // ช่วงยังไม่ครบ ⇒ ไม่ยิง · ข้อมูลเดิมค้างไว้พร้อมคำแนะนำของตัวเลือกช่วง
+    if (url === null) return
     let cancelled = false
     void (async () => {
       const result = await callApi<ReportPayload>(url)
@@ -80,5 +93,6 @@ export function useReportData(
     }
   }, [url])
 
-  return { payload, loading, error, reload }
+  // ช่วงยังไม่ครบ = ไม่ได้กำลังโหลด (ตัวเลือกช่วงต้องกรอกต่อได้ แม้เปิดหน้ามาด้วย URL ที่ช่วงไม่ครบ)
+  return { payload, loading: url === null ? false : loading, error, reload }
 }
