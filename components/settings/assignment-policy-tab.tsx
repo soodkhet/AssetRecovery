@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Can } from '@/components/auth/permission-provider'
+import { Can, usePermission } from '@/components/auth/permission-provider'
 import { ReasonConfirmModal } from '@/components/settings/reason-confirm-modal'
 import { MANAGE_SETTINGS } from '@/components/settings/shared'
 import { Button, Card, ErrorState, Field, InlineAlert, LoadingState, NumericInput, useToast } from '@/components/ui'
@@ -88,6 +88,9 @@ function changesOf(before: AssignmentPolicyValues, after: AssignmentPolicyValues
 
 export function AssignmentPolicyTab() {
   const { showToast } = useToast()
+  // ผู้ดูอย่างเดียว (เช่น บริหาร) ไม่มีปุ่มบันทึก ⇒ ช่องต้องปิดด้วย ไม่ให้แก้แล้วสับสน (mytester6 T-007)
+  const { can } = usePermission()
+  const readOnly = !can('manage', MANAGE_SETTINGS)
   const [policy, setPolicy] = useState<AssignmentPolicyDto | null>(null)
   const [form, setForm] = useState<FormState | null>(null)
   const [loading, setLoading] = useState(true)
@@ -222,6 +225,7 @@ export function AssignmentPolicyTab() {
               numeric
               value={form.reassignTimeoutHours}
               onChange={(event) => set('reassignTimeoutHours', event.target.value)}
+              disabled={readOnly}
               placeholder={String(DEFAULT_ASSIGNMENT_POLICY_VALUES.reassignTimeoutHours)}
             />
           </div>
@@ -236,6 +240,7 @@ export function AssignmentPolicyTab() {
                   type="checkbox"
                   checked={form[toggle.key]}
                   onChange={(event) => set(toggle.key, event.target.checked)}
+                  disabled={readOnly}
                   className="focus-ring h-4 w-4 rounded border-slate-300"
                 />
                 {toggle.label}
@@ -254,6 +259,7 @@ export function AssignmentPolicyTab() {
               type="checkbox"
               checked={form.hasAcceptDeadline}
               onChange={(event) => set('hasAcceptDeadline', event.target.checked)}
+              disabled={readOnly}
               className="focus-ring h-4 w-4 rounded border-slate-300"
             />
             กำหนดเส้นตายกดรับงานครั้งแรก
@@ -273,6 +279,7 @@ export function AssignmentPolicyTab() {
                     numeric
                     value={form.acceptDeadlineHours}
                     onChange={(event) => set('acceptDeadlineHours', event.target.value)}
+                    disabled={readOnly}
                     placeholder="24"
                   />
                 </div>
