@@ -64,6 +64,27 @@ describe('POST /api/storage/discard', () => {
     expect(verifyMock.discardStagedUpload).toHaveBeenCalledWith(PATH)
   })
 
+  it('ทุกรายการลง log มีโครงสร้าง (ผู้ใช้ · องค์กร · path · ผล) — รีวิว security D-4', async () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => undefined)
+    requireSessionMock.mockResolvedValue(AGENT)
+    await POST(
+      req({
+        items: [
+          { path: PATH, discardToken: uploadDiscardToken(SECRET, AGENT_ID, PATH) },
+          { path: PATH, discardToken: uploadDiscardToken(SECRET, OTHER_ID, PATH) },
+        ],
+      }),
+    )
+    expect(info).toHaveBeenCalledWith('[uploads] discard', { userId: AGENT_ID, organizationId: 'org-1', path: PATH, result: 'removed' })
+    expect(info).toHaveBeenCalledWith('[uploads] discard', {
+      userId: AGENT_ID,
+      organizationId: 'org-1',
+      path: PATH,
+      result: 'invalid_token',
+    })
+    info.mockRestore()
+  })
+
   it('โทเคนของผู้ใช้อื่น / path นอกโครงระบบ ⇒ ข้าม ไม่ลบ', async () => {
     requireSessionMock.mockResolvedValue(AGENT)
     const response = await POST(

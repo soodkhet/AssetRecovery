@@ -19,7 +19,7 @@ import { discardStagedUpload } from '@/lib/uploads/verify'
  *    เพราะการตรวจการอ้างอิงไม่ค้นสำเนาใน JSONB snapshot เช่นโลโก้/ลายเซ็นองค์กร) และ **ไม่มี record ใดอ้าง**
  *    (`isUploadPathReferenced`)
  * ไม่ผ่านข้อ 2/3 ⇒ ข้ามเงียบ ๆ (ไม่บอกว่าไฟล์มีอยู่/ผูกกับอะไร) · ไม่ลง audit เพราะไฟล์ยังไม่เป็นข้อมูลของระบบ
- * (เหมือนการออกโทเคนอัปโหลด)
+ * (เหมือนการออกโทเคนอัปโหลด) — แต่ทุกรายการลง log แบบมีโครงสร้างฝั่ง server (`[uploads] discard`) ไว้สืบย้อน
  */
 export async function POST(request: NextRequest): Promise<Response> {
   try {
@@ -30,14 +30,30 @@ export async function POST(request: NextRequest): Promise<Response> {
     const secret = uploadDiscardSecret()
     let removed = 0
     for (const item of parsed.data.items) {
-      // เฉพาะหมวดที่ฟอร์มทิ้งไฟล์จริง (หลักฐานปิดงาน · รูปรับเข้าคลัง) — หมวดอื่นข้ามเงียบ (รีวิว security D-1)
-      if (!isDiscardableUploadPath(item.path)) continue
-      if (!isValidUploadDiscardToken(secret, user.id, item.path, item.discardToken)) continue
-      if (await discardStagedUpload(item.path)) removed += 1
+      const result = await discardOne(secret, user.id, item.path, item.discardToken)
+      if (result === 'removed') removed += 1
+      // ร่องรอยการลบ (รีวิว security D-4) — log แบบมีโครงสร้างฝั่ง server ไม่ใช่ audit_logs เพราะไฟล์ยังไม่เป็น
+      // record ของระบบ (ไม่มี target ให้ผูก · เหมือนการออกโทเคนอัปโหลดที่ไม่ลง audit) แต่ยังสืบย้อนผู้สั่งลบได้
+      console.info('[uploads] discard', {
+        userId: user.id,
+        organizationId: user.organizationId,
+        path: item.path,
+        result,
+      })
     }
     const data: DiscardUploadsDto = { removed }
     return apiSuccess(data)
   } catch (error) {
     return toModuleErrorResponse(error)
   }
+}
+
+type DiscardResult = 'removed' | 'not_discardable' | 'invalid_token' | 'kept'
+
+/** ตัดสินผลทีละไฟล์ — `kept` = มี record อ้างอยู่/ลบไม่สำเร็จ (ไม่บอกผู้เรียกว่าเป็นกรณีไหน) */
+async function discardOne(secret: string, userId: string, path: string, token: string): Promise<DiscardResult> {
+  // เฉพาะหมวดที่ฟอร์มทิ้งไฟล์จริง (หลักฐานปิดงาน · รูปรับเข้าคลัง) — หมวดอื่นข้ามเงียบ (รีวิว security D-1)
+  if (!isDiscardableUploadPath(path)) return 'not_discardable'
+  if (!isValidUploadDiscardToken(secret, userId, path, token)) return 'invalid_token'
+  return (await discardStagedUpload(path)) ? 'removed' : 'kept'
 }
