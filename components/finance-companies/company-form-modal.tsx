@@ -304,7 +304,7 @@ export function CompanyFormModal({
             label="เลขประจำตัวผู้เสียภาษี (13 หลัก)"
             required
             error={errors.taxId}
-            hint="ตรวจรูปแบบอย่างเดียว ไม่มี checksum"
+            hint="ระบบตรวจเฉพาะรูปแบบ (ตัวเลข 13 หลัก) — ตรวจเลขกับเอกสารของบริษัทก่อนบันทึก"
           >
             <NumericInput
               kind="digits"

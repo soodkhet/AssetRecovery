@@ -71,7 +71,7 @@ const STATUS_FILTER_LABEL: Readonly<Record<StatusFilter, string>> = {
 }
 
 /** ฟิลด์ที่แก้แล้ว payee ที่ยืนยันแล้วต้องยืนยันใหม่ (`18` §9) — ใช้เตือนล่วงหน้าในฟอร์ม */
-const RESET_LABELS = 'ประเภท / Tax ID / คำนำหน้า / ที่อยู่ / สาขา / เงื่อนไขการหัก / กติกาภาษี / ข้อมูลธนาคาร'
+const RESET_LABELS = 'ประเภท / เลขผู้เสียภาษี / คำนำหน้า / ที่อยู่ / สาขา / เงื่อนไขการหัก / กติกาภาษี / ข้อมูลธนาคาร'
 
 type Candidate = PayeeCandidateDto
 
@@ -295,7 +295,7 @@ export function PayeeTab() {
           <Tr>
             <Th>ผู้รับเงิน</Th>
             <Th>ประเภท</Th>
-            <Th>Tax ID</Th>
+            <Th>เลขผู้เสียภาษี</Th>
             <Th>บัญชีธนาคาร</Th>
             <Th>อัตรา WHT</Th>
             <Th className="text-right">สถานะ / จัดการ</Th>

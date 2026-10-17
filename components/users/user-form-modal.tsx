@@ -39,6 +39,7 @@ import { MANAGE_PAYEE_PROFILE_CAPABILITY } from '@/lib/payees/payee'
 import { userCreateSchema, userUpdateSchema } from '@/lib/users/schemas'
 import type { UserDto } from '@/lib/users/types'
 import { requiredScopeFor } from '@/lib/users/user'
+import { TEAM_SIDE_LABEL } from '@/lib/ui/status-badge'
 
 /**
  * ฟอร์มสร้าง/แก้ไขผู้ใช้งาน — โครงตาม mockup `settings.html` (modal `create-user`/`edit-user`)
@@ -408,7 +409,7 @@ export function UserFormModal({
                 <option value="">— เลือกทีม —</option>
                 {groupTeams.map((team) => (
                   <option key={team.id} value={team.id}>
-                    {team.name} ({team.side})
+                    {team.name} ({TEAM_SIDE_LABEL[team.side]})
                   </option>
                 ))}
               </Select>

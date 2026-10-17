@@ -44,8 +44,8 @@ type StatusFilter = 'all' | 'active' | 'inactive'
 
 const STATUS_LABEL: Record<StatusFilter, string> = {
   all: 'สถานะ: ทั้งหมด',
-  active: 'ใช้งานปกติ (Active)',
-  inactive: 'ปิดใช้งาน (Inactive)',
+  active: 'ใช้งานปกติ',
+  inactive: 'ปิดใช้งาน',
 }
 
 export function TeamsManager() {
@@ -304,7 +304,7 @@ export function TeamsManager() {
                     <div className="flex items-center justify-end gap-2">
                       <StatusBadge
                         group={team.status === 'active' ? 'success' : 'neutral'}
-                        label={team.status === 'active' ? 'Active' : 'Inactive'}
+                        label={team.status === 'active' ? 'ใช้งานปกติ' : 'ปิดใช้งาน'}
                       />
                       <Can action="manage" resource={MANAGE_RESOURCE}>
                         <Button

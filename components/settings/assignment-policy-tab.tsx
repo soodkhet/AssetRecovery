@@ -60,7 +60,7 @@ const SUPERVISOR_TOGGLES: readonly {
   key: 'supervisorCanAssignSystem' | 'supervisorCanAssignInhouse' | 'supervisorCanAssignOutsource'
   label: string
 }[] = [
-  { key: 'supervisorCanAssignSystem', label: 'หัวหน้าทีมกลุ่ม System มอบหมาย/เปลี่ยนผู้รับผิดชอบได้' },
+  { key: 'supervisorCanAssignSystem', label: 'หัวหน้าทีมกลุ่มแอดมิน มอบหมาย/เปลี่ยนผู้รับผิดชอบได้' },
   { key: 'supervisorCanAssignInhouse', label: 'หัวหน้าทีมกลุ่ม Inhouse มอบหมาย/เปลี่ยนผู้รับผิดชอบได้' },
   { key: 'supervisorCanAssignOutsource', label: 'หัวหน้าทีมกลุ่ม Outsource มอบหมาย/เปลี่ยนผู้รับผิดชอบได้' },
 ]
@@ -232,7 +232,7 @@ export function AssignmentPolicyTab() {
         </Field>
 
         <div>
-          <div className="mb-2 text-xs font-bold text-slate-700">สิทธิ์มอบหมายงานของหัวหน้าทีม (Supervisor)</div>
+          <div className="mb-2 text-xs font-bold text-slate-700">สิทธิ์มอบหมายงานของหัวหน้าทีม</div>
           <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
             {SUPERVISOR_TOGGLES.map((toggle) => (
               <label key={toggle.key} className="flex items-center gap-2 text-xs font-medium text-slate-700">

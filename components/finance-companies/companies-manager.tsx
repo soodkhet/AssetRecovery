@@ -50,8 +50,8 @@ type StatusFilter = 'all' | 'active' | 'suspended'
 
 const STATUS_LABEL: Record<StatusFilter, string> = {
   all: 'สถานะบริษัท: ทั้งหมด',
-  active: 'ใช้งานปกติ (Active)',
-  suspended: 'ระงับ (Suspended)',
+  active: 'ใช้งานปกติ',
+  suspended: 'ระงับ',
 }
 
 function Detail({ label, children }: { label: string; children: React.ReactNode }) {
@@ -256,13 +256,13 @@ export function CompaniesManager() {
                 <div className="absolute top-5 right-5">
                   <StatusBadge
                     group={company.status === 'active' ? 'success' : 'critical'}
-                    label={company.status === 'active' ? 'Active' : 'Suspended'}
+                    label={company.status === 'active' ? 'ใช้งานปกติ' : 'ระงับ'}
                   />
                 </div>
 
                 <div className="mb-1 text-lg font-bold text-slate-900">{company.name}</div>
                 <div className="mb-4 font-mono text-xs text-slate-500">
-                  Tax ID: {formatTaxId(company.taxId)} · {formatBranch(company.branchCode)} ·{' '}
+                  เลขผู้เสียภาษี {formatTaxId(company.taxId)} · {formatBranch(company.branchCode)} ·{' '}
                   {company.vatRegistered ? (
                     <span className="font-semibold text-emerald-600">จด VAT แล้ว</span>
                   ) : (

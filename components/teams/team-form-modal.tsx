@@ -20,6 +20,7 @@ import { PROVINCE_DATA } from '@/lib/teams/provinces'
 import { teamCreateSchema } from '@/lib/teams/schemas'
 import { isTeamSlotEligible, type TeamSide, type TeamStatus } from '@/lib/teams/team'
 import type { EligibleMemberDto, TeamDto } from '@/lib/teams/types'
+import { TEAM_SIDE_LABEL } from '@/lib/ui/status-badge'
 
 /**
  * ฟอร์มสร้าง/แก้ไขทีม — โครงตาม mockup `settings.html` (modal `create-team`/`edit-team`)
@@ -255,7 +256,7 @@ export function TeamFormModal({
               <option value="">— เลือกแผนค่าตอบแทน —</option>
               {sidePlans.map((plan) => (
                 <option key={plan.id} value={plan.id}>
-                  {plan.name} ({plan.side} · v{plan.version})
+                  {plan.name} ({TEAM_SIDE_LABEL[plan.side]} · เวอร์ชัน {plan.version})
                 </option>
               ))}
             </Select>
@@ -300,8 +301,8 @@ export function TeamFormModal({
               value={form.status}
               onChange={(event) => set('status', event.target.value as TeamStatus)}
             >
-              <option value="active">ใช้งานปกติ (Active)</option>
-              <option value="inactive">ปิดใช้งาน (Inactive)</option>
+              <option value="active">ใช้งานปกติ</option>
+              <option value="inactive">ปิดใช้งาน</option>
             </Select>
           </Field>
         </div>

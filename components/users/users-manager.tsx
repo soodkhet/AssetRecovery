@@ -51,8 +51,8 @@ type StatusFilter = 'all' | 'active' | 'suspended'
 
 const STATUS_LABEL: Record<StatusFilter, string> = {
   all: 'สถานะ: ทั้งหมด',
-  active: 'ใช้งาน (Active)',
-  suspended: 'ระงับ (Suspended)',
+  active: 'ใช้งาน',
+  suspended: 'ระงับ',
 }
 
 type PendingAction = { user: UserDto; action: 'suspend' | 'reactivate' | 'delete' }
@@ -342,7 +342,7 @@ export function UsersManager() {
                       )}
                       <StatusBadge
                         group={user.status === 'active' ? 'success' : 'critical'}
-                        label={user.status === 'active' ? 'Active' : 'Suspended'}
+                        label={user.status === 'active' ? 'ใช้งาน' : 'ระงับ'}
                       />
                       {/* บัญชีกลุ่ม system จัดการได้เฉพาะ Superadmin (DEC-010) — ซ่อนปุ่มทั้งชุด · API ตอบ 403 ซ้ำ */}
                       <Can action="manage" resource={MANAGE_RESOURCE}>
