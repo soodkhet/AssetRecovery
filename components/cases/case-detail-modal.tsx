@@ -63,7 +63,7 @@ import { fmtDate, fmtDateTime } from '@/lib/format/datetime'
 import { caseEditedFieldsText } from '@/lib/cases/status-timeline'
 import { debtorDocumentsPurgedText } from '@/lib/settings/data-retention'
 import { fmtSatangSymbol } from '@/lib/format/money'
-import { projectedRevenueNote } from '@/lib/cases/projected-revenue'
+import { caseHasNoServiceFee, NO_SERVICE_FEE_DECLINED_TEXT, projectedRevenueNote } from '@/lib/cases/projected-revenue'
 
 /**
  * **Case Detail / Review Modal (consolidated — `38` §7.5)**
@@ -621,6 +621,16 @@ function CaseSummary({ detail }: { detail: CaseDetailDto }) {
 }
 
 function ProjectedRevenueBox({ detail }: { detail: CaseDetailDto }) {
+  // ไม่รับเคส = ปิดถาวร ไม่มีค่าบริการ ⇒ ไม่แสดงยอดประมาณการจากเทมเพลตสด (mytester6 T-011 · ตรงกับพอร์ทัล)
+  if (caseHasNoServiceFee(detail.status)) {
+    return (
+      <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+        <div className="text-[11px] font-semibold text-slate-600">ค่าบริการ</div>
+        <div className="mt-1 text-sm font-bold text-slate-700">{NO_SERVICE_FEE_DECLINED_TEXT}</div>
+        <p className="mt-1 text-[11px] text-slate-500">เคสนี้ปิดแล้วโดยไม่รับติดตาม จึงไม่มีรายได้จากเคสนี้</p>
+      </div>
+    )
+  }
   return (
     <div className="rounded-xl border border-sky-200 bg-sky-50 p-4">
       <div className="text-[11px] font-semibold text-sky-700">ประมาณการรายได้ (ถ้าติดตามสำเร็จ)</div>

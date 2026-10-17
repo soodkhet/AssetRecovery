@@ -5,6 +5,8 @@ import {
   caseProjectedRevenueSatang,
   caseServiceFeeSnapshotOf,
   projectedRevenueNote,
+  caseHasNoServiceFee,
+  NO_SERVICE_FEE_DECLINED_TEXT,
   parseProjectedRevenueSource,
   projectedRevenueSourceText,
   type ProjectedRevenueTemplate,
@@ -258,5 +260,15 @@ describe('mytester5 รีวิว B5-01 — ยอด + ที่มาจา�
     const full = caseProjectedRevenue(converted, { debtAmountSatang: 1_000_000 }, { amountSatang: null, source: null })
     expect(full.amountSatang).toBe(155_000)
     expect(caseProjectedRevenueSatang(converted, { debtAmountSatang: 1_000_000 }, null).amountSatang).toBe(155_000)
+  })
+})
+
+describe('mytester6 T-011 — เคสไม่รับเคสไม่แสดงประมาณการรายได้', () => {
+  it('rejected ⇒ ไม่มีค่าบริการ · สถานะอื่นยังแสดงประมาณการ', () => {
+    expect(caseHasNoServiceFee('rejected')).toBe(true)
+    for (const status of ['draft', 'pending_review', 'need_info', 'approved', 'active', 'closed_success', 'closed_fail']) {
+      expect(caseHasNoServiceFee(status)).toBe(false)
+    }
+    expect(NO_SERVICE_FEE_DECLINED_TEXT).toBe('ไม่มีค่าบริการ (ไม่รับเคส)')
   })
 })
