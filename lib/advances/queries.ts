@@ -851,6 +851,9 @@ export async function reviewAdvanceClear(
   }
   const at = new Date()
   const updated = await prisma.$transaction(async (tx) => {
+    // ล็อกแถวเงินทดรองก่อนตรวจใบรับรอง — การยกเลิกใบรับรองที่ผูกเงินทดรองล็อกแถวเดียวกัน (รีวิว security T-1)
+    // ⇒ ไม่มีช่องที่ใบถูกยกเลิกหลังตรวจฉบับเซ็นผ่านแต่ก่อนประทับ "ตรวจแล้ว"
+    await tx.$queryRaw`SELECT id FROM advances WHERE id = ${advanceId}::uuid FOR UPDATE`
     // มติ 16/10/2569 Q1 (F-07) — ใบรับรองแทนใบเสร็จต้องมีฉบับเซ็นก่อน (ตรวจใน transaction เดียวกับการประทับ)
     await assertAdvanceSubstituteReceiptSigned(tx, advanceId)
     const claimed = await tx.advance.updateMany({
