@@ -1225,6 +1225,35 @@ suite('มติ PO U95 — รับเงิน ⇒ ใบเสร็จร�
     expect(replacement).toMatchObject({ docKind: 'tax_invoice', totalSatang: 1_284_000, replacesInvoiceNumber: `${PREFIX}-LEGACY-${RUN}` })
     await expectCode(() => sales.issueTaxInvoice(ctx, { replacesInvoiceId: legacyId }), 'TAX_INVOICE_ALREADY_ISSUED')
   })
+
+  it('mytester6 T-021 รีวิว: ออกใบแทนใบเดียวกันพร้อมกัน ⇒ คนแพ้ได้ TAX_INVOICE_ALREADY_ISSUED พร้อมเลขใบที่ออกไปแล้ว', async () => {
+    await setNumbering({ seq: 320 })
+    const batch = await seedBilling({ status: 'sent' })
+    const record = await sales.syncSalesRecordFromBilling(ctx, batch.id)
+    const legacy = await db().$queryRawUnsafe<{ id: string }[]>(`
+      INSERT INTO tax_invoices (organization_id, sales_record_id, doc_kind, invoice_number, invoice_date, buyer_branch_code,
+        seller_branch_code, amount_before_vat_satang, vat_satang, total_satang, vat_rate_pct_used, seller_name, seller_tax_id,
+        seller_address, buyer_name, buyer_tax_id, buyer_address, delivery_format, description, created_by)
+      VALUES ('${ORG_ID}', '${record?.id ?? ''}', 'tax_invoice', '${PREFIX}-LEGACY2-${RUN}', '${TODAY.toISOString().slice(0, 10)}',
+        '00000', '00000', 1200000, 84000, 1284000, 7.00, 'Phase43Test', '9999999994300', 'ที่อยู่ทดสอบ 4.3 กรุงเทพฯ',
+        'ไฟแนนซ์เดิม', '${RUN_TAX_ID}', '1 ถนนสีลม', 'paper_pdf', 'ค่าบริการติดตามทรัพย์ รอบเดือน ${batch.period}', '${ACCOUNTING_ID}')
+      RETURNING id
+    `)
+    const legacyId = legacy[0]?.id ?? ''
+    await sales.cancelTaxInvoice(ctx, legacyId, { reason: 'เลขผู้เสียภาษีผิด' })
+    const results = await Promise.allSettled([
+      sales.issueTaxInvoice(ctx, { replacesInvoiceId: legacyId }),
+      sales.issueTaxInvoice(ctx, { replacesInvoiceId: legacyId }),
+    ])
+    const winner = results.find((result) => result.status === 'fulfilled')
+    const loser = results.find((result) => result.status === 'rejected')
+    expect(winner).toBeDefined()
+    const reason = (loser as PromiseRejectedResult).reason as { code: string; context?: Record<string, unknown> }
+    expect(reason.code).toBe('TAX_INVOICE_ALREADY_ISSUED')
+    expect(reason.context?.['invoiceNumber']).toBe(
+      (winner as PromiseFulfilledResult<{ invoiceNumber: string }>).value.invoiceNumber,
+    )
+  })
 })
 
 suite('มติ PO U77/U82 (ม.86/4) — สาขาผู้ซื้อ/ผู้ขาย snapshot ตอนออกใบ', () => {

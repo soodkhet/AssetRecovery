@@ -674,6 +674,7 @@ async function planReplacement(ctx: SalesMutationContext, replacesInvoiceId: str
     throw new SalesError('TAX_INVOICE_ALREADY_ISSUED', {
       detail: `ออกแทนแล้วด้วย ${already.invoiceNumber}`,
       message: `ใบนี้ถูกออกแทนแล้วด้วยเลขที่ ${already.invoiceNumber}`,
+      context: { invoiceNumber: already.invoiceNumber },
     })
   }
   const replaces = { id: invoice.id, invoiceNumber: invoice.invoiceNumber }
@@ -853,19 +854,39 @@ export async function issueTaxInvoice(
 
       return invoice
     })
-    .catch((error: unknown) => {
+    .catch(async (error: unknown) => {
       // แข่งกันออกใบพร้อมกัน (เงินรับเดียวกัน / ใบแทนใบเดียวกัน) — partial unique ที่ DB เป็นคนตัดสิน
       // ⇒ คนที่แพ้ต้องได้ code ของ `24` ไม่ใช่ Prisma error ดิบ (เลขไม่ขาดเพราะจองเลขใน transaction เดียวกัน)
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        // เลขใบที่ชนะ — หน้าต่างออกใบบอก "ออกไปแล้ว เลขที่ …" (mytester6 T-021 รีวิว)
+        const winner = await conflictingInvoiceNumber(organizationId, plan, sales.id).catch(() => null)
         throw new SalesError('TAX_INVOICE_ALREADY_ISSUED', {
-          detail: `เอกสารของรายการขาย ${sales.id} ถูกออกโดยคำขออื่นพร้อมกัน`,
-          context: { salesRecordId: sales.id },
+          detail: `เอกสารของรายการขาย ${sales.id} ถูกออกโดยคำขออื่นพร้อมกัน${winner === null ? '' : ` (${winner})`}`,
+          context: winner === null ? { salesRecordId: sales.id } : { salesRecordId: sales.id, invoiceNumber: winner },
         })
       }
       throw error
     })
 
   return toInvoiceDto(created, sales)
+}
+
+/**
+ * เลขใบที่ทำให้การออกชน partial unique (คนที่ออกสำเร็จก่อน) — ตามดัชนีที่แผนนี้ชนได้: ใบ active ของเงินรับเดียวกัน ·
+ * ใบที่ออกแทนใบเดียวกัน · ใบแบบเดิม active ของรายการขายเดียวกัน · ไม่พบ ⇒ `null`
+ */
+async function conflictingInvoiceNumber(organizationId: string, plan: IssuePlan, salesId: string): Promise<string | null> {
+  const candidates: Prisma.TaxInvoiceWhereInput[] = []
+  if (plan.cashReceiptId !== null) candidates.push({ cashReceiptId: plan.cashReceiptId, status: 'active' })
+  if (plan.replaces !== null) candidates.push({ replacesTaxInvoiceId: plan.replaces.id })
+  if (plan.docKind === 'tax_invoice') candidates.push({ salesRecordId: salesId, status: 'active', docKind: 'tax_invoice' })
+  if (candidates.length === 0) return null
+  const row = await prisma.taxInvoice.findFirst({
+    where: { organizationId, OR: candidates },
+    orderBy: { createdAt: 'desc' },
+    select: { invoiceNumber: true },
+  })
+  return row?.invoiceNumber ?? null
 }
 
 /**
