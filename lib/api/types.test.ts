@@ -101,6 +101,16 @@ describe('describeApiFailure', () => {
     expect(describeApiFailure('server', 'POST', 500).message).not.toContain('ตรวจในรายการ')
   })
 
+  it('คำขอเขียนที่ไม่รู้ผล (หมดเวลา/เน็ตหลุด/502–504/คำตอบอ่านไม่ได้) ติดธง outcomeUnknown · GET/500/4xx ไม่ติด', () => {
+    expect(describeApiFailure('timeout', 'POST').outcomeUnknown).toBe(true)
+    expect(describeApiFailure('network', 'POST').outcomeUnknown).toBe(true)
+    expect(describeApiFailure('server', 'POST', 504).outcomeUnknown).toBe(true)
+    expect(describeApiFailure('invalid_response', 'POST').outcomeUnknown).toBe(true)
+    expect(describeApiFailure('timeout', 'GET').outcomeUnknown).toBeUndefined()
+    expect(describeApiFailure('server', 'POST', 500).outcomeUnknown).toBeUndefined()
+    expect(describeApiFailure('client', 'POST', 413).outcomeUnknown).toBeUndefined()
+  })
+
   it('4xx ที่ไม่มี envelope บอกสถานะ', () => {
     expect(describeApiFailure('client', 'GET', 413).message).toContain('HTTP 413')
   })

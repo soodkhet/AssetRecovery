@@ -23,7 +23,7 @@ vi.mock('@/lib/api/types', () => ({
   jsonRequest: (method: string, body: unknown) => ({ method, body: JSON.stringify(body) }),
 }))
 
-const { discardStagedUploads, isStagedUpload, uploadToStorage } = await import('@/lib/uploads/client')
+const { createStagedUploadDiscarder, discardStagedUploads, isStagedUpload, uploadToStorage } = await import('@/lib/uploads/client')
 
 function discardCalls(): Array<{ items: Array<{ path: string; discardToken: string }>; keepalive: unknown }> {
   return callApiMock.mock.calls
@@ -48,5 +48,39 @@ describe('discardStagedUploads', () => {
     const before = discardCalls().length
     discardStagedUploads(['cases/x/field_evidence/photo/unknown.jpg'])
     expect(discardCalls()).toHaveLength(before)
+  })
+})
+
+describe('createStagedUploadDiscarder — ส่งล่าสุดไม่รู้ผล ⇒ ไม่ทิ้งไฟล์ (mytester6 รีวิว)', () => {
+  const paths = ['cases/x/field_evidence/photo/a.jpg']
+
+  it('ยังไม่เคยส่ง / ส่งแล้วรู้ผล ⇒ ทิ้งได้', () => {
+    const discardFn = vi.fn()
+    const discarder = createStagedUploadDiscarder(discardFn)
+    expect(discarder.discard(paths)).toBe(true)
+    discarder.beginSubmit()
+    discarder.endSubmit({ code: 'VALIDATION_ERROR', title: 'x', message: 'y' })
+    expect(discarder.discard(paths)).toBe(true)
+    expect(discardFn).toHaveBeenCalledTimes(2)
+  })
+
+  it('ระหว่างส่ง ⇒ ไม่ทิ้ง', () => {
+    const discardFn = vi.fn()
+    const discarder = createStagedUploadDiscarder(discardFn)
+    discarder.beginSubmit()
+    expect(discarder.discard(paths)).toBe(false)
+    expect(discardFn).not.toHaveBeenCalled()
+  })
+
+  it('ส่งแล้วไม่รู้ผล (หมดเวลา/502–504) ⇒ ไม่ทิ้งตลอดรอบฟอร์ม แม้ส่งรอบถัดไปรู้ผล', () => {
+    const discardFn = vi.fn()
+    const discarder = createStagedUploadDiscarder(discardFn)
+    discarder.beginSubmit()
+    discarder.endSubmit({ title: 'ระบบตอบช้าเกินไป', message: 'x', outcomeUnknown: true })
+    expect(discarder.discard(paths)).toBe(false)
+    discarder.beginSubmit()
+    discarder.endSubmit({ code: 'INVALID_STATE_TRANSITION', title: 'x', message: 'y' })
+    expect(discarder.discard(paths)).toBe(false)
+    expect(discardFn).not.toHaveBeenCalled()
   })
 })

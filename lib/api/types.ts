@@ -33,6 +33,11 @@ export interface ApiCallError {
   message: string
   fields?: Record<string, string>
   payload?: ApiErrorPayload
+  /**
+   * คำขอเขียนข้อมูลที่**ไม่รู้ผล** (หมดเวลา/เน็ตหลุด/502–504/คำตอบอ่านไม่ได้) — server อาจทำรายการเสร็จแล้วแต่คำตอบหาย
+   * ฟอร์มที่มีงานต่อเนื่องตามผล (เช่นทิ้งไฟล์ที่อัปโหลด) ต้องไม่ถือว่า "ไม่สำเร็จ" (mytester6 รีวิว)
+   */
+  outcomeUnknown?: true
 }
 
 export interface ApiCallResult<T> {
@@ -130,23 +135,26 @@ type FailureKind = 'timeout' | 'network' | 'server' | 'client' | 'invalid_respon
 export function describeApiFailure(kind: FailureKind, method: string, status?: number): ApiCallError {
   const mutating = method.toUpperCase() !== 'GET'
   const checkFirst = mutating ? ' — ถ้ากดบันทึกไปแล้ว ให้ตรวจในรายการก่อนส่งซ้ำ' : ''
+  const unknown = mutating ? ({ outcomeUnknown: true } as const) : {}
   switch (kind) {
     case 'timeout':
-      return { title: 'ระบบตอบช้าเกินไป', message: `รอนานเกินกำหนดจึงหยุดรอ กรุณาลองใหม่${checkFirst}` }
+      return { title: 'ระบบตอบช้าเกินไป', message: `รอนานเกินกำหนดจึงหยุดรอ กรุณาลองใหม่${checkFirst}`, ...unknown }
     case 'network':
-      return { title: 'เชื่อมต่อระบบไม่สำเร็จ', message: `ตรวจสอบอินเทอร์เน็ตแล้วลองใหม่${checkFirst}` }
+      return { title: 'เชื่อมต่อระบบไม่สำเร็จ', message: `ตรวจสอบอินเทอร์เน็ตแล้วลองใหม่${checkFirst}`, ...unknown }
     case 'server': {
       // 502/503/504 จาก proxy/Vercel (ไม่มี envelope) = server อาจทำรายการเสร็จแล้วแต่คำตอบหาย เหมือน timeout (staging S-024)
       const gateway = status === 502 || status === 503 || status === 504
       return {
         title: 'ระบบขัดข้องชั่วคราว',
         message: `ระบบทำรายการไม่สำเร็จ (HTTP ${status ?? 500}) กรุณาลองใหม่${gateway ? checkFirst : ''} — ถ้ายังไม่ได้ให้แจ้งผู้ดูแลระบบ`,
+        ...(gateway ? unknown : {}),
       }
     }
     case 'client':
       return { title: 'ทำรายการไม่สำเร็จ', message: `ระบบปฏิเสธคำขอ (HTTP ${status ?? 400}) กรุณาโหลดหน้าใหม่แล้วลองอีกครั้ง` }
     case 'invalid_response':
-      return { title: 'ข้อมูลตอบกลับไม่ถูกต้อง', message: 'กรุณาโหลดหน้าใหม่แล้วลองอีกครั้ง' }
+      // สถานะสำเร็จแต่อ่านคำตอบไม่ได้ — คำขอเขียนอาจทำเสร็จแล้ว
+      return { title: 'ข้อมูลตอบกลับไม่ถูกต้อง', message: 'กรุณาโหลดหน้าใหม่แล้วลองอีกครั้ง', ...unknown }
   }
 }
 

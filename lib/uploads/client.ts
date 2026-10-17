@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import { callApi, jsonRequest } from '@/lib/api/types'
+import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
 import { CASE_DOCUMENT_BUCKET } from '@/lib/cases/document-upload'
 import { getPublicEnv } from '@/lib/env-public'
 import {
@@ -176,6 +176,42 @@ export function discardStagedUploads(paths: Iterable<string>): void {
   for (let index = 0; index < items.length; index += MAX_DISCARD_UPLOADS) {
     const chunk = items.slice(index, index + MAX_DISCARD_UPLOADS)
     void callApi(STORAGE_API_PATH.discard, { ...jsonRequest('POST', { items: chunk }), keepalive: true }).catch(() => undefined)
+  }
+}
+
+/**
+ * ตัวทิ้งไฟล์ของฟอร์มหนึ่งรอบที่รู้ผลการส่ง (mytester6 รีวิว) — ระหว่างส่ง หรือการส่งใดในรอบนี้**ไม่รู้ผล**
+ * (หมดเวลา/เน็ตหลุด/502–504 — server อาจกำลัง commit ผูกไฟล์อยู่) ⇒ **ไม่ทิ้งไฟล์ใดเลย**จนจบรอบฟอร์ม
+ * เพราะการตรวจ "ยังไม่ผูก record" ฝั่ง server แข่งกับ transaction ที่ยังไม่ commit ได้ · ไฟล์ที่ไม่ได้ทิ้ง = ค้างใน Storage
+ * (ปลอดภัยกว่าลบไฟล์ที่ถูกผูกไปแล้ว) · สร้างใหม่ต่อการเปิดฟอร์ม (`useState(createStagedUploadDiscarder)`)
+ */
+export interface StagedUploadDiscarder {
+  /** เรียกก่อนยิงคำขอส่งฟอร์ม */
+  beginSubmit(): void
+  /** เรียกเมื่อรู้ผลคำขอส่งฟอร์ม (ทั้งสำเร็จ/ไม่สำเร็จ) — `error.outcomeUnknown` ⇒ ล็อกไม่ทิ้งไฟล์ตลอดรอบ */
+  endSubmit(error: ApiCallError | undefined): void
+  /** ทิ้งไฟล์ — ข้ามทั้งหมดเมื่อกำลังส่ง/เคยส่งแบบไม่รู้ผล · คืน `true` = ส่งคำขอทิ้งแล้ว */
+  discard(paths: Iterable<string>): boolean
+}
+
+export function createStagedUploadDiscarder(
+  discardFn: (paths: Iterable<string>) => void = discardStagedUploads,
+): StagedUploadDiscarder {
+  let inFlight = 0
+  let outcomeUnknown = false
+  return {
+    beginSubmit() {
+      inFlight += 1
+    },
+    endSubmit(error) {
+      inFlight = Math.max(0, inFlight - 1)
+      if (error?.outcomeUnknown === true) outcomeUnknown = true
+    },
+    discard(paths) {
+      if (inFlight > 0 || outcomeUnknown) return false
+      discardFn(paths)
+      return true
+    },
   }
 }
 

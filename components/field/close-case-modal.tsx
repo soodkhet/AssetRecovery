@@ -20,7 +20,7 @@ import {
 import { Button, ErrorState, LoadingState, Modal, Textarea, useRovingRadio, useToast } from '@/components/ui'
 import { cn } from '@/components/ui/cn'
 import { apiPath } from '@/lib/api/contract'
-import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
+import { callApi, jsonRequest, type ApiCallError, type ApiCallResult } from '@/lib/api/types'
 import {
   EMPTY_CLOSE_FORM,
   appendMedia,
@@ -61,7 +61,7 @@ import {
 } from '@/lib/field/media-upload'
 import type { TravelOriginInput } from '@/lib/field/schemas'
 import { uploadFieldMedia, FieldUploadError } from '@/lib/field/upload-client'
-import { discardStagedUploads } from '@/lib/uploads/client'
+import { createStagedUploadDiscarder } from '@/lib/uploads/client'
 import type {
   FieldActionResultDto,
   FieldCaseDetailDto,
@@ -513,6 +513,8 @@ export function CloseCaseModal({
   const [revisionEdited, setRevisionEdited] = useState(false)
   /** ไฟล์ที่อัปโหลดในรอบเปิดนี้ — ทิ้งข้อมูล/ส่งแล้วไม่ได้ใช้ ⇒ ลบออกจาก Storage (mytester6 T-015) */
   const sessionUploadsRef = useRef<string[]>([])
+  // ทิ้งไฟล์ค้างเฉพาะเมื่อรู้ผลการส่งแน่ชัด — ส่งแล้วไม่รู้ผล (หมดเวลา/502–504) server อาจกำลังผูกไฟล์ (mytester6 รีวิว)
+  const [uploadDiscarder] = useState(() => createStagedUploadDiscarder())
   /**
    * พิมพ์ช่องข้อความ (บันทึกเพิ่มเติม/รายละเอียดเหตุผล) แล้วยังไม่ได้ตั้ง autosave (ตั้งตอน blur) — ปิดด้วย Esc ขณะเคอร์เซอร์
    * ยังอยู่ในช่องไม่เกิด blur ⇒ ต้องเก็บ Draft ตอนปิดด้วย (mytester6 T-013)
@@ -886,15 +888,23 @@ export function CloseCaseModal({
     setSubmitting(true)
     closingRef.current = true
     try {
-      const response = mode.revision
-        ? await callApi<FieldActionResultDto>(
-            apiPath('field.resubmitClose', { id: caseId }),
-            jsonRequest('POST', resubmitClosePayload(form, revisedOrigin ?? undefined)),
-          )
-        : await callApi<FieldActionResultDto>(
-            apiPath('field.closeCase', { id: caseId }),
-            jsonRequest('POST', closeCasePayload(form)),
-          )
+      uploadDiscarder.beginSubmit()
+      let submitError: ApiCallError | undefined = { title: '', message: '', outcomeUnknown: true }
+      let response: ApiCallResult<FieldActionResultDto>
+      try {
+        response = mode.revision
+          ? await callApi<FieldActionResultDto>(
+              apiPath('field.resubmitClose', { id: caseId }),
+              jsonRequest('POST', resubmitClosePayload(form, revisedOrigin ?? undefined)),
+            )
+          : await callApi<FieldActionResultDto>(
+              apiPath('field.closeCase', { id: caseId }),
+              jsonRequest('POST', closeCasePayload(form)),
+            )
+        submitError = response.error
+      } finally {
+        uploadDiscarder.endSubmit(submitError)
+      }
 
       if (response.error !== undefined || response.data === undefined) {
         // ปิดงานไม่สำเร็จ = ยังอยู่ในฟอร์ม ⇒ autosave กลับมาทำงาน
@@ -917,7 +927,7 @@ export function CloseCaseModal({
       }
 
       // ไฟล์ที่อัปโหลดรอบนี้แต่ไม่อยู่ในชุดที่ส่ง (ลบ/แทนที่ก่อนส่ง) ⇒ ลบออกจาก Storage · ไฟล์ที่ผูกแล้ว server ไม่ลบ (T-015)
-      discardStagedUploads(unusedUploads(sessionUploadsRef.current, form))
+      uploadDiscarder.discard(unusedUploads(sessionUploadsRef.current, form))
       showToast({
         tone: 'success',
         title: mode.revision ? 'ส่งหลักฐานกลับให้ตรวจอีกครั้งแล้ว' : 'ปิดงานเรียบร้อย',
@@ -956,7 +966,8 @@ export function CloseCaseModal({
   function dismiss(): void {
     // โหมดตีกลับไม่มี Draft — ปิด (หลังยืนยัน "ทิ้งข้อมูล") ⇒ ไฟล์ที่อัปโหลดรอบนี้ยังไม่ผูก record ⇒ ลบออกจาก Storage
     // (mytester6 T-015 · server ไม่ลบไฟล์ที่มี record อ้าง) · ส่งสำเร็จแล้วปิดด้วย `onClose` ตรง ไม่ผ่านทางนี้
-    if (mode?.revision === true) discardStagedUploads(sessionUploadsRef.current)
+    // · เคยส่งแล้วไม่รู้ผล ⇒ ไม่ทิ้ง (server อาจผูกไฟล์ไปแล้ว — รีวิว mytester6)
+    if (mode?.revision === true) uploadDiscarder.discard(sessionUploadsRef.current)
     // พิมพ์ค้างในช่องข้อความแล้วปิดด้วย Esc (ไม่เกิด blur) ⇒ เก็บลง Draft ด้วย (mytester6 T-013) · โหมดตีกลับไม่มี Draft
     if (mode?.revision !== true && (draftSaver.hasPending() || textPendingRef.current)) {
       textPendingRef.current = false

@@ -39,7 +39,7 @@ import {
 } from '@/lib/warehouse/intake-photos'
 import { ASSET_CONDITIONS } from '@/lib/warehouse/schemas'
 import type { AssetDetailDto, AssetListItemDto } from '@/lib/warehouse/types'
-import { discardStagedUploads } from '@/lib/uploads/client'
+import { createStagedUploadDiscarder } from '@/lib/uploads/client'
 import { INTAKE_PHOTO_ACCEPT, WarehouseUploadError, uploadIntakePhoto } from '@/lib/warehouse/upload-client'
 import { ASSET_CONDITION_LABEL } from '@/lib/warehouse/warehouse-ui'
 
@@ -82,6 +82,8 @@ export function IntakeModal({
   const [colorCapacityMatched, setColorCapacityMatched] = useState<boolean | null>(asset.colorCapacityMatched)
   const [colorCapacityNote, setColorCapacityNote] = useState(asset.colorCapacityNote ?? '')
   const [photos, setPhotos] = useState<readonly string[]>([])
+  // ทิ้งรูปค้างเฉพาะเมื่อรู้ผลการส่งแน่ชัด — ส่งแล้วไม่รู้ผล (หมดเวลา/502–504) server อาจผูกรูปไปแล้ว (mytester6 รีวิว)
+  const [uploadDiscarder] = useState(() => createStagedUploadDiscarder())
   const [uploading, setUploading] = useState<IntakePhotoAngle | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<ApiCallError | null>(null)
@@ -153,7 +155,7 @@ export function IntakeModal({
   function removePhoto(path: string): void {
     setPhotos((current) => current.filter((each) => each !== path))
     // รูปที่ถ่ายในรอบนี้แล้วลบทิ้ง ⇒ ลบออกจาก Storage ด้วย (ยังไม่ผูก record — mytester6 T-019)
-    discardStagedUploads([path])
+    uploadDiscarder.discard([path])
   }
 
   // กลุ่ม radio ใช้คีย์บอร์ดแบบ roving tabindex + ลูกศร (รีวิวรอบ 2 SV5-A11Y-A2-03)
@@ -209,6 +211,8 @@ export function IntakeModal({
     }
 
     setSubmitting(true)
+    uploadDiscarder.beginSubmit()
+    let submitError: ApiCallError | undefined = { title: '', message: '', outcomeUnknown: true }
     try {
       const response = await callApi<AssetDetailDto>(
         apiPath('asset.intake', { id: asset.id }),
@@ -222,6 +226,7 @@ export function IntakeModal({
           photos,
         }),
       )
+      submitError = response.error
       if (response.error !== undefined) {
         setError(response.error)
         return
@@ -233,6 +238,7 @@ export function IntakeModal({
       })
       onDone()
     } finally {
+      uploadDiscarder.endSubmit(submitError)
       setSubmitting(false)
     }
   }
@@ -242,7 +248,8 @@ export function IntakeModal({
       open={open}
       onClose={onClose}
       // "ทิ้งข้อมูล" ⇒ รูปที่ถ่ายในรอบนี้ยังไม่ผูก record ⇒ ลบออกจาก Storage ไม่ให้ค้าง (mytester6 T-019)
-      onDiscard={() => discardStagedUploads(photos)}
+      // · เคยส่งแล้วไม่รู้ผล ⇒ ไม่ทิ้ง (รีวิว mytester6)
+      onDiscard={() => void uploadDiscarder.discard(photos)}
       size="lg"
       title={isRetry ? 'รับเครื่องเข้าคลังอีกครั้ง' : 'รับเครื่องเข้าคลัง'}
       description="ตรวจ IMEI → บันทึกสภาพ → ถ่ายรูปหลักฐาน 7 มุม"
