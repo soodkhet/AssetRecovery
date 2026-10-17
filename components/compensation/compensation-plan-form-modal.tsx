@@ -3,8 +3,12 @@
 import { SettingHelp } from '@/components/settings/setting-help'
 import { useState } from 'react'
 import {
+  apiFailureSummary,
   Button,
+  cn,
   Field,
+  fieldErrorsSummary,
+  FormSubmitFooter,
   InlineAlert,
   Input,
   Modal,
@@ -13,7 +17,9 @@ import {
   NumericInput,
   Select,
   Textarea,
-  cn,
+  useClearOnClose,
+  useRevealFieldError,
+  useSubmitError,
   useToast,
 } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
@@ -142,6 +148,10 @@ export function CompensationPlanFormModal({
   const [form, setForm] = useState<FormState>(plan === null ? emptyForm() : formOf(plan))
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
+  // กดบันทึกไม่ผ่าน ⇒ ข้อความที่ footer + เลื่อน/โฟกัสช่องแรกที่ผิด (mytester6 T-004)
+  const { ref: formBodyRef, reveal: revealFieldError } = useRevealFieldError()
+  const submitError = useSubmitError(revealFieldError)
+  useClearOnClose(open, submitError.clear)
 
   const isEdit = plan !== null
 
@@ -158,10 +168,12 @@ export function CompensationPlanFormModal({
         if (fields[path] === undefined) fields[path] = issue.message
       }
       setErrors(fields)
+      submitError.fail({ message: fieldErrorsSummary(fields) })
       return
     }
 
     setErrors({})
+    submitError.clear()
     setSaving(true)
     try {
       const result = await callApi<CompensationPlanListDto>(
@@ -169,6 +181,8 @@ export function CompensationPlanFormModal({
         jsonRequest(isEdit ? 'PATCH' : 'POST', parsed.data),
       )
       if (result.error !== undefined) {
+        if (result.error.fields !== undefined) setErrors(result.error.fields)
+        submitError.fail({ message: apiFailureSummary(result.error) })
         showToast({ tone: 'error', title: result.error.title, description: result.error.message })
         return
       }
@@ -199,17 +213,17 @@ export function CompensationPlanFormModal({
           : 'ค่าตอบแทนที่จ่ายออกให้ทีมงาน — ผูกกับทีมในขั้นตอนจัดการทีม'
       }
       footer={
-        <>
+        <FormSubmitFooter message={submitError.message} tick={submitError.tick}>
           <ModalCancelButton onClose={onClose} disabled={saving}>
             ยกเลิก
           </ModalCancelButton>
           <Button onClick={() => void save()} loading={saving}>
             {isEdit ? 'บันทึกเป็นเวอร์ชันใหม่' : 'สร้างแผน'}
           </Button>
-        </>
+        </FormSubmitFooter>
       }
     >
-      <div className="space-y-4">
+      <div ref={formBodyRef} className="space-y-4">
         {isEdit && plan.teamCount > 0 && (
           <InlineAlert tone="warning" title={`มี ${plan.teamCount} ทีมผูกอยู่กับแผนนี้`}>
             ทีมทั้งหมดจะถูกย้ายมาใช้เวอร์ชันใหม่ทันที — ค่าใช้จ่ายที่บันทึกไว้แล้วยังอ้างเวอร์ชันเดิมเสมอ

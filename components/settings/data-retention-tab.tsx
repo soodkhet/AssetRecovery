@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Can } from '@/components/auth/permission-provider'
+import { Can, usePermission } from '@/components/auth/permission-provider'
 import { SettingHelp } from '@/components/settings/setting-help'
 import { MANAGE_DATA_RETENTION } from '@/components/settings/shared'
 import {
@@ -47,6 +47,9 @@ function formOf(policy: DataRetentionPolicyDto): FormState {
 
 export function DataRetentionTab() {
   const { showToast } = useToast()
+  // ผู้ดูอย่างเดียวไม่มีปุ่มบันทึก ⇒ ช่องต้องปิดด้วย ไม่ให้แก้แล้วสับสน (mytester6 T-007)
+  const { can } = usePermission()
+  const readOnly = !can('manage', MANAGE_DATA_RETENTION)
   const [policy, setPolicy] = useState<DataRetentionPolicyDto | null>(null)
   const [form, setForm] = useState<FormState | null>(null)
   const [loading, setLoading] = useState(true)
@@ -156,6 +159,7 @@ export function DataRetentionTab() {
               numeric
               value={form.years}
               onChange={(event) => set('years', event.target.value)}
+              disabled={readOnly}
               placeholder={String(DEFAULT_DEBTOR_DOCUMENT_RETENTION_YEARS)}
             />
           </div>
@@ -168,6 +172,7 @@ export function DataRetentionTab() {
             id="retention-reason"
             value={form.reason}
             onChange={(event) => set('reason', event.target.value)}
+            disabled={readOnly}
             placeholder="เช่น ปรับตามนโยบายคุ้มครองข้อมูลส่วนบุคคลขององค์กร"
           />
         </Field>

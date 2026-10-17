@@ -86,6 +86,9 @@ const userSelect = {
   role: { select: { name: true, roleGroup: true } },
   team: { select: { name: true } },
   company: { select: { name: true } },
+  // สังกัดของผู้จัดการ/หัวหน้าทีม ไม่ได้อยู่ที่ `users.team_id` (mytester6 T-006)
+  supervisedTeams: { where: { deletedAt: null }, select: { name: true }, orderBy: { name: 'asc' } },
+  managedTeams: { where: { team: { deletedAt: null } }, select: { team: { select: { name: true } } } },
   _count: { select: { assignmentsAsAgent: { where: activeAssignmentWhere } } },
   payeeProfile: { where: { deletedAt: null }, select: { id: true }, take: 1 },
 } as const
@@ -105,6 +108,8 @@ function toDto(row: UserRow): UserDto {
     roleGroup: row.role.roleGroup,
     teamId: row.teamId,
     teamName: row.team?.name ?? null,
+    supervisedTeamNames: row.supervisedTeams.map((team) => team.name),
+    managedTeamNames: row.managedTeams.map((link) => link.team.name).sort((a, b) => a.localeCompare(b, 'th')),
     companyId: row.companyId,
     companyName: row.company?.name ?? null,
     status: row.status,

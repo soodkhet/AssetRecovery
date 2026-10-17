@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Can } from '@/components/auth/permission-provider'
+import { Can, usePermission } from '@/components/auth/permission-provider'
 import { SettingHelp } from '@/components/settings/setting-help'
 import { MANAGE_SETTINGS } from '@/components/settings/shared'
 import {
@@ -64,6 +64,9 @@ function formOf(policy: FinancePolicyDto): FormState {
 
 export function FinancePolicyCard() {
   const { showToast } = useToast()
+  // ผู้ดูอย่างเดียวไม่มีปุ่มบันทึก ⇒ ช่องต้องปิดด้วย ไม่ให้แก้แล้วสับสน (mytester6 T-007)
+  const { can } = usePermission()
+  const readOnly = !can('manage', MANAGE_SETTINGS)
   const [policy, setPolicy] = useState<FinancePolicyDto | null>(null)
   const [form, setForm] = useState<FormState | null>(null)
   const [loading, setLoading] = useState(true)
@@ -201,6 +204,7 @@ export function FinancePolicyCard() {
               id="policy-advance-max"
               value={form.advanceMaxAmountPerRequest}
               onChange={(event) => set('advanceMaxAmountPerRequest', event.target.value)}
+              disabled={readOnly}
               placeholder="เว้นว่าง = ไม่จำกัด"
             />
           </Field>
@@ -210,6 +214,7 @@ export function FinancePolicyCard() {
               id="policy-writeoff"
               value={form.writeOffTolerance}
               onChange={(event) => set('writeOffTolerance', event.target.value)}
+              disabled={readOnly}
               placeholder="50.00"
             />
           </Field>
@@ -235,6 +240,7 @@ export function FinancePolicyCard() {
               id="policy-substitute-doc"
               value={form.substituteReceiptMaxPerDoc}
               onChange={(event) => set('substituteReceiptMaxPerDoc', event.target.value)}
+              disabled={readOnly}
               placeholder="500.00"
             />
           </Field>
@@ -249,6 +255,7 @@ export function FinancePolicyCard() {
               id="policy-substitute-month"
               value={form.substituteReceiptMaxPerMonth}
               onChange={(event) => set('substituteReceiptMaxPerMonth', event.target.value)}
+              disabled={readOnly}
               placeholder="3000.00"
             />
           </Field>
@@ -275,6 +282,7 @@ export function FinancePolicyCard() {
                       numeric
                       value={value}
                       onChange={(event) => setBucket(index, event.target.value)}
+                      disabled={readOnly}
                       placeholder="30"
                     />
                   </div>
@@ -312,6 +320,7 @@ export function FinancePolicyCard() {
               type="checkbox"
               checked={form.requirePayeeIdDocument}
               onChange={(event) => set('requirePayeeIdDocument', event.target.checked)}
+              disabled={readOnly}
               className="focus-ring h-4 w-4 rounded border-slate-300"
             />
             บังคับแนบเอกสารยืนยันตัวตนผู้รับเงินก่อนอนุมัติจ่าย
@@ -329,6 +338,7 @@ export function FinancePolicyCard() {
             id="policy-reason"
             value={form.reason}
             onChange={(event) => set('reason', event.target.value)}
+            disabled={readOnly}
             placeholder="เช่น ปรับเพดานเงินทดรองตามมติที่ประชุมการเงิน 14/08/2569"
           />
         </Field>

@@ -360,7 +360,7 @@ export function BankFileFormatsTab() {
           <Tr>
             <Th>ธนาคาร</Th>
             <Th>ใช้สำหรับ</Th>
-            <Th>ชนิดไฟล์ / Encoding</Th>
+            <Th>ชนิดไฟล์ / การเข้ารหัสตัวอักษร</Th>
             <Th>คอลัมน์</Th>
             <Th>สถานะทดสอบ</Th>
             <Th className="text-right">สถานะ / จัดการ</Th>
@@ -527,7 +527,7 @@ export function BankFileFormatsTab() {
                 <option value="TXT">TXT</option>
               </Select>
             </Field>
-            <Field id="bank-file-encoding" label="Encoding" required error={errors.encoding}>
+            <Field id="bank-file-encoding" label="การเข้ารหัสตัวอักษร" required error={errors.encoding}>
               <Select
                 id="bank-file-encoding"
                 value={form.encoding}

@@ -5,7 +5,7 @@ import { Button, type ButtonProps, type ButtonVariant } from '@/components/ui/bu
 import { cn } from '@/components/ui/cn'
 import { installFocusTrap } from '@/components/ui/focus-trap'
 import { FormSubmitFooter } from '@/components/ui/input'
-import { busyElementLocksModal, decideModalClose, discardAndClose, dropMarksDraft, modalHasDraft } from '@/components/ui/modal-close-guard'
+import { busyElementLocksModal, decideModalClose, discardAndClose, dropMarksDraft, inputMarksDraft, modalHasDraft, MODAL_DRAFT_IGNORE_SELECTOR } from '@/components/ui/modal-close-guard'
 import { guardModalHistory } from '@/components/ui/modal-history'
 import { isDismissEscape, isTopModal, registerModal, unregisterModal } from '@/components/ui/modal-stack'
 
@@ -218,17 +218,22 @@ export function Modal({
 
   /** ผู้ใช้กรอก/เปลี่ยนค่าเอง (ไม่นับค่าที่โค้ดตั้ง และช่องค้นหา) ⇒ ถือว่ามีข้อมูลที่ยังไม่บันทึก */
   function markDirty(event: SyntheticEvent) {
-    if (!event.nativeEvent.isTrusted) return
     const target = event.target
     if (!(target instanceof HTMLElement) || target.closest('[role="dialog"]') !== panelRef.current) return
-    if (target instanceof HTMLInputElement && target.type === 'search') return
-    dirtyRef.current = true
+    // ส่วนที่บันทึกทันที (`MODAL_DRAFT_IGNORE` เช่น แนบไฟล์ล็อต) ไม่นับเป็นร่าง — mytester6 T-018
+    const draft = inputMarksDraft({
+      trusted: event.nativeEvent.isTrusted,
+      isSearch: target instanceof HTMLInputElement && target.type === 'search',
+      savesImmediately: target.closest(MODAL_DRAFT_IGNORE_SELECTOR) !== null,
+    })
+    if (draft) dirtyRef.current = true
   }
 
   /** ลากไฟล์มาวางใน `<FileDropzone onDropFile>` ⇒ มีร่างเหมือนคลิกเลือกไฟล์ (ไม่เกิด input/change) — ตรวจซ้ำ staging SV5-P1-01 */
   function markDropDirty(event: DragEvent) {
     const target = event.target
     if (!(target instanceof HTMLElement) || target.closest('[role="dialog"]') !== panelRef.current) return
+    if (target.closest(MODAL_DRAFT_IGNORE_SELECTOR) !== null) return
     if (dropMarksDraft({ handled: event.defaultPrevented, fileCount: event.dataTransfer.files.length })) dirtyRef.current = true
   }
 

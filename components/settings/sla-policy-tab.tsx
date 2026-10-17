@@ -3,7 +3,7 @@
 import { SettingHelp } from '@/components/settings/setting-help'
 import { slaPolicyHelp } from '@/lib/settings/help'
 import { useCallback, useEffect, useState } from 'react'
-import { Can } from '@/components/auth/permission-provider'
+import { Can, usePermission } from '@/components/auth/permission-provider'
 import { MANAGE_SETTINGS } from '@/components/settings/shared'
 import {
   Badge,
@@ -48,6 +48,9 @@ function formOf(policy: SlaPolicyDto): FormState {
 
 export function SlaPolicyTab() {
   const { showToast } = useToast()
+  // ผู้ดูอย่างเดียว (เช่น บริหาร) ไม่มีปุ่มบันทึก ⇒ ช่องต้องปิดด้วย ไม่ให้แก้แล้วสับสน (mytester6 T-007)
+  const { can } = usePermission()
+  const readOnly = !can('manage', MANAGE_SETTINGS)
   const [policy, setPolicy] = useState<SlaPolicyDto | null>(null)
   const [form, setForm] = useState<FormState | null>(null)
   const [loading, setLoading] = useState(true)
@@ -162,6 +165,7 @@ export function SlaPolicyTab() {
                 numeric
                 value={form.slaAlertHours}
                 onChange={(event) => set('slaAlertHours', event.target.value)}
+                disabled={readOnly}
                 placeholder={String(DEFAULT_SLA_ALERT_HOURS)}
               />
             </div>
@@ -178,6 +182,7 @@ export function SlaPolicyTab() {
             id="sla-reason"
             value={form.reason}
             onChange={(event) => set('reason', event.target.value)}
+            disabled={readOnly}
             placeholder="เช่น ปรับเกณฑ์ SLA ตามข้อตกลงกับบริษัทไฟแนนซ์ 15/08/2569"
           />
         </Field>

@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Can } from '@/components/auth/permission-provider'
+import { Can, usePermission } from '@/components/auth/permission-provider'
 import { ReasonConfirmModal } from '@/components/settings/reason-confirm-modal'
 import { MANAGE_SETTINGS } from '@/components/settings/shared'
 import { Button, Card, ErrorState, Field, InlineAlert, LoadingState, NumericInput, useToast } from '@/components/ui'
@@ -60,7 +60,7 @@ const SUPERVISOR_TOGGLES: readonly {
   key: 'supervisorCanAssignSystem' | 'supervisorCanAssignInhouse' | 'supervisorCanAssignOutsource'
   label: string
 }[] = [
-  { key: 'supervisorCanAssignSystem', label: 'หัวหน้าทีมกลุ่ม System มอบหมาย/เปลี่ยนผู้รับผิดชอบได้' },
+  { key: 'supervisorCanAssignSystem', label: 'หัวหน้าทีมกลุ่มแอดมิน มอบหมาย/เปลี่ยนผู้รับผิดชอบได้' },
   { key: 'supervisorCanAssignInhouse', label: 'หัวหน้าทีมกลุ่ม Inhouse มอบหมาย/เปลี่ยนผู้รับผิดชอบได้' },
   { key: 'supervisorCanAssignOutsource', label: 'หัวหน้าทีมกลุ่ม Outsource มอบหมาย/เปลี่ยนผู้รับผิดชอบได้' },
 ]
@@ -88,6 +88,9 @@ function changesOf(before: AssignmentPolicyValues, after: AssignmentPolicyValues
 
 export function AssignmentPolicyTab() {
   const { showToast } = useToast()
+  // ผู้ดูอย่างเดียว (เช่น บริหาร) ไม่มีปุ่มบันทึก ⇒ ช่องต้องปิดด้วย ไม่ให้แก้แล้วสับสน (mytester6 T-007)
+  const { can } = usePermission()
+  const readOnly = !can('manage', MANAGE_SETTINGS)
   const [policy, setPolicy] = useState<AssignmentPolicyDto | null>(null)
   const [form, setForm] = useState<FormState | null>(null)
   const [loading, setLoading] = useState(true)
@@ -222,13 +225,14 @@ export function AssignmentPolicyTab() {
               numeric
               value={form.reassignTimeoutHours}
               onChange={(event) => set('reassignTimeoutHours', event.target.value)}
+              disabled={readOnly}
               placeholder={String(DEFAULT_ASSIGNMENT_POLICY_VALUES.reassignTimeoutHours)}
             />
           </div>
         </Field>
 
         <div>
-          <div className="mb-2 text-xs font-bold text-slate-700">สิทธิ์มอบหมายงานของหัวหน้าทีม (Supervisor)</div>
+          <div className="mb-2 text-xs font-bold text-slate-700">สิทธิ์มอบหมายงานของหัวหน้าทีม</div>
           <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
             {SUPERVISOR_TOGGLES.map((toggle) => (
               <label key={toggle.key} className="flex items-center gap-2 text-xs font-medium text-slate-700">
@@ -236,6 +240,7 @@ export function AssignmentPolicyTab() {
                   type="checkbox"
                   checked={form[toggle.key]}
                   onChange={(event) => set(toggle.key, event.target.checked)}
+                  disabled={readOnly}
                   className="focus-ring h-4 w-4 rounded border-slate-300"
                 />
                 {toggle.label}
@@ -254,6 +259,7 @@ export function AssignmentPolicyTab() {
               type="checkbox"
               checked={form.hasAcceptDeadline}
               onChange={(event) => set('hasAcceptDeadline', event.target.checked)}
+              disabled={readOnly}
               className="focus-ring h-4 w-4 rounded border-slate-300"
             />
             กำหนดเส้นตายกดรับงานครั้งแรก
@@ -273,6 +279,7 @@ export function AssignmentPolicyTab() {
                     numeric
                     value={form.acceptDeadlineHours}
                     onChange={(event) => set('acceptDeadlineHours', event.target.value)}
+                    disabled={readOnly}
                     placeholder="24"
                   />
                 </div>

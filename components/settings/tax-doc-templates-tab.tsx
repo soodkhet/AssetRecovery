@@ -4,7 +4,7 @@ import { SettingHelp } from '@/components/settings/setting-help'
 import { taxDocTemplateHelp } from '@/lib/settings/help'
 import { useCallback, useEffect, useState } from 'react'
 import { fetchSamplePdf } from '@/components/accounting/document-samples-view'
-import { Can } from '@/components/auth/permission-provider'
+import { Can, usePermission } from '@/components/auth/permission-provider'
 import { MANAGE_TAX_PROFILES } from '@/components/settings/shared'
 import {
   Button,
@@ -53,6 +53,9 @@ function formOf(template: TaxDocTemplateDto): FormState {
 
 export function TaxDocTemplatesTab() {
   const { showToast } = useToast()
+  // ผู้ดูอย่างเดียวไม่มีปุ่มบันทึก ⇒ ช่องต้องปิดด้วย ไม่ให้แก้แล้วสับสน (mytester6 T-007)
+  const { can } = usePermission()
+  const readOnly = !can('manage', MANAGE_TAX_PROFILES)
   const [payload, setPayload] = useState<TemplatesPayload | null>(null)
   const [forms, setForms] = useState<Record<string, FormState>>({})
   const [loading, setLoading] = useState(true)
@@ -232,6 +235,7 @@ export function TaxDocTemplatesTab() {
                     value={form.footerNote}
                     maxLength={MAX_FOOTER_NOTE_LENGTH}
                     onChange={(event) => set(template.documentType, 'footerNote', event.target.value)}
+                    disabled={readOnly}
                     placeholder="เช่น เงื่อนไขการชำระเงิน หรือข้อความขอบคุณ"
                   />
                 </Field>
@@ -241,6 +245,7 @@ export function TaxDocTemplatesTab() {
                     type="checkbox"
                     checked={form.printSignature}
                     onChange={(event) => set(template.documentType, 'printSignature', event.target.checked)}
+                    disabled={readOnly}
                     className="focus-ring mt-0.5 h-4 w-4 rounded border-slate-300"
                   />
                   <span>
@@ -259,6 +264,7 @@ export function TaxDocTemplatesTab() {
                     id={`reason-${template.documentType}`}
                     value={form.reason}
                     onChange={(event) => set(template.documentType, 'reason', event.target.value)}
+                    disabled={readOnly}
                     placeholder="เช่น เพิ่มเงื่อนไขการชำระเงินตามที่ฝ่ายบริหารอนุมัติ"
                   />
                 </Field>

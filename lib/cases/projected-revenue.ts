@@ -181,6 +181,16 @@ export function projectedRevenueNote(detail: {
   return `คำนวณจาก${source} · เป็นประมาณการก่อนรับเคส ${NOT_CONFIRMED_NOTE}`
 }
 
+/**
+ * เคส "ไม่รับเคส" (`rejected`) ปิดถาวรแล้ว ติดตามไม่ได้และไม่มี snapshot ค่าบริการ ⇒ ไม่แสดงประมาณการรายได้
+ * แสดง "ไม่มีค่าบริการ (ไม่รับเคส)" แทน — ข้อความเดียวกับพอร์ทัล (mytester6 T-011)
+ */
+export function caseHasNoServiceFee(status: string): boolean {
+  return status === 'rejected'
+}
+
+export const NO_SERVICE_FEE_DECLINED_TEXT = 'ไม่มีค่าบริการ (ไม่รับเคส)'
+
 // ── แปล `calculation_source` เป็นข้อความสำหรับผู้ใช้ (UAT BUG-034) ─────────────
 
 export interface ProjectedRevenueSourceParts {

@@ -23,6 +23,22 @@ export function submitErrorFrom(
   return { message: error.message, fields: { ...(error.fields ?? {}) }, tick: previous.tick + 1 }
 }
 
+/**
+ * ข้อความ footer เมื่อตรวจฟอร์มฝั่งหน้าจอไม่ผ่าน — ข้อผิดจริงอยู่ใต้ช่อง (ฟอร์มที่เก็บ `errors` ของตัวเอง
+ * แล้วใช้ `fail({ message: fieldErrorsSummary(fields) })` แค่ให้ footer มีข้อความ + เลื่อน/โฟกัสช่องแรก — mytester6 T-004)
+ */
+export function fieldErrorsSummary(fields: Readonly<Record<string, string>>): string {
+  const count = Object.keys(fields).length
+  return count > 1
+    ? `ข้อมูลยังไม่ถูกต้อง ${count} ช่อง — แก้ช่องที่มีข้อความสีแดงแล้วบันทึกอีกครั้ง`
+    : 'ข้อมูลยังไม่ถูกต้อง — แก้ช่องที่มีข้อความสีแดงแล้วบันทึกอีกครั้ง'
+}
+
+/** ข้อความ footer เมื่อ API ตอบ error / เชื่อมต่อไม่ได้ — หัวข้อ + รายละเอียดในบรรทัดเดียว (mytester6 T-004/T-010) */
+export function apiFailureSummary(error: { title: string; message: string }): string {
+  return `${error.title} — ${error.message}`
+}
+
 /** ผู้ใช้แก้ช่องที่ผิดแล้ว ⇒ ล้างข้อความใต้ช่องนั้น (ข้อความ footer คงไว้จนกดส่งใหม่/ปิด) — คืน state เดิมถ้าไม่มีอะไรเปลี่ยน */
 export function clearSubmitErrorField(state: SubmitErrorState, field: string): SubmitErrorState {
   if (!(field in state.fields)) return state

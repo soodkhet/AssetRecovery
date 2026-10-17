@@ -13,7 +13,10 @@ import {
   Card,
   cn,
   ErrorState,
+  apiFailureSummary,
   Field,
+  fieldErrorsSummary,
+  FormSubmitFooter,
   InlineAlert,
   Input,
   LoadingState,
@@ -22,6 +25,9 @@ import {
   NumericInput,
   Select,
   Textarea,
+  useClearOnClose,
+  useRevealFieldError,
+  useSubmitError,
   useToast,
 } from '@/components/ui'
 import { TOUCH_TARGET_CLASS } from '@/components/ui/button'
@@ -175,6 +181,10 @@ export function OrganizationProfileTab() {
   const [form, setForm] = useState<FormState | null>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
+  // กดบันทึกไม่ผ่าน ⇒ ข้อความที่ footer + เลื่อน/โฟกัสช่องแรกที่ผิด (mytester6 T-004)
+  const { ref: formBodyRef, reveal: revealFieldError } = useRevealFieldError()
+  const submitError = useSubmitError(revealFieldError)
+  useClearOnClose(form !== null, submitError.clear)
 
   const [imageKind, setImageKind] = useState<ImageKind | null>(null)
   const [logoFile, setLogoFile] = useState<File | null>(null)
@@ -233,16 +243,20 @@ export function OrganizationProfileTab() {
       reason: form.reason,
     })
     if (!parsed.success) {
-      setErrors(toFieldErrors(parsed.error))
+      const fields = toFieldErrors(parsed.error)
+      setErrors(fields)
+      submitError.fail({ message: fieldErrorsSummary(fields) })
       return
     }
 
     setErrors({})
+    submitError.clear()
     setSaving(true)
     try {
       const result = await callApi<OrganizationProfileDto>(ENDPOINT, jsonRequest('PATCH', parsed.data))
       if (result.error !== undefined) {
         if (result.error.fields !== undefined) setErrors(result.error.fields)
+        submitError.fail({ message: apiFailureSummary(result.error) })
         showToast({ tone: 'error', title: result.error.title, description: result.error.message })
         return
       }
@@ -516,7 +530,7 @@ export function OrganizationProfileTab() {
         <b>หมายเหตุ:</b> ข้อมูลองค์กรนี้ถูกบันทึกลงในใบกำกับภาษีและใบแจ้งหนี้ทุกฉบับตอนออก — แก้ไขแล้วมีผลเฉพาะเอกสารที่ออกหลังจากนี้
         เอกสารเก่าไม่เปลี่ยน · สิทธิ์แก้ไข: Superadmin เท่านั้น
         <br />
-        <b>การตั้งค่า Prefix / รูปแบบเลขที่เอกสาร</b> อยู่ที่ <b>ตั้งค่าบัญชี/การเงิน → เลขที่เอกสาร</b>
+        <b>การตั้งค่าคำนำหน้า / รูปแบบเลขที่เอกสาร</b> อยู่ที่ <b>ตั้งค่าบัญชี/การเงิน → เลขที่เอกสาร</b>
       </div>
 
       <Modal
@@ -525,18 +539,18 @@ export function OrganizationProfileTab() {
         title="แก้ไขข้อมูลองค์กร"
         size="lg"
         footer={
-          <>
+          <FormSubmitFooter message={submitError.message} tick={submitError.tick}>
             <ModalCancelButton onClose={() => setForm(null)} disabled={saving}>
               ยกเลิก
             </ModalCancelButton>
             <Button onClick={() => void save()} loading={saving}>
               บันทึก
             </Button>
-          </>
+          </FormSubmitFooter>
         }
       >
         {form !== null && (
-          <div className="space-y-4">
+          <div ref={formBodyRef} className="space-y-4">
             <InlineAlert tone="warning" title="ข้อมูลนี้ปรากฏบนใบกำกับภาษีทุกฉบับ">
               มีผลกับเอกสารที่ออกหลังจากบันทึกเท่านั้น · สิทธิ์: Superadmin เท่านั้น
             </InlineAlert>

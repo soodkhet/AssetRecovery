@@ -1,4 +1,5 @@
 import { fmtPercent, fmtSatangSymbol } from '@/lib/format/money'
+import { NO_SERVICE_FEE_DECLINED_TEXT } from '@/lib/cases/projected-revenue'
 import type { PortalServiceFeeDto } from '@/lib/portal/serializers'
 import {
   PORTAL_CASE_STATUS_CODES,
@@ -138,7 +139,7 @@ export interface PortalServiceFeeRow {
  * (mytester3 I3-02)
  */
 export function portalServiceFeeEmptyText(code: PortalCaseStatusCode): string {
-  return code === 'declined' ? 'ไม่มีค่าบริการ (ไม่รับเคส)' : 'ค่าบริการจะถูกกำหนดเมื่อเคสได้รับการอนุมัติ'
+  return code === 'declined' ? NO_SERVICE_FEE_DECLINED_TEXT : 'ค่าบริการจะถูกกำหนดเมื่อเคสได้รับการอนุมัติ'
 }
 
 /**

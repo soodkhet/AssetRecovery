@@ -33,6 +33,7 @@ import type { RoleGroup } from '@/lib/generated/prisma/enums'
 import { ROLE_GROUP_LABEL, ROLE_GROUP_TABS, roleGroupsForTab, type RoleGroupTabId } from '@/lib/roles/role-groups'
 import type { RoleListItem } from '@/lib/roles/types'
 import { canManageAccountIn, canViewAccountsIn } from '@/lib/users/auth-account'
+import { userAffiliationText } from '@/lib/users/affiliation'
 import type { TeamDto } from '@/lib/teams/types'
 import type { UserDto } from '@/lib/users/types'
 
@@ -50,8 +51,8 @@ type StatusFilter = 'all' | 'active' | 'suspended'
 
 const STATUS_LABEL: Record<StatusFilter, string> = {
   all: 'สถานะ: ทั้งหมด',
-  active: 'ใช้งาน (Active)',
-  suspended: 'ระงับ (Suspended)',
+  active: 'ใช้งาน',
+  suspended: 'ระงับ',
 }
 
 type PendingAction = { user: UserDto; action: 'suspend' | 'reactivate' | 'delete' }
@@ -323,7 +324,7 @@ export function UsersManager() {
                     <Badge className={`mt-1 ${ROLE_GROUP_BADGE_CLASS[user.roleGroup]}`}>{ROLE_GROUP_LABEL[user.roleGroup]}</Badge>
                   </Td>
                   <Td>
-                    <div className="text-xs text-slate-600">{user.teamName ?? user.companyName ?? '—'}</div>
+                    <div className="text-xs text-slate-600">{userAffiliationText(user)}</div>
                     {user.activeCaseCount > 0 && (
                       <div className="mt-0.5 text-[10px] text-amber-600">งานค้าง {user.activeCaseCount} เคส</div>
                     )}
@@ -341,7 +342,7 @@ export function UsersManager() {
                       )}
                       <StatusBadge
                         group={user.status === 'active' ? 'success' : 'critical'}
-                        label={user.status === 'active' ? 'Active' : 'Suspended'}
+                        label={user.status === 'active' ? 'ใช้งาน' : 'ระงับ'}
                       />
                       {/* บัญชีกลุ่ม system จัดการได้เฉพาะ Superadmin (DEC-010) — ซ่อนปุ่มทั้งชุด · API ตอบ 403 ซ้ำ */}
                       <Can action="manage" resource={MANAGE_RESOURCE}>

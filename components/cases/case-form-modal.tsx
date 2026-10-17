@@ -8,7 +8,7 @@ import { DeviceAttributeSelect } from '@/components/cases/device-attribute-selec
 import { DeviceModelPicker } from '@/components/cases/device-model-picker'
 import { useDeviceAttributeOptions } from '@/components/cases/use-device-attribute-options'
 import { TeamSuggestionPanel } from '@/components/cases/team-suggestion-panel'
-import { Button, ConfirmModal, Field, InlineAlert, Input, Modal, MoneyInput, NumericInput, Select, Textarea, useRevealFieldError, useToast } from '@/components/ui'
+import { apiFailureSummary, Button, ConfirmModal, Field, FormSubmitFooter, InlineAlert, Input, Modal, MoneyInput, NumericInput, Select, Textarea, useRevealFieldError, useToast } from '@/components/ui'
 import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
 import { apiPath } from '@/lib/api/contract'
 import {
@@ -105,6 +105,11 @@ export function CaseFormModal({
   // กดบันทึกไม่ผ่าน ⇒ เลื่อน+โฟกัสช่องแรกที่ผิด (ช่องอาจอยู่บนสุดของฟอร์มยาว — ตรวจซ้ำ staging SV5-E1-01)
   const { ref: formBodyRef, reveal: revealFieldError } = useRevealFieldError()
   const [formError, setFormError] = useState<ApiCallError | null>(null)
+  /**
+   * ครั้งที่บันทึกไม่ผ่านจาก API/เน็ตหลุด — ข้อความขึ้น footer เหนือปุ่มบันทึกด้วย (กล่องบนสุดของฟอร์มอยู่นอกจอเมื่อเลื่อนลงล่าง)
+   * `key` ใหม่ทุกครั้งให้ screen reader อ่านซ้ำ (mytester6 T-010)
+   */
+  const [submitFailTick, setSubmitFailTick] = useState(0)
   const [submitting, setSubmitting] = useState(false)
   const [staged, setStaged] = useState<StagedFile[]>([])
   const [teamOptions, setTeamOptions] = useState<readonly CaseTeamOptionDto[]>([])
@@ -261,6 +266,7 @@ export function CaseFormModal({
       if (result.error !== undefined || result.data === undefined) {
         const failure = result.error ?? { title: 'บันทึกไม่สำเร็จ', message: 'กรุณาลองใหม่' }
         setFormError(failure)
+        setSubmitFailTick((tick) => tick + 1)
         setFieldErrors(result.error?.fields ?? {})
         if (result.error?.fields !== undefined && Object.keys(result.error.fields).length > 0) revealFieldError()
         // ข้อความในฟอร์มอยู่บนสุด — ผู้ใช้ที่เลื่อนลงล่างไม่เห็น ⇒ แจ้ง toast ด้วยเสมอ (preship R4-004)
@@ -392,7 +398,10 @@ export function CaseFormModal({
           : 'บันทึกเป็นเคสร่างก่อน แล้วค่อยแนบเอกสาร/ส่งตรวจสอบ — ข้อมูลไม่ครบก็บันทึกร่างได้'
       }
       footer={
-        <>
+        <FormSubmitFooter
+          message={formError === null ? null : apiFailureSummary(formError)}
+          tick={submitFailTick}
+        >
           {uploadProgress !== null && (
             <span role="status" className="mr-auto self-center text-xs font-semibold text-slate-600">
               {uploadProgressLabel(uploadProgress.done, uploadProgress.total)}
@@ -416,7 +425,7 @@ export function CaseFormModal({
           >
             {isEdit ? 'บันทึกการแก้ไข' : 'บันทึกเคสร่าง'}
           </Button>
-        </>
+        </FormSubmitFooter>
       }
     >
       <div ref={formBodyRef} className="space-y-6">

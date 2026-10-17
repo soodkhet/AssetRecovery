@@ -62,3 +62,29 @@ export function discardAndClose({ onDiscard, onClose }: { onDiscard: (() => void
 export function dropMarksDraft({ handled, fileCount }: { handled: boolean; fileCount: number }): boolean {
   return handled && fileCount > 0
 }
+
+/**
+ * แอตทริบิวต์บนส่วนของ modal ที่ **บันทึกทันทีเมื่อเลือก/เปลี่ยนค่า** (เช่น แนบไฟล์แล้วผูกเข้าล็อตเลย)
+ * ⇒ การกรอกในส่วนนี้ไม่นับเป็น "ข้อมูลที่ยังไม่บันทึก" ปิดแล้วไม่ถามทิ้งข้อมูล (mytester6 T-018)
+ * — ใส่ที่ช่องหรือกล่องที่ห่อ: `<input {...MODAL_DRAFT_IGNORE}>`
+ */
+export const MODAL_DRAFT_IGNORE = { 'data-modal-draft': 'ignore' } as const
+
+/** selector ที่ `<Modal>` ใช้ตรวจ `MODAL_DRAFT_IGNORE` ด้วย `closest()` */
+export const MODAL_DRAFT_IGNORE_SELECTOR = '[data-modal-draft="ignore"]'
+
+/**
+ * การกรอก/เปลี่ยนค่าใน modal นับเป็น "มีร่าง" ไหม — ผู้ใช้ทำเอง (ไม่ใช่โค้ดตั้งค่า) · ไม่ใช่ช่องค้นหา
+ * · ไม่อยู่ในส่วนที่บันทึกทันที (`MODAL_DRAFT_IGNORE`)
+ */
+export function inputMarksDraft({
+  trusted,
+  isSearch,
+  savesImmediately,
+}: {
+  trusted: boolean
+  isSearch: boolean
+  savesImmediately: boolean
+}): boolean {
+  return trusted && !isSearch && !savesImmediately
+}

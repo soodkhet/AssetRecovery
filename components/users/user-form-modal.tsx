@@ -2,14 +2,20 @@
 
 import { useState } from 'react'
 import {
+  apiFailureSummary,
   Button,
   Field,
+  fieldErrorsSummary,
+  FormSubmitFooter,
   InlineAlert,
   Input,
   Modal,
   ModalCancelButton,
   NumericInput,
   Select,
+  useClearOnClose,
+  useRevealFieldError,
+  useSubmitError,
   useToast,
 } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
@@ -33,6 +39,7 @@ import { MANAGE_PAYEE_PROFILE_CAPABILITY } from '@/lib/payees/payee'
 import { userCreateSchema, userUpdateSchema } from '@/lib/users/schemas'
 import type { UserDto } from '@/lib/users/types'
 import { requiredScopeFor } from '@/lib/users/user'
+import { TEAM_SIDE_LABEL } from '@/lib/ui/status-badge'
 
 /**
  * ฟอร์มสร้าง/แก้ไขผู้ใช้งาน — โครงตาม mockup `settings.html` (modal `create-user`/`edit-user`)
@@ -170,6 +177,10 @@ export function UserFormModal({
   )
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
+  // กดบันทึกไม่ผ่าน ⇒ ข้อความที่ footer + เลื่อน/โฟกัสช่องแรกที่ผิด (mytester6 T-004)
+  const { ref: formBodyRef, reveal: revealFieldError } = useRevealFieldError()
+  const submitError = useSubmitError(revealFieldError)
+  useClearOnClose(open, submitError.clear)
 
   const isEdit = user !== null
   const scope = requiredScopeFor(form.roleGroup)
@@ -193,6 +204,11 @@ export function UserFormModal({
   })
   const paymentTouched = showPayment && isUserPaymentTouched(payment, paymentInitial)
 
+  function failFields(fields: Record<string, string>): void {
+    setErrors(fields)
+    submitError.fail({ message: fieldErrorsSummary(fields) })
+  }
+
   async function save(): Promise<void> {
     const parsed = (isEdit ? userUpdateSchema : userCreateSchema).safeParse(
       payloadOf(form, isEdit, paymentTouched ? payment : null),
@@ -203,20 +219,21 @@ export function UserFormModal({
         const path = issue.path.join('.') || '_'
         if (fields[path] === undefined) fields[path] = issue.message
       }
-      setErrors(fields)
+      failFields(fields)
       return
     }
 
     if (scope === 'team' && parsed.data.teamId === null) {
-      setErrors({ teamId: 'ผู้ใช้กลุ่ม Inhouse/Outsource ต้องระบุทีม' })
+      failFields({ teamId: 'ผู้ใช้กลุ่ม Inhouse/Outsource ต้องระบุทีม' })
       return
     }
     if (scope === 'company' && parsed.data.companyId === null) {
-      setErrors({ companyId: 'ผู้ใช้กลุ่มบริษัทไฟแนนซ์ต้องระบุบริษัท' })
+      failFields({ companyId: 'ผู้ใช้กลุ่มบริษัทไฟแนนซ์ต้องระบุบริษัท' })
       return
     }
 
     setErrors({})
+    submitError.clear()
     setSaving(true)
     try {
       const result = await callApi<UserDto>(
@@ -224,6 +241,8 @@ export function UserFormModal({
         jsonRequest(isEdit ? 'PATCH' : 'POST', parsed.data),
       )
       if (result.error !== undefined) {
+        if (result.error.fields !== undefined) setErrors(result.error.fields)
+        submitError.fail({ message: apiFailureSummary(result.error) })
         showToast({ tone: 'error', title: result.error.title, description: result.error.message })
         return
       }
@@ -254,17 +273,17 @@ export function UserFormModal({
       title={isEdit ? `แก้ไขผู้ใช้งาน — ${user.fullName}` : 'สร้างบัญชีผู้ใช้งาน'}
       description="เลือกกลุ่ม → บทบาท → สังกัด (ทีมสำหรับ Inhouse/Outsource · บริษัทสำหรับกลุ่มไฟแนนซ์)"
       footer={
-        <>
+        <FormSubmitFooter message={submitError.message} tick={submitError.tick}>
           <ModalCancelButton onClose={onClose} disabled={saving}>
             ยกเลิก
           </ModalCancelButton>
           <Button onClick={() => void save()} loading={saving}>
             {isEdit ? 'บันทึกการแก้ไข' : 'สร้างบัญชี'}
           </Button>
-        </>
+        </FormSubmitFooter>
       }
     >
-      <div className="space-y-4">
+      <div ref={formBodyRef} className="space-y-4">
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field id="user-group" label="กลุ่มผู้ใช้ (Role Group)" required>
@@ -390,7 +409,7 @@ export function UserFormModal({
                 <option value="">— เลือกทีม —</option>
                 {groupTeams.map((team) => (
                   <option key={team.id} value={team.id}>
-                    {team.name} ({team.side})
+                    {team.name} ({TEAM_SIDE_LABEL[team.side]})
                   </option>
                 ))}
               </Select>

@@ -17,6 +17,10 @@ export interface UserDto {
   roleGroup: RoleGroup
   teamId: string | null
   teamName: string | null
+  /** ทีมที่ผู้ใช้เป็นหัวหน้า (`teams.supervisor_id`) — หัวหน้าทีมไม่มี `team_id` (mytester6 T-006) */
+  supervisedTeamNames: string[]
+  /** ทีมที่ผู้ใช้เป็นผู้จัดการ (`team_managers`) — ดูแลได้หลายทีม */
+  managedTeamNames: string[]
   companyId: string | null
   companyName: string | null
   status: UserStatus
