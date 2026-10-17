@@ -162,6 +162,18 @@ export interface HotelClaimFormInput {
   hasReceipt: boolean
   /** ช่อง "จำนวนคืน" (ไม่บังคับ — ไม่ส่ง/ว่าง = 1) */
   nightsText?: string
+  /**
+   * แผนของทีมบังคับใบเสร็จค่าที่พัก (known Q7/M2) — ฟอร์มซ่อนตัวเลือก "ไม่มีใบเสร็จ" ⇒ ข้อความต้องไม่ชี้ไปที่ตัวเลือกนั้น
+   * (mytester6 T-014)
+   */
+  receiptRequired?: boolean
+}
+
+/** ข้อความเมื่อยังไม่แนบใบเสร็จ — แผนบังคับใบเสร็จไม่มีตัวเลือก "ไม่มีใบเสร็จ" ให้ติ๊ก (mytester6 T-014) */
+export function hotelReceiptMissingMessage(receiptRequired: boolean): string {
+  return receiptRequired
+    ? 'ต้องแนบใบเสร็จก่อนส่งคำขอเบิก'
+    : 'ต้องแนบใบเสร็จ (หรือติ๊ก "ไม่มีใบเสร็จ" แล้วกรอกรายการ) ก่อนส่งคำขอเบิก'
 }
 
 /** ช่องในฟอร์มเบิกที่พักที่ข้อความผิดพลาดชี้ไป — ใช้เลื่อน/โฟกัสไปช่องนั้น (ตรวจซ้ำ staging SV5-R3-01) */
@@ -180,7 +192,7 @@ export function hotelClaimFormIssue(input: HotelClaimFormInput): { field: HotelC
   if (Number.isNaN(amountSatang)) return { field: 'amount', message: 'จำนวนเงินต้องเป็นตัวเลข' }
   if (amountSatang <= 0) return { field: 'amount', message: 'จำนวนเงินต้องมากกว่า 0' }
   if (!input.hasReceipt) {
-    return { field: 'receipt', message: 'ต้องแนบใบเสร็จ (หรือติ๊ก "ไม่มีใบเสร็จ" แล้วกรอกรายการ) ก่อนส่งคำขอเบิก' }
+    return { field: 'receipt', message: hotelReceiptMissingMessage(input.receiptRequired === true) }
   }
   return null
 }

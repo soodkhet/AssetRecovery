@@ -98,6 +98,13 @@ describe('ข้อความของฟอร์มเบิกที่พ�
     expect(hotelClaimFormError({ ...ok, hasReceipt: false })).toBe('ต้องแนบใบเสร็จ (หรือติ๊ก "ไม่มีใบเสร็จ" แล้วกรอกรายการ) ก่อนส่งคำขอเบิก')
     expect(hotelClaimFormError(ok)).toBeNull()
   })
+
+  it('mytester6 T-014: แผนบังคับใบเสร็จ — ข้อความไม่ชี้ไปที่ตัวเลือก "ไม่มีใบเสร็จ" (ซึ่งถูกซ่อน)', () => {
+    const issue = hotelClaimFormIssue({ ...ok, hasReceipt: false, receiptRequired: true })
+    expect(issue).toEqual({ field: 'receipt', message: 'ต้องแนบใบเสร็จก่อนส่งคำขอเบิก' })
+    expect(issue?.message).not.toContain('ไม่มีใบเสร็จ')
+    expect(hotelClaimFormIssue({ ...ok, hasReceipt: false, receiptRequired: false })?.message).toContain('ติ๊ก "ไม่มีใบเสร็จ"')
+  })
 })
 
 describe('เพดานค่าที่พักต่อคืน (มติ PO U89 · `22` §6.15)', () => {

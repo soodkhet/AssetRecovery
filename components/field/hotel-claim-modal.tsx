@@ -147,6 +147,7 @@ export function HotelClaimModal({
       amountBaht: effectiveAmountBaht,
       hasReceipt: noReceipt || receipt !== null,
       nightsText,
+      receiptRequired,
     })
     const amountSatang = parseBahtInput(effectiveAmountBaht)
     const hotelNights = parseHotelNightsInput(nightsText)
