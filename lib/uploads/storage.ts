@@ -1,4 +1,5 @@
 import { CASE_DOCUMENT_BUCKET } from '@/lib/cases/document-upload'
+import { getServerEnv } from '@/lib/env'
 import { createSupabaseAdminClient } from '@/lib/supabase/server'
 
 /**
@@ -35,6 +36,14 @@ export async function createSignedUpload(path: string): Promise<SignedUpload | n
   const { data, error } = await supabase.storage.from(CASE_DOCUMENT_BUCKET).createSignedUploadUrl(path, { upsert: false })
   if (error !== null || data === null) return null
   return { path: data.path, token: data.token }
+}
+
+/**
+ * secret ฝั่ง server สำหรับโทเคนทิ้งไฟล์ที่อัปโหลดค้าง (`lib/uploads/discard-token.ts` — mytester6 T-015/T-019)
+ * ใช้ service role key เป็นวัตถุดิบ (HMAC แยกโดเมนอีกชั้น) — ไม่ต้องตั้ง env ใหม่ · อยู่โมดูลนี้เพราะเทสต์ mock โมดูลนี้อยู่แล้ว
+ */
+export function uploadDiscardSecret(): string {
+  return getServerEnv().SUPABASE_SERVICE_ROLE_KEY
 }
 
 /** signed URL อายุสั้นสำหรับเปิดดูไฟล์ — `null` เมื่อไม่มีไฟล์/ออกไม่ได้ */

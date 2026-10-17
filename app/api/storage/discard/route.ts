@@ -1,0 +1,40 @@
+import type { NextRequest } from 'next/server'
+import { apiSuccess } from '@/lib/api/envelope'
+import { readJsonBody, toModuleErrorResponse, validationErrorResponse } from '@/lib/api/http'
+import { requireAnyPermission } from '@/lib/auth/require-permission'
+import { STORAGE_UPLOAD_CAPABILITIES } from '@/lib/uploads/access'
+import { isValidUploadDiscardToken } from '@/lib/uploads/discard-token'
+import { uploadDiscardSecret } from '@/lib/uploads/storage'
+import { discardUploadsRequestSchema, parseStoragePath, type DiscardUploadsDto } from '@/lib/uploads/targets'
+import { discardStagedUpload } from '@/lib/uploads/verify'
+
+/**
+ * `POST /api/storage/discard` (mytester6 T-015/T-019) — ทิ้งไฟล์ที่ผู้ใช้อัปโหลดแล้วไม่ได้ใช้
+ * (กด "ทิ้งข้อมูล" / ลบรูปก่อนส่ง) ไม่ให้ค้างใน Storage โดยไม่ผูก record
+ *
+ * body `{ items: [{ path, discardToken }] }` — ลบได้เฉพาะเมื่อ:
+ * 1. มี capability อัปโหลดอย่างน้อยหนึ่งทาง (ยามเดียวกับ `upload-url`)
+ * 2. `discardToken` ตรงกับ **ผู้เรียก + path** (ออกโดย `upload-url` ให้ผู้ขอ path นั้น ⇒ ลบได้เฉพาะไฟล์ที่ตัวเองอัปโหลด)
+ * 3. path อยู่ในโครงที่ระบบสร้าง และ **ไม่มี record ใดอ้าง** (`isUploadPathReferenced`)
+ * ไม่ผ่านข้อ 2/3 ⇒ ข้ามเงียบ ๆ (ไม่บอกว่าไฟล์มีอยู่/ผูกกับอะไร) · ไม่ลง audit เพราะไฟล์ยังไม่เป็นข้อมูลของระบบ
+ * (เหมือนการออกโทเคนอัปโหลด)
+ */
+export async function POST(request: NextRequest): Promise<Response> {
+  try {
+    const user = await requireAnyPermission('manage', STORAGE_UPLOAD_CAPABILITIES)
+    const parsed = discardUploadsRequestSchema.safeParse(await readJsonBody(request))
+    if (!parsed.success) return validationErrorResponse(parsed.error)
+
+    const secret = uploadDiscardSecret()
+    let removed = 0
+    for (const item of parsed.data.items) {
+      if (parseStoragePath(item.path) === null) continue
+      if (!isValidUploadDiscardToken(secret, user.id, item.path, item.discardToken)) continue
+      if (await discardStagedUpload(item.path)) removed += 1
+    }
+    const data: DiscardUploadsDto = { removed }
+    return apiSuccess(data)
+  } catch (error) {
+    return toModuleErrorResponse(error)
+  }
+}

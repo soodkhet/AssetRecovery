@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ModuleError } from '@/lib/api/errors'
 import { fieldEvidenceFiles, lotDocumentRule } from '@/lib/uploads/rules'
 import {
+  discardStagedUpload,
   discardUnboundUpload,
   toVerifiedUploadMap,
   uploadMapJson,
@@ -156,6 +157,25 @@ describe('discardUnboundUpload', () => {
     await discardUnboundUpload(null, rule)
     referenceCheckFails = true
     await discardUnboundUpload(path, rule)
+    expect(uploadTestState.removed).toEqual([])
+  })
+})
+
+describe('discardStagedUpload (mytester6 T-015/T-019)', () => {
+  const path = 'cases/c-1/field_evidence/photo/k1.jpg'
+
+  it('ไม่มี record อ้าง ⇒ ลบ คืน true', async () => {
+    putFakeUpload(path, sampleBytes('jpeg'))
+    await expect(discardStagedUpload(path)).resolves.toBe(true)
+    expect(uploadTestState.removed).toEqual([path])
+  })
+
+  it('ผูก record แล้ว / ตรวจการอ้างอิงล้ม ⇒ ไม่ลบ คืน false', async () => {
+    referencedPaths.add(path)
+    await expect(discardStagedUpload(path)).resolves.toBe(false)
+    referencedPaths.clear()
+    referenceCheckFails = true
+    await expect(discardStagedUpload(path)).resolves.toBe(false)
     expect(uploadTestState.removed).toEqual([])
   })
 })

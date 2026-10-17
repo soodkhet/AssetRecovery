@@ -39,6 +39,7 @@ import {
 } from '@/lib/warehouse/intake-photos'
 import { ASSET_CONDITIONS } from '@/lib/warehouse/schemas'
 import type { AssetDetailDto, AssetListItemDto } from '@/lib/warehouse/types'
+import { discardStagedUploads } from '@/lib/uploads/client'
 import { INTAKE_PHOTO_ACCEPT, WarehouseUploadError, uploadIntakePhoto } from '@/lib/warehouse/upload-client'
 import { ASSET_CONDITION_LABEL } from '@/lib/warehouse/warehouse-ui'
 
@@ -151,6 +152,8 @@ export function IntakeModal({
 
   function removePhoto(path: string): void {
     setPhotos((current) => current.filter((each) => each !== path))
+    // รูปที่ถ่ายในรอบนี้แล้วลบทิ้ง ⇒ ลบออกจาก Storage ด้วย (ยังไม่ผูก record — mytester6 T-019)
+    discardStagedUploads([path])
   }
 
   // กลุ่ม radio ใช้คีย์บอร์ดแบบ roving tabindex + ลูกศร (รีวิวรอบ 2 SV5-A11Y-A2-03)
@@ -238,6 +241,8 @@ export function IntakeModal({
     <Modal
       open={open}
       onClose={onClose}
+      // "ทิ้งข้อมูล" ⇒ รูปที่ถ่ายในรอบนี้ยังไม่ผูก record ⇒ ลบออกจาก Storage ไม่ให้ค้าง (mytester6 T-019)
+      onDiscard={() => discardStagedUploads(photos)}
       size="lg"
       title={isRetry ? 'รับเครื่องเข้าคลังอีกครั้ง' : 'รับเครื่องเข้าคลัง'}
       description="ตรวจ IMEI → บันทึกสภาพ → ถ่ายรูปหลักฐาน 7 มุม"

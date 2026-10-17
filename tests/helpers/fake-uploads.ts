@@ -66,6 +66,7 @@ export async function fakeStorageModule(): Promise<typeof StorageModule> {
     SIGNED_DOWNLOAD_TTL_SECONDS: 300,
     downloadUploadedFile: async (path: string) => uploadTestState.files.get(path) ?? null,
     createSignedUpload: async (path: string) => ({ path, token: `token:${path}` }),
+    uploadDiscardSecret: () => 'test-upload-discard-secret',
     createSignedDownloadUrl: async (path: string) =>
       uploadTestState.files.has(path) ? `https://storage.test/signed/${path}` : null,
     removeStoredFiles: async (paths: readonly string[]) => {

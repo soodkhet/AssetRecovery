@@ -79,20 +79,30 @@ export async function discardUnboundUpload(path: string | null | undefined, rule
   await removeUnboundUpload(path, {})
 }
 
-async function removeUnboundUpload(path: string, options: VerifyUploadOptions): Promise<void> {
-  if (options.boundPaths?.includes(path) === true) return
+/**
+ * ผู้ใช้ทิ้งไฟล์ที่ตัวเองอัปโหลดแต่ยังไม่ได้ใช้ (กด "ทิ้งข้อมูล"/ลบรูปก่อนส่ง — mytester6 T-015/T-019) ⇒ ลบเฉพาะเมื่อ
+ * ไม่มี record ใดอ้าง path นี้ · ผู้เรียก (`POST /api/storage/discard`) ตรวจโทเคนผูกผู้ใช้มาก่อนแล้ว · คืน `true` = ลบแล้ว
+ */
+export async function discardStagedUpload(path: string): Promise<boolean> {
+  return removeUnboundUpload(path, {})
+}
+
+async function removeUnboundUpload(path: string, options: VerifyUploadOptions): Promise<boolean> {
+  if (options.boundPaths?.includes(path) === true) return false
   try {
-    if (await isUploadPathReferenced(path)) return
+    if (await isUploadPathReferenced(path)) return false
   } catch (referenceError: unknown) {
     console.error('[uploads] ตรวจการอ้างอิงไฟล์ไม่สำเร็จ — ไม่ลบไฟล์', { path, error: referenceError })
-    return
+    return false
   }
   try {
     const { failed } = await removeStoredFiles([path])
     if (failed.length > 0) console.error('[uploads] ลบไฟล์ที่ถูกปฏิเสธไม่สำเร็จ', { path })
+    return failed.length === 0
   } catch (removeError: unknown) {
     // ลบไม่สำเร็จต้องไม่บัง error เดิมที่ผู้ใช้ต้องเห็น
     console.error('[uploads] ลบไฟล์ที่ถูกปฏิเสธไม่สำเร็จ', { path, error: removeError })
+    return false
   }
 }
 

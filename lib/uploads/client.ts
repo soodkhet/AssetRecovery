@@ -3,6 +3,7 @@ import { callApi, jsonRequest } from '@/lib/api/types'
 import { CASE_DOCUMENT_BUCKET } from '@/lib/cases/document-upload'
 import { getPublicEnv } from '@/lib/env-public'
 import {
+  MAX_DISCARD_UPLOADS,
   STORAGE_API_PATH,
   type SignedDownloadDto,
   type SignedUploadDto,
@@ -129,7 +130,7 @@ export async function uploadToStorage(target: UploadTarget, file: File, options:
   const onCallerAbort = () => stop('cancelled')
   const timer = setTimeout(() => stop('timeout'), uploadTimeoutMs(file.size))
   callerSignal?.addEventListener('abort', onCallerAbort)
-  const { path, token } = issued.data
+  const { path, token, discardToken } = issued.data
   uploadSignals.set(token, controller.signal)
 
   try {
@@ -142,6 +143,7 @@ export async function uploadToStorage(target: UploadTarget, file: File, options:
     if (uploaded.error !== null) {
       throw new StorageUploadError(`อัปโหลดไฟล์ ${file.name} ไม่สำเร็จ — ${uploaded.error.message}`)
     }
+    if (typeof discardToken === 'string' && discardToken !== '') stagedUploads.set(path, discardToken)
     return path
   } finally {
     clearTimeout(timer)
@@ -150,6 +152,36 @@ export async function uploadToStorage(target: UploadTarget, file: File, options:
     // กัน unhandled rejection ของ promise ที่ไม่ได้ใช้แล้ว
     stopped.catch(() => undefined)
   }
+}
+
+/**
+ * ไฟล์ที่หน้านี้อัปโหลดสำเร็จแล้ว → โทเคนทิ้งไฟล์ที่ server ออกให้ผู้อัปโหลด (mytester6 T-015/T-019)
+ * อยู่ในหน่วยความจำของหน้าเท่านั้น — รีเฟรชแล้วหาย (ไฟล์ที่ทิ้งไม่ทันยังปลอดภัย แค่ค้างใน Storage)
+ */
+const stagedUploads = new Map<string, string>()
+
+/**
+ * ทิ้งไฟล์ที่อัปโหลดจากหน้านี้แต่ไม่ได้ใช้ (ผู้ใช้กด "ทิ้งข้อมูล" / ลบรูปก่อนส่ง / ส่งแล้วไม่มีไฟล์นั้นในชุดสุดท้าย)
+ * — ส่งเฉพาะ path ที่หน้านี้อัปโหลดเอง (มีโทเคน) · server ลบเฉพาะไฟล์ของผู้เรียกที่ยังไม่ผูก record
+ * · ยิงแล้วไม่รอผล (`keepalive` — ปิดหน้าต่าง/เปลี่ยนหน้าแล้วคำขอยังไปถึง) · ล้มเหลว = ไฟล์ค้างเหมือนเดิม ไม่กระทบผู้ใช้
+ */
+export function discardStagedUploads(paths: Iterable<string>): void {
+  const items: Array<{ path: string; discardToken: string }> = []
+  for (const path of new Set(paths)) {
+    const discardToken = stagedUploads.get(path)
+    if (discardToken === undefined) continue
+    stagedUploads.delete(path)
+    items.push({ path, discardToken })
+  }
+  for (let index = 0; index < items.length; index += MAX_DISCARD_UPLOADS) {
+    const chunk = items.slice(index, index + MAX_DISCARD_UPLOADS)
+    void callApi(STORAGE_API_PATH.discard, { ...jsonRequest('POST', { items: chunk }), keepalive: true }).catch(() => undefined)
+  }
+}
+
+/** path นี้อัปโหลดจากหน้านี้และยังทิ้งได้อยู่ไหม — ให้ฟอร์มแยกไฟล์ใหม่ออกจากไฟล์ที่ผูก record แล้ว */
+export function isStagedUpload(path: string): boolean {
+  return stagedUploads.has(path)
 }
 
 /**

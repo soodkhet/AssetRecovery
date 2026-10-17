@@ -81,6 +81,32 @@ export const signedDownloadRequestSchema = z.object({
 export interface SignedUploadDto {
   path: string
   token: string
+  /**
+   * โทเคนทิ้งไฟล์นี้ถ้าผู้ใช้ไม่ได้ใช้ (กด "ทิ้งข้อมูล"/ลบรูปก่อนส่ง) — ผูกกับผู้ใช้ที่ขอ path นี้
+   * ส่งกลับมาที่ `POST /api/storage/discard` (mytester6 T-015/T-019)
+   */
+  discardToken: string
+}
+
+/** จำนวนไฟล์สูงสุดต่อคำขอทิ้งหนึ่งครั้ง — ฟอร์มที่แนบไฟล์มากสุด (หลักฐานปิดงาน) ยังไม่ถึง */
+export const MAX_DISCARD_UPLOADS = 50
+
+/** `POST /api/storage/discard` — ทิ้งไฟล์ที่อัปโหลดค้างและยังไม่ผูก record (mytester6 T-015/T-019) */
+export const discardUploadsRequestSchema = z.object({
+  items: z
+    .array(
+      z.object({
+        path: z.string().min(1).max(MAX_STORAGE_PATH_LENGTH),
+        discardToken: z.string().min(1).max(128),
+      }),
+    )
+    .min(1)
+    .max(MAX_DISCARD_UPLOADS),
+})
+
+export interface DiscardUploadsDto {
+  /** จำนวนไฟล์ที่ลบจริง (ไฟล์ที่ผูก record แล้ว/โทเคนไม่ตรง ⇒ ข้ามเงียบ ๆ) */
+  removed: number
 }
 
 export interface SignedDownloadDto {
@@ -227,4 +253,5 @@ export function parseStoragePath(path: string): StoragePathOwner | null {
 export const STORAGE_API_PATH = {
   uploadUrl: '/api/storage/upload-url',
   downloadUrl: '/api/storage/download-url',
+  discard: '/api/storage/discard',
 } as const

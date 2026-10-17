@@ -29,6 +29,7 @@ const storageMock = vi.hoisted(() => ({
   SIGNED_DOWNLOAD_TTL_SECONDS: 300,
   downloadUploadedFile: vi.fn(),
   createSignedUpload: vi.fn(async (path: string) => ({ path, token: `token:${path}` })),
+  uploadDiscardSecret: () => 'test-upload-discard-secret',
   createSignedDownloadUrl: vi.fn(async (path: string) => `https://storage.test/signed/${path}`),
   removeStoredFiles: vi.fn(),
 }))
