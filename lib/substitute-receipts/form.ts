@@ -133,6 +133,21 @@ export function substituteLineRowError(
 }
 
 /**
+ * ยอดรวมเกินเพดานใบรับรองแทนใบเสร็จ — ข้อผิดระดับทั้งใบแต่ต้องชี้ช่องให้แก้ได้ (mytester6 T-016) ⇒ ช่อง "จำนวนเงิน"
+ * ของแถวสุดท้ายที่กรอกยอดไว้ (ปกติคือแถวที่ทำให้เกิน) · ไม่มีแถวที่กรอกยอด ⇒ แถวแรก · ไม่มีแถวเลย ⇒ `null`
+ */
+export function substituteLimitLineAt(drafts: readonly SubstituteLineDraft[]): SubstituteLineIssueAt | null {
+  let index = -1
+  drafts.forEach((draft, at) => {
+    const amount = parseBahtInput(draft.amountBaht)
+    if (amount !== null && !Number.isNaN(amount) && amount > 0) index = at
+  })
+  const lineIndex = index === -1 ? 0 : index
+  const lineKey = drafts[lineIndex]?.key
+  return lineKey === undefined ? null : { lineIndex, lineKey, field: 'amount' }
+}
+
+/**
  * ข้อผิดรายช่องจาก server (`fields` ของ error — key แบบ `lines.0.amountSatang`) → แถว/ช่องบนจอข้อแรกตามลำดับบนจอ
  * · ไม่มีช่องของแถวที่ยังอยู่ ⇒ `null` (แสดงที่ footer อย่างเดียว) · ตรวจซ้ำ staging หน้าต่างออกใบใหม่แทน
  */

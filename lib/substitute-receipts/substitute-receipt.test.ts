@@ -3,6 +3,7 @@ import {
   emptySubstituteLine,
   fitSubstituteLinesToTotal,
   substituteDraftPayload,
+  substituteLimitLineAt,
   substituteLineAtFromFields,
   substituteLineInputId,
   substituteLineRowError,
@@ -608,5 +609,25 @@ describe('ตรวจซ้ำ staging — หน้าต่างออกใ
     expect(substituteLineAtFromFields({ lines: 'ต้องมีอย่างน้อย 1 รายการ' }, lines)).toBeNull()
     expect(substituteLineAtFromFields({ 'lines.5.description': 'กรอกรายละเอียด' }, lines)).toBeNull()
     expect(substituteLineAtFromFields({ 'lines.0.unknown': 'x' }, lines)).toBeNull()
+  })
+})
+
+describe('mytester6 T-016 — ยอดรวมเกินเพดานใบรับรองแทนใบเสร็จชี้ช่องยอดของรายการ', () => {
+  it('ชี้ช่องจำนวนเงินของแถวสุดท้ายที่กรอกยอดแล้ว', () => {
+    const lines = [
+      { ...emptySubstituteLine('a', '2026-10-01'), amountBaht: '300' },
+      { ...emptySubstituteLine('b', '2026-10-01'), amountBaht: '350.50' },
+      emptySubstituteLine('c', '2026-10-01'),
+    ]
+    expect(substituteLimitLineAt(lines)).toEqual({ lineIndex: 1, lineKey: 'b', field: 'amount' })
+  })
+
+  it('ยังไม่มีแถวที่กรอกยอด ⇒ แถวแรก · ไม่มีแถว ⇒ null', () => {
+    expect(substituteLimitLineAt([emptySubstituteLine('a'), emptySubstituteLine('b')])).toEqual({
+      lineIndex: 0,
+      lineKey: 'a',
+      field: 'amount',
+    })
+    expect(substituteLimitLineAt([])).toBeNull()
   })
 })

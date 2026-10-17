@@ -23,10 +23,12 @@ import {
   followSubstituteLineDates,
   substituteDraftPayload,
   substituteDraftTotalSatang,
+  substituteLimitLineAt,
   substituteLineRowError,
   type SubstituteLineDraft,
   type SubstituteLineIssueAt,
 } from '@/lib/substitute-receipts/form'
+import { substituteReceiptPerDocWarning } from '@/lib/substitute-receipts/substitute-receipt'
 
 /**
  * ฟอร์มเบิกค่าที่พัก (`41` §6.6 กลุ่ม "เบิกแยก" · §7.9)
@@ -63,6 +65,8 @@ export function HotelClaimModal({
   const [noReceipt, setNoReceipt] = useState(false)
   // known Q7/M2 (DO-02) — แผนของทีมบังคับใบเสร็จค่าที่พัก ⇒ ซ่อนตัวเลือก "ไม่มีใบเสร็จ" (server ตรวจซ้ำ)
   const [receiptRequired, setReceiptRequired] = useState(false)
+  // เพดานต่อใบของใบรับรองแทนใบเสร็จ (นโยบายองค์กร) — เตือนที่ช่องยอดก่อนส่ง · `null` = ยังไม่รู้ ให้ server ตรวจ (mytester6 T-016)
+  const [substituteMaxPerDocSatang, setSubstituteMaxPerDocSatang] = useState<number | null>(null)
   const [substituteLines, setSubstituteLines] = useState<SubstituteLineDraft[]>(() => [
     emptySubstituteLine('line-0', expenseDate),
   ])
@@ -123,11 +127,14 @@ export function HotelClaimModal({
   useEffect(() => {
     let cancelled = false
     void (async () => {
-      const response = await callApi<{ items: FieldTeammateDto[]; hotelReceiptRequired?: boolean }>(
-        apiPath('field.teammates'),
-      )
+      const response = await callApi<{
+        items: FieldTeammateDto[]
+        hotelReceiptRequired?: boolean
+        substituteReceiptMaxPerDocSatang?: number
+      }>(apiPath('field.teammates'))
       if (cancelled) return
       setTeammates(response.data?.items ?? [])
+      setSubstituteMaxPerDocSatang(response.data?.substituteReceiptMaxPerDocSatang ?? null)
       if (response.data?.hotelReceiptRequired === true) {
         setReceiptRequired(true)
         setNoReceipt(false)
@@ -152,10 +159,17 @@ export function HotelClaimModal({
     const amountSatang = parseBahtInput(effectiveAmountBaht)
     const hotelNights = parseHotelNightsInput(nightsText)
     const substitute = noReceipt ? substituteDraftPayload(substituteLines) : null
+    // ยอดรวมเกินเพดานต่อใบ ⇒ ชี้ช่องยอดของรายการ (เดิมรู้ตอน server ตอบ แล้วขึ้นแค่ toast — mytester6 T-016)
+    const limitWarning =
+      substitute !== null && substitute.error === null && substituteMaxPerDocSatang !== null
+        ? substituteReceiptPerDocWarning(substituteTotal, substituteMaxPerDocSatang)
+        : null
     const linesIssue =
       substitute !== null && substitute.error !== null
         ? { field: 'lines' as const, message: substitute.error, lineAt: substitute.at }
-        : null
+        : limitWarning !== null
+          ? { field: 'lines' as const, message: limitWarning, lineAt: substituteLimitLineAt(substituteLines) }
+          : null
     // ไม่มีใบเสร็จ: ยอดเงิน = ยอดรวมรายการ (ช่องยอดถูกล็อก) ⇒ ยอดผิดชี้ไปที่รายการแทน
     const amountFromLines = noReceipt && formIssue !== null && formIssue.field === 'amount'
     const issue =
@@ -192,6 +206,13 @@ export function HotelClaimModal({
         }),
       )
       if (response.error !== undefined || response.data === undefined) {
+        // เกินเพดานใบรับรองแทนใบเสร็จ (ต่อใบ/ต่อเดือน — ฝั่งฟอร์มรู้แค่ต่อใบ) ⇒ ผูกช่องยอดของรายการ + footer + โฟกัส
+        // แบบเดียวกับข้อผิดอื่นของฟอร์มนี้ (mytester6 T-016)
+        if (noReceipt && response.error?.code === 'SUBSTITUTE_RECEIPT_EXCEEDS_LIMIT') {
+          setError(response.error.message, 'lines', substituteLimitLineAt(substituteLines))
+          setRevealTick((tick) => tick + 1)
+          return
+        }
         const fields = response.error?.fields ?? {}
         setFieldErrors(fields)
         const fieldMessages = Object.values(fields)

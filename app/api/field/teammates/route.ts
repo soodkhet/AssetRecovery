@@ -4,6 +4,8 @@ import { resolveHotelReceiptRequiredForUser } from '@/lib/field/expense-queries'
 import { listFieldTeammates } from '@/lib/field/queries'
 import { FIELD_CAPABILITY } from '@/lib/field/permissions'
 import type { FieldTeammateDto } from '@/lib/field/types'
+import { prisma } from '@/lib/prisma'
+import { substituteReceiptLimitsOf } from '@/lib/substitute-receipts/queries'
 
 /**
  * `GET /api/field/teammates` (`41` §6.6)
@@ -11,16 +13,22 @@ import type { FieldTeammateDto } from '@/lib/field/types'
  * เงื่อนไขตรงกับยาม `assertSharedAgentInTeam()` ของ `POST /api/field/expenses/hotel`
  * + `hotelReceiptRequired` — แผนของทีม ณ วันนี้บังคับใบเสร็จค่าที่พัก (known Q7/M2) ⇒ ฟอร์มซ่อน "ไม่มีใบเสร็จ"
  *   (UX เท่านั้น — server ตรวจซ้ำตามแผนที่มีผล ณ วันที่เข้าพัก)
+ * + `substituteReceiptMaxPerDocSatang` — เพดานต่อใบของใบรับรองแทนใบเสร็จ (นโยบายองค์กร) ให้ฟอร์มเตือนที่ช่องยอดก่อนส่ง
+ *   (mytester6 T-016 · UX เท่านั้น — server ตรวจครบทั้งต่อใบ/ต่อเดือนตอนออกใบ)
  */
-export const GET = withEndpoint<unknown, { items: FieldTeammateDto[]; hotelReceiptRequired: boolean }>({
+export const GET = withEndpoint<
+  unknown,
+  { items: FieldTeammateDto[]; hotelReceiptRequired: boolean; substituteReceiptMaxPerDocSatang: number }
+>({
   endpoint: 'field.teammates',
   action: 'view',
   resource: FIELD_CAPABILITY,
   handler: async (_request: NextRequest, _context, user) => {
-    const [items, hotelReceiptRequired] = await Promise.all([
+    const [items, hotelReceiptRequired, limits] = await Promise.all([
       listFieldTeammates(user),
       resolveHotelReceiptRequiredForUser(user, new Date()),
+      substituteReceiptLimitsOf(prisma, user.organizationId),
     ])
-    return { data: { items, hotelReceiptRequired } }
+    return { data: { items, hotelReceiptRequired, substituteReceiptMaxPerDocSatang: limits.maxPerDocSatang } }
   },
 })
