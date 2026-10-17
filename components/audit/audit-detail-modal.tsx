@@ -18,10 +18,11 @@ import {
 import {
   auditRowDisplay,
   auditActorLabel,
+  auditChangeLabel,
   auditFieldChanges,
-  auditFieldLabel,
   auditValueDisplay,
   auditValueTooltip,
+  auditVisibleFieldChanges,
 } from '@/lib/audit/log-display'
 import { fmtDateTime } from '@/lib/format/datetime'
 
@@ -31,7 +32,9 @@ import { fmtDateTime } from '@/lib/format/datetime'
  */
 export function AuditDetailModal({ id, onClose }: { id: string | null; onClose: () => void }) {
   const { detail, loading, error } = useAuditLogDetail(id)
-  const changes = detail === null ? [] : auditFieldChanges(detail.before, detail.after)
+  // ตรวจซ้ำ staging SV6-R3-02 — ซ่อนแถวที่ซ้ำความหมาย (ชื่อที่เก็บคู่กับ id)
+  const changes =
+    detail === null ? [] : auditVisibleFieldChanges(auditFieldChanges(detail.before, detail.after), detail.refLabels)
 
   // audit immutable — `90` §10 / `02` §13 (อ้างสเปคไว้ในคอมเมนต์ ไม่ปล่อยเลขไฟล์ขึ้นหน้าจอผู้ใช้)
   return (
@@ -104,7 +107,7 @@ export function AuditDetailModal({ id, onClose }: { id: string | null; onClose: 
                   {changes.map((change) => (
                     <Tr key={change.field} className="align-top">
                       {/* mytester H-06 — ชื่อฟิลด์/ค่าเป็นภาษาไทยเมื่อรู้จัก */}
-                      <Td className="px-3 py-2 text-xs">{auditFieldLabel(change.field)}</Td>
+                      <Td className="px-3 py-2 text-xs">{auditChangeLabel(change, detail.targetType)}</Td>
                       <Td
                         className="px-3 py-2 text-xs break-all whitespace-pre-line text-slate-500"
                         title={auditValueTooltip(change.before, change.field, detail.refLabels)}

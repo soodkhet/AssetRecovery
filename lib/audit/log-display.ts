@@ -1,5 +1,10 @@
 import { fmtDate, fmtDateTime } from '@/lib/format/datetime'
-import { AUDIT_RESULT_CODE_LABEL, auditEnumValueLabel, auditFieldLabel } from '@/lib/audit/field-display'
+import {
+  AUDIT_RESULT_CODE_LABEL,
+  auditEnumValueLabel,
+  auditFieldLabel,
+  auditFieldLabelOfValues,
+} from '@/lib/audit/field-display'
 import {
   AUDIT_LIST_REF_DISPLAY_LIMIT,
   auditListFieldRefType,
@@ -522,13 +527,13 @@ function auditInlineRecord(
   const entries = Object.entries(record)
   if (entries.length === 0) return 'ไม่มี'
   return entries
-    .map(([key, item]) => `${auditRecordKeyLabel(key)}${pairSeparator}${auditNestedValue(item, key, targetType, refLabels)}`)
+    .map(([key, item]) => `${auditRecordKeyLabel(key, targetType)}${pairSeparator}${auditNestedValue(item, key, targetType, refLabels)}`)
     .join(', ')
 }
 
 /** คีย์ของอ็อบเจกต์ — บางชุดใช้ path ไฟล์เป็นคีย์ (ค่าตรวจสอบไฟล์ต่อไฟล์) ⇒ ชื่อไฟล์แทน path ดิบ (SV6-R3-01) */
-function auditRecordKeyLabel(key: string): string {
-  return auditStoragePathText(key) ?? auditFieldLabel(key)
+function auditRecordKeyLabel(key: string, targetType: string | null): string {
+  return auditStoragePathText(key) ?? auditFieldLabel(key, targetType)
 }
 
 /**
@@ -547,9 +552,35 @@ function auditRecordLines(
       const text = isPlainObject(item)
         ? auditInlineRecord(item, targetType, refLabels, ' ')
         : auditNestedValue(item, key, targetType, refLabels)
-      return `${auditRecordKeyLabel(key)}: ${text}`
+      return `${auditRecordKeyLabel(key, targetType)}: ${text}`
     })
     .join('\n')
+}
+
+/**
+ * ตรวจซ้ำ staging SV6-R3-02 — ฟิลด์ที่ซ้ำความหมายกับฟิลด์ข้างกัน: ชื่อที่เก็บคู่กับ id ⇒ ซ่อนเมื่อชื่อของ id ตรงกัน
+ * (สร้างรอบจ่ายเก็บทั้ง `cycle_id` และ `cycle_name` — ข้อมูลใน DB คงเดิม)
+ */
+const DUPLICATE_NAME_OF_REF: Readonly<Record<string, string>> = { cycle_name: 'cycle_id', cycleName: 'cycleId' }
+
+export function auditVisibleFieldChanges(
+  changes: readonly AuditFieldChange[],
+  refLabels: Readonly<Record<string, string>>,
+): AuditFieldChange[] {
+  const byField = new Map(changes.map((change) => [change.field, change]))
+  const sameAsRef = (name: unknown, id: unknown): boolean =>
+    name === null || (typeof id === 'string' && typeof name === 'string' && refLabels[id.toLowerCase()] === name)
+  return changes.filter((change) => {
+    const refField = Object.hasOwn(DUPLICATE_NAME_OF_REF, change.field) ? DUPLICATE_NAME_OF_REF[change.field] : undefined
+    const ref = refField === undefined ? undefined : byField.get(refField)
+    if (ref === undefined) return true
+    return !(sameAsRef(change.before, ref.before) && sameAsRef(change.after, ref.after))
+  })
+}
+
+/** ป้ายของแถวในตาราง "ค่าก่อน / หลัง" — ตามชนิดเป้าหมาย + ค่าที่เก็บ (`code` ของผลที่ไม่สำเร็จ ⇒ "รหัสข้อผิดพลาด") */
+export function auditChangeLabel(change: AuditFieldChange, targetType: string | null): string {
+  return auditFieldLabelOfValues(change.field, [change.before, change.after], targetType)
 }
 
 /** tooltip ของค่า — id ที่แสดงเป็นชื่อ ⇒ UUID เดิม · path ไฟล์ที่แสดงเป็นชื่อไฟล์ ⇒ path เต็ม (หลักฐาน) */

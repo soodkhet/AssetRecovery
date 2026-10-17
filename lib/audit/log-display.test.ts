@@ -6,8 +6,10 @@ import {
   auditValueDisplay,
   auditActionLabel,
   auditActorLabel,
+  auditChangeLabel,
   auditFieldChanges,
   auditValueTooltip,
+  auditVisibleFieldChanges,
   auditLoginFailureOf,
   auditReasonText,
   auditRowDisplay,
@@ -359,5 +361,44 @@ describe('ตรวจซ้ำ staging SV6-R3-01 — ค่าที่ระ�
     const text = auditReasonText('งานเบื้องหลัง "X" ทำงานสำเร็จ (job id 58536284-a2c3-4178-b9f4-4e8bc91fd0d7)')
     expect(text).toBe('งานเบื้องหลัง "X" ทำงานสำเร็จ (งานเบื้องหลัง #58536284)')
     expect(text).not.toMatch(/job/)
+  })
+})
+
+describe('ตรวจซ้ำ staging SV6-R3-02 — ป้ายฟิลด์ไม่กำกวม/ไม่ซ้ำความหมาย', () => {
+  it('code ของผลที่ไม่สำเร็จ ⇒ "รหัสข้อผิดพลาด" · code ของตารางอื่นยังเป็น "รหัส"', () => {
+    expect(auditChangeLabel({ field: 'code', before: null, after: 'INVALID_CREDENTIALS' }, 'users')).toBe('รหัสข้อผิดพลาด')
+    expect(auditChangeLabel({ field: 'code', before: null, after: 'PERMISSION_DENIED' }, 'cases')).toBe('รหัสข้อผิดพลาด')
+    expect(auditChangeLabel({ field: 'code', before: null, after: 'CC-002' }, 'cost_centers')).toBe('รหัส')
+  })
+
+  it('สร้างรอบจ่าย: ชื่อรอบจ่าย vs รอบตามค่าตั้ง · ชื่อรอบตามค่าตั้งที่ซ้ำกับรอบ ⇒ ซ่อน', () => {
+    const cycleId = '0d3235c4-46cc-4a07-a4e5-ed90b8009dd7'
+    const cycleName = 'รอบจ่ายค่าตอบแทน 15 และสิ้นเดือน (MT6)'
+    const changes = auditFieldChanges(null, { name: 'MT6-V2 รอบจ่าย', cycle_id: cycleId, cycle_name: cycleName })
+    const labels = { [cycleId]: cycleName }
+    const visible = auditVisibleFieldChanges(changes, labels)
+    expect(visible.map((change) => change.field)).toEqual(['cycle_id', 'name'])
+    expect(visible.map((change) => auditChangeLabel(change, 'payout_batches'))).toEqual([
+      'รอบตามค่าตั้งรอบวางบิล/รอบจ่าย',
+      'ชื่อรอบจ่าย',
+    ])
+    // ชื่อไม่ตรงกับรอบ (เช่นเปลี่ยนชื่อรอบทีหลัง) ⇒ แสดงทั้งคู่ · ชื่อป้ายไม่ซ้ำกัน
+    const renamed = auditVisibleFieldChanges(changes, { [cycleId]: 'ชื่อใหม่' })
+    expect(renamed.map((change) => auditChangeLabel(change, 'payout_batches'))).toEqual([
+      'รอบตามค่าตั้งรอบวางบิล/รอบจ่าย',
+      'ชื่อรอบตามค่าตั้ง',
+      'ชื่อรอบจ่าย',
+    ])
+  })
+
+  it('ค่าบริการ: ยอดเงินส่วนคงที่ vs ฐานคำนวณ — คำเดียวกับหน้าเทมเพลตค่าบริการ', () => {
+    expect(auditFieldLabel('service_fee_base_satang')).toBe('ค่าบริการส่วนคงที่/เหมาต่อเคส')
+    expect(auditFieldLabel('service_fee_basis_snapshot')).toBe('ฐานคำนวณค่าบริการที่บันทึกไว้')
+    expect(auditFieldLabel('serviceFeeRatePct')).toBe('อัตราความสำเร็จ (%)')
+    expect(auditFieldLabel('base_satang', 'service_fee_templates')).toBe('ค่าบริการส่วนคงที่/เหมาต่อเคส')
+    expect(auditFieldLabel('basis', 'service_fee_templates')).toBe('ฐานคำนวณ')
+    expect(auditFieldLabel('model', 'service_fee_templates')).toBe('โมเดลเก็บเงิน')
+    // ตารางอื่นไม่ถูกกระทบ
+    expect(auditFieldLabel('name')).toBe('ชื่อ')
   })
 })

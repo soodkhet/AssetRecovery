@@ -464,7 +464,9 @@ const FIELD_LABELS: LabelMap = {
   billing_batch_id: 'รอบวางบิล',
   matched_billing_id: 'รอบวางบิลที่จับคู่',
   batch_number: 'เลขที่รอบ',
-  cycle_name: 'ชื่อรอบ',
+  // ตรวจซ้ำ staging SV6-R3-02 — รอบตามค่าตั้ง "รอบวางบิล/รอบจ่าย" (ไม่ใช่ชื่อรอบจ่ายที่สร้าง)
+  cycle_id: 'รอบตามค่าตั้งรอบวางบิล/รอบจ่าย',
+  cycle_name: 'ชื่อรอบตามค่าตั้ง',
   bill_outstanding_satang: 'ยอดค้างชำระตามบิล',
   bank_fee_written_off_date: 'วันที่ตัดค่าธรรมเนียมธนาคาร',
   bank_fee_written_off_satang: 'ค่าธรรมเนียมธนาคารที่ตัดจำหน่าย',
@@ -495,17 +497,18 @@ const FIELD_LABELS: LabelMap = {
   refund_note: 'หมายเหตุการคืนเงิน',
   column_mapping: 'คอลัมน์ในไฟล์ (เรียงตามลำดับ)',
   // รายได้/ค่าบริการ
-  service_fee_base_satang: 'ฐานค่าบริการ',
-  service_fee_basis_snapshot: 'ฐานค่าบริการที่บันทึกไว้',
+  // ตรวจซ้ำ staging SV6-R3-02 — ยอดเงินคงที่ vs ฐานคิด % ห้ามชื่อคล้ายกัน (คำเดียวกับหน้าเทมเพลตค่าบริการ)
+  service_fee_base_satang: 'ค่าบริการส่วนคงที่/เหมาต่อเคส',
+  service_fee_basis_snapshot: 'ฐานคำนวณค่าบริการที่บันทึกไว้',
   service_fee_fail_fee_satang: 'ค่าบริการกรณีไม่สำเร็จ',
   service_fee_model_snapshot: 'รูปแบบค่าบริการที่บันทึกไว้',
-  service_fee_rate_pct: 'อัตราค่าบริการ (%)',
+  service_fee_rate_pct: 'อัตราความสำเร็จ (%)',
   service_fee_template_id: 'แม่แบบค่าบริการ',
-  prev_service_fee_base_satang: 'ฐานค่าบริการ (เดิม)',
-  prev_service_fee_basis: 'ฐานค่าบริการ (เดิม)',
+  prev_service_fee_base_satang: 'ค่าบริการส่วนคงที่/เหมาต่อเคส (เดิม)',
+  prev_service_fee_basis: 'ฐานคำนวณค่าบริการ (เดิม)',
   prev_service_fee_fail_fee_satang: 'ค่าบริการกรณีไม่สำเร็จ (เดิม)',
   prev_service_fee_model: 'รูปแบบค่าบริการ (เดิม)',
-  prev_service_fee_rate_pct: 'อัตราค่าบริการ (%) (เดิม)',
+  prev_service_fee_rate_pct: 'อัตราความสำเร็จ (%) (เดิม)',
   prev_debt_amount_satang: 'ยอดหนี้ (เดิม)',
   prev_closed_at: 'เวลาปิดงาน (เดิม)',
   prev_outcome: 'ผลลัพธ์ (เดิม)',
@@ -861,9 +864,48 @@ function specificFieldLabel(field: string): string | undefined {
   return NORMALIZED_FIELD_LABELS.get(normalizeFieldName(field))
 }
 
-/** ชื่อฟิลด์ภาษาไทยของตาราง "ค่าก่อน / หลัง" — ป้ายเฉพาะ → แปลทีละคำ → ชื่อเดิม (ไม่พัง) */
-export function auditFieldLabel(field: string): string {
-  return specificFieldLabel(field) ?? auditComposedFieldLabel(field) ?? field
+/**
+ * ตรวจซ้ำ staging SV6-R3-02 — ป้ายที่ความหมายขึ้นกับชนิดเป้าหมาย (คีย์สั้นอย่าง `name`/`model`/`basis` ใช้หลายตาราง)
+ * ข้อความชุดเดียวกับหน้าจอของโมดูลนั้น (หน้าเทมเพลตค่าบริการ: "ค่าบริการส่วนคงที่" · "ฐานคำนวณ" · "อัตราความสำเร็จ")
+ */
+const FIELD_LABELS_BY_TARGET: Readonly<Record<string, LabelMap>> = {
+  service_fee_templates: {
+    name: 'ชื่อเทมเพลตค่าบริการ',
+    model: 'โมเดลเก็บเงิน',
+    base_satang: 'ค่าบริการส่วนคงที่/เหมาต่อเคส',
+    basis: 'ฐานคำนวณ',
+    rate_pct: 'อัตราความสำเร็จ (%)',
+  },
+  payout_batches: { name: 'ชื่อรอบจ่าย' },
+}
+
+const NORMALIZED_FIELD_LABELS_BY_TARGET: ReadonlyMap<string, ReadonlyMap<string, string>> = new Map(
+  Object.entries(FIELD_LABELS_BY_TARGET).map(([target, labels]) => [
+    target,
+    new Map(Object.entries(labels).map(([field, label]) => [normalizeFieldName(field), label])),
+  ]),
+)
+
+/**
+ * ชื่อฟิลด์ภาษาไทยของตาราง "ค่าก่อน / หลัง" — ป้ายตามชนิดเป้าหมาย → ป้ายเฉพาะ → แปลทีละคำ → ชื่อเดิม (ไม่พัง)
+ */
+export function auditFieldLabel(field: string, targetType: string | null = null): string {
+  const byTarget = targetType === null ? undefined : NORMALIZED_FIELD_LABELS_BY_TARGET.get(targetType)?.get(normalizeFieldName(field))
+  return byTarget ?? specificFieldLabel(field) ?? auditComposedFieldLabel(field) ?? field
+}
+
+/**
+ * ตรวจซ้ำ staging SV6-R3-02 — `code` ของการเข้าสู่ระบบ/การเข้าถึงที่ไม่สำเร็จคือ "รหัสข้อผิดพลาด"
+ * (ป้าย "รหัส" เฉย ๆ อ่านเป็นรหัสผ่าน/รหัสรายการ) — ตัดสินจากค่าที่เก็บ (`code` ของตารางอื่นยังเป็น "รหัส")
+ */
+export function auditFieldLabelOfValues(field: string, values: readonly unknown[], targetType: string | null = null): string {
+  if (
+    normalizeFieldName(field) === 'code' &&
+    values.some((value) => typeof value === 'string' && Object.hasOwn(AUDIT_RESULT_CODE_LABEL, value))
+  ) {
+    return 'รหัสข้อผิดพลาด'
+  }
+  return auditFieldLabel(field, targetType)
 }
 
 /**
