@@ -14,9 +14,12 @@ import { PayeeTaxRuleCell } from '@/components/payees/payee-tax-rule-cell'
 import { ReasonConfirmModal } from '@/components/settings/reason-confirm-modal'
 import { useTaxRuleSettings } from '@/components/teams/use-tax-rule-settings'
 import {
+  apiFailureSummary,
   Button,
   Card,
   Field,
+  fieldErrorsSummary,
+  FormSubmitFooter,
   InlineAlert,
   Input,
   Modal,
@@ -31,6 +34,9 @@ import {
   Th,
   THead,
   Tr,
+  useClearOnClose,
+  useRevealFieldError,
+  useSubmitError,
   useToast,
 } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
@@ -95,6 +101,10 @@ export function PayeeTab() {
   const [editing, setEditing] = useState<PayeeDto | null>(null)
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  // กดบันทึกไม่ผ่าน ⇒ ข้อความที่ footer + เลื่อน/โฟกัสช่องแรกที่ผิด (mytester6 T-004)
+  const { ref: formBodyRef, reveal: revealFieldError } = useRevealFieldError()
+  const submitError = useSubmitError(revealFieldError)
+  useClearOnClose(formOpen, submitError.clear)
   const [saving, setSaving] = useState(false)
   /** รายชื่อผู้ใช้ของ dropdown ยังโหลดไม่เสร็จ — ห้ามกดบันทึกระหว่างนี้ (UAT BUG-017) */
   const [candidatesLoading, setCandidatesLoading] = useState(false)
@@ -176,11 +186,14 @@ export function PayeeTab() {
         ? payeeCreateSchema.safeParse({ ...values, userId: form.userId })
         : payeeUpdateSchema.safeParse(values)
     if (!parsed.success) {
-      setErrors(toFieldErrors(parsed.error))
+      const fields = toFieldErrors(parsed.error)
+      setErrors(fields)
+      submitError.fail({ message: fieldErrorsSummary(fields) })
       return
     }
 
     setErrors({})
+    submitError.clear()
     setSaving(true)
     try {
       const result = await callApi<PayeeDto>(
@@ -189,6 +202,7 @@ export function PayeeTab() {
       )
       if (result.error !== undefined) {
         if (result.error.fields !== undefined) setErrors(result.error.fields)
+        submitError.fail({ message: apiFailureSummary(result.error) })
         showToast({ tone: 'error', title: result.error.title, description: result.error.message })
         return
       }
@@ -396,7 +410,7 @@ export function PayeeTab() {
         title={editing === null ? 'เพิ่มผู้รับเงิน' : `แก้ไขผู้รับเงิน — ${editing.name}`}
         description="ชื่อผู้รับเงินมาจากชื่อผู้ใช้ในระบบ (ต้องตรงกับหน้าสมุดบัญชี) — แก้ชื่อที่หน้าจัดการผู้ใช้"
         footer={
-          <>
+          <FormSubmitFooter message={submitError.message} tick={submitError.tick}>
             <ModalCancelButton onClose={() => setFormOpen(false)} disabled={saving}>
               ยกเลิก
             </ModalCancelButton>
@@ -407,10 +421,10 @@ export function PayeeTab() {
             >
               {editing === null ? 'เพิ่มผู้รับเงิน' : 'บันทึกการแก้ไข'}
             </Button>
-          </>
+          </FormSubmitFooter>
         }
       >
-        <div className="space-y-4">
+        <div ref={formBodyRef} className="space-y-4">
           {editing !== null && editing.isVerified && (
             <InlineAlert tone="warning" title="แก้แล้วต้องยืนยันใหม่">
               รายนี้ยืนยันแล้ว — แก้ {RESET_LABELS} จะกลับเป็น “รอยืนยัน” อัตโนมัติ และเข้ารอบจ่ายเงินไม่ได้จนกว่าการเงินจะยืนยันใหม่

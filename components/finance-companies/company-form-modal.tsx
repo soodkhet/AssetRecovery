@@ -6,8 +6,11 @@ import { SettingHelp } from '@/components/settings/setting-help'
 import { useCurrentVatRate } from '@/components/settings/use-current-vat-rate'
 import { toFieldErrors } from '@/lib/api/validation'
 import {
+  apiFailureSummary,
   Button,
   Field,
+  fieldErrorsSummary,
+  FormSubmitFooter,
   InlineAlert,
   Input,
   Modal,
@@ -15,6 +18,9 @@ import {
   NumericInput,
   Select,
   Textarea,
+  useClearOnClose,
+  useRevealFieldError,
+  useSubmitError,
   useToast,
 } from '@/components/ui'
 import { EMPTY_ADDRESS, formatThaiAddressLineFull, type AddressValue } from '@/lib/address/address-value'
@@ -191,6 +197,10 @@ export function CompanyFormModal({
   const selectedCycle = billingCycles.find((cycle) => cycle.id === form.billingCycleId) ?? null
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
+  // กดบันทึกไม่ผ่าน ⇒ ข้อความที่ footer + เลื่อน/โฟกัสช่องแรกที่ผิด (mytester6 T-004)
+  const { ref: formBodyRef, reveal: revealFieldError } = useRevealFieldError()
+  const submitError = useSubmitError(revealFieldError)
+  useClearOnClose(open, submitError.clear)
 
   const isEdit = company !== null
   /** ที่อยู่เดิมแบบข้อความอิสระ (แยกช่องไม่ได้) — ไม่แตะ = บันทึกต่อได้ตามเดิม */
@@ -212,10 +222,12 @@ export function CompanyFormModal({
         next[`address.${field}`] = field === 'postalCode' ? 'กรอกรหัสไปรษณีย์ 5 หลัก' : 'กรุณากรอกช่องนี้'
       }
       setErrors(next)
+      submitError.fail({ message: fieldErrorsSummary(next) })
       return
     }
 
     setErrors({})
+    submitError.clear()
     setSaving(true)
     try {
       const result = await callApi<FinanceCompanyDto>(
@@ -223,6 +235,8 @@ export function CompanyFormModal({
         jsonRequest(isEdit ? 'PATCH' : 'POST', parsed.data),
       )
       if (result.error !== undefined) {
+        if (result.error.fields !== undefined) setErrors(result.error.fields)
+        submitError.fail({ message: apiFailureSummary(result.error) })
         showToast({ tone: 'error', title: result.error.title, description: result.error.message })
         return
       }
@@ -253,17 +267,17 @@ export function CompanyFormModal({
       title={isEdit ? `แก้ไขบริษัท — ${company.name}` : 'สร้างบริษัทไฟแนนซ์'}
       description="ข้อมูลนี้ใช้ออกใบกำกับภาษี/ใบวางบิล — ทุกบริษัทต้องผูกเทมเพลตค่าบริการเสมอ"
       footer={
-        <>
+        <FormSubmitFooter message={submitError.message} tick={submitError.tick}>
           <ModalCancelButton onClose={onClose} disabled={saving}>
             ยกเลิก
           </ModalCancelButton>
           <Button onClick={() => void save()} loading={saving}>
             {isEdit ? 'บันทึกการแก้ไข' : 'สร้างบริษัท'}
           </Button>
-        </>
+        </FormSubmitFooter>
       }
     >
-      <div className="space-y-4">
+      <div ref={formBodyRef} className="space-y-4">
         {templates.length === 0 && (
           <InlineAlert tone="warning" title="ยังไม่มีเทมเพลตค่าบริการที่ใช้งานอยู่">
             สร้างเทมเพลตที่หน้า “เทมเพลตค่าบริการ” ก่อน — บริษัทที่ไม่มีเทมเพลตสร้างไม่ได้

@@ -14,10 +14,13 @@ import {
   type StatusFilter,
 } from '@/components/settings/shared'
 import {
+  apiFailureSummary,
   Badge,
   Button,
   Card,
   Field,
+  fieldErrorsSummary,
+  FormSubmitFooter,
   InlineAlert,
   Input,
   Modal,
@@ -33,6 +36,9 @@ import {
   Th,
   THead,
   Tr,
+  useClearOnClose,
+  useRevealFieldError,
+  useSubmitError,
   useToast,
 } from '@/components/ui'
 import { THAI_BANK_CODES } from '@/lib/banks/thai-banks'
@@ -100,6 +106,10 @@ export function BankAccountsTab() {
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
+  // กดบันทึกไม่ผ่าน ⇒ ข้อความที่ footer + เลื่อน/โฟกัสช่องแรกที่ผิด (mytester6 T-004)
+  const { ref: formBodyRef, reveal: revealFieldError } = useRevealFieldError()
+  const submitError = useSubmitError(revealFieldError)
+  useClearOnClose(formOpen, submitError.clear)
 
   const [deleteTarget, setDeleteTarget] = useState<BankAccountDto | null>(null)
   const [deleteReason, setDeleteReason] = useState('')
@@ -196,11 +206,14 @@ export function BankAccountsTab() {
       reason: form.reason.trim(),
     })
     if (!parsed.success) {
-      setErrors(toFieldErrors(parsed.error))
+      const fields = toFieldErrors(parsed.error)
+      setErrors(fields)
+      submitError.fail({ message: fieldErrorsSummary(fields) })
       return
     }
 
     setErrors({})
+    submitError.clear()
     setSaving(true)
     try {
       const result = await callApi<BankAccountDto>(
@@ -208,6 +221,8 @@ export function BankAccountsTab() {
         jsonRequest(editing === null ? 'POST' : 'PATCH', parsed.data),
       )
       if (result.error !== undefined) {
+        if (result.error.fields !== undefined) setErrors(result.error.fields)
+        submitError.fail({ message: apiFailureSummary(result.error) })
         showToast({ tone: 'error', title: result.error.title, description: result.error.message })
         return
       }
@@ -389,17 +404,17 @@ export function BankAccountsTab() {
         title={editing === null ? 'เพิ่มบัญชีธนาคารบริษัท' : `แก้ไขบัญชี — ${editing.bankName}`}
         description="การใช้งาน (รับ/จ่าย/ทั้งสอง) เป็นตัวกำหนดว่าบัญชีนี้จะถูกเลือกได้ในรอบจ่ายและการรับชำระ"
         footer={
-          <>
+          <FormSubmitFooter message={submitError.message} tick={submitError.tick}>
             <ModalCancelButton onClose={() => setFormOpen(false)} disabled={saving}>
               ยกเลิก
             </ModalCancelButton>
             <Button onClick={() => void save()} loading={saving}>
               {editing === null ? 'เพิ่มบัญชี' : 'บันทึกการแก้ไข'}
             </Button>
-          </>
+          </FormSubmitFooter>
         }
       >
-        <div className="space-y-4">
+        <div ref={formBodyRef} className="space-y-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field id="bank-account-bank" label="ธนาคาร" required error={errors.bankName}>
               {/* รายการธนาคารไทยมาตรฐานชุดเดียวทั้งระบบ (มติ PO U147) — ค่าเดิมที่ไม่อยู่ในรายการยังแสดงไว้ */}

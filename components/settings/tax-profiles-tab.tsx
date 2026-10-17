@@ -12,9 +12,12 @@ import {
   type StatusFilter,
 } from '@/components/settings/shared'
 import {
+  apiFailureSummary,
   Button,
   Card,
   Field,
+  fieldErrorsSummary,
+  FormSubmitFooter,
   InlineAlert,
   Input,
   Modal,
@@ -31,6 +34,9 @@ import {
   Th,
   THead,
   Tr,
+  useClearOnClose,
+  useRevealFieldError,
+  useSubmitError,
   useToast,
 } from '@/components/ui'
 import { callApi, jsonRequest } from '@/lib/api/types'
@@ -97,6 +103,10 @@ export function TaxProfilesTab() {
   const [editing, setEditing] = useState<TaxProfileDto | null>(null)
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  // กดบันทึกไม่ผ่าน ⇒ ข้อความที่ footer + เลื่อน/โฟกัสช่องแรกที่ผิด (mytester6 T-004)
+  const { ref: formBodyRef, reveal: revealFieldError } = useRevealFieldError()
+  const submitError = useSubmitError(revealFieldError)
+  useClearOnClose(formOpen, submitError.clear)
   const [saving, setSaving] = useState(false)
 
   const [deleteTarget, setDeleteTarget] = useState<TaxProfileDto | null>(null)
@@ -176,11 +186,14 @@ export function TaxProfilesTab() {
       reason: form.reason.trim(),
     })
     if (!parsed.success) {
-      setErrors(toFieldErrors(parsed.error))
+      const fields = toFieldErrors(parsed.error)
+      setErrors(fields)
+      submitError.fail({ message: fieldErrorsSummary(fields) })
       return
     }
 
     setErrors({})
+    submitError.clear()
     setSaving(true)
     try {
       const result = await callApi<TaxProfileDto>(
@@ -188,6 +201,8 @@ export function TaxProfilesTab() {
         jsonRequest(editing === null ? 'POST' : 'PATCH', parsed.data),
       )
       if (result.error !== undefined) {
+        if (result.error.fields !== undefined) setErrors(result.error.fields)
+        submitError.fail({ message: apiFailureSummary(result.error) })
         showToast({ tone: 'error', title: result.error.title, description: result.error.message })
         return
       }
@@ -350,17 +365,17 @@ export function TaxProfilesTab() {
         title={editing === null ? 'เพิ่ม Tax Profile' : `แก้ไข Tax Profile — ${editing.name}`}
         description="อัตราและเกณฑ์ทั้งหมดเป็นค่าตั้งได้ — ระบบไม่ได้ฝังอัตราภาษีไว้ตายตัวในการคำนวณ"
         footer={
-          <>
+          <FormSubmitFooter message={submitError.message} tick={submitError.tick}>
             <ModalCancelButton onClose={() => setFormOpen(false)} disabled={saving}>
               ยกเลิก
             </ModalCancelButton>
             <Button onClick={() => void save()} loading={saving}>
               {editing === null ? 'เพิ่ม Profile' : 'บันทึกการแก้ไข'}
             </Button>
-          </>
+          </FormSubmitFooter>
         }
       >
-        <div className="space-y-4">
+        <div ref={formBodyRef} className="space-y-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field id="tax-name" label="ชื่อ Profile" required error={errors.name}>
               <Input
