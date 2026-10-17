@@ -5,7 +5,7 @@ import { requireAnyPermission } from '@/lib/auth/require-permission'
 import { STORAGE_UPLOAD_CAPABILITIES } from '@/lib/uploads/access'
 import { isValidUploadDiscardToken } from '@/lib/uploads/discard-token'
 import { uploadDiscardSecret } from '@/lib/uploads/storage'
-import { discardUploadsRequestSchema, parseStoragePath, type DiscardUploadsDto } from '@/lib/uploads/targets'
+import { discardUploadsRequestSchema, isDiscardableUploadPath, type DiscardUploadsDto } from '@/lib/uploads/targets'
 import { discardStagedUpload } from '@/lib/uploads/verify'
 
 /**
@@ -15,7 +15,9 @@ import { discardStagedUpload } from '@/lib/uploads/verify'
  * body `{ items: [{ path, discardToken }] }` — ลบได้เฉพาะเมื่อ:
  * 1. มี capability อัปโหลดอย่างน้อยหนึ่งทาง (ยามเดียวกับ `upload-url`)
  * 2. `discardToken` ตรงกับ **ผู้เรียก + path** (ออกโดย `upload-url` ให้ผู้ขอ path นั้น ⇒ ลบได้เฉพาะไฟล์ที่ตัวเองอัปโหลด)
- * 3. path อยู่ในโครงที่ระบบสร้าง และ **ไม่มี record ใดอ้าง** (`isUploadPathReferenced`)
+ * 3. path อยู่ใน**หมวดที่ทิ้งได้** (`isDiscardableUploadPath` — หลักฐานปิดงานภาคสนาม + รูปรับเข้าคลังเท่านั้น
+ *    เพราะการตรวจการอ้างอิงไม่ค้นสำเนาใน JSONB snapshot เช่นโลโก้/ลายเซ็นองค์กร) และ **ไม่มี record ใดอ้าง**
+ *    (`isUploadPathReferenced`)
  * ไม่ผ่านข้อ 2/3 ⇒ ข้ามเงียบ ๆ (ไม่บอกว่าไฟล์มีอยู่/ผูกกับอะไร) · ไม่ลง audit เพราะไฟล์ยังไม่เป็นข้อมูลของระบบ
  * (เหมือนการออกโทเคนอัปโหลด)
  */
@@ -28,7 +30,8 @@ export async function POST(request: NextRequest): Promise<Response> {
     const secret = uploadDiscardSecret()
     let removed = 0
     for (const item of parsed.data.items) {
-      if (parseStoragePath(item.path) === null) continue
+      // เฉพาะหมวดที่ฟอร์มทิ้งไฟล์จริง (หลักฐานปิดงาน · รูปรับเข้าคลัง) — หมวดอื่นข้ามเงียบ (รีวิว security D-1)
+      if (!isDiscardableUploadPath(item.path)) continue
       if (!isValidUploadDiscardToken(secret, user.id, item.path, item.discardToken)) continue
       if (await discardStagedUpload(item.path)) removed += 1
     }

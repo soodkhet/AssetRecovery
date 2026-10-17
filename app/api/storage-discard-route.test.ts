@@ -79,6 +79,30 @@ describe('POST /api/storage/discard', () => {
     expect(verifyMock.discardStagedUpload).not.toHaveBeenCalled()
   })
 
+  it('หมวดที่ไม่มีฟอร์มทิ้งไฟล์ (โลโก้/ลายเซ็นองค์กร · เอกสารเคส) ⇒ ข้าม แม้โทเคนถูก (รีวิว security D-1)', async () => {
+    const ORG = '00000000-0000-4000-8000-000000000001'
+    const paths = [
+      `organization/${ORG}/logo/abc-logo.png`,
+      `organization/${ORG}/signature/abc-sign.png`,
+      'cases/00000000-0000-4000-8000-000000000011/contract/abc-doc.pdf',
+    ]
+    requireSessionMock.mockResolvedValue(sessionUser(AGENT_ID, { manage_organization_profile: 'manage', perform_field_work: 'manage' }))
+    const response = await POST(
+      req({ items: paths.map((path) => ({ path, discardToken: uploadDiscardToken(SECRET, AGENT_ID, path) })) }),
+    )
+    expect(response.status).toBe(200)
+    expect(((await response.json()) as { data: { removed: number } }).data.removed).toBe(0)
+    expect(verifyMock.discardStagedUpload).not.toHaveBeenCalled()
+  })
+
+  it('รูปรับเข้าคลัง ⇒ ลบได้', async () => {
+    const intake = 'assets/00000000-0000-4000-8000-000000000021/intake/front/abc-front.jpg'
+    requireSessionMock.mockResolvedValue(AGENT)
+    const response = await POST(req({ items: [{ path: intake, discardToken: uploadDiscardToken(SECRET, AGENT_ID, intake) }] }))
+    expect(((await response.json()) as { data: { removed: number } }).data.removed).toBe(1)
+    expect(verifyMock.discardStagedUpload).toHaveBeenCalledWith(intake)
+  })
+
   it('ไม่มี capability อัปโหลดเลย ⇒ 403', async () => {
     requireSessionMock.mockResolvedValue(sessionUser(OTHER_ID, {}))
     const response = await POST(req({ items: [{ path: PATH, discardToken: uploadDiscardToken(SECRET, OTHER_ID, PATH) }] }))

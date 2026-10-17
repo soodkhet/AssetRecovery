@@ -249,6 +249,25 @@ export function parseStoragePath(path: string): StoragePathOwner | null {
   return null
 }
 
+/**
+ * หมวด path ที่ `POST /api/storage/discard` ยอมลบ (mytester6 รีวิว security D-1) — เฉพาะหมวดที่ฟอร์มฝั่ง client
+ * เรียก `discardStagedUploads` จริง: หลักฐานปิดงานภาคสนาม (`close-case-modal`) + รูปรับเข้าคลัง (`intake-modal`)
+ *
+ * เหตุผล: การตรวจ "ยังไม่ผูก record" (`isUploadPathReferenced`) ไม่ค้นสำเนาใน JSONB snapshot (เช่นโลโก้/ลายเซ็น
+ * องค์กรที่ถูก snapshot ลงหัวเอกสารล็อต/วางบิล/ใบกำกับ) ⇒ หมวดอื่นห้ามลบผ่านทางนี้แม้ถือโทเคนถูกต้อง
+ * เพิ่มฟอร์มใหม่ที่ทิ้งไฟล์ได้ ⇒ เพิ่มหมวดที่นี่ (และตรวจว่าทุกที่ที่อ้าง path หมวดนั้นอยู่ใน `isUploadPathReferenced`)
+ */
+const DISCARDABLE_PATH_PATTERNS: readonly RegExp[] = [
+  new RegExp(`^cases/${UUID}/field_evidence/[^/]+/[^/]+$`),
+  new RegExp(`^assets/${UUID}/intake/[^/]+/[^/]+$`),
+]
+
+/** path นี้อยู่ในหมวดที่ทิ้งได้ผ่าน `POST /api/storage/discard` หรือไม่ (ตรวจโครง path ปลอดภัยด้วย) */
+export function isDiscardableUploadPath(path: string): boolean {
+  if (parseStoragePath(path) === null) return false
+  return DISCARDABLE_PATH_PATTERNS.some((pattern) => pattern.test(path))
+}
+
 /** path ของ endpoint ออก URL/โทเคน — นอก contract `45` (ใช้ร่วมทุกโมดูล ไม่ใช่ของโมดูลเคส/คลัง) */
 export const STORAGE_API_PATH = {
   uploadUrl: '/api/storage/upload-url',
