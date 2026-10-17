@@ -1,5 +1,5 @@
 import { fmtDate, fmtDateTime } from '@/lib/format/datetime'
-import { auditEnumValueLabel } from '@/lib/audit/field-display'
+import { AUDIT_RESULT_CODE_LABEL, auditEnumValueLabel } from '@/lib/audit/field-display'
 import {
   AUDIT_LIST_REF_DISPLAY_LIMIT,
   auditListFieldRefType,
@@ -226,13 +226,8 @@ export function auditLoginFailureOf(action: AuditAction, after: unknown): AuditL
   }
 }
 
-const LOGIN_FAILURE_REASON: Readonly<Record<string, string>> = {
-  INVALID_CREDENTIALS: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง',
-  LOGIN_RATE_LIMITED: 'ถูกพักชั่วคราว — ใส่รหัสผิดหลายครั้ง',
-  ACCOUNT_INACTIVE: 'บัญชีถูกปิดใช้งาน',
-  COMPANY_SUSPENDED: 'บริษัทถูกระงับ',
-  USER_NOT_PROVISIONED: 'ยังไม่ได้ตั้งค่าบัญชีในระบบ',
-}
+/** ข้อความของรหัสผลที่ล้มเหลว — ชุดเดียวกับค่า `code` ในตาราง "ค่าก่อน / หลัง" (SV6-R-02) */
+const LOGIN_FAILURE_REASON = AUDIT_RESULT_CODE_LABEL
 
 /**
  * ตรวจซ้ำ staging SV6-R-04 — เหตุผลที่ระบบสร้างไว้ก่อนแก้ (audit immutable) มี "วันที่ 2026-10-17" แบบ ISO ค.ศ.

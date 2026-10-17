@@ -1,6 +1,14 @@
 import { QUESTION_STATUS_LABEL } from '@/lib/accounting/question'
 import { ADJUSTMENT_TYPE_LABEL } from '@/lib/adjustments/adjustment'
-import { DEBTOR_NATIONALITY_LABEL } from '@/lib/cases/case'
+import { DEBTOR_NATIONALITY_LABEL, DOCUMENT_MODE_LABEL, DOCUMENT_SLOT_LABEL } from '@/lib/cases/case'
+import { CASE_STATUS_ACTIONS, CASE_STATUS_RULES, type CaseStatusAction } from '@/lib/cases/state-machine'
+import { AUDIT_EVENT_LABEL } from '@/lib/audit/event-labels'
+import { CLOSE_FAIL_REASON_LABEL } from '@/lib/field/fail-reasons'
+import { JOB_TYPES, jobTypeLabel } from '@/lib/jobs/job-types'
+import type { PortalSection } from '@/lib/portal/access'
+import type { WhtBasis } from '@/lib/settings/tax-profile'
+import type { PersonalDataFile } from '@/lib/uploads/personal-data'
+import type { RevenueSkipReason } from '@/lib/warehouse/revenue-service'
 import { DEVICE_CATALOG_STATUS_LABEL } from '@/lib/device-catalog/catalog'
 import { TAC_SOURCE_LABEL } from '@/lib/device-catalog/tac'
 import { DOCUMENT_NUMBER_LABEL } from '@/lib/document-numbering/format'
@@ -909,7 +917,23 @@ const STATUS_LABEL_BY_TARGET: Readonly<Record<string, LabelMap>> = {
   pending_reassignments: PENDING_REASSIGNMENT_STATUS_LABEL,
   bank_file_formats: BANK_FILE_TEST_STATUS_LABEL,
   device_tac_updates: { success: 'อัปเดตสำเร็จ', not_modified: 'ไม่มีข้อมูลใหม่', failed: 'ไม่สำเร็จ' },
+  // คอลัมน์ TEXT (ไม่ใช่ enum) — active | suspended
+  finance_companies: { active: 'ใช้งาน', suspended: 'ระงับ' },
 }
+
+/**
+ * ตรวจซ้ำ staging SV6-R-02 — สถานะที่เก็บในชื่อฟิลด์อื่น (ข้อมูลเสริมของการส่งออก/การเข้าถึง) ⇒ ใช้ชุดสถานะของชนิดเป้าหมายนั้น
+ * (`batch_status` ของ PDF รอบจ่าย = สถานะรอบจ่าย ไม่ใช่สถานะทั่วไป)
+ */
+const STATUS_TARGET_BY_FIELD: ReadonlyMap<string, string> = new Map(
+  Object.entries({
+    batch_status: 'payout_batches',
+    invoice_status: 'tax_invoices',
+    lot_status: 'handover_lots',
+    company_status: 'finance_companies',
+    case_status: 'cases',
+  }).map(([field, target]) => [normalizeFieldName(field), target]),
+)
 
 /** สถานะทั่วไปเมื่อไม่รู้ชนิดเป้าหมาย/ไม่มีในชุดของเป้าหมาย */
 const GENERIC_STATUS_LABEL: LabelMap = {
@@ -929,6 +953,7 @@ const GENERIC_STATUS_LABEL: LabelMap = {
   confirmed: 'ยืนยันแล้ว',
   suspended: 'ระงับ',
   deleted: 'ลบแล้ว',
+  success: 'สำเร็จ',
 }
 
 /** เงื่อนไขความพร้อมปิดงวด — ข้อความเดียวกับหน้าต่างตรวจความพร้อม */
@@ -970,6 +995,8 @@ const SOURCE_VALUE_LABEL: LabelMap = {
   import: 'นำเข้า',
   api: 'API',
   manual_adjusted: 'ปรับตำแหน่งเอง',
+  bank_reconciliation: 'จากการจับคู่รายการเดินบัญชี',
+  public_holidays: 'วันหยุดราชการ',
   gps_auto: 'GPS อัตโนมัติ',
 }
 const MODE_VALUE_LABEL: LabelMap = {
@@ -1011,6 +1038,105 @@ const REPORT_ID_VALUE_LABEL: LabelMap = Object.fromEntries(
 )
 
 const MAPPING_RULE_VALUE_LABEL: LabelMap = { auto: 'อัตโนมัติ (Auto)', manual: 'ระบุเอง (Manual)' }
+/**
+ * ตรวจซ้ำ staging SV6-R-02 — ค่ารหัสที่ไม่ใช่ enum ของ Prisma (string union/ค่าคงที่ใน TS) · ใช้ชุดป้ายของโมดูลเมื่อมี
+ * (`field-label-coverage.test.ts` สแกนค่าตัวอักษรใน payload ของ audit ให้มีป้ายครบ)
+ */
+const MATCHED_VIA_VALUE_LABEL: LabelMap = { proposal: 'ยืนยันคู่ที่ระบบเสนอ', auto: 'อัตโนมัติ', manual: 'เลือกเอง' }
+const KIND_VALUE_LABEL: Readonly<Record<PersonalDataFile['kind'] | 'billing' | 'payout', string>> = {
+  case_document: 'เอกสารเคส',
+  customer_wht: 'หนังสือรับรองหัก ณ ที่จ่ายจากลูกค้า',
+  substitute_receipt_signed: 'ใบรับรองแทนใบเสร็จที่ลงนามแล้ว',
+  company_document: 'เอกสารบริษัทไฟแนนซ์',
+  payee_id_document: 'เอกสารยืนยันตัวตนผู้รับเงิน',
+  billing: 'รอบวางบิล',
+  payout: 'รอบจ่ายเงิน',
+}
+/** สาเหตุที่ถูกปฏิเสธการเข้าถึง (พอร์ทัล/เปิดเอกสาร) — `company_status:<สถานะ>` แปลแยกที่ `causeLabel()` */
+const ACCESS_DENIED_CAUSE_LABEL: LabelMap = {
+  not_company_user: 'ไม่ใช่ผู้ใช้ของบริษัทไฟแนนซ์',
+  company_missing: 'ไม่พบบริษัทของผู้ใช้',
+  missing: 'ไม่พบข้อมูล',
+  missing_capability: 'ไม่มีสิทธิ์ดูหมวดนี้',
+  missing_capability_or_download: 'ไม่มีสิทธิ์ดูหมวดนี้หรือดาวน์โหลด',
+  view_as_by_company_user: 'ผู้ใช้ของบริษัทใช้โหมดดูในนามลูกค้าไม่ได้',
+  view_as_company_not_found: 'ไม่พบบริษัทที่ขอดูในนาม',
+  view_as_missing_capability: 'ไม่มีสิทธิ์ดูในนามลูกค้า',
+  row_not_found: 'ไม่พบรายการที่ขอ',
+  asset_not_viewable: 'ทรัพย์นี้ยังไม่เปิดให้ลูกค้าดู',
+  cross_company: 'รายการเป็นของบริษัทอื่น',
+}
+/** รหัสผลของการเข้าสู่ระบบ/การเข้าถึงที่ไม่สำเร็จ (ข้อความเดียวกับช่องเหตุผลของบันทึกการใช้งาน) */
+export const AUDIT_RESULT_CODE_LABEL: LabelMap = {
+  INVALID_CREDENTIALS: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง',
+  LOGIN_RATE_LIMITED: 'ถูกพักชั่วคราว — ใส่รหัสผิดหลายครั้ง',
+  ACCOUNT_INACTIVE: 'บัญชีถูกปิดใช้งาน',
+  COMPANY_SUSPENDED: 'บริษัทถูกระงับ',
+  USER_NOT_PROVISIONED: 'ยังไม่ได้ตั้งค่าบัญชีในระบบ',
+  PERMISSION_DENIED: 'ไม่มีสิทธิ์เข้าถึง',
+}
+const PORTAL_SECTION_VALUE_LABEL: Readonly<Record<PortalSection, string>> = {
+  cases: 'เคส',
+  finance: 'การเงิน',
+  handover: 'การส่งมอบ',
+  profile: 'ข้อมูลบริษัท',
+}
+const RESULT_VALUE_LABEL: LabelMap = { success: 'สำเร็จ', failed: 'ไม่สำเร็จ', created: 'สร้างแล้ว', skipped: 'ข้าม' }
+/** เหตุผลที่ยังไม่เกิดรายได้ (`revenueByCase[].reason`) — ค่าข้อความอิสระอื่นของ `reason` ไม่ตรงคีย์ จึงไม่ถูกแตะ */
+const REVENUE_SKIP_REASON_LABEL: Readonly<Record<RevenueSkipReason, string>> = {
+  no_snapshot: 'ยังไม่มี snapshot ค่าบริการ',
+  no_outcome: 'เคสยังไม่ปิดงาน',
+  model_excludes_fail: 'รูปแบบค่าบริการไม่คิดเคสไม่สำเร็จ',
+  field_days_not_settled: 'ค่าเบี้ยเลี้ยงรายวันยังคำนวณไม่ครบ',
+  expense_not_approved: 'รายการเบิกยังไม่อนุมัติ',
+  warehouse_gate: 'ยังไม่ผ่านการส่งมอบที่คลัง',
+  already_created: 'สร้างรายได้ไว้แล้ว',
+  missing_basis: 'ไม่มีฐานคำนวณค่าบริการ',
+}
+const CASE_ACTION_VALUE_LABEL: Readonly<Record<CaseStatusAction, string>> = Object.fromEntries(
+  CASE_STATUS_ACTIONS.map((action) => [action, CASE_STATUS_RULES[action].label]),
+) as Record<CaseStatusAction, string>
+/** `trigger`: การอัปเดตฐาน TAC + เหตุที่หลักฐานปิดงานผ่านอัตโนมัติ */
+const TRIGGER_VALUE_LABEL: LabelMap = {
+  ...TAC_UPDATE_TRIGGER_LABEL,
+  asset_intake: 'คลังรับเครื่องเข้าแล้ว',
+  expense_approved: 'ค่าตอบแทนของเคสได้รับอนุมัติแล้ว',
+}
+/** เอกสารของล็อตที่เปิด/ดาวน์โหลด (`document` ของพอร์ทัล/คลัง) */
+const LOT_DOCUMENT_VALUE_LABEL: LabelMap = {
+  signed_doc: 'ใบเซ็นรับ',
+  delivery_note: 'ใบส่งมอบ (PDF)',
+  delivery_proof: 'หลักฐานการส่งมอบ',
+}
+const RECORD_SOURCE_VALUE_LABEL: LabelMap = { bank_reconciliation: 'จากการจับคู่รายการเดินบัญชี', manual: 'บันทึกเอง' }
+const JOB_TYPE_VALUE_LABEL: LabelMap = Object.fromEntries(JOB_TYPES.map((code) => [code, jobTypeLabel(code)]))
+const MIME_VALUE_LABEL: LabelMap = {
+  'application/pdf': 'PDF',
+  'image/jpeg': 'รูปภาพ JPEG',
+  'image/png': 'รูปภาพ PNG',
+  'image/webp': 'รูปภาพ WebP',
+  'image/heic': 'รูปภาพ HEIC',
+  'text/csv': 'CSV',
+  'text/plain': 'ข้อความ (TXT)',
+  'application/zip': 'ZIP',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'Excel (XLSX)',
+}
+const CALCULATION_SOURCE_VALUE_LABEL: LabelMap = { compensation_plan: 'คำนวณจากแผนค่าตอบแทน', manual: 'กรอกเอง' }
+const ACCOUNT_TYPE_VALUE_LABEL: LabelMap = { savings: 'ออมทรัพย์', current: 'กระแสรายวัน' }
+const WHT_BASIS_VALUE_LABEL: Readonly<Record<WhtBasis, string>> = {
+  before_vat: 'ยอดก่อน VAT (มาตรฐาน)',
+  gross_amount: 'ยอดรวมทั้งสิ้น',
+}
+const CONTEXT_VALUE_LABEL: LabelMap = { change_password: 'เปลี่ยนรหัสผ่าน' }
+const CHANGED_FROM_VALUE_LABEL: LabelMap = { finance_companies: 'หน้าบริษัทไฟแนนซ์' }
+/** ผลอัปเดตฐาน TAC (`path` ในผลงานเบื้องหลัง) — ค่า path ไฟล์จริงไม่ตรงคีย์ จึงไม่ถูกแตะ */
+const TAC_SYNC_PATH_VALUE_LABEL: LabelMap = {
+  sha_unchanged: 'ไฟล์ต้นทางไม่เปลี่ยน',
+  etag_not_modified: 'ไม่มีข้อมูลใหม่',
+  downloaded: 'ดาวน์โหลดข้อมูลใหม่',
+  file: 'นำเข้าไฟล์',
+}
+
 const CHANNEL_VALUE_LABEL: LabelMap = { internal: 'ดาวน์โหลดในระบบ', portal: 'พอร์ทัลลูกค้า', ...ADVANCE_RETURN_CHANNEL_LABEL }
 
 /** ค่า enum ตามชื่อฟิลด์ (normalize แล้ว) — ไม่ขึ้นกับชนิดเป้าหมาย */
@@ -1022,7 +1148,7 @@ const VALUE_LABEL_BY_FIELD: ReadonlyMap<string, LabelMap> = new Map(
     mapping_rule: MAPPING_RULE_VALUE_LABEL,
     failed_checks: READINESS_CHECK_LABEL,
     channel: CHANNEL_VALUE_LABEL,
-    document: EXPORT_DOCUMENT_LABEL,
+    document: { ...EXPORT_DOCUMENT_LABEL, ...LOT_DOCUMENT_VALUE_LABEL },
     fuel_mode: FUEL_MODE_LABEL,
     side: TEAM_SIDE_LABEL,
     team_side: TEAM_SIDE_LABEL,
@@ -1045,11 +1171,10 @@ const VALUE_LABEL_BY_FIELD: ReadonlyMap<string, LabelMap> = new Map(
     wht_base_expense_types: EXPENSE_TYPE_LABEL,
     role_group: ROLE_GROUP_LABEL,
     viewer_role_group: ROLE_GROUP_LABEL,
-    document_type: { ...COMPANY_DOCUMENT_LABEL, ...TEMPLATE_DOCUMENT_TYPE_LABEL },
+    document_type: { ...COMPANY_DOCUMENT_LABEL, ...TEMPLATE_DOCUMENT_TYPE_LABEL, ...DOCUMENT_SLOT_LABEL },
     usage: BANK_ACCOUNT_USAGE_LABEL,
     source_channel: CASE_SOURCE_LABEL,
     period_status_at_target: PERIOD_STATUS_LABEL,
-    company_status: GENERIC_STATUS_LABEL,
     payee_type: PAYEE_TYPE_VALUE_LABEL,
     source: SOURCE_VALUE_LABEL,
     mode: MODE_VALUE_LABEL,
@@ -1092,22 +1217,74 @@ const VALUE_LABEL_BY_FIELD: ReadonlyMap<string, LabelMap> = new Map(
     prev_outcome: CASE_OUTCOME_VALUE_LABEL,
     resolution: REASSIGNMENT_RESOLUTION_LABEL,
     manual_status: DEVICE_CATALOG_STATUS_LABEL,
-    trigger: TAC_UPDATE_TRIGGER_LABEL,
     checkin_type: CHECKIN_TYPE_LABEL,
     asset_status: ASSET_STATUS_LABEL,
     condition: ASSET_CONDITION_LABEL,
     vat_mode_snapshot: VAT_MODE_LABEL,
     adjustment_type: ADJUSTMENT_TYPE_LABEL,
     doc_kind: TAX_INVOICE_DOC_KIND_LABEL,
+    // ตรวจซ้ำ staging SV6-R-02 — ค่ารหัสที่ไม่ใช่ enum ในสคีมา (string union/ค่าคงที่ใน TS)
+    matched_via: MATCHED_VIA_VALUE_LABEL,
+    kind: KIND_VALUE_LABEL,
+    slot: DOCUMENT_SLOT_LABEL,
+    document_mode: DOCUMENT_MODE_LABEL,
+    document_mode_before: DOCUMENT_MODE_LABEL,
+    cause: ACCESS_DENIED_CAUSE_LABEL,
+    code: AUDIT_RESULT_CODE_LABEL,
+    section: PORTAL_SECTION_VALUE_LABEL,
+    result: RESULT_VALUE_LABEL,
+    reason: REVENUE_SKIP_REASON_LABEL,
+    action: CASE_ACTION_VALUE_LABEL,
+    trigger: TRIGGER_VALUE_LABEL,
+    received_source: RECORD_SOURCE_VALUE_LABEL,
+    confirmed_source: RECORD_SOURCE_VALUE_LABEL,
+    job_type: JOB_TYPE_VALUE_LABEL,
+    mime_type: MIME_VALUE_LABEL,
+    content_type: MIME_VALUE_LABEL,
+    logo_mime_type: MIME_VALUE_LABEL,
+    signature_mime_type: MIME_VALUE_LABEL,
+    asset_type: ASSET_TYPE_LABEL,
+    fail_reason: CLOSE_FAIL_REASON_LABEL,
+    calculation_source: CALCULATION_SOURCE_VALUE_LABEL,
+    account_type: ACCOUNT_TYPE_VALUE_LABEL,
+    wht_basis: WHT_BASIS_VALUE_LABEL,
+    context: CONTEXT_VALUE_LABEL,
+    changed_from: CHANGED_FROM_VALUE_LABEL,
+    path: TAC_SYNC_PATH_VALUE_LABEL,
+    events: AUDIT_EVENT_LABEL,
   } satisfies Record<string, LabelMap>).map(([field, labels]) => [normalizeFieldName(field), labels]),
 )
 
+/**
+ * สาเหตุแบบมีสถานะต่อท้าย (`company_status:suspended` · `user_status:inactive` · `lot_not_confirmed:draft` ·
+ * `not_we_deliver:client_pickup`) ⇒ ข้อความไทย + ป้ายสถานะ/ประเภท · ไม่ใช่รูปแบบนี้ = `null`
+ */
+function causeWithStatusLabel(value: string): string | null {
+  const match = /^(company_status|user_status|lot_not_confirmed|not_we_deliver):(\w+)$/.exec(value)
+  const kind = match?.[1]
+  const code = match?.[2]
+  if (kind === undefined || code === undefined) return null
+  if (kind === 'company_status') {
+    if (code === 'missing') return 'ไม่พบบริษัทของผู้ใช้'
+    return `บริษัทมีสถานะ ${ownValue(STATUS_LABEL_BY_TARGET.finance_companies ?? {}, code) ?? code}`
+  }
+  if (kind === 'user_status') return `บัญชีผู้ใช้มีสถานะ ${ownValue(GENERIC_STATUS_LABEL, code) ?? code}`
+  if (kind === 'lot_not_confirmed') return `ล็อตยังไม่ยืนยันส่งมอบ (${ownValue(LOT_STATUS_LABELS, code) ?? code})`
+  return `ล็อตไม่ใช่แบบบริษัทนำส่ง (${ownValue(HANDOVER_TYPE_LABEL, code) ?? code})`
+}
+
 function enumLabel(value: string, field: string, targetType: string | null): string | null {
   const key = normalizeFieldName(field)
-  if (key === 'status') {
-    const targetLabels = targetType === null ? undefined : ownValue(STATUS_LABEL_BY_TARGET, targetType)
+  const statusTarget = STATUS_TARGET_BY_FIELD.get(key)
+  if (key === 'status' || statusTarget !== undefined) {
+    const target = statusTarget ?? targetType
+    const targetLabels = target === null ? undefined : ownValue(STATUS_LABEL_BY_TARGET, target)
     const byTarget = targetLabels === undefined ? undefined : ownValue(targetLabels, value)
     return byTarget ?? ownValue(GENERIC_STATUS_LABEL, value) ?? null
+  }
+  if (key === 'cause') {
+    const prefixed = causeWithStatusLabel(value)
+    if (prefixed !== null) return prefixed
   }
   const labels = VALUE_LABEL_BY_FIELD.get(key)
   return labels === undefined ? null : (ownValue(labels, value) ?? null)

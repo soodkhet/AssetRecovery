@@ -1,6 +1,9 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { EVENT_NAMES } from '@/lib/api/event-names'
+import { auditEventLabel } from '@/lib/audit/event-labels'
+import { jobTypeLabel } from '@/lib/jobs/job-types'
 import {
   auditComposedFieldLabel,
   auditEnumValueLabel,
@@ -271,5 +274,113 @@ describe('ตรวจซ้ำ staging SV6-R-01 — ป้ายเฉพาะ
     expect(auditFieldLabelIsWordByWord('zz_payee_team')).toBe(false) // แปลไม่ได้ (คำแรกไม่รู้จัก)
     expect(auditFieldLabelIsWordByWord('payee_team')).toBe(true)
     expect(auditFieldLabelIsWordByWord('cancelled_at')).toBe(false)
+  })
+})
+
+/** ส่วนท้ายของนิพจน์ที่ตำแหน่ง `start` จนจบค่าของคีย์ (ระดับวงเล็บ 0 เจอ `,` `;` ขึ้นบรรทัดใหม่ หรือวงเล็บปิด) */
+function expressionAt(source: string, start: number): string {
+  let depth = 0
+  let index = start
+  while (index < source.length) {
+    const char = source[index] ?? ''
+    if ('([{'.includes(char)) depth += 1
+    else if (')]}'.includes(char)) {
+      if (depth === 0) break
+      depth -= 1
+    } else if (depth === 0 && (char === ',' || char === ';' || char === '\n')) break
+    index += 1
+  }
+  return source.slice(start, index)
+}
+
+/**
+ * ตรวจซ้ำ staging SV6-R-02 — ค่ารหัสแบบตัวอักษรที่ซอร์สเขียนลง payload ของ audit (`key: 'proposal'` ·
+ * `key: cond ? 'a' : 'b'`) ต้องแปลเป็นไทยได้ (enum ที่ไม่ใช่ Prisma enum: string union/ค่าคงที่ใน TS)
+ * ยกเว้น `status` (ชุดสถานะขึ้นกับชนิดเป้าหมาย — ล็อกด้วยเทสต์ enum ของสคีมา)
+ */
+function collectSourceLiteralValues(): Map<string, string> {
+  const found = new Map<string, string>()
+  for (const { file, source } of auditSourceFiles()) {
+    for (const block of auditPayloadBlocks(source)) {
+      for (const match of block.matchAll(/(?:^|[\s,{(])([A-Za-z_]\w*)\s*:(?!:)\s*/g)) {
+        const key = match[1]
+        if (key === undefined || key === 'status' || key === 'events') continue
+        const expr = expressionAt(block, (match.index ?? 0) + match[0].length).trim()
+        // ค่าตัวอักษรล้วน หรือ ternary ของค่าตัวอักษร
+        if (!/^(?:[^?'"`]*\?\s*)?'[^']*'(?:\s*:\s*'[^']*')?$/.test(expr)) continue
+        for (const literal of expr.matchAll(/'([a-z][a-z0-9_]*)'/g)) {
+          const value = literal[1]
+          if (value !== undefined) found.set(`${key}=${value}`, relative(ROOT, file))
+        }
+      }
+    }
+  }
+  return found
+}
+
+describe('ตรวจซ้ำ staging SV6-R-02 — ค่ารหัสตัวอักษรใน payload ของ audit แปลเป็นไทยได้', () => {
+  const values = collectSourceLiteralValues()
+
+  it('ตัวเก็บเจอค่าหลักจริง', () => {
+    for (const entry of ['matched_via=proposal', 'confirmed_source=bank_reconciliation', 'result=failed', 'context=change_password']) {
+      expect(values.has(entry), entry).toBe(true)
+    }
+  })
+
+  it('ทุกค่ามีป้าย', () => {
+    const missing = [...values.keys()].filter((entry) => {
+      const [key = '', value = ''] = entry.split('=')
+      return auditEnumValueLabel(value, key, null) === null
+    })
+    expect(missing.map((entry) => `${entry} ← ${values.get(entry) ?? ''}`)).toEqual([])
+  })
+})
+
+/** ชื่อเหตุการณ์ที่ซอร์สเขียนลง `events: [ … ]` ของ audit + ทะเบียนเหตุการณ์ทั้งหมด ต้องมีป้ายไทย (SV6-R-03) */
+describe('ตรวจซ้ำ staging SV6-R-03 — ชื่อเหตุการณ์ใน audit มีป้ายไทยครบ', () => {
+  it('ทะเบียน + ค่าที่เขียนจริงในซอร์ส', () => {
+    const names = new Set<string>(EVENT_NAMES)
+    for (const { source } of auditSourceFiles()) {
+      for (const match of source.matchAll(/\bevents\s*:\s*/g)) {
+        const expr = expressionAt(source, (match.index ?? 0) + match[0].length)
+        for (const literal of expr.matchAll(/'([a-z_]+\.[a-z_]+)'/g)) if (literal[1] !== undefined) names.add(literal[1])
+      }
+    }
+    expect(names.has('lot.asset_removed')).toBe(true)
+    expect([...names].filter((name) => auditEventLabel(name) === null)).toEqual([])
+  })
+})
+
+describe('ตรวจซ้ำ staging SV6-R-02 — ตัวอย่างค่าที่หลุดบน staging', () => {
+  it.each([
+    ['proposal', 'matched_via', 'bank_transactions', 'ยืนยันคู่ที่ระบบเสนอ'],
+    ['completed', 'batch_status', 'payout_batches', 'จ่ายสำเร็จ'],
+    ['active', 'invoice_status', 'tax_invoices', null],
+    ['failed', 'result', 'users', 'ไม่สำเร็จ'],
+    ['accept', 'action', 'cases', 'รับเคส'],
+    ['case_document', 'kind', 'cases', 'เอกสารเคส'],
+    ['company_document', 'kind', 'finance_companies', 'เอกสารบริษัทไฟแนนซ์'],
+    ['national_id_doc', 'slot', 'cases', 'บัตรประชาชน/Passport ลูกหนี้'],
+    ['national_id_doc', 'documentType', 'case_documents', 'บัตรประชาชน/Passport ลูกหนี้'],
+    ['signed_doc', 'document', 'handover_lots', 'ใบเซ็นรับ'],
+    ['row_not_found', 'cause', 'assets', 'ไม่พบรายการที่ขอ'],
+    ['company_status:suspended', 'cause', 'portal', 'บริษัทมีสถานะ ระงับ'],
+    ['asset_intake', 'trigger', 'case_evidences', 'คลังรับเครื่องเข้าแล้ว'],
+    ['expense_approved', 'trigger', 'case_evidences', 'ค่าตอบแทนของเคสได้รับอนุมัติแล้ว'],
+    ['bank_reconciliation', 'source', 'cash_receipts', 'จากการจับคู่รายการเดินบัญชี'],
+    ['bank_reconciliation', 'received_source', 'billing_batches', 'จากการจับคู่รายการเดินบัญชี'],
+    ['application/pdf', 'mimeType', 'case_documents', 'PDF'],
+    ['image/jpeg', 'mime_type', 'finance_company_documents', 'รูปภาพ JPEG'],
+    ['PERMISSION_DENIED', 'code', 'portal', 'ไม่มีสิทธิ์เข้าถึง'],
+    ['handover', 'section', 'portal', 'การส่งมอบ'],
+  ])('%s (%s @ %s)', (value, field, target, expected) => {
+    const label = auditEnumValueLabel(value, field, target)
+    expect(label).not.toBeNull()
+    if (expected !== null) expect(label).toBe(expected)
+  })
+
+  it('ประเภทงานเบื้องหลัง ใช้ชื่อเดียวกับหน้างานเบื้องหลัง', () => {
+    expect(auditEnumValueLabel('daily_field_allowance', 'jobType', 'jobs')).toBe(jobTypeLabel('daily_field_allowance'))
+    expect(auditEnumValueLabel('daily_field_allowance', 'jobType', 'jobs')).not.toBe('daily_field_allowance')
   })
 })
