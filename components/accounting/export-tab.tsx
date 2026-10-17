@@ -1,6 +1,6 @@
 'use client'
 
-import { EXPORT_HANDOFF_TEXT } from '@/lib/exports/handoff-ui'
+import { EXPORT_HANDOFF_TEXT, exportHandoffTrail } from '@/lib/exports/handoff-ui'
 import { useId, useState } from 'react'
 import { ExportPackModal } from '@/components/accounting/export-pack-modal'
 import { useExportHistory } from '@/components/accounting/use-exports'
@@ -99,8 +99,9 @@ export function ExportTab() {
               <Th>Version</Th>
               <Th>ไฟล์หลัก</Th>
               <Th>เอกสารแนบ</Th>
-              <Th>ส่งโดย</Th>
-              <Th>วันที่</Th>
+              {/* mytester6 T-025 — คอลัมน์นี้คือผู้/เวลาสร้างไฟล์ · ผู้/เวลาที่บันทึกว่าส่งอยู่ใต้สถานะ */}
+              <Th>สร้างโดย</Th>
+              <Th>สร้างเมื่อ</Th>
               <Th>SHA-256</Th>
               <Th>สถานะ</Th>
               <Th className="text-right">จัดการ</Th>
@@ -133,6 +134,11 @@ export function ExportTab() {
                   </Td>
                   <Td>
                     <StatusBadge status={row.status} group={row.statusGroup} label={row.statusLabel} />
+                    {exportHandoffTrail(row, fmtDateTime).map((line) => (
+                      <div key={line} className="mt-0.5 text-[11px] whitespace-nowrap text-slate-500">
+                        {line}
+                      </div>
+                    ))}
                   </Td>
                   <Td className="text-right whitespace-nowrap">
                     <div className="inline-flex items-center gap-1.5">

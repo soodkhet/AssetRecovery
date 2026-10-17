@@ -26,3 +26,20 @@ export const EXPORT_HANDOFF_TEXT: Readonly<Record<ExportHandoffAction, ExportHan
     noteHint: 'เช่น ผู้ทำบัญชีตอบกลับทางอีเมลว่าได้รับครบ — บันทึกไว้ในประวัติการใช้งาน',
   },
 }
+
+/**
+ * mytester6 T-025 — บรรทัดรองใต้สถานะของแถวประวัติส่งมอบ: ส่งเมื่อ/โดยใคร (และตอบรับเมื่อ) แยกจากผู้สร้างไฟล์
+ * (action สำคัญต้องเห็นวันเวลาบนรายการ — แนวเดียวกับบรรทัดผู้ล็อกของรอบบัญชี) · ยังไม่ส่ง = `[]`
+ * `fmt` = ตัวจัดรูปแบบวันเวลา พ.ศ. ของหน้าจอ (`fmtDateTime`)
+ */
+export function exportHandoffTrail(
+  record: { sentAt: string | null; sentByName: string | null; acceptedAt: string | null },
+  fmt: (iso: string) => string,
+): string[] {
+  const lines: string[] = []
+  if (record.sentAt !== null) {
+    lines.push(`ส่งเมื่อ ${fmt(record.sentAt)}${record.sentByName === null ? '' : ` · โดย ${record.sentByName}`}`)
+  }
+  if (record.acceptedAt !== null) lines.push(`ตอบรับเมื่อ ${fmt(record.acceptedAt)}`)
+  return lines
+}
