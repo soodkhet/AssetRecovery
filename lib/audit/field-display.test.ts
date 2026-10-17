@@ -80,3 +80,35 @@ describe('คีย์จากข้อมูลที่ชนชื่อใ�
     expect(auditComposedFieldLabel('amount_constructor')).toBeNull()
   })
 })
+
+describe('mytester6 SV6-03 — ป้ายที่ยังหลุดบน staging', () => {
+  it('ชื่อฟิลด์ผู้รับเงิน/ที่อยู่/ภาษี อ่านรู้เรื่อง ไม่แปลทีละคำ', () => {
+    expect(auditFieldLabel('address_postal_code')).toBe('รหัสไปรษณีย์')
+    expect(auditFieldLabel('branch_code')).toBe('เลขที่สาขา')
+    expect(auditFieldLabel('wht_40_2_pct')).toBe('อัตราหัก ณ ที่จ่าย 40(1)/40(2) (%)')
+    expect(auditFieldLabel('national_id')).toBe('เลขประจำตัวผู้เสียภาษี (บัตรประชาชน/ทะเบียนนิติบุคคล)')
+    expect(auditFieldLabel('nationalId')).toBe('เลขประจำตัวผู้เสียภาษี (บัตรประชาชน/ทะเบียนนิติบุคคล)')
+    expect(auditFieldLabel('legal_name')).toBe('ชื่อนิติบุคคล (ตามหนังสือรับรอง)')
+    expect(auditFieldLabel('name_title')).toBe('คำนำหน้าชื่อ')
+    expect(auditFieldLabel('tax_profile_id')).toBe('กติกาภาษี (Tax Profile)')
+    expect(auditFieldLabel('advance_max_amount_per_request_satang')).toBe('ยอดเงินทดรองสูงสุดต่อคำขอ')
+    expect(auditFieldLabel('last_readiness_checked_at')).toBe('เวลาตรวจความพร้อมล่าสุด')
+    expect(auditFieldLabel('mode')).toBe('วิธีดำเนินการ')
+  })
+
+  it('ค่าอังกฤษ: ประเภทผู้รับ · ที่มาวันหยุด · วิธีส่งออก · รายงาน', () => {
+    expect(auditValueDisplay('corporate', 'payee_type', 'payee_profiles')).toBe('นิติบุคคล')
+    expect(auditValueDisplay('individual', 'payeeType', 'payee_profiles')).toBe('บุคคลธรรมดา')
+    expect(auditValueDisplay('import', 'source', 'public_holidays')).toBe('นำเข้า')
+    expect(auditValueDisplay('manual', 'source', 'public_holidays')).toBe('เพิ่มเอง')
+    expect(auditValueDisplay('sync', 'mode', 'export_records')).toBe('ส่งออกทันที')
+    expect(auditValueDisplay('kpi-summary', 'report_id', 'export_records')).toBe('E1 KPI ภาพรวม')
+    expect(auditValueDisplay('xlsx', 'format', 'export_records')).toBe('Excel (XLSX)')
+  })
+
+  it('ค่าที่ไม่รู้จักยังแสดงค่าดิบ · รายการว่าง = "ไม่มี"', () => {
+    expect(auditValueDisplay('something-else', 'report_id', 'export_records')).toBe('something-else')
+    expect(auditValueDisplay([], 'legacyCaseIds', 'field_day_settlements')).toBe('ไม่มี')
+    expect(auditValueDisplay([], 'company_ids', null)).toBe('ไม่มี')
+  })
+})

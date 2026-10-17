@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { auditFieldLabel } from '@/lib/audit/field-display'
+import { auditComposedFieldLabel, auditEnumValueLabel, auditFieldLabel } from '@/lib/audit/field-display'
 
 /**
  * mytester6 T-009 — ล็อกความครบ (แนวเดียวกับ `target-ref-coverage.test.ts`): ชื่อฟิลด์ที่ขึ้นตาราง "ค่าก่อน / หลัง"
@@ -104,5 +104,95 @@ describe('mytester6 T-009 — ทุกชื่อฟิลด์ใน audit �
 
   it('คอลัมน์ทุกตัวในสคีมาไม่ตกหล่น', () => {
     expect(untranslated(schemaColumns)).toEqual([])
+  })
+})
+
+/**
+ * mytester6 SV6-03 — ค่า enum ที่บันทึกลง audit (snapshot แถว/diff ใช้ค่า enum ตรง ๆ) ต้องแปลเป็นไทยได้ทุกค่า
+ * ไล่ทุกคอลัมน์ในสคีมาที่ชนิดเป็น enum (`auditEnumValueLabel(ค่า, คอลัมน์, ตาราง)`) · เพิ่ม enum/ค่าใหม่ ⇒ เพิ่มป้ายใน
+ * `field-display.ts` (ใช้ชุดเดียวกับหน้าจอของโมดูลนั้น) · ยกเว้น `audit_logs` (ตัวบันทึกเอง ไม่ใช่เป้าหมายของ audit)
+ */
+const ENUM_SCAN_EXCLUDED_TABLES = new Set(['audit_logs'])
+
+function collectEnumColumns(): { table: string; column: string; values: string[] }[] {
+  const schema = readFileSync(join(ROOT, 'prisma', 'schema.prisma'), 'utf8')
+  const enums = new Map<string, string[]>()
+  for (const match of schema.matchAll(/^enum (\w+) \{([^}]*)\}/gm)) {
+    const values = (match[2] ?? '')
+      .split('\n')
+      .map((line) => line.trim().split(/\s+/)[0] ?? '')
+      .filter((value) => /^[A-Za-z0-9_]+$/.test(value))
+    enums.set(match[1] ?? '', values)
+  }
+  const found: { table: string; column: string; values: string[] }[] = []
+  let lines: string[] | null = null
+  for (const line of schema.split('\n')) {
+    if (/^model \w+ \{/.test(line)) {
+      lines = []
+      continue
+    }
+    if (lines === null) continue
+    if (!line.startsWith('}')) {
+      lines.push(line)
+      continue
+    }
+    const table = lines.map((item) => /^\s*@@map\("(\w+)"\)/.exec(item)?.[1]).find((name) => name !== undefined)
+    for (const item of lines) {
+      const field = /^\s+(\w+)\s+(\w+)/.exec(item)
+      const values = field?.[2] === undefined ? undefined : enums.get(field[2])
+      if (field?.[1] === undefined || values === undefined || table === undefined) continue
+      const column = /@map\("(\w+)"\)/.exec(item)?.[1] ?? field[1].replace(/([A-Z])/g, '_$1').toLowerCase()
+      found.push({ table, column, values })
+    }
+    lines = null
+  }
+  return found
+}
+
+describe('mytester6 SV6-03 — ค่า enum ของทุกคอลัมน์แปลเป็นไทยได้', () => {
+  const columns = collectEnumColumns()
+
+  it('ตัวเก็บเจอคอลัมน์ enum หลักจริง', () => {
+    const keys = new Set(columns.map((item) => `${item.table}.${item.column}`))
+    for (const key of ['payee_profiles.payee_type', 'cases.status', 'billing_payout_cycles.type', 'assets.condition']) {
+      expect(keys.has(key), key).toBe(true)
+    }
+    expect(columns.length).toBeGreaterThan(80)
+  })
+
+  it('ทุกค่า enum มีป้าย', () => {
+    const missing = columns
+      .filter((item) => !ENUM_SCAN_EXCLUDED_TABLES.has(item.table))
+      .flatMap((item) =>
+        item.values
+          .filter((value) => auditEnumValueLabel(value, item.column, item.table) === null)
+          .map((value) => `${item.table}.${item.column} = ${value}`),
+      )
+    expect(missing).toEqual([])
+  })
+})
+
+/**
+ * mytester6 SV6-03 — ชื่อที่แปลทีละคำแล้วอ่านไม่รู้เรื่อง (ตัวอย่างจากหน้าบันทึกการใช้งานบน staging) ต้องมีป้ายเฉพาะ
+ * ไม่ใช่ผลแปลทีละคำ — กันป้ายเฉพาะถูกลบแล้วกลับไปเป็น "ที่อยู่ รหัสไปรษณีย์ รหัส"
+ */
+describe('mytester6 SV6-03 — ฟิลด์ผู้รับเงิน/ที่อยู่/ภาษี/ค่าตั้ง ใช้ป้ายเฉพาะ', () => {
+  it.each([
+    'address_postal_code',
+    'branch_code',
+    'id_document_url',
+    'income_category_override',
+    'name_title',
+    'legal_name',
+    'tax_profile_id',
+    'wht_40_2_pct',
+    'national_id',
+    'advance_max_amount_per_request_satang',
+    'replaces_document_id',
+    'last_readiness_checked_at',
+    'last_readiness_passed_count',
+    'legacy_case_ids',
+  ])('%s', (field) => {
+    expect(auditFieldLabel(field)).not.toBe(auditComposedFieldLabel(field))
   })
 })

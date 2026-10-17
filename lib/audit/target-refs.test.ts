@@ -379,7 +379,7 @@ describe('ทดสอบซ้ำ local LR6-01 — target_id แบบ polymorp
       `ไฟแนนซ์ A, ${ids[6]?.slice(0, 8)}`,
     )
     expect(auditValueDisplay([ids[0]], 'company_ids', null, {})).toBe(JSON.stringify([ids[0]]))
-    expect(auditValueDisplay([], 'company_ids', null, labels)).toBe('[]')
+    expect(auditValueDisplay([], 'company_ids', null, labels)).toBe('ไม่มี')
     expect(auditRefLabel([ids[0]], 'tags', labels)).toBeNull()
     expect(auditValueDisplay(ids[1], 'target_id', 'adjustments', { [ids[1] ?? '']: 'BL-2569-001' })).toBe('BL-2569-001')
     expect(auditValueDisplay(ids[1], 'target_id', 'adjustments', {})).toBe(ids[1])

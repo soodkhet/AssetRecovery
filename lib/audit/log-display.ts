@@ -327,6 +327,8 @@ export function auditValueText(value: unknown, field?: string): string {
     return field !== undefined && isAuditDateOnlyField(field) ? fmtDate(value) : fmtDateTime(value)
   }
   if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  // รายการว่าง ⇒ "ไม่มี" ไม่ใช่ `[]` ดิบ (mytester6 SV6-03)
+  if (Array.isArray(value) && value.length === 0) return 'ไม่มี'
   return JSON.stringify(value)
 }
 
@@ -378,6 +380,8 @@ export function auditValueDisplay(
   // mytester H-06 → mytester6 T-026 — enum/boolean ⇒ ป้ายไทยชุดเดียวกับหน้าจอ (สถานะแยกตามชนิดเป้าหมาย)
   const enumText = auditEnumValueLabel(value, field, targetType)
   if (enumText !== null) return enumText
+  // รายการว่าง ⇒ "ไม่มี" (ก่อนแปลงค่าซ้อนซึ่งจะได้ `[]` ดิบ — mytester6 SV6-03)
+  if (Array.isArray(value) && value.length === 0) return auditValueText(value, field)
   // ตรวจซ้ำ staging SV5-R-02 — id ในค่าซ้อน (`revenueByCase[].caseId` · `payload.actorId`) ⇒ ชื่อ (แปลงตอนแสดงเท่านั้น)
   if (value !== null && typeof value === 'object') return JSON.stringify(auditReplaceNestedRefs(value, refLabels))
   // ตรวจซ้ำ staging SV5-R-03 — `source_ref` "bank_transaction:<id>" ⇒ ป้ายรายการเดินบัญชี
