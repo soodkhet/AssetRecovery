@@ -41,6 +41,11 @@ export async function createSignedUpload(path: string): Promise<SignedUpload | n
 /**
  * secret ฝั่ง server สำหรับโทเคนทิ้งไฟล์ที่อัปโหลดค้าง (`lib/uploads/discard-token.ts` — mytester6 T-015/T-019)
  * ใช้ service role key เป็นวัตถุดิบ (HMAC แยกโดเมนอีกชั้น) — ไม่ต้องตั้ง env ใหม่ · อยู่โมดูลนี้เพราะเทสต์ mock โมดูลนี้อยู่แล้ว
+ *
+ * ทำไมยังไม่แยก secret เฉพาะ (ข้อสังเกตจาก security audit mytester6 รีวิว): HMAC-SHA256 ที่มี domain separation
+ * ไม่เปิดเผย service role key (เดากุญแจย้อนจาก MAC ไม่ได้) และ key นั้นอยู่ฝั่ง server อยู่แล้ว · การแยก secret
+ * ต้องเพิ่ม env ใหม่ทุก environment + DEC ใหม่ ⇒ รอผู้ใช้ตัดสิน · ผลข้างเคียงที่รู้: หมุน service role key
+ * ⇒ โทเคนทิ้งไฟล์ที่ออกไปแล้วใช้ไม่ได้ (ยอมรับได้ — ไฟล์ค้างให้งานกวาดจัดการ)
  */
 export function uploadDiscardSecret(): string {
   return getServerEnv().SUPABASE_SERVICE_ROLE_KEY
