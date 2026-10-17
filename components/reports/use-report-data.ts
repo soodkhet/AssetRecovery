@@ -36,6 +36,23 @@ export function reportDataUrl(
   return `/api/reports/${reportId}?${query.toString()}`
 }
 
+/**
+ * mytester6 T-027 รีวิว — ข้อความเมื่อช่วง "กำหนดเอง" ยังเลือกไม่ครบ (ไม่ยิงคำขอ) · ช่วงพร้อม ⇒ `null`
+ * มีข้อมูลค้างจากช่วงก่อน ⇒ บอกชัดว่าที่เห็นเป็นของช่วงไหน (ไม่ให้เข้าใจผิดว่าเป็นช่วงที่กำลังเลือก)
+ */
+export function reportRangePendingNotice(
+  ready: boolean,
+  previousRangeLabel: string | null,
+): { title: string; message: string } | null {
+  if (ready) return null
+  return previousRangeLabel === null
+    ? { title: 'ยังเลือกช่วงวันที่ไม่ครบ', message: 'เลือกวันเริ่มและวันสิ้นสุดให้ครบเพื่อแสดงรายงาน' }
+    : {
+        title: 'ยังเลือกช่วงวันที่ไม่ครบ',
+        message: `ข้อมูลที่แสดงอยู่เป็นของช่วงก่อนหน้า (${previousRangeLabel}) — เลือกวันเริ่มและวันสิ้นสุดให้ครบเพื่อดูช่วงใหม่`,
+      }
+}
+
 export function useReportData(
   reportId: string,
   range: ReportRangeValue,

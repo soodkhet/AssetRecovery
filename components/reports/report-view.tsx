@@ -7,7 +7,7 @@ import { DateRangePicker, isReportRangeReady, reportRangeQuery, type ReportRange
 import { KpiCardRow } from '@/components/reports/kpi-card'
 import { ReconciliationLines } from '@/components/reports/reconciliation-lines'
 import { ReportTable } from '@/components/reports/report-table'
-import { useReportData } from '@/components/reports/use-report-data'
+import { reportRangePendingNotice, useReportData } from '@/components/reports/use-report-data'
 import { browserSearchParams, replaceUrlParams } from '@/components/ui/url-state'
 import { useSearchQueryChange } from '@/components/ui/use-search-param-change'
 import { FetchTimeoutError, fetchWithTimeout } from '@/lib/api/fetch-with-timeout'
@@ -148,6 +148,9 @@ export function ReportView({
   )
 
   const cache = payload?.cache ?? null
+  // ช่วง "กำหนดเอง" ยังไม่ครบ ⇒ ไม่ยิงคำขอ · ข้อมูลที่ค้างเป็นของช่วงก่อน ⇒ บอกชัด + จางลง (mytester6 T-027 รีวิว)
+  const rangeNotice = reportRangePendingNotice(ready, payload?.range.label ?? null)
+  const showingPreviousRange = rangeNotice !== null && payload !== null
   const slotContext: ReportSlotContext = { payload, loading, range }
 
   /** ช่วงล่าสุดที่แจ้ง `onRangeChange` แล้ว — กันแจ้งซ้ำ */
@@ -210,6 +213,11 @@ export function ReportView({
         </div>
       </Card>
 
+      {rangeNotice !== null && (
+        <InlineAlert tone="warning" title={rangeNotice.title}>
+          {rangeNotice.message}
+        </InlineAlert>
+      )}
       {cache?.refreshThrottled === true && (
         <InlineAlert tone="info" title="เพิ่งรีเฟรชไปเมื่อครู่">
           ระบบเว้นระยะการรีเฟรช 5 นาทีต่อรายงาน — ข้อมูลที่แสดงคือชุดล่าสุดที่คำนวณไว้
@@ -221,44 +229,46 @@ export function ReportView({
         </InlineAlert>
       )}
 
-      {loading && payload === null ? (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {[0, 1, 2, 3].map((index) => (
-            <Skeleton key={index} className="h-20 rounded-xl" />
-          ))}
-        </div>
-      ) : (
-        <KpiCardRow kpis={payload?.kpis ?? []} />
-      )}
+      <div className={showingPreviousRange ? 'flex flex-col gap-4 opacity-60' : 'flex flex-col gap-4'}>
+        {loading && payload === null ? (
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {[0, 1, 2, 3].map((index) => (
+              <Skeleton key={index} className="h-20 rounded-xl" />
+            ))}
+          </div>
+        ) : (
+          <KpiCardRow kpis={payload?.kpis ?? []} />
+        )}
 
-      {renderSlot(chart, slotContext)}
+        {renderSlot(chart, slotContext)}
 
-      <ReportTable
-        columns={payload?.columns ?? []}
-        rows={payload?.rows ?? []}
-        totalRow={payload?.totalRow ?? null}
-        loading={loading}
-        error={error}
-        emptyDescription={reportEmptyDescription(report.code)}
-        onRetry={
-          <Button variant="secondary" size="sm" onClick={() => void reload(false)}>
-            ลองใหม่
-          </Button>
-        }
-      />
+        <ReportTable
+          columns={payload?.columns ?? []}
+          rows={payload?.rows ?? []}
+          totalRow={payload?.totalRow ?? null}
+          loading={loading}
+          error={error}
+          emptyDescription={reportEmptyDescription(report.code)}
+          onRetry={
+            <Button variant="secondary" size="sm" onClick={() => void reload(false)}>
+              ลองใหม่
+            </Button>
+          }
+        />
 
-      {payload?.reconciliation !== undefined && payload.reconciliation !== null && !loading && (
-        <ReconciliationLines reconciliation={payload.reconciliation} />
-      )}
-      {payload?.note !== undefined && payload.note !== null && (
-        <p className="text-xs text-slate-500">{payload.note}</p>
-      )}
-      {cache !== null && (
-        <p className="text-xs text-slate-400">
-          ข้อมูล ณ {fmtDateTime(cache.computedAt)}
-          {cache.fromCache ? ' (จากแคช)' : ' (คำนวณสด)'}
-        </p>
-      )}
+        {payload?.reconciliation !== undefined && payload.reconciliation !== null && !loading && (
+          <ReconciliationLines reconciliation={payload.reconciliation} />
+        )}
+        {payload?.note !== undefined && payload.note !== null && (
+          <p className="text-xs text-slate-500">{payload.note}</p>
+        )}
+        {cache !== null && (
+          <p className="text-xs text-slate-400">
+            ข้อมูล ณ {fmtDateTime(cache.computedAt)}
+            {cache.fromCache ? ' (จากแคช)' : ' (คำนวณสด)'}
+          </p>
+        )}
+      </div>
     </div>
   )
 }
