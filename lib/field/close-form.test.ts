@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  unusedUploads,
   rejectedUploadPath,
   uploadDisplayName,
   withoutUpload,
@@ -398,5 +399,13 @@ describe('ไฟล์ที่ server ปัดต้องออกจาก�
   it('ชื่อไฟล์ที่ผู้ใช้เห็นตัด uuid หน้าออก', () => {
     expect(uploadDisplayName(bad)).toBe('fake.jpg')
     expect(uploadDisplayName('a/b/plain.png')).toBe('plain.png')
+  })
+})
+
+describe('unusedUploads (mytester6 T-015)', () => {
+  it('ไฟล์ที่อัปโหลดรอบนี้แต่ไม่อยู่ในฟอร์มแล้ว ⇒ ทิ้ง · ไฟล์ที่ยังใช้ (รูป/วิดีโอ/รูปสินค้า/เสียง) ⇒ เก็บ', () => {
+    const form = { ...EMPTY_CLOSE_FORM, photos: ['p1'], videos: ['v1'], productPhotos: ['pp1'], audioUrl: 'a1' }
+    expect(unusedUploads(['p1', 'p2', 'v1', 'pp1', 'a1', 'a0', 'p2'], form)).toEqual(['p2', 'a0'])
+    expect(unusedUploads([], form)).toEqual([])
   })
 })

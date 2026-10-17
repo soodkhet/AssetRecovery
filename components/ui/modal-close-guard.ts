@@ -10,6 +10,14 @@
 
 export type ModalCloseDecision = 'ignore' | 'confirm-discard' | 'close'
 
+/**
+ * modal มีร่างที่ยังไม่บันทึกไหม — `tracked` = modal ตรวจเจอเองจาก input/change/drop · `declared` = ผู้เรียกบอกผ่าน
+ * prop `dirty` (การแก้ด้วยปุ่มที่ไม่เกิด input/change เช่นย้ายจุด/ลบไฟล์ — mytester6 T-002) · อย่างใดอย่างหนึ่ง = มีร่าง
+ */
+export function modalHasDraft({ tracked, declared }: { tracked: boolean; declared: boolean }): boolean {
+  return tracked || declared
+}
+
 export function decideModalClose({
   busy,
   dirty,

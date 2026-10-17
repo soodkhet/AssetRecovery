@@ -28,6 +28,16 @@ export interface CloseFormState {
   failReasonDetail: string | null
 }
 
+/**
+ * ไฟล์ที่อัปโหลดในรอบเปิดฟอร์มนี้แต่ไม่อยู่ในฟอร์มแล้ว (ลบ/แทนที่ก่อนส่ง) — ให้ทิ้งออกจาก Storage หลังส่งสำเร็จ
+ * (mytester6 T-015) · server ยังตรวจซ้ำว่าไม่มี record อ้างก่อนลบเสมอ
+ */
+export function unusedUploads(sessionUploads: readonly string[], form: CloseFormState): string[] {
+  const used = new Set<string>([...form.photos, ...form.videos, ...form.productPhotos])
+  if (form.audioUrl !== null) used.add(form.audioUrl)
+  return [...new Set(sessionUploads)].filter((path) => !used.has(path))
+}
+
 export const EMPTY_CLOSE_FORM: CloseFormState = {
   outcome: null,
   photos: [],

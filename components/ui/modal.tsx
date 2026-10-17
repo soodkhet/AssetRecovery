@@ -5,7 +5,7 @@ import { Button, type ButtonProps, type ButtonVariant } from '@/components/ui/bu
 import { cn } from '@/components/ui/cn'
 import { installFocusTrap } from '@/components/ui/focus-trap'
 import { FormSubmitFooter } from '@/components/ui/input'
-import { busyElementLocksModal, decideModalClose, discardAndClose, dropMarksDraft } from '@/components/ui/modal-close-guard'
+import { busyElementLocksModal, decideModalClose, discardAndClose, dropMarksDraft, modalHasDraft } from '@/components/ui/modal-close-guard'
 import { guardModalHistory } from '@/components/ui/modal-history'
 import { isDismissEscape, isTopModal, registerModal, unregisterModal } from '@/components/ui/modal-stack'
 
@@ -46,6 +46,7 @@ export function Modal({
   busy = false,
   lockClose = false,
   confirmDiscard = true,
+  dirty = false,
   onDiscard,
 }: {
   open: boolean
@@ -64,6 +65,11 @@ export function Modal({
   lockClose?: boolean
   /** ถามยืนยันก่อนปิดเมื่อผู้ใช้กรอก/เปลี่ยนค่าใน modal แล้ว — ปิดได้สำหรับ modal ที่ช่องกรอกเป็นแค่ตัวกรอง */
   confirmDiscard?: boolean
+  /**
+   * ผู้เรียกบอกเองว่ามีข้อมูลที่ยังไม่บันทึก — สำหรับการแก้ที่**ไม่เกิด input/change** (กดปุ่มย้ายจุด/ลบไฟล์/เลือกตัวเลือก
+   * ที่เป็นปุ่ม) ซึ่ง modal ตรวจเองไม่เจอ · รวม (OR) กับที่ modal ตรวจจาก input/change · ไม่ส่ง = พฤติกรรมเดิม (mytester6 T-002)
+   */
+  dirty?: boolean
   /**
    * ผู้ใช้กด "ทิ้งข้อมูล" ในกล่องยืนยัน ⇒ ล้างร่างก่อนปิด — **ฟอร์มที่ค้าง mount/เก็บร่างไว้ต้องส่ง**
    * (เช่นเคลียร์เงินทดรอง/ขอเงินทดรอง/เบิกเอง) ไม่งั้นเปิดใหม่ร่างยังอยู่ ขัดกับข้อความในกล่อง (ตรวจซ้ำ staging SV5-J1-01)
@@ -84,12 +90,16 @@ export function Modal({
   const dirtyRef = useRef(false)
   /** เวลาที่เปิด — คลิกที่สองของดับเบิลคลิกปุ่มเปิดตกที่ backdrop ⇒ ไม่นับเป็นสั่งปิด (preship R6-007) */
   const openedAtRef = useRef(0)
-  const guardRef = useRef({ closeLocked, confirming, confirmDiscard })
+  const guardRef = useRef({ closeLocked, confirming, confirmDiscard, dirtyProp: dirty })
   useEffect(() => {
-    guardRef.current = { closeLocked, confirming, confirmDiscard }
+    guardRef.current = { closeLocked, confirming, confirmDiscard, dirtyProp: dirty }
     // ผู้เรียกปิดการถามหลังบันทึกสำเร็จ (หน้าจอผลลัพธ์) ⇒ ล้างสถานะ "กรอกค้าง" ไปด้วย (staging E-051)
     if (!confirmDiscard) dirtyRef.current = false
-  }, [closeLocked, confirming, confirmDiscard])
+  }, [closeLocked, confirming, confirmDiscard, dirty])
+  /** มีข้อมูลที่ยังไม่บันทึก — จาก input/change ที่ modal ตรวจเอง หรือผู้เรียกบอกผ่าน `dirty` */
+  function isDirty(): boolean {
+    return modalHasDraft({ tracked: dirtyRef.current, declared: guardRef.current.dirtyProp })
+  }
   // ผู้เรียกมักส่ง `onClose` เป็น arrow ใหม่ทุก render — เก็บใน ref เพื่อให้ effect ด้านล่างผูกกับ `open` อย่างเดียว
   // (ไม่งั้น modal ข้างหลังที่ re-render จะลงทะเบียนชั้นใหม่ขึ้นไปทับตัวบน + แย่ง focus กลับมา)
   const onCloseRef = useRef(onClose)
@@ -104,7 +114,7 @@ export function Modal({
   /** ปิดตามคำสั่งผู้ใช้ (Esc / backdrop / X / `<ModalCancelButton>`) — ผ่าน guard ก่อนเสมอ */
   function requestClose() {
     const { closeLocked: busyNow, confirmDiscard: confirmNow } = guardRef.current
-    const decision = decideModalClose({ busy: busyNow, dirty: dirtyRef.current, confirmDiscard: confirmNow })
+    const decision = decideModalClose({ busy: busyNow, dirty: isDirty(), confirmDiscard: confirmNow })
     if (decision === 'confirm-discard') {
       focusBeforeConfirmRef.current = currentFocus()
       setConfirming(true)
@@ -142,7 +152,7 @@ export function Modal({
 
     // กรอกแล้วกด refresh/ปิดแท็บ ⇒ ให้ browser ถามก่อนทิ้ง (preship R3-014 — เดิมข้อมูลฟอร์มยาวหายเงียบ)
     function handleBeforeUnload(event: BeforeUnloadEvent) {
-      if (!dirtyRef.current || !guardRef.current.confirmDiscard) return
+      if (!isDirty() || !guardRef.current.confirmDiscard) return
       event.preventDefault()
       event.returnValue = ''
     }
@@ -155,7 +165,7 @@ export function Modal({
             // มี modal อื่นซ้อนอยู่ข้างบน (เช่นหน้าดูไฟล์) ⇒ ไม่ปิดตัวข้างหลังทะลุ — อยู่หน้าเดิม
             if (!isTopModal(token)) return 'stay'
             const { closeLocked: busyNow, confirmDiscard: confirmNow } = guardRef.current
-            const decision = decideModalClose({ busy: busyNow, dirty: dirtyRef.current, confirmDiscard: confirmNow })
+            const decision = decideModalClose({ busy: busyNow, dirty: isDirty(), confirmDiscard: confirmNow })
             if (decision === 'close') return 'close'
             if (decision === 'confirm-discard') {
               focusBeforeConfirmRef.current = currentFocus()

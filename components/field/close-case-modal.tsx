@@ -36,6 +36,7 @@ import {
   rejectedUploadPath,
   removeMediaAt,
   resubmitClosePayload,
+  unusedUploads,
   uploadDisplayName,
   withoutUpload,
   type CloseFormState,
@@ -60,6 +61,7 @@ import {
 } from '@/lib/field/media-upload'
 import type { TravelOriginInput } from '@/lib/field/schemas'
 import { uploadFieldMedia, FieldUploadError } from '@/lib/field/upload-client'
+import { discardStagedUploads } from '@/lib/uploads/client'
 import type {
   FieldActionResultDto,
   FieldCaseDetailDto,
@@ -504,6 +506,18 @@ export function CloseCaseModal({
    * "ส่งกลับยืนยันอีกครั้ง" ให้ server คำนวณค่าน้ำมันใหม่ (`41` §7.6 · mytester3 D-IN3-01) · `null` = ใช้จุดเดิม
    */
   const [revisedOrigin, setRevisedOrigin] = useState<TravelOriginInput | null>(null)
+  /**
+   * โหมดตีกลับ: ผู้ใช้แก้อะไรแล้วหรือยัง (รวมการกดปุ่ม — ย้ายจุดเริ่ม/ลบไฟล์/เลือกผลลัพธ์/เหตุผล ซึ่งไม่เกิด input/change
+   * ให้ modal ตรวจเจอเอง) ⇒ ปิดต้องถามทิ้งก่อน (mytester6 T-002) · จุดเริ่มที่ระบบดึงอัตโนมัติตอนเปิดไม่นับ
+   */
+  const [revisionEdited, setRevisionEdited] = useState(false)
+  /** ไฟล์ที่อัปโหลดในรอบเปิดนี้ — ทิ้งข้อมูล/ส่งแล้วไม่ได้ใช้ ⇒ ลบออกจาก Storage (mytester6 T-015) */
+  const sessionUploadsRef = useRef<string[]>([])
+  /**
+   * พิมพ์ช่องข้อความ (บันทึกเพิ่มเติม/รายละเอียดเหตุผล) แล้วยังไม่ได้ตั้ง autosave (ตั้งตอน blur) — ปิดด้วย Esc ขณะเคอร์เซอร์
+   * ยังอยู่ในช่องไม่เกิด blur ⇒ ต้องเก็บ Draft ตอนปิดด้วย (mytester6 T-013)
+   */
+  const textPendingRef = useRef(false)
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number } | null>(null)
   const dragStart = useRef<{ x: number; y: number } | null>(null)
 
@@ -579,6 +593,7 @@ export function CloseCaseModal({
   const scheduleDraft = useCallback(
     (next: CloseFormState, options?: { revision?: boolean }): void => {
       if (options?.revision === true) return
+      textPendingRef.current = false
       draftSaver.schedule(() => void persistDraft(next, options))
     },
     [draftSaver, persistDraft],
@@ -660,7 +675,15 @@ export function CloseCaseModal({
     formRef.current = next
     setForm(next)
     setShowMissing(false)
+    if (mode?.revision === true) setRevisionEdited(true)
     scheduleDraft(next, { revision: mode?.revision === true })
+  }
+
+  /** พิมพ์ช่องข้อความ — autosave ตั้งตอน blur (ไม่ยิงทุกตัวอักษร) แต่ฟอร์มล่าสุดต้องอยู่ใน `formRef` ให้ปิดแล้วเก็บได้ (T-013) */
+  function changeText(next: CloseFormState): void {
+    formRef.current = next
+    setForm(next)
+    if (mode?.revision !== true) textPendingRef.current = true
   }
 
   /** ใช้หลัง `await` — คำนวณค่าใหม่จากฟอร์มล่าสุด (`formRef`) แทน `form` ที่ค้างจากตอนเริ่ม */
@@ -705,6 +728,7 @@ export function CloseCaseModal({
         }
       }
       if (uploaded.length === 0) return
+      sessionUploadsRef.current.push(...uploaded)
       updateFormWith((latest) => ({ ...latest, [section.list]: appendMedia(latest[section.list], uploaded) }))
     } finally {
       endUpload()
@@ -717,6 +741,7 @@ export function CloseCaseModal({
     const signal = beginUpload()
     try {
       const path = await uploadFieldMedia(caseId, 'audio', file, { signal })
+      sessionUploadsRef.current.push(path)
       updateFormWith((latest) => ({ ...latest, audioUrl: path }))
     } catch (error) {
       showToast({
@@ -786,6 +811,8 @@ export function CloseCaseModal({
     if (closeFormMode(detail).revision) {
       const next: TravelOriginInput = { ...point, source }
       setRevisedOrigin(next)
+      // ผู้ใช้ย้ายจุดเริ่มเอง (ดึงตำแหน่งปัจจุบัน/ลากแผนที่) — มีผลกับค่าน้ำมัน ⇒ ปิดต้องถามทิ้ง (mytester6 T-002)
+      setRevisionEdited(true)
       setDetail((latest) =>
         latest === null ? latest : { ...latest, travelOrigin: localTravelOrigin(next, new Date()) },
       )
@@ -889,6 +916,8 @@ export function CloseCaseModal({
         return
       }
 
+      // ไฟล์ที่อัปโหลดรอบนี้แต่ไม่อยู่ในชุดที่ส่ง (ลบ/แทนที่ก่อนส่ง) ⇒ ลบออกจาก Storage · ไฟล์ที่ผูกแล้ว server ไม่ลบ (T-015)
+      discardStagedUploads(unusedUploads(sessionUploadsRef.current, form))
       showToast({
         tone: 'success',
         title: mode.revision ? 'ส่งหลักฐานกลับให้ตรวจอีกครั้งแล้ว' : 'ปิดงานเรียบร้อย',
@@ -925,7 +954,12 @@ export function CloseCaseModal({
 
   /** ปิดด้วย X/พื้นหลัง — มีการบันทึกไปแล้ว ⇒ ให้รายการรีโหลดก่อน (DI-01) */
   function dismiss(): void {
-    if (draftSaver.hasPending()) {
+    // โหมดตีกลับไม่มี Draft — ปิด (หลังยืนยัน "ทิ้งข้อมูล") ⇒ ไฟล์ที่อัปโหลดรอบนี้ยังไม่ผูก record ⇒ ลบออกจาก Storage
+    // (mytester6 T-015 · server ไม่ลบไฟล์ที่มี record อ้าง) · ส่งสำเร็จแล้วปิดด้วย `onClose` ตรง ไม่ผ่านทางนี้
+    if (mode?.revision === true) discardStagedUploads(sessionUploadsRef.current)
+    // พิมพ์ค้างในช่องข้อความแล้วปิดด้วย Esc (ไม่เกิด blur) ⇒ เก็บลง Draft ด้วย (mytester6 T-013) · โหมดตีกลับไม่มี Draft
+    if (mode?.revision !== true && (draftSaver.hasPending() || textPendingRef.current)) {
+      textPendingRef.current = false
       // autosave ยังหน่วงอยู่ — บันทึกฟอร์มล่าสุดก่อน แล้วค่อยให้รายการรีโหลด (ป้าย Draft ขึ้นทันที)
       draftSaver.cancel()
       void persistDraft(formRef.current).then(() => onDone())
@@ -945,6 +979,8 @@ export function CloseCaseModal({
       lockClose={busy}
       // โหมดปกติเก็บเป็น Draft อัตโนมัติ ⇒ ปิดได้เลยไม่ถาม · โหมดตีกลับยังถามก่อนทิ้ง (มติผู้ใช้ 16/10/2569 แบบ ก)
       confirmDiscard={mode === null || mode.confirmDiscardOnClose}
+      // การแก้ด้วยปุ่ม (ย้ายจุดเริ่ม/ลบไฟล์/เลือกตัวเลือก) ไม่เกิด input/change ⇒ บอก modal เอง (mytester6 T-002)
+      dirty={mode?.revision === true && revisionEdited}
       title={mode?.revision === true ? 'แก้ไขหลักฐานปิดงาน' : 'ปิดงาน'}
       description={detail === null ? undefined : `${detail.debtorName ?? '—'} · ${detail.caseRef}`}
       footer={
@@ -1231,7 +1267,7 @@ export function CloseCaseModal({
                   detail={form.failReasonDetail}
                   locked={mode.outcomeLocked}
                   onSelect={(failReason) => updateForm({ ...form, failReason })}
-                  onDetailChange={(text) => setForm({ ...form, failReasonDetail: text === '' ? null : text })}
+                  onDetailChange={(text) => changeText({ ...form, failReasonDetail: text === '' ? null : text })}
                   onDetailBlur={() => scheduleDraft(form, { revision: mode.revision })}
                 />
               )}
@@ -1242,7 +1278,7 @@ export function CloseCaseModal({
                   rows={2}
                   maxLength={2000}
                   value={form.note ?? ''}
-                  onChange={(event) => setForm({ ...form, note: event.target.value === '' ? null : event.target.value })}
+                  onChange={(event) => changeText({ ...form, note: event.target.value === '' ? null : event.target.value })}
                   onBlur={() => scheduleDraft(form, { revision: mode.revision })}
                   placeholder="รายละเอียดที่อยากบันทึกไว้กับการปิดงานครั้งนี้"
                 />

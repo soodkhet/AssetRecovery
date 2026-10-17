@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { busyElementLocksModal, decideModalClose, discardAndClose, dropMarksDraft, MODAL_BUSY_IGNORE } from '@/components/ui/modal-close-guard'
+import { busyElementLocksModal, decideModalClose, discardAndClose, dropMarksDraft, MODAL_BUSY_IGNORE, modalHasDraft } from '@/components/ui/modal-close-guard'
 
 describe('decideModalClose', () => {
   it('ระหว่างบันทึก ปิดไม่ได้เลย แม้กรอกข้อมูลไว้หรือปิดการยืนยันทิ้ง', () => {
@@ -54,5 +54,19 @@ describe('dropMarksDraft (ตรวจซ้ำ staging SV5-P1-01)', () => {
   it('วางนอกโซนที่รับ หรือไม่มีไฟล์ ⇒ ไม่นับ', () => {
     expect(dropMarksDraft({ handled: false, fileCount: 1 })).toBe(false)
     expect(dropMarksDraft({ handled: true, fileCount: 0 })).toBe(false)
+  })
+})
+
+describe('modalHasDraft (mytester6 T-002)', () => {
+  it('การแก้ด้วยปุ่มที่ผู้เรียกบอกเอง (dirty prop) นับเป็นร่างแม้ไม่มี input/change ⇒ ปิดต้องถามทิ้ง', () => {
+    expect(modalHasDraft({ tracked: false, declared: true })).toBe(true)
+    const dirty = modalHasDraft({ tracked: false, declared: true })
+    expect(decideModalClose({ busy: false, dirty, confirmDiscard: true })).toBe('confirm-discard')
+  })
+
+  it('ไม่ส่ง dirty (false) ⇒ พฤติกรรมเดิมตาม input/change · โหมดไม่ถาม (confirmDiscard=false) ⇒ ปิดได้เลย', () => {
+    expect(modalHasDraft({ tracked: true, declared: false })).toBe(true)
+    expect(modalHasDraft({ tracked: false, declared: false })).toBe(false)
+    expect(decideModalClose({ busy: false, dirty: true, confirmDiscard: false })).toBe('close')
   })
 })
