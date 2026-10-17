@@ -161,6 +161,15 @@ function storageFileName(segment: string): string {
 }
 
 /**
+ * ช่องชื่อไฟล์ที่เก็บชื่อพร้อม UUID นำหน้า (`<uuid>-idcard8.jpg`) ⇒ ชื่อเดิม `idcard8.jpg`
+ * ให้ตรงกับช่อง "ไฟล์" ในหน้าต่างเดียวกัน (ตรวจซ้ำ staging SV6-R4-01) · ไม่มี UUID นำหน้า ⇒ `null` (แสดงค่าเดิม)
+ */
+export function auditStoredFileNameText(value: string): string | null {
+  if (!LEADING_UUID.test(value) && !UUID_FILE.test(value)) return null
+  return storageFileName(value)
+}
+
+/**
  * path ไฟล์ในที่เก็บ (`cases/<id>/national_id_doc/<uuid>-idcard.jpg`) ⇒ "ชนิดเอกสาร · ชื่อไฟล์"
  * ไม่ใช่ path ที่รู้จัก ⇒ `null` (ผู้เรียกแสดงค่าเดิม) · path เต็มยังอยู่ใน DB/tooltip
  */

@@ -416,3 +416,16 @@ describe('ตรวจซ้ำ staging SV6-R3-03 — อ็อบเจกต�
     )
   })
 })
+
+describe('SV6-R4-01 — ช่องชื่อไฟล์ในค่าก่อน/หลัง', () => {
+  it('file_name/original_name ที่มี UUID นำหน้า แสดงชื่อเดิม (ตรงกับช่อง "ไฟล์") · tooltip ยังเป็นค่าเต็ม', () => {
+    const stored = 'b00d2446-08da-4460-8e01-96252cfc3985-idcard8.jpg'
+    expect(auditValueDisplay(stored, 'file_name', 'case_documents')).toBe('idcard8.jpg')
+    expect(auditValueDisplay(stored, 'original_name', 'finance_company_documents')).toBe('idcard8.jpg')
+    expect(auditValueTooltip(stored, 'file_name', {})).toBe(stored)
+  })
+
+  it('ชื่อไฟล์ปกติแสดงตามเดิม', () => {
+    expect(auditValueDisplay('ภพ20-MT6.pdf', 'file_name', 'case_documents')).toBe('ภพ20-MT6.pdf')
+  })
+})

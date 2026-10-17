@@ -16,6 +16,7 @@ import { fmtSatangSymbol } from '@/lib/format/money'
 import {
   auditColumnMappingText,
   auditStoragePathText,
+  auditStoredFileNameText,
   auditSystemReasonText,
   auditThrottleKeyText,
 } from '@/lib/audit/system-text'
@@ -430,11 +431,17 @@ function auditScalarDisplay(
   return auditValueText(value, field)
 }
 
+/** ช่องที่เก็บชื่อไฟล์ (มี UUID นำหน้ากันชื่อซ้ำ) — SV6-R4-01 */
+const STORED_FILE_NAME_FIELDS: ReadonlySet<string> = new Set(
+  ['file_name', 'file_names', 'original_name', 'fileName'].map(normalizeFieldName),
+)
+
 /** ค่าข้อความที่ระบบสร้างซึ่งแปลงเป็นข้อความไทยได้ (path เต็มยังดูได้ใน tooltip) · ไม่ใช่ = `null` */
 export function auditSystemValueText(value: string, field: string): string | null {
   const key = normalizeFieldName(field)
   if (key === normalizeFieldName('throttle_key')) return auditThrottleKeyText(value)
   if (key === normalizeFieldName('column_mapping')) return auditColumnMappingText(value)
+  if (STORED_FILE_NAME_FIELDS.has(key)) return auditStoredFileNameText(value)
   return auditStoragePathText(value)
 }
 

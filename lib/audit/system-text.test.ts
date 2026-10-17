@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import {
   auditColumnMappingText,
   auditStoragePathText,
+  auditStoredFileNameText,
   auditSystemReasonText,
   auditThrottleKeyText,
   jobRefText,
@@ -181,5 +182,19 @@ describe('SV6-R3-01 — coverage: เหตุผลที่ระบบสร�
       }
     }
     expect(offenders).toEqual([])
+  })
+})
+
+describe('SV6-R4-01 — ช่องชื่อไฟล์ตัด UUID นำหน้าให้ตรงกับช่อง "ไฟล์"', () => {
+  const KEY = 'b00d2446-08da-4460-8e01-96252cfc3985'
+
+  it('ชื่อไฟล์ที่มี UUID นำหน้า ⇒ ชื่อเดิม · UUID ล้วน ⇒ "ไฟล์ <นามสกุล>"', () => {
+    expect(auditStoredFileNameText(`${KEY}-idcard8.jpg`)).toBe('idcard8.jpg')
+    expect(auditStoredFileNameText(`${KEY}.pdf`)).toBe('ไฟล์ PDF')
+  })
+
+  it('ชื่อไฟล์ปกติ (ไม่มี UUID นำหน้า) ⇒ null ให้แสดงค่าเดิม', () => {
+    expect(auditStoredFileNameText('ภพ20-MT6.pdf')).toBeNull()
+    expect(auditStoredFileNameText(`scan-${KEY}.pdf`)).toBeNull()
   })
 })
