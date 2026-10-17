@@ -234,6 +234,20 @@ const LOGIN_FAILURE_REASON: Readonly<Record<string, string>> = {
   USER_NOT_PROVISIONED: 'ยังไม่ได้ตั้งค่าบัญชีในระบบ',
 }
 
+/**
+ * ตรวจซ้ำ staging SV6-R-04 — เหตุผลที่ระบบสร้างไว้ก่อนแก้ (audit immutable) มี "วันที่ 2026-10-17" แบบ ISO ค.ศ.
+ * ⇒ แปลงเป็น พ.ศ. DD/MM/YYYY ตอนแสดงเท่านั้น (Rule 01) · เฉพาะวันที่ล้วนที่ไม่ติดตัวอักษร/ตัวเลขอื่น
+ * (ไม่แตะเลขอ้างอิงอย่าง `PB-IN-25691004-…` หรือชื่อไฟล์ `AccountingPack_2569-10_v1.0`)
+ */
+const REASON_ISO_DATE = /(?<![\w-])(\d{4}-\d{2}-\d{2})(?![\w-])/g
+
+export function auditReasonText(reason: string): string {
+  return reason.replace(REASON_ISO_DATE, (whole: string, date: string) => {
+    const parsed = new Date(`${date}T00:00:00Z`)
+    return Number.isNaN(parsed.getTime()) ? whole : fmtDate(parsed)
+  })
+}
+
 /** ป้าย + สี + คำอธิบายของแถว — login ที่ล้มเหลวแยกจากสำเร็จ (สีเตือน) */
 export function auditRowDisplay(row: {
   action: AuditAction

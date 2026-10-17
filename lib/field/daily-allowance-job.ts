@@ -393,9 +393,10 @@ export async function persistFieldDaySettlement(
   const backdated = mode.kind === 'backdated' ? mode : null
   const expenseDate = backdated === null ? day.fieldDate : backdated.expenseDate
   const expenseDateIso = expenseDate.toISOString().slice(0, 10)
+  // ตรวจซ้ำ staging SV6-R-04 — ข้อความที่ระบบสร้างแสดงวันที่ พ.ศ. (`fmtDate`) ไม่ใช่ ISO ค.ศ. (Rule 01)
   const reasonPrefix =
     backdated === null
-      ? `[job:${mode.kind === 'job' ? mode.jobId : ''}] คำนวณค่าน้ำมันเหมาจ่าย/เบี้ยเลี้ยงรายวันของวันที่ ${fieldDateIso}`
+      ? `[job:${mode.kind === 'job' ? mode.jobId : ''}] คำนวณค่าน้ำมันเหมาจ่าย/เบี้ยเลี้ยงรายวันของวันที่ ${fmtDate(day.fieldDate)}`
       : `${backdated.reason} — สร้างรายการเบิกย้อนหลังของวันลงพื้นที่ ${fmtDate(day.fieldDate)} (งวดของวันนั้นปิดแล้ว) ลงวันที่ ${fmtDate(expenseDate)}`
   const actor =
     backdated === null

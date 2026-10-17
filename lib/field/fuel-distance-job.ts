@@ -635,7 +635,7 @@ export async function createBackdatedFuelExpense(
   const workPeriod = await periodStatusAt(organizationId, periodKeyOf(workDate))
   if (workPeriod === null || !isDirectEditRejected(workPeriod, true)) {
     throw new AccountingError('PERIOD_INVALID_STATUS', {
-      detail: `งวดของวันปิดงาน ${locked.workDate} ยังไม่ปิด — ให้ job ค่าน้ำมันคำนวณตามปกติ`,
+      detail: `งวดของวันปิดงาน ${fmtDate(workDate)} ยังไม่ปิด — ให้ job ค่าน้ำมันคำนวณตามปกติ`,
     })
   }
   // วันที่ลงรายการต้องอยู่ในงวดที่เปิดอยู่ (`13` §6.11) — งวดปัจจุบันปิดด้วย ⇒ PERIOD_LOCKED_DIRECT_EDIT

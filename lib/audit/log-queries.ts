@@ -1,6 +1,6 @@
 import { AuthError } from '@/lib/auth/errors'
 import type { SessionUser } from '@/lib/auth/types'
-import { auditLoginFailureOf, auditTargetLabelOf } from '@/lib/audit/log-display'
+import { auditLoginFailureOf, auditReasonText, auditTargetLabelOf } from '@/lib/audit/log-display'
 import type { AuditLogListQuery } from '@/lib/audit/log-schemas'
 import { resolveAuditRefLabels } from '@/lib/audit/target-ref-queries'
 import {
@@ -109,7 +109,11 @@ function toListItem(row: ListRow, labels: ReadonlyMap<string, string>, organizat
     targetId: row.targetId,
     targetRef: targetRefOf(row, labels, organizationId),
     // ตรวจซ้ำ staging SV5-R-03 — แปลงอ้างอิงรายการเดินบัญชีในเหตุผลเป็นป้ายตอนแสดง (ข้อมูล audit คงเดิม)
-    reason: row.reason === null ? null : auditReplaceTextRefs(row.reason, (ref) => labels.get(auditRefKey(ref)) ?? null),
+    // ตรวจซ้ำ staging SV6-R-04 — วันที่ ISO ค.ศ. ในเหตุผลเดิม ⇒ พ.ศ.
+    reason:
+      row.reason === null
+        ? null
+        : auditReasonText(auditReplaceTextRefs(row.reason, (ref) => labels.get(auditRefKey(ref)) ?? null)),
     loginFailure: auditLoginFailureOf(row.action, row.afterData),
   }
 }

@@ -8,6 +8,7 @@ import {
   auditActorLabel,
   auditFieldChanges,
   auditLoginFailureOf,
+  auditReasonText,
   auditRowDisplay,
   auditTargetLabel,
   auditTargetLabelOf,
@@ -246,5 +247,16 @@ describe('ตรวจซ้ำ staging SV5-R-02/R-03 — auditValueDisplay ก�
     )
     const missing = 'bank_transaction:0a1b2c3d-0000-4000-8000-0000000000ee'
     expect(auditValueDisplay(missing, 'source_ref', 'billing_batches', labels)).toBe(missing)
+  })
+})
+
+describe('ตรวจซ้ำ staging SV6-R-04 — วันที่ ISO ในเหตุผลเดิมแสดงเป็น พ.ศ.', () => {
+  it('วันที่ล้วน ⇒ DD/MM/YYYY พ.ศ. · เลขอ้างอิง/ชื่อไฟล์ที่มีตัวเลขติดกันไม่ถูกแตะ', () => {
+    expect(auditReasonText('[job:x] คำนวณค่าน้ำมันเหมาจ่าย/เบี้ยเลี้ยงรายวันของวันที่ 2026-10-17 — กระจาย')).toBe(
+      '[job:x] คำนวณค่าน้ำมันเหมาจ่าย/เบี้ยเลี้ยงรายวันของวันที่ 17/10/2569 — กระจาย',
+    )
+    expect(auditReasonText('คีย์ PB-IN-25691004-CB4FD7202879')).toBe('คีย์ PB-IN-25691004-CB4FD7202879')
+    expect(auditReasonText('ไฟล์ AccountingPack_2569-10_v1.0.zip')).toBe('ไฟล์ AccountingPack_2569-10_v1.0.zip')
+    expect(auditReasonText('id 0a1b2c3d-0000-4000-8000-0000000000c1')).toBe('id 0a1b2c3d-0000-4000-8000-0000000000c1')
   })
 })

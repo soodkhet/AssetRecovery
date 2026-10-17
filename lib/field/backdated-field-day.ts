@@ -13,6 +13,7 @@ import {
 } from '@/lib/field/daily-allowance-job'
 import type { BackdatedFieldDayInput } from '@/lib/field/backdated-schemas'
 import { FieldError } from '@/lib/field/errors'
+import { fmtDate } from '@/lib/format/datetime'
 import { bangkokBusinessDate } from '@/lib/field/expense-queries'
 import { notifyExpensesAwaitingApprovalAwaited } from '@/lib/notifications/approval-queue'
 import { prisma } from '@/lib/prisma'
@@ -141,7 +142,7 @@ export async function createBackdatedFieldDayExpenses(
   // งวดของวันลงพื้นที่ยังไม่ปิด ⇒ job รอบปกติคิดให้เอง (ไม่ต้องเบิกย้อนหลัง)
   if (!(await isFieldDayPeriodLocked(organizationId, input.fieldDate))) {
     throw new AccountingError('PERIOD_INVALID_STATUS', {
-      detail: `งวดของวันลงพื้นที่ ${input.fieldDate.toISOString().slice(0, 10)} ยังไม่ปิด — ให้ job รายวันคำนวณตามปกติ`,
+      detail: `งวดของวันลงพื้นที่ ${fmtDate(input.fieldDate)} ยังไม่ปิด — ให้ job รายวันคำนวณตามปกติ`,
     })
   }
   // วันที่ลงรายการต้องอยู่ในงวดที่เปิดอยู่ (`13` §6.11) — งวดปัจจุบันปิดด้วย ⇒ PERIOD_LOCKED_DIRECT_EDIT

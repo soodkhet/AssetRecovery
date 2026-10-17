@@ -393,6 +393,13 @@ suite('Phase 2.9 — รายการเบิกอัตโนมัติ�
     expect(allowance?.distanceKm).toBeNull()
     expect(allowance?.fieldDaySettlementId).not.toBeNull()
     expect(allowance?.compPlanId).toBe(PLAN_PER_KM)
+    // ตรวจซ้ำ staging SV6-R-04 — เหตุผลที่ job สร้างแสดงวันที่ พ.ศ. DD/MM/YYYY ไม่ใช่ ISO ค.ศ.
+    const allowanceAudit = await db().auditLog.findFirstOrThrow({
+      where: { targetType: 'expenses', targetId: allowance?.id ?? '', action: 'create' },
+    })
+    const [year, month, dayOfMonth] = today.split('-')
+    expect(allowanceAudit.reason ?? '').toContain(`ของวันที่ ${dayOfMonth}/${month}/${Number(year) + 543}`)
+    expect(allowanceAudit.reason ?? '').not.toMatch(/\d{4}-\d{2}-\d{2}/)
   })
 
   it('เคสสำเร็จ = รายการเบิกรอคลังยืนยันเสมอ ห้ามข้ามไป pending_approval (`41` §20)', async () => {
