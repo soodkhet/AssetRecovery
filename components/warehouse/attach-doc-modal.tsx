@@ -3,6 +3,7 @@
 import { type ReactNode, useId, useRef, useState } from 'react'
 import { Button, ConfirmModal, Field, InlineAlert, Input, Modal, ModalCancelButton, useToast } from '@/components/ui'
 import { buttonClass } from '@/components/ui/button'
+import { MODAL_DRAFT_IGNORE } from '@/components/ui/modal-close-guard'
 import { cn } from '@/components/ui/cn'
 import { FileViewerModal, type ViewableFile } from '@/components/cases/file-viewer-modal'
 import { apiPath } from '@/lib/api/contract'
@@ -307,7 +308,9 @@ export function DocumentSlotField({
         <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
           <label className={buttonClass('secondary', 'sm', 'cursor-pointer')}>
             <span id={`${slotId}-action`}>{uploading ? 'กำลังอัปโหลด...' : slot.attached ? 'แนบไฟล์ใหม่แทน' : 'เลือกไฟล์'}</span>
+            {/* ไฟล์ผูกเข้าล็อตทันทีที่เลือก ⇒ ไม่นับเป็นข้อมูลค้าง ปิดแล้วไม่ถามทิ้ง (mytester6 T-018) */}
             <input
+              {...MODAL_DRAFT_IGNORE}
               type="file"
               aria-labelledby={`${slotId}-name ${slotId}-action`}
               aria-describedby={`${slotId}-hint`}

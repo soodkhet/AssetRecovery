@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest'
-import { busyElementLocksModal, decideModalClose, discardAndClose, dropMarksDraft, MODAL_BUSY_IGNORE } from '@/components/ui/modal-close-guard'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import {
+  busyElementLocksModal,
+  decideModalClose,
+  discardAndClose,
+  dropMarksDraft,
+  inputMarksDraft,
+  MODAL_BUSY_IGNORE,
+  MODAL_DRAFT_IGNORE,
+  MODAL_DRAFT_IGNORE_SELECTOR,
+} from '@/components/ui/modal-close-guard'
 
 describe('decideModalClose', () => {
   it('ระหว่างบันทึก ปิดไม่ได้เลย แม้กรอกข้อมูลไว้หรือปิดการยืนยันทิ้ง', () => {
@@ -54,5 +65,23 @@ describe('dropMarksDraft (ตรวจซ้ำ staging SV5-P1-01)', () => {
   it('วางนอกโซนที่รับ หรือไม่มีไฟล์ ⇒ ไม่นับ', () => {
     expect(dropMarksDraft({ handled: false, fileCount: 1 })).toBe(false)
     expect(dropMarksDraft({ handled: true, fileCount: 0 })).toBe(false)
+  })
+})
+
+describe('inputMarksDraft — ส่วนที่บันทึกทันทีไม่นับเป็นร่าง (mytester6 T-018)', () => {
+  it('ผู้ใช้กรอกช่องปกติ ⇒ มีร่าง', () => {
+    expect(inputMarksDraft({ trusted: true, isSearch: false, savesImmediately: false })).toBe(true)
+  })
+
+  it('แนบไฟล์ที่ผูกเข้าล็อตทันที / ช่องค้นหา / ค่าที่โค้ดตั้ง ⇒ ไม่นับ', () => {
+    expect(inputMarksDraft({ trusted: true, isSearch: false, savesImmediately: true })).toBe(false)
+    expect(inputMarksDraft({ trusted: true, isSearch: true, savesImmediately: false })).toBe(false)
+    expect(inputMarksDraft({ trusted: false, isSearch: false, savesImmediately: false })).toBe(false)
+  })
+
+  it('selector ตรงกับแอตทริบิวต์ที่ใส่ · ช่องแนบไฟล์ล็อตติดแอตทริบิวต์นี้', () => {
+    expect(MODAL_DRAFT_IGNORE_SELECTOR).toBe(`[data-modal-draft="${MODAL_DRAFT_IGNORE['data-modal-draft']}"]`)
+    const source = readFileSync(join(__dirname, '..', 'warehouse', 'attach-doc-modal.tsx'), 'utf8')
+    expect(source).toMatch(/<input\s+\{\.\.\.MODAL_DRAFT_IGNORE\}\s+type="file"/)
   })
 })
