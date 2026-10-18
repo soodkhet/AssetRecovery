@@ -144,6 +144,11 @@ export interface TaxProfileDto {
   filingForm: WhtFilingForm
   isActive: boolean
   updatedAt: string
+  /**
+   * mytester7 S7-AG4-04 — จำนวนที่อ้าง profile นี้ (ผู้รับที่ผูกรายคน · รายการในรอบจ่าย snapshot) ให้หน้าจอบอกล่วงหน้าว่าปิดไม่ได้
+   * (server ปฏิเสธ `TAX_PROFILE_IN_USE`) · ไม่ส่ง = ไม่ทราบ
+   */
+  usage?: { payeeCount: number; payoutItemCount: number }
 }
 
 /** ช่องหนึ่งของค่าเริ่มต้นตามประเภทผู้รับ (มติ PO U121) */

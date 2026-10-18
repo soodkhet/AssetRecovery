@@ -51,7 +51,9 @@ import {
   DEFAULT_WHT_MIN_THRESHOLD_SATANG,
   DEFAULT_WHT_PCT,
   TAX_PROFILE_INCOME_TYPE_CODES,
+  TAX_PROFILE_DEACTIVATE_DESCRIPTION,
   TAX_PROFILE_INCOME_TYPE_OPTION_LABEL,
+  taxProfileDeactivateBlock,
   WHT_BASIS_VALUES,
   type WhtBasis,
 } from '@/lib/settings/tax-profile'
@@ -334,11 +336,17 @@ export function TaxProfilesTab() {
                         group={ACTIVE_BADGE_GROUP[item.isActive ? 'active' : 'inactive']}
                         label={item.isActive ? 'ใช้งาน' : 'ปิดใช้งาน'}
                       />
+                      {item.isActive && taxProfileDeactivateBlock(item.usage) !== null && (
+                        <span className="max-w-[200px] text-left text-[10px] text-slate-500">
+                          {taxProfileDeactivateBlock(item.usage)}
+                        </span>
+                      )}
                       <Can action="manage" resource={MANAGE_TAX_PROFILES}>
                         <Button variant="secondary" onClick={() => openForm(item)}>
                           แก้ไข
                         </Button>
-                        {item.isActive && (
+                        {/* mytester7 S7-AG4-04 — ถูกใช้แล้วปิดไม่ได้ ⇒ ซ่อนปุ่มแล้วบอกเหตุ (เดิมกดแล้วโดนปฏิเสธหลังกรอกเหตุผล) */}
+                        {item.isActive && taxProfileDeactivateBlock(item.usage) === null && (
                           <Button
                             variant="danger"
                             onClick={() => {
@@ -497,7 +505,7 @@ export function TaxProfilesTab() {
         maxLength={REASON_MAX}
         open={deleteTarget !== null}
         title={`ปิดใช้งาน Tax Profile "${deleteTarget?.name ?? ''}"`}
-        description="ปิดใช้งานเป็น soft delete — เอกสารและรอบจ่ายเดิมยังอ้าง profile นี้ได้ตามปกติ"
+        description={TAX_PROFILE_DEACTIVATE_DESCRIPTION}
         confirmLabel="ยืนยันปิดใช้งาน"
         loading={deleting}
         reason={deleteReason}
