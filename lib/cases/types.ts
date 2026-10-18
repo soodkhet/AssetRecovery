@@ -198,6 +198,8 @@ export interface CaseFieldEvidenceDto {
   assignmentId: string
   /** `assignment_status` ปัจจุบัน — ตีกลับได้เฉพาะ `closed_success`/`closed_fail` */
   assignmentStatus: string
+  /** รอบติดตามของหลักฐานชุดนี้ — เคสที่รีไซเคิลแล้วอาจยังเป็นหลักฐานของรอบก่อน (mytester7 S7-AG1-02) */
+  trackingRound?: number
   agentName: string
   outcome: string
   evidenceStatus: string

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   canRejectFieldEvidence,
   checkinTypeLabel,
+  evidenceRoundBadge,
   fieldEvidenceAccess,
   fieldEvidenceFile,
   revisionEditableHint,
@@ -86,5 +87,16 @@ describe('revisionEditableHint — mytester3 V3-02 (จุดเริ่มเ�
   })
   it('ฝั่งผู้อนุมัติ (ไม่รู้โหมดค่าน้ำมัน) ⇒ บอกเงื่อนไข', () => {
     expect(revisionEditableHint(null)).toContain('และจุดเริ่มเดินทาง (ทีมที่คิดค่าน้ำมันตามระยะทาง)')
+  })
+})
+
+describe('ป้ายรอบของกล่องหลักฐานปิดงาน (mytester7 S7-AG1-02)', () => {
+  it('เคสรอบ 2 ที่หลักฐานยังเป็นของรอบ 1 = "รอบที่ 1 (รอบก่อน)"', () => {
+    expect(evidenceRoundBadge(1, 2)).toEqual({ label: 'รอบที่ 1 (รอบก่อน)', previousRound: true })
+  })
+  it('หลักฐานของรอบปัจจุบัน (รอบ ≥ 2) = "รอบที่ n" · เคสรอบเดียว/ไม่รู้รอบ = ไม่มีป้าย', () => {
+    expect(evidenceRoundBadge(2, 2)).toEqual({ label: 'รอบที่ 2', previousRound: false })
+    expect(evidenceRoundBadge(1, 1)).toBeNull()
+    expect(evidenceRoundBadge(undefined, 2)).toBeNull()
   })
 })

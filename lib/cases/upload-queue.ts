@@ -37,6 +37,18 @@ export async function runWithConcurrency<T, R>(
   return results
 }
 
+/**
+ * ไฟล์นี้ถูกผูกกับเคสแล้วหรือยัง — ใช้ตรวจซ้ำเมื่อคำขอผูกไฟล์ "ไม่รู้ผล" (เน็ตหลุด/หมดเวลาหลังส่งคำขอ
+ * ทั้งที่ server บันทึกไปแล้ว) ก่อนแจ้งผู้ใช้ว่าไม่สำเร็จ (mytester7 S7-AG5-01)
+ * เทียบ path ใน Storage (ไม่ซ้ำต่อการอัปโหลด) — ไม่เทียบชื่อไฟล์เพราะผู้ใช้อาจแนบชื่อซ้ำคนละไฟล์
+ */
+export function isDocumentAttached(
+  documents: ReadonlyArray<{ fileUrl: string; documentType: string }>,
+  uploaded: { fileUrl: string; documentType: string },
+): boolean {
+  return documents.some((doc) => doc.fileUrl === uploaded.fileUrl && doc.documentType === uploaded.documentType)
+}
+
 /** ป้ายสถานะของช่องเอกสาร — นับเฉพาะไฟล์ที่ผูกกับเคสแล้วว่า "อัปโหลดแล้ว" */
 export function slotUploadBadge(uploaded: number, pending: number): { label: string; group: StatusBadgeGroup } {
   if (pending > 0) {

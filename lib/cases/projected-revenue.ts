@@ -166,10 +166,16 @@ export function projectedRevenueNote(detail: {
   projectedRevenueSource: string | null
   projectedRevenueSourceLabel: string | null
   serviceFeeModelSnapshot: string | null
+  /** รอบที่ 2 ขึ้นไป snapshot เกิดตอนอนุมัติรีไซเคิล ไม่ใช่ตอนรับเคส (มติ U125 · mytester7 S7-AG1-02) */
+  trackingRound?: number
 }): string {
   if (detail.serviceFeeModelSnapshot !== null) {
     const formula = detail.projectedRevenueSourceLabel === null ? '' : ` (${detail.projectedRevenueSourceLabel})`
-    return `คำนวณจากค่าบริการที่บันทึกไว้ตอนรับเคส${formula} · ${NOT_CONFIRMED_NOTE}`
+    const when =
+      detail.trackingRound !== undefined && detail.trackingRound >= 2
+        ? `ตอนอนุมัติรีไซเคิล (รอบที่ ${detail.trackingRound})`
+        : 'ตอนรับเคส'
+    return `คำนวณจากค่าบริการที่บันทึกไว้${when}${formula} · ${NOT_CONFIRMED_NOTE}`
   }
   if (detail.projectedRevenueSource === null) {
     // ระบบคำนวณตอนส่งตรวจสอบ — เคสร่างยังไม่มีผลแม้ข้อมูลครบแล้ว อย่าบอกว่าขาดข้อมูล (staging S-018)

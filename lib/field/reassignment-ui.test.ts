@@ -2,8 +2,12 @@ import { describe, expect, it } from 'vitest'
 import {
   EMPTY_REASSIGNMENT_WATCH,
   declineReasonError,
+  msUntilExpiry,
   nextReassignmentPopup,
+  parseDismissedPopups,
   pendingReassignmentCases,
+  pruneDismissedPopups,
+  reassignmentPopupKey,
   reassignedAwayMessage,
   reassignmentCountdown,
   trackReassignments,
@@ -136,5 +140,48 @@ describe('trackReassignments — toast เคสที่ถูกโอนเ�
   it('คำขอยังอยู่ = ไม่ toast', () => {
     const first = trackReassignments(withPending, EMPTY_REASSIGNMENT_WATCH).next
     expect(trackReassignments(withPending, first).autoResolved).toEqual([])
+  })
+})
+
+describe('"ดูทีหลัง" จำข้ามการโหลดหน้า ต่อคำขอ (mytester7 S7-AG6-06)', () => {
+  const cases = [
+    item({ caseId: 'a', hasPendingReassignment: true, pendingReassignmentId: 'req-a1' }),
+    item({ caseId: 'c', hasPendingReassignment: true, pendingReassignmentId: 'req-c1' }),
+  ]
+
+  it('กุญแจ = id ของคำขอ (ไม่มี = caseId)', () => {
+    expect(reassignmentPopupKey(cases[0]!)).toBe('req-a1')
+    expect(reassignmentPopupKey(item({ caseId: 'z', hasPendingReassignment: true }))).toBe('z')
+  })
+
+  it('ค่าที่อ่านจาก sessionStorage กด "ดูทีหลัง" ครบทั้ง 2 คำขอ = ไม่เด้งเลยหลังรีโหลด', () => {
+    const stored = parseDismissedPopups(JSON.stringify(['req-a1', 'req-c1']))
+    expect(nextReassignmentPopup(cases, stored)).toBeNull()
+  })
+
+  it('คำขอใหม่ของเคสเดิม (id ใหม่) เด้งอีกได้', () => {
+    const renewed = [item({ caseId: 'a', hasPendingReassignment: true, pendingReassignmentId: 'req-a2' })]
+    expect(nextReassignmentPopup(renewed, ['req-a1'])?.caseId).toBe('a')
+  })
+
+  it('ค่าที่เก็บเสีย/ไม่ใช่ array = เริ่มว่าง', () => {
+    expect(parseDismissedPopups(null)).toEqual([])
+    expect(parseDismissedPopups('{oops')).toEqual([])
+    expect(parseDismissedPopups('{"a":1}')).toEqual([])
+    expect(parseDismissedPopups('["x", 3, null]')).toEqual(['x'])
+  })
+
+  it('ตัดกุญแจของคำขอที่จบแล้วทิ้ง · รายการยังไม่โหลด (ว่าง) = ไม่ตัด', () => {
+    expect(pruneDismissedPopups(['req-a1', 'req-old'], cases)).toEqual(['req-a1'])
+    expect(pruneDismissedPopups(['req-old'], [])).toEqual(['req-old'])
+  })
+})
+
+describe('msUntilExpiry — ตั้ง timer ให้ป้ายหมดเวลาขึ้นตรงเวลา (mytester7 S7-AG5-03)', () => {
+  it('ยังไม่หมด = มิลลิวินาทีที่เหลือ · หมดแล้ว/ค่าเสีย = null', () => {
+    const now = new Date('2026-10-18T13:48:30.000Z')
+    expect(msUntilExpiry('2026-10-18T13:48:46.000Z', now)).toBe(16_000)
+    expect(msUntilExpiry('2026-10-18T13:48:30.000Z', now)).toBeNull()
+    expect(msUntilExpiry('not-a-date', now)).toBeNull()
   })
 })

@@ -337,13 +337,19 @@ export function isCurrentAssignee(
   )
 }
 
-async function pendingReassignmentCaseIds(caseIds: readonly string[]): Promise<Set<string>> {
-  if (caseIds.length === 0) return new Set()
+/**
+ * คำขอเปลี่ยนผู้รับผิดชอบที่รอตอบ ต่อเคส — คืน id + เวลาหมดเขตด้วย เพื่อให้ popup บนมือถือ
+ * จำ "ดูทีหลัง" ต่อคำขอ (S7-AG6-06) และแสดงป้ายหมดเวลาก่อนให้กด (S7-AG5-03)
+ */
+async function pendingReassignmentsByCase(
+  caseIds: readonly string[],
+): Promise<Map<string, { id: string; expiresAt: string }>> {
+  if (caseIds.length === 0) return new Map()
   const rows = await prisma.pendingReassignment.findMany({
     where: { caseId: { in: [...caseIds] }, status: 'waiting_consent' },
-    select: { caseId: true },
+    select: { id: true, caseId: true, expiresAt: true },
   })
-  return new Set(rows.map((row) => row.caseId))
+  return new Map(rows.map((row) => [row.caseId, { id: row.id, expiresAt: row.expiresAt.toISOString() }]))
 }
 
 /**
@@ -446,7 +452,7 @@ export async function listFieldCases(user: SessionUser, query: FieldCaseListQuer
   })
 
   const [pending, closedExtras, previousFail] = await Promise.all([
-    pendingReassignmentCaseIds(rows.map((row) => row.caseId)),
+    pendingReassignmentsByCase(rows.map((row) => row.caseId)),
     loadClosedCardExtras(user.organizationId, rows),
     loadPreviousRoundFailReasons(user.organizationId, rows),
   ])
@@ -456,9 +462,12 @@ export async function listFieldCases(user: SessionUser, query: FieldCaseListQuer
     group: query.status ?? null,
     readOnly: query.view === 'team',
     items: rows.map((row) => {
+      const pendingRequest = pending.get(row.caseId) ?? null
       const item = {
-        ...toListItem(row, pending.has(row.caseId), closedExtras.get(row.id)),
+        ...toListItem(row, pendingRequest !== null, closedExtras.get(row.id)),
         previousRoundFailReason: previousFail.get(row.id) ?? null,
+        pendingReassignmentId: pendingRequest?.id ?? null,
+        pendingReassignmentExpiresAt: pendingRequest?.expiresAt ?? null,
       }
       // มุมมองทีม: เคสของเพื่อนร่วมทีมเห็นแค่ชื่อลูกหนี้/พื้นที่/วัน/ชื่อพนักงาน (preship R3-005 · PDPA)
       return query.view === 'team' ? toTeamViewListItem(item, user.id) : item

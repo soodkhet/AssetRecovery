@@ -620,16 +620,26 @@ export function advanceDecidedMessage(
 
 /**
  * ผู้รับมีสองฝั่ง (`15` §9.1): **ผู้ยืม** เห็นจากหน้าจอ Field · **การเงิน** เห็นจากแท็บเงินทดรองจ่าย
- * — ข้อความเดียวกัน ต่างกันแค่ปลายทางของลิงก์ (ใช้คีย์กันซ้ำตัวเดียวกันได้ เพราะ id กันซ้ำผูกกับผู้รับด้วย)
+ * — ต่างกันที่ปลายทางของลิงก์ + ฝั่งการเงินมีชื่อผู้ยืม (ใช้คีย์กันซ้ำตัวเดียวกันได้ เพราะ id กันซ้ำผูกกับผู้รับด้วย)
  */
 export function advanceOverdueMessage(
-  input: { advanceId: string; dueClearDate: Date },
+  input: {
+    advanceId: string
+    /** เลขใบ ADV — ให้แยกได้ว่าใบไหนเมื่อเลยกำหนดหลายใบพร้อมกัน (mytester7 S7-AG5-02) */
+    advanceNumber: string
+    /** ยอดที่จ่ายออกไป (อนุมัติ — ไม่มีค่า = ยอดที่ขอ) satang */
+    amountSatang: number
+    /** ชื่อผู้ยืม — แสดงเฉพาะฝั่งการเงิน (ผู้ยืมรู้อยู่แล้วว่าเป็นของตัวเอง) */
+    borrowerName: string | null
+    dueClearDate: Date
+  },
   audience: 'payee' | 'finance',
 ): NotificationMessage {
+  const borrower = audience === 'finance' && input.borrowerName !== null ? ` · ${input.borrowerName}` : ''
   return {
     eventCode: 'advance.overdue',
     title: 'เงินทดรองเลยกำหนดเคลียร์',
-    body: `ครบกำหนดเคลียร์ยอดวันที่ ${fmtDate(input.dueClearDate)} — ระบบมาร์คเป็นเลยกำหนดแล้ว`,
+    body: `${input.advanceNumber}${borrower} · ยอด ${fmtSatangSymbol(input.amountSatang)} · ครบกำหนดเคลียร์ยอดวันที่ ${fmtDate(input.dueClearDate)} — ระบบมาร์คเป็นเลยกำหนดแล้ว`,
     // ผู้ยืมไปหน้าเงินทดรองของตัวเองใน Field Tracker (มีหน้าแล้วตั้งแต่ UAT BUG-046)
     linkPath: audience === 'payee' ? '/field/advances' : '/finance?tab=advances',
     dedupeKey: `advance-${input.advanceId}`,

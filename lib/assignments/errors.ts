@@ -93,9 +93,25 @@ export function assignmentErrorMessage(code: AssignmentErrorCode): ErrorMessage 
   return MESSAGES[code]
 }
 
+/**
+ * ข้อความเฉพาะกรณี "เลยเวลาตอบแล้ว แต่ job หมดเวลายังไม่ทันรัน" (code/HTTP เดิม) — ข้อความกลางบอกว่า
+ * "เปลี่ยนไปแล้ว" ซึ่งไม่จริงในช่วงนี้ เคสยังเป็นของพนักงานจนกว่า job จะรัน (mytester7 S7-AG5-03)
+ */
+export const REASSIGNMENT_EXPIRED_AWAITING_JOB_MESSAGE: ErrorMessage = {
+  title: 'คำขอนี้หมดเวลาตอบแล้ว',
+  message: 'เลยเวลาที่ตอบได้แล้ว — ระบบจะเปลี่ยนผู้รับผิดชอบให้อัตโนมัติตามกติกาในไม่ช้า ไม่รับการตอบที่มาช้า',
+}
+
 export class AssignmentError extends ModuleError<AssignmentErrorCode> {
-  constructor(code: AssignmentErrorCode, options?: { detail?: string; context?: Record<string, unknown> }) {
-    super(code, MESSAGES[code], HTTP_STATUS[code], options)
+  /** `message` = ข้อความเฉพาะสถานการณ์แทนข้อความกลางของ code (code/HTTP status คงเดิม) */
+  constructor(
+    code: AssignmentErrorCode,
+    options?: { detail?: string; context?: Record<string, unknown>; message?: ErrorMessage },
+  ) {
+    super(code, options?.message ?? MESSAGES[code], HTTP_STATUS[code], {
+      detail: options?.detail,
+      context: options?.context,
+    })
     this.name = 'AssignmentError'
   }
 }

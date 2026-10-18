@@ -1,5 +1,5 @@
 import type { DomainEventName } from '@/lib/api/event-names'
-import { CaseError } from '@/lib/cases/errors'
+import { CaseError, RECYCLE_INVALID_STATUS_MESSAGES } from '@/lib/cases/errors'
 
 /**
  * State machine ของเคสฝั่งรับเคส (ไฟล์ 38 §9/§10) — **pure ล้วน ใช้ร่วม FE/BE**
@@ -209,7 +209,14 @@ export function assertStatusChange(
 
   if (!(rule.from as readonly string[]).includes(currentStatus)) {
     if (rule.recycle) {
-      throw new CaseError('CASE_RECYCLE_INVALID_STATUS', { context: { status: currentStatus, action } })
+      // ข้อความให้ตรงสถานการณ์ (S7-AG1-01) — code เดิมตาม `38` §12
+      const message =
+        action !== 'create_recycle_request'
+          ? RECYCLE_INVALID_STATUS_MESSAGES.noPendingRequest
+          : currentStatus === 'pending_recycle_review'
+            ? RECYCLE_INVALID_STATUS_MESSAGES.alreadyPending
+            : undefined
+      throw new CaseError('CASE_RECYCLE_INVALID_STATUS', { context: { status: currentStatus, action }, message })
     }
     throw new CaseError('CASE_INVALID_STATUS_TRANSITION', {
       context: { status: currentStatus, action, allowedFrom: rule.from },

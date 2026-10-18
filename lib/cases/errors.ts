@@ -182,9 +182,32 @@ export function caseErrorMessage(code: CaseErrorCode): ErrorMessage {
   return MESSAGES[code]
 }
 
+/**
+ * ข้อความเฉพาะสถานการณ์ของ `CASE_RECYCLE_INVALID_STATUS` (code/HTTP status คงเดิม) — ข้อความกลางพูดถึง
+ * "ขอรีไซเคิลได้เฉพาะเคสปิดไม่สำเร็จ" ซึ่งไม่ตรงเมื่อผู้ใช้กดอนุมัติ/ไม่อนุมัติคำขอที่ถูกตัดสินไปแล้ว
+ * (เช่น หน้าต่างค้างในแท็บอื่น) หรือขอซ้ำขณะมีคำขอรอพิจารณาอยู่ (mytester7 S7-AG1-01)
+ */
+export const RECYCLE_INVALID_STATUS_MESSAGES = {
+  noPendingRequest: {
+    title: 'ไม่มีคำขอรีไซเคิลรอพิจารณาแล้ว',
+    message: 'คำขอรีไซเคิลของเคสนี้ถูกพิจารณาไปแล้ว หรือไม่มีคำขอค้างอยู่ — รีเฟรชหน้าเพื่อดูสถานะล่าสุดของเคส',
+  },
+  alreadyPending: {
+    title: 'มีคำขอรีไซเคิลรอพิจารณาอยู่แล้ว',
+    message: 'เคสนี้มีคำขอรีไซเคิลที่ยังรอพิจารณาอยู่ — รอผลการพิจารณาก่อน ไม่ต้องส่งคำขอซ้ำ',
+  },
+} as const satisfies Record<string, ErrorMessage>
+
 export class CaseError extends ModuleError<CaseErrorCode> {
-  constructor(code: CaseErrorCode, options?: { detail?: string; context?: Record<string, unknown> }) {
-    super(code, MESSAGES[code], HTTP_STATUS[code], options)
+  /** `message` = ข้อความเฉพาะสถานการณ์แทนข้อความกลางของ code (code/HTTP status คงเดิม) */
+  constructor(
+    code: CaseErrorCode,
+    options?: { detail?: string; context?: Record<string, unknown>; message?: ErrorMessage },
+  ) {
+    super(code, options?.message ?? MESSAGES[code], HTTP_STATUS[code], {
+      detail: options?.detail,
+      context: options?.context,
+    })
     this.name = 'CaseError'
   }
 }

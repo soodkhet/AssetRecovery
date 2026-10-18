@@ -6,7 +6,7 @@ import { IconAlert, IconCalendar } from '@/components/field/field-icons'
 import { Button, ErrorState, Field, LoadingState, Modal, ModalCancelButton, Textarea, useToast } from '@/components/ui'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
-import { declineReasonError, reassignmentCountdown } from '@/lib/field/reassignment-ui'
+import { declineReasonError, msUntilExpiry, reassignmentCountdown } from '@/lib/field/reassignment-ui'
 import type { FieldActionResultDto, FieldCaseDetailDto, FieldCaseDetailResponseDto } from '@/lib/field/types'
 import { fmtDateTime } from '@/lib/format/datetime'
 
@@ -16,7 +16,7 @@ import { fmtDateTime } from '@/lib/format/datetime'
  *
  * - **ยินยอม** → เคสโอนให้คนใหม่ทันที หายจากรายการของเรา (ไฟล์ 40 §8)
  * - **ไม่ยินยอม** → ต้องกรอกเหตุผลก่อนเสมอ (`DECLINE_REASON_REQUIRED`) เคสยังเป็นของเราตามเดิม
- * - หมดเขตแล้ว = job auto-resolve ไปแล้ว ตอบไม่ได้ (`REASSIGNMENT_ALREADY_TIMED_OUT`)
+ * - หมดเขตแล้ว = ตอบไม่ได้ (`REASSIGNMENT_ALREADY_TIMED_OUT`) — job อาจยังไม่ทันรัน ระบบจะเปลี่ยนให้ตามกติกา
  *
  * ⚠️ ผู้เรียกต้องส่ง `key={caseId}` — state รีเซ็ตด้วยการ remount
  */
@@ -73,9 +73,29 @@ export function ReassignmentModal({
   const countdown = pending === null ? null : reassignmentCountdown(pending.expiresAt, now)
   const reasonError = declineReasonError(reason)
 
+  // ตั้งเวลาให้ตรงวินาทีที่หมดเขต — เดิมรอรอบ 30 วินาที ⇒ ช่วงนั้นยังกดตอบได้ทั้งที่หมดเขตแล้ว
+  // แล้วโดนปฏิเสธด้วยข้อความที่ไม่ตรงสถานะ (mytester7 S7-AG5-03)
+  const expiresAtIso = pending?.expiresAt ?? null
+  useEffect(() => {
+    if (expiresAtIso === null) return
+    const remainingMs = msUntilExpiry(expiresAtIso, new Date())
+    if (remainingMs === null) return
+    // setTimeout รับได้ไม่เกิน ~24.8 วัน — คำขอจริงหมดเขตในไม่กี่ชั่วโมง
+    const timer = setTimeout(() => setNow(new Date()), Math.min(remainingMs + 250, 2_000_000_000))
+    return () => clearTimeout(timer)
+  }, [expiresAtIso])
+
   async function respond(consent: boolean): Promise<void> {
     if (pending === null) return
     if (!consent && reasonError !== null) return
+    // ตรวจเวลาอีกครั้งตอนกด (เครื่องหลับ/แท็บถูกพักทำให้ timer มาช้าได้) — หมดเขตแล้วไม่ส่ง แสดงป้ายหมดเวลาแทน
+    const clickedAt = new Date()
+    if (reassignmentCountdown(pending.expiresAt, clickedAt).expired) {
+      setNow(clickedAt)
+      setConsenting(false)
+      setDeclining(false)
+      return
+    }
 
     setSubmitting(true)
     try {

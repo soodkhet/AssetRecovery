@@ -16,12 +16,53 @@ export function pendingReassignmentCases(items: readonly FieldCaseListItemDto[])
   return items.filter((item) => item.hasPendingReassignment)
 }
 
-/** เคสถัดไปที่ควรเด้ง auto-popup — คืน `null` เมื่อไม่มี/ถูกกด "ดูทีหลัง" ไปหมดแล้ว */
+/**
+ * กุญแจที่ใช้จำ "ดูทีหลัง" — ต่อ **คำขอ** (id ของ pending_reassignment) เพื่อให้คำขอใหม่ของเคสเดิมเด้งได้อีก
+ * · ข้อมูลเก่าที่ไม่มี id = ใช้ caseId แทน (S7-AG6-06)
+ */
+export function reassignmentPopupKey(item: FieldCaseListItemDto): string {
+  return item.pendingReassignmentId ?? item.caseId
+}
+
+/** เคสถัดไปที่ควรเด้ง auto-popup — คืน `null` เมื่อไม่มี/ถูกกด "ดูทีหลัง" ไปหมดแล้ว (`dismissedKeys` = `reassignmentPopupKey`) */
 export function nextReassignmentPopup(
   items: readonly FieldCaseListItemDto[],
-  dismissedCaseIds: readonly string[],
+  dismissedKeys: readonly string[],
 ): FieldCaseListItemDto | null {
-  return pendingReassignmentCases(items).find((item) => !dismissedCaseIds.includes(item.caseId)) ?? null
+  return pendingReassignmentCases(items).find((item) => !dismissedKeys.includes(reassignmentPopupKey(item))) ?? null
+}
+
+/** กุญแจ sessionStorage ของรายการ "ดูทีหลัง" — อยู่ข้ามการโหลดหน้าในแท็บเดียวกัน หายเมื่อปิดแท็บ (S7-AG6-06) */
+export const REASSIGNMENT_DISMISSED_STORAGE_KEY = 'field.reassignment.dismissed'
+
+/** อ่านค่าที่เก็บไว้แบบทนข้อมูลเสีย — ไม่ใช่ array ของ string = ถือว่ายังไม่เคยกด */
+export function parseDismissedPopups(raw: string | null): string[] {
+  if (raw === null) return []
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+/**
+ * ตัดกุญแจของคำขอที่ไม่ค้างแล้วทิ้ง (ตอบ/หมดเวลาไปแล้ว) ก่อนเขียนกลับ — sessionStorage ไม่โตเรื่อย ๆ
+ * · รายการว่าง (ยังโหลดไม่เสร็จ) = ไม่ตัด
+ */
+export function pruneDismissedPopups(
+  dismissedKeys: readonly string[],
+  items: readonly FieldCaseListItemDto[],
+): string[] {
+  if (items.length === 0) return [...dismissedKeys]
+  const live = new Set(pendingReassignmentCases(items).map(reassignmentPopupKey))
+  return dismissedKeys.filter((key) => live.has(key))
+}
+
+/** มิลลิวินาทีจนถึงเวลาหมดเขต — `null` เมื่อหมดแล้ว/ค่าเสีย (ใช้ตั้ง timer ให้ป้ายหมดเวลาขึ้นตรงเวลา — S7-AG5-03) */
+export function msUntilExpiry(expiresAt: string, now: Date): number | null {
+  const remainingMs = new Date(expiresAt).getTime() - now.getTime()
+  return Number.isFinite(remainingMs) && remainingMs > 0 ? remainingMs : null
 }
 
 /** ข้อความบนปุ่ม "ไม่ยินยอม" — คืน `null` เมื่อเหตุผลใช้ได้ (`40` §8 `DECLINE_REASON_REQUIRED`) */

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { CaseError } from '@/lib/cases/errors'
 import { CASE_IMPORT_TEMPLATE_COLUMNS, IMPORT_COLUMNS } from '@/lib/cases/import'
 import {
+  debtorIdentityDisplay,
   imeiBlurError,
   CASE_REQUIRED_ADDRESS_FIELDS,
   readinessGapText,
@@ -505,5 +506,38 @@ describe('imeiBlurError (staging E-027)', () => {
     expect(imeiBlurError('356789012345678')).toBeNull()
     expect(imeiBlurError('C39XK2ABC123')).toBeNull()
     expect(imeiBlurError('')).toBeNull()
+  })
+})
+
+describe('debtorIdentityDisplay — โมดัลพิจารณาแสดงสัญชาติ + เลขเอกสารตัวตน (D7-04 · mytester7 S7-AG1-04)', () => {
+  const base = { debtorNationality: null, debtorNationalityOther: null, debtorNationalId: null, debtorPassportNo: null }
+
+  it('ต่างชาติ (พม่า) = สัญชาติ พม่า + เลข Passport', () => {
+    expect(debtorIdentityDisplay({ ...base, debtorNationality: 'MM', debtorPassportNo: 'MD1234567' })).toEqual({
+      nationality: 'พม่า',
+      idLabel: 'เลข Passport / เอกสารอื่น',
+      idValue: 'MD1234567',
+    })
+  })
+
+  it('ไทย = เลขบัตรประชาชน', () => {
+    expect(debtorIdentityDisplay({ ...base, debtorNationality: 'TH', debtorNationalId: '1101700000001' })).toEqual({
+      nationality: 'ไทย',
+      idLabel: 'เลขบัตรประชาชน',
+      idValue: '1101700000001',
+    })
+  })
+
+  it('สัญชาติอื่นๆ แสดงข้อความที่ระบุ · ไม่ทราบสัญชาติแต่มี Passport = แสดง Passport', () => {
+    expect(
+      debtorIdentityDisplay({ ...base, debtorNationality: 'OTHER', debtorNationalityOther: 'เวียดนาม', debtorPassportNo: 'C123' })
+        .nationality,
+    ).toBe('เวียดนาม')
+    expect(debtorIdentityDisplay({ ...base, debtorPassportNo: 'P9' })).toEqual({
+      nationality: '—',
+      idLabel: 'เลข Passport / เอกสารอื่น',
+      idValue: 'P9',
+    })
+    expect(debtorIdentityDisplay(base).idValue).toBe('—')
   })
 })

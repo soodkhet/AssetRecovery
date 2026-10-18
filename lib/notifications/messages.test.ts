@@ -113,7 +113,10 @@ const ALL: readonly NotificationMessage[] = [
   expenseRejectedMessage({ grossSatang: 50000, reason: 'ใบเสร็จไม่ชัด', caseBound: true }),
   expenseRejectedMessage({ grossSatang: 80000, reason: 'ใบเสร็จไม่ชัด', caseBound: false }),
   payoutBatchCompletedMessage({ batchId: 'b1', batchName: 'รอบจ่าย Outsource', netSatang: 9900000, source: 'manual' }),
-  advanceOverdueMessage({ advanceId: 'a1', dueClearDate: new Date('2026-08-10T00:00:00Z') }, 'payee'),
+  advanceOverdueMessage(
+    { advanceId: 'a1', advanceNumber: 'ADV-2569-0007', amountSatang: 235_075, borrowerName: 'สมพร นิติรับเหมา', dueClearDate: new Date('2026-08-10T00:00:00Z') },
+    'payee',
+  ),
   payoutPaidToPayeeMessage({ batchId: 'b1', userId: 'u1', transferSatang: 97_000 }),
   advanceDecidedMessage(
     { advanceId: 'a1', approvedSatang: 250_000, requestedSatang: 300_000, dueClearDate: new Date('2026-10-20T00:00:00Z'), reason: null },
@@ -297,10 +300,33 @@ describe('รายละเอียดข้อความรายตัว'
   })
 
   it('เงินทดรองเลยกำหนดส่งลิงก์คนละปลายทางตามผู้รับ แต่ใช้คีย์กันซ้ำตัวเดียวกัน', () => {
-    const input = { advanceId: 'a9', dueClearDate: new Date('2026-08-10T00:00:00Z') }
+    const input = {
+      advanceId: 'a9',
+      advanceNumber: 'ADV-2569-0007',
+      amountSatang: 235_075,
+      borrowerName: 'สมพร นิติรับเหมา',
+      dueClearDate: new Date('2026-08-10T00:00:00Z'),
+    }
     expect(advanceOverdueMessage(input, 'payee').linkPath).toBe('/field/advances')
     expect(advanceOverdueMessage(input, 'finance').linkPath).toBe('/finance?tab=advances')
     expect(advanceOverdueMessage(input, 'payee').dedupeKey).toBe(advanceOverdueMessage(input, 'finance').dedupeKey)
+  })
+
+  it('เงินทดรองเลยกำหนดระบุเลข ADV + ยอด · ฝั่งการเงินมีชื่อผู้ยืม (mytester7 S7-AG5-02)', () => {
+    const input = {
+      advanceId: 'a9',
+      advanceNumber: 'ADV-2569-0007',
+      amountSatang: 235_075,
+      borrowerName: 'สมพร นิติรับเหมา',
+      dueClearDate: new Date('2026-10-19T00:00:00Z'),
+    }
+    expect(advanceOverdueMessage(input, 'finance').body).toBe(
+      'ADV-2569-0007 · สมพร นิติรับเหมา · ยอด ฿2,350.75 · ครบกำหนดเคลียร์ยอดวันที่ 19/10/2569 — ระบบมาร์คเป็นเลยกำหนดแล้ว',
+    )
+    const payee = advanceOverdueMessage(input, 'payee').body
+    expect(payee).toContain('ADV-2569-0007')
+    expect(payee).toContain('฿2,350.75')
+    expect(payee).not.toContain('สมพร')
   })
 
   it('WHT: นับถอยหลัง/ครบกำหนดวันนี้/เลยกำหนด ใช้ข้อความคนละแบบ (`33` §6.2 มีโทษปรับ)', () => {

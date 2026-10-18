@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CaseError } from '@/lib/cases/errors'
+import { CaseError, RECYCLE_INVALID_STATUS_MESSAGES } from '@/lib/cases/errors'
 import {
   allowedActionsFrom,
   assertStatusChange,
@@ -22,6 +22,16 @@ function codeOf(fn: () => unknown): string {
     throw error
   }
   return 'NO_ERROR'
+}
+
+function errorOf(fn: () => unknown): CaseError {
+  try {
+    fn()
+  } catch (error) {
+    if (error instanceof CaseError) return error
+    throw error
+  }
+  throw new Error('NO_ERROR')
 }
 
 const ok = { hasReason: true }
@@ -106,6 +116,24 @@ describe('Recycle (`38` §6.6 · §20)', () => {
   it('เคส closed_success ขอรีไซเคิลไม่ได้ → CASE_RECYCLE_INVALID_STATUS', () => {
     expect(codeOf(() => assertStatusChange('closed_success', 'create_recycle_request', ok))).toBe(
       'CASE_RECYCLE_INVALID_STATUS',
+    )
+  })
+
+  it('อนุมัติ/ไม่อนุมัติเคสที่ไม่มีคำขอค้าง (ตัดสินไปแล้ว) → ข้อความบอกว่าไม่มีคำขอรอพิจารณา (S7-AG1-01)', () => {
+    for (const action of ['approve_recycle', 'reject_recycle'] as const) {
+      const error = errorOf(() => assertStatusChange('closed_fail', action, ok))
+      expect(error.code).toBe('CASE_RECYCLE_INVALID_STATUS')
+      expect(error.userMessage).toBe(RECYCLE_INVALID_STATUS_MESSAGES.noPendingRequest.message)
+      expect(error.userMessage).not.toContain('เฉพาะเคสที่ปิดงานด้วยผลไม่สำเร็จ')
+    }
+  })
+
+  it('ขอรีไซเคิลซ้ำขณะมีคำขอรอพิจารณา → ข้อความบอกว่ามีคำขอค้างอยู่แล้ว · closed_success คงข้อความเดิม', () => {
+    expect(errorOf(() => assertStatusChange('pending_recycle_review', 'create_recycle_request', ok)).userMessage).toBe(
+      RECYCLE_INVALID_STATUS_MESSAGES.alreadyPending.message,
+    )
+    expect(errorOf(() => assertStatusChange('closed_success', 'create_recycle_request', ok)).userMessage).toBe(
+      'ขอรีไซเคิลได้เฉพาะเคสที่ปิดงานด้วยผลไม่สำเร็จเท่านั้น',
     )
   })
 

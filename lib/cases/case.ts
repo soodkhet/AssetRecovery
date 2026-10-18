@@ -23,6 +23,36 @@ export const DEBTOR_NATIONALITY_LABEL: Record<DebtorNationalityCode, string> = {
   OTHER: 'อื่นๆ (ระบุ)',
 }
 
+/**
+ * สัญชาติ + เลขเอกสารตัวตนสำหรับแสดงผล (รายละเอียด/โมดัลพิจารณาเคส) — ผู้พิจารณาต้องเทียบกับสำเนาบัตร/Passport
+ * ที่แนบ (มติ D7-04 · mytester7 S7-AG1-04) · สัญชาติ "อื่นๆ" แสดงข้อความที่ระบุ · ไม่ทราบสัญชาติ = เลือกช่องที่มีค่า
+ */
+export function debtorIdentityDisplay(input: {
+  debtorNationality: string | null
+  debtorNationalityOther: string | null
+  debtorNationalId: string | null
+  debtorPassportNo: string | null
+}): { nationality: string; idLabel: string; idValue: string } {
+  const code = (DEBTOR_NATIONALITIES as readonly string[]).includes(input.debtorNationality ?? '')
+    ? (input.debtorNationality as DebtorNationalityCode)
+    : null
+  const nationality =
+    code === null
+      ? '—'
+      : code === 'OTHER'
+        ? (input.debtorNationalityOther?.trim() || 'อื่นๆ')
+        : DEBTOR_NATIONALITY_LABEL[code]
+  const kind =
+    code !== null
+      ? identityDocumentKind(code)
+      : input.debtorNationalId === null && input.debtorPassportNo !== null
+        ? 'passport'
+        : 'national_id'
+  return kind === 'national_id'
+    ? { nationality, idLabel: 'เลขบัตรประชาชน', idValue: input.debtorNationalId ?? '—' }
+    : { nationality, idLabel: 'เลข Passport / เอกสารอื่น', idValue: input.debtorPassportNo ?? '—' }
+}
+
 /** สัญชาติไทย = เลขบัตรประชาชน 13 หลัก · สัญชาติอื่น = passport/เอกสารอื่น (free text) */
 export function identityDocumentKind(nationality: DebtorNationalityCode): 'national_id' | 'passport' {
   return nationality === 'TH' ? 'national_id' : 'passport'

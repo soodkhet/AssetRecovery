@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { EMPTY_CASE_FORM, isCaseFormDirty } from '@/lib/cases/case-form'
-import { runWithConcurrency, slotUploadBadge, uploadProgressLabel } from '@/lib/cases/upload-queue'
+import { isDocumentAttached, runWithConcurrency, slotUploadBadge, uploadProgressLabel } from '@/lib/cases/upload-queue'
 
 describe('runWithConcurrency (mytester B-14)', () => {
   it('รันพร้อมกันไม่เกิน limit · ผลเรียงตามลำดับเดิม', async () => {
@@ -52,5 +52,18 @@ describe('ฟอร์มรับเคสมีข้อมูลค้าง 
   it('กรอกช่องใดช่องหนึ่ง หรือเลือกไฟล์ไว้ = ถามก่อนทิ้ง', () => {
     expect(isCaseFormDirty({ ...EMPTY_CASE_FORM, debtorName: 'สมชาย' }, EMPTY_CASE_FORM, 0)).toBe(true)
     expect(isCaseFormDirty(EMPTY_CASE_FORM, EMPTY_CASE_FORM, 1)).toBe(true)
+  })
+})
+
+describe('isDocumentAttached — คำตอบผูกไฟล์หายแต่ server บันทึกแล้ว ไม่แจ้งว่าไม่สำเร็จ (mytester7 S7-AG5-01)', () => {
+  const docs = [
+    { fileUrl: 'cases/c1/contract/aaa-contract.pdf', documentType: 'contract' },
+    { fileUrl: 'cases/c1/product_photo/45cdd6d4-phone2.jpg', documentType: 'product_photo' },
+  ]
+  it('path + ช่องตรง = ผูกแล้ว', () => {
+    expect(isDocumentAttached(docs, { fileUrl: 'cases/c1/product_photo/45cdd6d4-phone2.jpg', documentType: 'product_photo' })).toBe(true)
+  })
+  it('ชื่อไฟล์เดียวกันแต่ path ต่าง (อัปโหลดคนละครั้ง) = ยังไม่ผูก', () => {
+    expect(isDocumentAttached(docs, { fileUrl: 'cases/c1/product_photo/99999999-phone2.jpg', documentType: 'product_photo' })).toBe(false)
   })
 })

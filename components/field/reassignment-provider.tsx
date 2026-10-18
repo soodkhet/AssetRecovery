@@ -8,15 +8,22 @@ import { Button, Modal, useToast } from '@/components/ui'
 import {
   EMPTY_REASSIGNMENT_WATCH,
   nextReassignmentPopup,
+  parseDismissedPopups,
+  pruneDismissedPopups,
+  REASSIGNMENT_DISMISSED_STORAGE_KEY,
   reassignedAwayMessage,
+  reassignmentCountdown,
+  reassignmentPopupKey,
   trackReassignments,
 } from '@/lib/field/reassignment-ui'
+import { fmtDateTime } from '@/lib/format/datetime'
 
 /**
  * เจ้าของ **Pending Reassignment Flow** ทั้งหมดของ Field Tracker (`41` §7.8) — อยู่ระดับ shell
  * เพื่อให้ทั้ง 3 ทางเข้าเปิด modal ตัวเดียวกันและมี auto-popup ชุดเดียวไม่ซ้อนกัน:
  *
  * 1. **auto-popup** ทุกครั้งที่โหลดหน้าแล้วมีคำขอที่ยังไม่ตอบและยังไม่กด "ดูทีหลัง" ในเซสชันนี้
+ *    — "ดูทีหลัง" จำต่อคำขอใน sessionStorage ⇒ รีเฟรช/เปิดลิงก์ใหม่ในแท็บเดิมไม่เด้งซ้ำ (mytester7 S7-AG6-06)
  * 2. ปุ่ม "ตอบคำขอ" บนการ์ดแท็บกำลังติดตาม → `openReassignment(caseId)`
  * 3. ปุ่ม "ตอบคำขอนี้" ในหน้ารายละเอียดเคส → `openReassignment(caseId)`
  *
@@ -40,7 +47,9 @@ export function FieldReassignmentProvider({ children }: { children: ReactNode })
   const { items, reload } = useFieldCases()
   const { showToast } = useToast()
   const [openCaseId, setOpenCaseId] = useState<string | null>(null)
-  const [dismissed, setDismissed] = useState<readonly string[]>([])
+  // อ่านค่าครั้งแรกจาก sessionStorage — ตอน render ฝั่ง server/โหมดส่วนตัวที่เข้าถึงไม่ได้ = เริ่มว่าง
+  // (รายการเคสเริ่มว่างเสมอจนกว่าจะโหลดเสร็จ จึงไม่ทำให้ hydration ไม่ตรง)
+  const [dismissed, setDismissed] = useState<readonly string[]>(readDismissedPopups)
   const [paused, setPaused] = useState(false)
   /** สถานะติดตามคำขอข้ามรอบโหลด — เก็บใน ref เพราะไม่ต้อง re-render เมื่อเปลี่ยน */
   const watch = useRef(EMPTY_REASSIGNMENT_WATCH)
@@ -70,15 +79,23 @@ export function FieldReassignmentProvider({ children }: { children: ReactNode })
 
   const popupCase = openCaseId !== null || paused ? null : nextReassignmentPopup(items, dismissed)
 
-  /** "ดูทีหลัง" — ปิดเฉพาะ popup ในเซสชันนี้ (badge ม่วงยังค้าง) */
-  function dismissPopup(caseId: string): void {
-    setDismissed((current) => (current.includes(caseId) ? current : [...current, caseId]))
+  /** "ดูทีหลัง" — ปิดเฉพาะ popup ในเซสชันนี้ (badge ม่วงยังค้าง) · จำข้ามการโหลดหน้า (S7-AG6-06) */
+  function dismissPopup(key: string): void {
+    if (dismissed.includes(key)) return
+    const next = pruneDismissedPopups([...dismissed, key], items)
+    writeDismissedPopups(next)
+    setDismissed(next)
   }
 
-  function respondFromPopup(caseId: string): void {
-    setDismissed((current) => (current.includes(caseId) ? current : [...current, caseId]))
+  function respondFromPopup(caseId: string, key: string): void {
+    dismissPopup(key)
     setOpenCaseId(caseId)
   }
+
+  const popupCountdown =
+    popupCase?.pendingReassignmentExpiresAt == null
+      ? null
+      : reassignmentCountdown(popupCase.pendingReassignmentExpiresAt, new Date())
 
   function handleResponded(caseId: string): void {
     watch.current = { ...watch.current, answered: [...watch.current.answered, caseId] }
@@ -97,7 +114,7 @@ export function FieldReassignmentProvider({ children }: { children: ReactNode })
       <Modal
         open={popupCase !== null}
         onClose={() => {
-          if (popupCase !== null) dismissPopup(popupCase.caseId)
+          if (popupCase !== null) dismissPopup(reassignmentPopupKey(popupCase))
         }}
         size="sm"
         confirmDiscard={false}
@@ -115,11 +132,15 @@ export function FieldReassignmentProvider({ children }: { children: ReactNode })
                 variant="primary"
                 className="w-full justify-center py-3.5"
                 data-autofocus
-                onClick={() => respondFromPopup(popupCase.caseId)}
+                onClick={() => respondFromPopup(popupCase.caseId, reassignmentPopupKey(popupCase))}
               >
                 ตอบเลย
               </Button>
-              <Button variant="ghost" className="w-full justify-center" onClick={() => dismissPopup(popupCase.caseId)}>
+              <Button
+                variant="ghost"
+                className="w-full justify-center"
+                onClick={() => dismissPopup(reassignmentPopupKey(popupCase))}
+              >
                 ดูทีหลัง
               </Button>
             </div>
@@ -134,10 +155,22 @@ export function FieldReassignmentProvider({ children }: { children: ReactNode })
                 {[popupCase.district, popupCase.province].filter((part) => part !== null).join(', ') || '—'}
               </div>
               <div className="flex items-center gap-1.5 text-xs text-purple-600">
-                <IconCalendar className="h-4 w-4" /> เปิดดูรายละเอียดคำขอและเวลาหมดเขตได้ที่ปุ่ม &ldquo;ตอบเลย&rdquo;
+                <IconCalendar className="h-4 w-4" />
+                {popupCase.pendingReassignmentExpiresAt == null ? (
+                  <>เปิดดูรายละเอียดคำขอและเวลาหมดเขตได้ที่ปุ่ม &ldquo;ตอบเลย&rdquo;</>
+                ) : (
+                  <>หมดเขตตอบ {fmtDateTime(popupCase.pendingReassignmentExpiresAt)}</>
+                )}
               </div>
             </div>
-            <p className="text-xs text-slate-500">ถ้าไม่ตอบภายในเวลาที่กำหนด ระบบจะเปลี่ยนผู้รับผิดชอบให้อัตโนมัติ</p>
+            {popupCountdown?.expired === true ? (
+              // หมดเวลาแล้วแต่ระบบยังไม่ทันโอน — บอกก่อนกด ไม่ให้กดตอบแล้วโดนปฏิเสธ (S7-AG5-03)
+              <p className="rounded-xl border-2 border-rose-300 bg-rose-50 p-3 text-xs font-bold text-rose-700">
+                หมดเวลาตอบแล้ว — ระบบจะเปลี่ยนผู้รับผิดชอบให้อัตโนมัติตามกติกา
+              </p>
+            ) : (
+              <p className="text-xs text-slate-500">ถ้าไม่ตอบภายในเวลาที่กำหนด ระบบจะเปลี่ยนผู้รับผิดชอบให้อัตโนมัติ</p>
+            )}
           </>
         )}
       </Modal>
@@ -152,4 +185,22 @@ export function FieldReassignmentProvider({ children }: { children: ReactNode })
       )}
     </ReassignmentContext.Provider>
   )
+}
+
+/** sessionStorage อาจโยนได้ (โหมดส่วนตัว/บล็อกข้อมูลเว็บ/render ฝั่ง server) — ล้ม = เริ่มว่าง ไม่พังหน้า */
+function readDismissedPopups(): string[] {
+  try {
+    if (typeof window === 'undefined') return []
+    return parseDismissedPopups(window.sessionStorage.getItem(REASSIGNMENT_DISMISSED_STORAGE_KEY))
+  } catch {
+    return []
+  }
+}
+
+function writeDismissedPopups(keys: readonly string[]): void {
+  try {
+    window.sessionStorage.setItem(REASSIGNMENT_DISMISSED_STORAGE_KEY, JSON.stringify(keys))
+  } catch {
+    // เก็บไม่ได้ = จำได้แค่ในหน้านี้ (พฤติกรรมเดิม)
+  }
 }

@@ -104,6 +104,12 @@ export function AcceptedTab({ currentUserId }: { currentUserId: string }) {
                     onClick={() => setDetailCaseId(item.caseId)}
                     className="focus-ring min-w-0 flex-1 text-left"
                   >
+                    {/* เคสรีไซเคิล: ป้ายรอบเหมือนแท็บรอรับงาน (mytester7 S7-AG1-02) */}
+                    {item.trackingRound > 1 && (
+                      <div className="mb-1 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-800">
+                        รอบที่ {item.trackingRound}
+                      </div>
+                    )}
                     <div className="truncate text-[15px] font-bold text-slate-800">{item.debtorName ?? '—'}</div>
                     <div className="mt-0.5 flex items-center gap-1 truncate text-xs text-slate-500">
                       <IconMapPin className="h-4 w-4 shrink-0" />
