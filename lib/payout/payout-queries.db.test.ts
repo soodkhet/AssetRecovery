@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SessionUser } from '@/lib/auth/types'
@@ -430,6 +431,39 @@ suite('batch builder (`17` §9)', () => {
 
     const items = await db().payoutBatchItem.findMany({ where: { organizationId: ORG_ID }, select: { id: true } })
     expect(items).toHaveLength(1)
+  })
+})
+
+suite('ยอดสะสมฐาน WHT ณ รอบนี้ — loadMonthToDateThroughBatch (mytester7 S7-AG4-02 · review Rule 07)', () => {
+  /** สร้างรอบจาก 1 ใบเบิก แล้วตั้งเวลาสร้างรอบ (instant) ตามต้องการ */
+  async function batchAt(expenseId: string, grossSatang: number, createdAt: string): Promise<{ id: string; createdAt: Date }> {
+    await seedExpense({ id: expenseId, payeeId: PAYEE_OUT_ID, grossSatang })
+    const { batch } = await payout.createPayoutBatch(ctx, { side: 'outsource', cutoffDate: CUTOFF, name: null })
+    await db().$executeRawUnsafe(`UPDATE payout_batches SET created_at = '${createdAt}' WHERE id = '${batch.id}'`)
+    return { id: batch.id, createdAt: new Date(createdAt) }
+  }
+
+  it('นับรอบก่อนหน้าในเดือนไทยเดียวกัน + รายการรอบนี้ · ไม่นับรอบยกเลิก/เดือนก่อน (เวลาไทย)/รอบที่สร้างหลังรอบนี้', async () => {
+    const { loadMonthToDateThroughBatch } = await import('@/lib/payout/month-to-date-queries')
+    // 30/09 23:30 เวลาไทย = เดือนก่อน แม้วันที่ UTC เดียวกับรอบอื่น
+    await batchAt('00000000-0000-4000-8000-0000000034f1', 200_000, '2026-09-30T16:30:00Z')
+    // 01/10 00:10 เวลาไทย — รอบก่อนหน้าในเดือนเดียวกัน (นับ)
+    await batchAt('00000000-0000-4000-8000-0000000034f2', 500_000, '2026-09-30T17:10:00Z')
+    // 01/10 00:15 เวลาไทย — ถูกยกเลิก (ไม่นับ)
+    const cancelled = await batchAt('00000000-0000-4000-8000-0000000034f3', 300_000, '2026-09-30T17:15:00Z')
+    await db().$executeRawUnsafe(`UPDATE payout_batches SET status = 'cancelled', cancelled_at = NOW(), cancelled_by = '${FINANCE_ID}', cancel_reason = 'ทดสอบยกเลิก' WHERE id = '${cancelled.id}'`)
+    // รอบนี้ 01/10 00:30 เวลาไทย (นับรายการของตัวเอง)
+    const current = await batchAt('00000000-0000-4000-8000-0000000034f4', 100_000, '2026-09-30T17:30:00Z')
+    // สร้างหลังรอบนี้ (ไม่นับ)
+    await batchAt('00000000-0000-4000-8000-0000000034f5', 50_000, '2026-09-30T18:00:00Z')
+
+    const totals = await loadMonthToDateThroughBatch(ORG_ID, current, [PAYEE_OUT_ID])
+    expect(totals.get(PAYEE_OUT_ID)).toBe(600_000)
+  })
+
+  it('ไม่มีผู้รับ ⇒ ว่าง (ไม่ query)', async () => {
+    const { loadMonthToDateThroughBatch } = await import('@/lib/payout/month-to-date-queries')
+    expect((await loadMonthToDateThroughBatch(ORG_ID, { id: randomUUID(), createdAt: new Date() }, [])).size).toBe(0)
   })
 })
 
