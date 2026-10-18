@@ -35,7 +35,8 @@ import type { RoleListItem } from '@/lib/roles/types'
 import { canManageAccountIn, canViewAccountsIn } from '@/lib/users/auth-account'
 import { userAffiliationText } from '@/lib/users/affiliation'
 import type { TeamDto } from '@/lib/teams/types'
-import type { UserDto } from '@/lib/users/types'
+import { suspendWarnings } from '@/lib/users/pending-work'
+import type { UserDto, UserPendingWorkDto } from '@/lib/users/types'
 
 /**
  * หน้า "ผู้ใช้งาน" — โครงตาม mockup `settings.html` (`renderUsersContent`)
@@ -101,6 +102,19 @@ export function UsersManager() {
 
   const [pending, setPending] = useState<PendingAction | null>(null)
   const [pendingReason, setPendingReason] = useState('')
+  /**
+   * งานค้างทุกชนิดของผู้ใช้ที่กำลังจะระงับ (mytester7 S7-AG7-04) — งานภาคสนาม · ใบเบิก · คิวรออนุมัติที่เขาเป็นผู้ลงมือ
+   * `undefined` = กำลังโหลด · `null` = โหลดไม่ได้ (ยังระงับได้ — เตือนเท่าที่รู้จากตาราง)
+   */
+  const [suspendWork, setSuspendWork] = useState<{ userId: string; work: UserPendingWorkDto | null } | null>(null)
+
+  function askSuspend(user: UserDto): void {
+    setPending({ user, action: 'suspend' })
+    setSuspendWork(null)
+    void callApi<UserPendingWorkDto>(`/api/users/${user.id}/pending-work`).then((result) => {
+      setSuspendWork({ userId: user.id, work: result.data ?? null })
+    })
+  }
   const [submitting, setSubmitting] = useState(false)
 
   // แท็บ "เจ้าหน้าที่ติดตามทรัพย์" ครอบ 2 กลุ่ม แต่ปุ่มสลับย่อยเลือกทีละกลุ่ม (`07` §8)
@@ -360,7 +374,7 @@ export function UsersManager() {
                               <Button
                                 variant="secondary"
                                 onClick={() => {
-                                  setPending({ user, action: 'suspend' })
+                                  askSuspend(user)
                                   setPendingReason('')
                                 }}
                               >
@@ -433,11 +447,7 @@ export function UsersManager() {
         loading={submitting}
         confirmDisabled={pendingReason.trim().length < REASON_MIN_LENGTH}
       >
-        {pending?.action === 'suspend' && pending.user.activeCaseCount > 0 && (
-          <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-            ผู้ใช้คนนี้ยังมีงานค้างอยู่ {pending.user.activeCaseCount} เคส — ต้องมอบหมายงานให้คนอื่นต่อ (การย้ายงานอัตโนมัติจะมาในเฟสถัดไป)
-          </p>
-        )}
+        {pending?.action === 'suspend' && <SuspendWorkNotice user={pending.user} state={suspendWork} />}
         <Field id="user-action-reason" label="เหตุผล" required>
           <Textarea
             maxLength={500}
@@ -449,5 +459,44 @@ export function UsersManager() {
         </Field>
       </ConfirmModal>
     </>
+  )
+}
+
+/**
+ * กล่องเตือนงานค้างก่อนระงับ (mytester7 S7-AG7-04) — ทุกชนิด ไม่ใช่แค่งานภาคสนาม
+ * รวมคิวรออนุมัติที่ผู้ใช้เป็นผู้ลงมือ และระบุเมื่อเขาเป็นผู้อนุมัติคนเดียวที่ใช้งานอยู่
+ */
+function SuspendWorkNotice({
+  user,
+  state,
+}: {
+  user: UserDto
+  state: { userId: string; work: UserPendingWorkDto | null } | null
+}) {
+  const box = 'mb-3 rounded-lg border p-3 text-xs'
+  if (state === null || state.userId !== user.id) {
+    return <p className={`${box} border-slate-200 bg-slate-50 text-slate-600`}>กำลังตรวจงานค้างของผู้ใช้คนนี้…</p>
+  }
+  if (state.work === null) {
+    // โหลดรายละเอียดไม่ได้ — เตือนจากตัวเลขในตารางเท่าที่มี
+    return user.activeCaseCount > 0 ? (
+      <p className={`${box} border-amber-200 bg-amber-50 text-amber-800`}>
+        ผู้ใช้คนนี้ยังมีงานค้างอยู่ {user.activeCaseCount} เคส — ต้องมอบหมายงานให้คนอื่นต่อ (ตรวจงานรออนุมัติอื่นไม่สำเร็จ)
+      </p>
+    ) : (
+      <p className={`${box} border-amber-200 bg-amber-50 text-amber-800`}>ตรวจงานค้างของผู้ใช้คนนี้ไม่สำเร็จ — ระงับได้ แต่ควรตรวจงานค้างเองก่อน</p>
+    )
+  }
+  const lines = suspendWarnings(state.work)
+  if (lines.length === 0) return null
+  return (
+    <div className={`${box} border-amber-200 bg-amber-50 text-amber-800`}>
+      <p className="font-semibold">ผู้ใช้คนนี้ยังมีงานค้าง — ระบบไม่ส่งต่องานให้อัตโนมัติ</p>
+      <ul className="mt-1 list-disc space-y-0.5 pl-4">
+        {lines.map((line) => (
+          <li key={line}>{line}</li>
+        ))}
+      </ul>
+    </div>
   )
 }

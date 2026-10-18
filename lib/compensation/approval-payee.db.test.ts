@@ -1091,4 +1091,77 @@ suite('U131 — ข้อมูลรับเงินในฟอร์มผ�
     expect(after[0]?.payeeInfoIncomplete).toBe(false)
     expect((await fieldExpenses.listFieldExpenses(agent, { type: 'caseBound' })).paymentInfoIncomplete).toBe(false)
   })
+
+  /** ค่าฟอร์มของผู้ใช้เดิม + ทีมใหม่ (ฟอร์มส่งทั้งชุด) */
+  async function moveValues(userId: string, teamId: string) {
+    const current = await users.getUser(admin, userId)
+    return {
+      current,
+      values: {
+        roleId: current.roleId,
+        username: current.username ?? `d703-${Date.now()}`,
+        email: current.email,
+        fullName: current.fullName,
+        phone: current.phone,
+        employeeCode: current.employeeCode,
+        teamId,
+        companyId: current.companyId,
+      },
+    }
+  }
+
+  it('มติ D7-03 (mytester7 S7-AG7-01) — มีงานภาคสนามเปิด ⇒ ย้ายทีมไม่ได้ `USER_HAS_OPEN_ASSIGNMENTS` พร้อมเลขเคส · ทีมเดิมคงอยู่ · แก้ฟิลด์อื่นได้', async () => {
+    const caseRef = `D703-${Date.now()}`
+    const tx = db()
+    const cases = await tx.$queryRawUnsafe<{ id: string }[]>(`
+      INSERT INTO cases (
+        organization_id, case_ref, case_ref_normalized, company_id, source, status, created_by,
+        debtor_name, addr_province, addr_district, asset_kind, asset_description, debt_amount_satang, assigned_team_id
+      ) VALUES (
+        '${ORG_ID}', $$${caseRef}$$, $$${caseRef}$$, '${COMPANY_ID}', 'manual', 'active', '${MANAGER_ID}',
+        'ลูกหนี้ D7-03', 'ลำพูน', 'เมือง', 'smartphone', 'iPhone 15', 1000000, '${TEAM_ID}'
+      ) RETURNING id
+    `)
+    await tx.$executeRawUnsafe(`
+      INSERT INTO case_assignments (organization_id, case_id, agent_id, team_id, status, created_by)
+      VALUES ('${ORG_ID}', '${cases[0]?.id}', '${AGENT_2_ID}', '${TEAM_ID}', 'scheduled', '${MANAGER_ID}')
+    `)
+
+    const { current, values } = await moveValues(AGENT_2_ID, OTHER_TEAM_ID)
+    const error = await users.updateUser({ actor: admin, meta }, current, values).catch((e: unknown) => e)
+    expect(codeOf(error)).toBe('USER_HAS_OPEN_ASSIGNMENTS')
+    expect((error as { userMessage: string }).userMessage).toContain(caseRef)
+    expect((await tx.user.findUniqueOrThrow({ where: { id: AGENT_2_ID } })).teamId).toBe(TEAM_ID)
+
+    // ทีมเดิม + แก้เบอร์โทร ⇒ ผ่าน (กันเฉพาะการย้ายทีม/กลุ่ม)
+    const sameTeam = await users.updateUser({ actor: admin, meta }, current, { ...values, teamId: TEAM_ID, phone: '0811110703' })
+    expect(sameTeam.user.phone).toBe('0811110703')
+    await tx.user.update({ where: { id: AGENT_2_ID }, data: { phone: null } })
+  })
+
+  it('มติ D7-03 ขยาย (mytester7 S7-AG7-03) — ใบเบิกไม่ผูกงานรออนุมัติ ⇒ ย้ายทีมไม่ได้ · ใบเบิกผูกงานที่ปิดแล้วไม่กัน · audit ระบุทีมจาก → ไป (S7-AG7-02)', async () => {
+    const payeeId = await seedPayee(AGENT_ID)
+    // ใบเบิกผูกงาน (งาน closed_success) ⇒ ยึดทีมของงานเสมอ จึงไม่กัน
+    await seedPendingExpense(payeeId)
+    const tx = db()
+    await tx.$executeRawUnsafe(`
+      INSERT INTO expenses (organization_id, payee_id, expense_type, gross_satang, expense_date, status, calculation_source, created_by)
+      VALUES ('${ORG_ID}', '${payeeId}', 'hotel', 79999, DATE '2026-10-18', 'pending_approval', 'receipt', '${AGENT_ID}')
+    `)
+    const { current, values } = await moveValues(AGENT_ID, OTHER_TEAM_ID)
+    const error = await users.updateUser({ actor: admin, meta }, current, values).catch((e: unknown) => e)
+    expect(codeOf(error)).toBe('USER_HAS_OPEN_ASSIGNMENTS')
+    expect((error as { userMessage: string }).userMessage).toContain('ค่าที่พัก ฿799.99')
+
+    await tx.$executeRawUnsafe(`DELETE FROM expenses WHERE organization_id = '${ORG_ID}' AND assignment_id IS NULL`)
+    const moved = await users.updateUser({ actor: admin, meta }, current, values)
+    expect(moved.user.teamId).toBe(OTHER_TEAM_ID)
+    const audit = await tx.auditLog.findFirstOrThrow({
+      where: { targetType: 'users', targetId: AGENT_ID, action: 'update' },
+      orderBy: { createdAt: 'desc' },
+      select: { reason: true },
+    })
+    expect(audit.reason).toContain('ทีม ทีมทดสอบ 3.2 → ทีมนอก scope 3.2')
+    await tx.user.update({ where: { id: AGENT_ID }, data: { teamId: TEAM_ID } })
+  })
 })

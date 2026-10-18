@@ -1,4 +1,5 @@
 import type { RoleGroup, UserStatus } from '@/lib/generated/prisma/enums'
+import { ROLE_GROUP_LABEL } from '@/lib/roles/role-groups'
 import { UserError } from '@/lib/users/errors'
 
 /**
@@ -127,23 +128,51 @@ const CHANGE_LABELS: ReadonlyArray<[keyof UserValues, string]> = [
   ['fullName', 'ชื่อ-นามสกุล'],
   ['phone', 'เบอร์โทร'],
   ['employeeCode', 'รหัสพนักงาน'],
-  ['teamId', 'ทีม'],
-  ['companyId', 'บริษัท'],
 ]
+
+/** ชื่อที่ใช้บรรยายสิ่งที่เปลี่ยน — กลุ่ม/ทีม/บริษัทไม่ระบุ = บรรยายแค่ชื่อฟิลด์ (ผู้เรียกเดิม) */
+export interface UserChangeNames {
+  roleName: string
+  roleGroup?: RoleGroup
+  teamName?: string | null
+  companyName?: string | null
+}
+
+const NONE = 'ไม่มี'
+
+function fromTo(label: string, before: string | null | undefined, after: string | null | undefined): string {
+  return `${label} ${before ?? NONE} → ${after ?? NONE}`
+}
 
 /**
  * เหตุผลที่ระบบสร้างลง audit ตอนแก้ไขผู้ใช้ (มติ PO 03/10/2569 — ฟอร์มแก้ไขไม่มีช่องเหตุผล)
- * สรุปจากสิ่งที่เปลี่ยนจริง: บทบาทระบุชื่อเดิม → ใหม่ (ฟิลด์สิทธิ์ที่ตรวจย้อนหลังบ่อยที่สุด) · ฟิลด์อื่นระบุแค่ชื่อฟิลด์
- * (ค่าเต็ม before/after อยู่ใน audit อยู่แล้ว)
+ * สรุปจากสิ่งที่เปลี่ยนจริง: สังกัด/สิทธิ์ (กลุ่ม · บทบาท · ทีม · บริษัท) ระบุจาก → ไปเป็นชื่อที่อ่านออก
+ * (mytester7 S7-AG7-02 — role ชื่อซ้ำข้ามกลุ่มได้ ⇒ ย้ายกลุ่มต้องเห็นกลุ่มด้วย ไม่งั้นอ่านเป็น "X → X")
+ * ฟิลด์อื่นระบุแค่ชื่อฟิลด์ (ค่าเต็ม before/after อยู่ใน audit อยู่แล้ว)
  */
-export function describeUserChanges(
-  before: UserValues & { roleName: string },
-  after: UserValues & { roleName: string },
-): string {
+export function describeUserChanges(before: UserValues & UserChangeNames, after: UserValues & UserChangeNames): string {
   const parts: string[] = []
-  if (before.roleId !== after.roleId) parts.push(`บทบาท ${before.roleName} → ${after.roleName}`)
+  const groupChanged =
+    before.roleGroup !== undefined && after.roleGroup !== undefined && before.roleGroup !== after.roleGroup
+  if (groupChanged && before.roleGroup !== undefined && after.roleGroup !== undefined) {
+    parts.push(fromTo('กลุ่ม', ROLE_GROUP_LABEL[before.roleGroup], ROLE_GROUP_LABEL[after.roleGroup]))
+  }
+  if (before.roleId !== after.roleId) {
+    const sameName = before.roleName === after.roleName
+    const label = (names: UserChangeNames) =>
+      sameName && groupChanged && names.roleGroup !== undefined
+        ? `${names.roleName} (${ROLE_GROUP_LABEL[names.roleGroup]})`
+        : names.roleName
+    parts.push(fromTo('บทบาท', label(before), label(after)))
+  }
   for (const [key, label] of CHANGE_LABELS) {
     if (before[key] !== after[key]) parts.push(label)
+  }
+  if (before.teamId !== after.teamId) {
+    parts.push(after.teamName === undefined ? 'ทีม' : fromTo('ทีม', before.teamName, after.teamName))
+  }
+  if (before.companyId !== after.companyId) {
+    parts.push(after.companyName === undefined ? 'บริษัท' : fromTo('บริษัท', before.companyName, after.companyName))
   }
   return parts.length === 0 ? 'แก้ไขข้อมูลผู้ใช้ (ไม่มีฟิลด์เปลี่ยน)' : `แก้ไขข้อมูลผู้ใช้: ${parts.join(', ')}`
 }

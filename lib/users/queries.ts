@@ -37,6 +37,8 @@ import {
   setAuthPassword,
   syncAuthEmail,
 } from '@/lib/users/provisioning'
+import { blocksTeamChange, isTeamOrGroupChange, teamChangeBlockMessage } from '@/lib/users/pending-work'
+import { loadTeamChangeBlockers, type TeamChangeReadClient } from '@/lib/users/pending-work-queries'
 import type { UserListQuery } from '@/lib/users/schemas'
 import type { UserDto } from '@/lib/users/types'
 import {
@@ -314,21 +316,30 @@ async function assertPhoneAvailable(
 }
 
 /** ทีม/บริษัทที่อ้างต้องมีจริงในองค์กร — ใช้ code ของโมดูลเจ้าของ (`24` §6.1) ไม่ตั้ง code ใหม่ */
-async function assertReferencesExist(organizationId: string, values: UserValues): Promise<void> {
+/** ทีม/บริษัทที่อ้างต้องมีจริงในองค์กร — คืนชื่อไว้บรรยายเหตุผล audit (mytester7 S7-AG7-02) */
+async function assertReferencesExist(
+  organizationId: string,
+  values: UserValues,
+): Promise<{ teamName: string | null; companyName: string | null }> {
+  let teamName: string | null = null
+  let companyName: string | null = null
   if (values.teamId !== null) {
     const team = await prisma.team.findFirst({
       where: { id: values.teamId, organizationId, deletedAt: null },
-      select: { id: true },
+      select: { name: true },
     })
     if (!team) throw new TeamError('TEAM_NOT_FOUND', { detail: `team=${values.teamId}` })
+    teamName = team.name
   }
   if (values.companyId !== null) {
     const company = await prisma.financeCompany.findFirst({
       where: { id: values.companyId, organizationId, deletedAt: null },
-      select: { id: true },
+      select: { name: true },
     })
     if (!company) throw new FinanceCompanyError('COMPANY_NOT_FOUND', { detail: `company=${values.companyId}` })
+    companyName = company.name
   }
+  return { teamName, companyName }
 }
 
 /**
@@ -570,16 +581,23 @@ export async function updateUser(
   if (values.username !== before.username) await assertUsernameAvailable(organizationId, values.username, current.id)
   if (values.email !== before.email) await assertEmailAvailable(organizationId, values.email, current.id)
   if (values.phone !== before.phone) await assertPhoneAvailable(organizationId, values.phone, current.id)
-  await assertReferencesExist(organizationId, values)
+  const references = await assertReferencesExist(organizationId, values)
   await assertSuperadminSafety(
     organizationId,
     { roleName: current.roleName, status: current.status },
     { roleName: role.name, status: current.status },
   )
+  const teamOrGroupChange = isTeamOrGroupChange(
+    { teamId: before.teamId, roleGroup: current.roleGroup },
+    { teamId: values.teamId, roleGroup: role.roleGroup },
+  )
+  // มติ D7-03 — ตรวจก่อนเตรียมข้อมูลรับเงิน (ปฏิเสธเร็ว) แล้วตรวจซ้ำใน transaction กันงานที่เพิ่งถูกมอบระหว่างนั้น
+  if (teamOrGroupChange) await assertNoTeamChangeBlockers(organizationId, current.id, prisma)
   const preparedPayment = await preparePayment(context.actor, current.id, role.roleGroup, payment)
 
   let paymentResult: UserPaymentWriteResult | null = null
   const updated = await prisma.$transaction(async (tx) => {
+    if (teamOrGroupChange) await assertNoTeamChangeBlockers(organizationId, current.id, tx)
     const user = await tx.user.update({
       where: { id: current.id },
       data: {
@@ -606,7 +624,16 @@ export async function updateUser(
         targetId: current.id,
         before: toUserAuditPayload(before, { status: current.status, roleName: current.roleName }),
         after: toUserAuditPayload(values, { status: current.status, roleName: role.name }),
-        reason: describeUserChanges({ ...before, roleName: current.roleName }, { ...values, roleName: role.name }),
+        reason: describeUserChanges(
+          {
+            ...before,
+            roleName: current.roleName,
+            roleGroup: current.roleGroup,
+            teamName: current.teamName,
+            companyName: current.companyName,
+          },
+          { ...values, roleName: role.name, roleGroup: role.roleGroup, ...references },
+        ),
         ipAddress: context.meta.ipAddress,
         userAgent: context.meta.userAgent,
       },
@@ -645,6 +672,27 @@ export async function updateUser(
   }
 
   return { user: toDto(updated), warning: paymentWarning(warning, paymentResult) }
+}
+
+/**
+ * มติ D7-03 (mytester7 S7-AG7-01/03) — ย้ายทีม/กลุ่มไม่ได้ถ้ายังมีงานภาคสนามที่ยังไม่จบ
+ * หรือใบเบิกไม่ผูกงานที่ยังอยู่ในสายอนุมัติ · ข้อความระบุเลขเคส/ใบเบิกที่ต้องจัดการก่อน
+ */
+async function assertNoTeamChangeBlockers(
+  organizationId: string,
+  userId: string,
+  client: TeamChangeReadClient,
+): Promise<void> {
+  const blockers = await loadTeamChangeBlockers(organizationId, userId, client)
+  if (!blocksTeamChange(blockers)) return
+  throw new UserError('USER_HAS_OPEN_ASSIGNMENTS', {
+    message: teamChangeBlockMessage(blockers),
+    detail: `user=${userId} openAssignments=${blockers.openAssignments.length} pendingClaims=${blockers.pendingClaims.length}`,
+    context: {
+      caseRefs: [...new Set(blockers.openAssignments.map((item) => item.caseRef))],
+      pendingClaimIds: blockers.pendingClaims.map((item) => item.expenseId),
+    },
+  })
 }
 
 /**

@@ -1,4 +1,4 @@
-import type { RoleGroup, UserStatus } from '@/lib/generated/prisma/enums'
+import type { AssignmentStatus, ExpenseStatus, ExpenseType, RoleGroup, UserStatus } from '@/lib/generated/prisma/enums'
 
 /**
  * รูปร่างข้อมูลที่ API ของโมดูลผู้ใช้งานส่งออก — **pure type ล้วน**
@@ -37,4 +37,41 @@ export interface UserDto {
   /** Payee ที่ผูกกับผู้ใช้ (มติ PO U131 — ฟอร์มผู้ใช้โหลดข้อมูลรับเงินจากตัวนี้) · `null` = ยังไม่มี */
   payeeId: string | null
   updatedAt: string
+}
+
+/** งานภาคสนามที่ยังไม่จบของผู้ใช้ (ผู้รับผิดชอบงาน) — ต้องมอบใหม่ก่อนย้ายทีม/กลุ่ม (มติ D7-03) */
+export interface UserOpenAssignmentDto {
+  assignmentId: string
+  caseId: string
+  caseRef: string
+  status: AssignmentStatus
+}
+
+/**
+ * ใบเบิกที่ไม่ผูกงานซึ่งยังรออนุมัติ/ถูกตีกลับ — ผู้อนุมัติขั้นผู้จัดการคิดจากทีมปัจจุบันของผู้เบิก
+ * จึงต้องจบก่อนย้ายทีม/กลุ่ม (มติ D7-03 ขยาย — mytester7 S7-AG7-03)
+ */
+export interface UserPendingClaimDto {
+  expenseId: string
+  expenseType: ExpenseType
+  grossSatang: number
+  status: ExpenseStatus
+}
+
+/** คิวรออนุมัติที่ผู้ใช้เป็นผู้ลงมือ (ใช้เตือนก่อนระงับ — mytester7 S7-AG7-04) */
+export interface UserApprovalQueueDto {
+  id: string
+  label: string
+  count: number
+  /** จำนวนชนเพดานการดึงข้อมูล — แสดงเป็น "N+" */
+  capped: boolean
+  /** ไม่มีผู้ใช้อื่นที่ใช้งานอยู่ถือสิทธิ์ทำคิวนี้ (ยกเว้น Superadmin) */
+  soleApprover: boolean
+}
+
+/** `GET /api/users/:id/pending-work` — งานค้างทุกชนิดของผู้ใช้ */
+export interface UserPendingWorkDto {
+  openAssignments: UserOpenAssignmentDto[]
+  pendingClaims: UserPendingClaimDto[]
+  approvalQueues: UserApprovalQueueDto[]
 }

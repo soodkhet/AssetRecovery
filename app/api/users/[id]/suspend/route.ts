@@ -13,8 +13,8 @@ type RouteContext = { params: Promise<{ id: string }> }
  * · ผู้ใช้ที่ถูกระงับ login ไม่ได้ (`05` §10) และ session cache ถูกล้างทันทีไม่ต้องรอ TTL
  * · Superadmin ที่ active คนสุดท้ายระงับไม่ได้ (`LAST_SUPERADMIN_REMOVAL` — `07` §11)
  *
- * เคสค้างของผู้ใช้ที่ถูกระงับ (D7) แสดงเป็นตัวเลขเตือนบน UI ก่อนกดยืนยัน — การ reassign อัตโนมัติ
- * อยู่ที่ Phase 2.6 (ไฟล์ 40)
+ * งานค้างทุกชนิด (งานภาคสนาม · ใบเบิก · คิวรออนุมัติที่ผู้ใช้เป็นผู้ลงมือ/ผู้อนุมัติคนเดียว) เตือนบน UI ก่อนกดยืนยัน
+ * ผ่าน `GET /api/users/:id/pending-work` (mytester7 S7-AG7-04) — ระบบไม่ส่งต่องานอัตโนมัติ
  */
 export const PATCH = withApiPermission<RouteContext>(
   'manage',

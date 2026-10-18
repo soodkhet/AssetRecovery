@@ -51,6 +51,8 @@ export const ERROR_CATALOG = {
   // 502 = ปลายทางภายนอก (Supabase Auth) ไม่ตอบ/ปฏิเสธ ไม่ใช่ข้อมูลผู้เรียกผิด (มติ PO 03/10/2569)
   AUTH_ACCOUNT_SYNC_FAILED: { status: 502, severity: 'reject', source: '24 §6.1' },
   INVALID_USER_SCOPE: { status: 400, severity: 'reject', source: '24 §6.1' },
+  // มติ D7-03 (mytester7 S7-AG7-01/03) — ย้ายทีม/กลุ่มขณะมีงานภาคสนามเปิด/ใบเบิกไม่ผูกงานรออนุมัติ
+  USER_HAS_OPEN_ASSIGNMENTS: { status: 400, severity: 'reject', source: '24 §6.1' },
   BANK_ACCOUNT_NAME_MISMATCH: { status: 200, severity: 'warn', source: '24 §6.1' },
   CYCLE_NOT_FOUND: { status: 404, severity: 'reject', source: '24 §6.1' },
   DUPLICATE_CYCLE_NAME: { status: 400, severity: 'reject', source: '24 §6.1' },
