@@ -1,4 +1,4 @@
-import { toBangkokParts } from '@/lib/format/datetime'
+import { fmtDate, toBangkokParts } from '@/lib/format/datetime'
 
 /**
  * อัตรา VAT แบบ effective-dated (`13` §6.5 · `19` §6.3) — **pure ล้วน ใช้ร่วม FE/BE**
@@ -99,4 +99,159 @@ export function sortPeriodsDesc<T extends Pick<VatRatePeriod, 'effectiveFrom'>>(
 /** ช่วงที่ยังเปิดปลาย (ยังใช้อยู่) — FE เตือนให้ปิดช่วงก่อนเพิ่มอัตราใหม่ */
 export function openEndedPeriod(periods: readonly VatRatePeriod[]): VatRatePeriod | null {
   return periods.find((period) => period.effectiveTo === null) ?? null
+}
+
+/**
+ * ป้ายช่วงอัตราที่ผู้ใช้เห็น — "7% (01/10/2568–31/10/2569)" หรือ "7% (01/10/2568 เป็นต้นไป)" ตามวันสิ้นสุดจริง
+ * (mytester7 S7-AG2-04 — เดิมแสดง "เป็นต้นไป" เสมอแม้ช่วงปิดแล้ว) · ใช้ทั้งข้อความ `VAT_RATE_OVERLAP` และหน้าจอ
+ */
+export function formatVatPeriodLabel(period: Pick<VatRatePeriod, 'ratePct' | 'effectiveFrom' | 'effectiveTo'>): string {
+  const range =
+    period.effectiveTo === null
+      ? `${fmtDate(period.effectiveFrom)} เป็นต้นไป`
+      : `${fmtDate(period.effectiveFrom)}–${fmtDate(period.effectiveTo)}`
+  return `${period.ratePct}% (${range})`
+}
+
+// ── กติกาแก้ช่วงอัตรา (มติ D7-01 · mytester7 S7-AG2-01/02/03) ─────────────────────────
+
+/** ช่องว่างระหว่างช่วง (วันแรก/วันสุดท้ายที่ไม่มีอัตรา — date-only เที่ยงคืน UTC) */
+export interface VatRateGap {
+  from: Date
+  to: Date
+}
+
+function fromDayNumber(day: number): Date {
+  return new Date(day * 86_400_000)
+}
+
+/**
+ * ช่องว่างระหว่างช่วงแรกถึงช่วงล่าสุด — วันที่ไม่มีอัตราใดครอบคลุม ⇒ รายได้วันนั้นสร้างไม่ได้ (`VAT_RATE_NOT_FOUND`)
+ * ไม่นับก่อนช่วงแรก/หลังช่วงสุดท้าย (นอกประวัติ ไม่ใช่ "ช่องว่าง")
+ */
+export function findVatRateGaps(
+  periods: readonly Pick<VatRatePeriod, 'effectiveFrom' | 'effectiveTo'>[],
+): VatRateGap[] {
+  const ranges = periods.map(rangeOf).sort((a, b) => a.from - b.from)
+  const gaps: VatRateGap[] = []
+  let coveredTo: number | null = null
+  for (const range of ranges) {
+    if (coveredTo !== null && range.from > coveredTo + 1) {
+      gaps.push({ from: fromDayNumber(coveredTo + 1), to: fromDayNumber(range.from - 1) })
+    }
+    coveredTo = coveredTo === null ? range.to : Math.max(coveredTo, range.to)
+  }
+  return gaps
+}
+
+/** วันที่ของรายได้ที่อ้างช่วงอัตราหนึ่ง (`revenues.revenue_date` แรกสุด/ล่าสุดที่ตกในช่วง) */
+export interface VatRevenueSpan {
+  first: Date
+  last: Date
+}
+
+export type VatRateChangeViolation =
+  /** ปิดช่วง (วันสิ้นสุด) ก่อนวันนี้ตามเวลาไทย */
+  | { code: 'VAT_RATE_END_DATE_PAST'; today: Date }
+  /** เปลี่ยนอัตรา หรือย่น/เลื่อนช่วงจนรายได้ที่อ้างอยู่หลุดช่วง */
+  | { code: 'VAT_RATE_IN_USE'; reason: 'rate_changed' | 'range_excludes_revenue'; span: VatRevenueSpan }
+  /** การบันทึกทำให้เกิดวันที่ไม่มีอัตราระหว่างช่วง */
+  | { code: 'VAT_RATE_GAP'; gap: VatRateGap }
+
+export interface VatRateChangeInput {
+  /** ค่าที่จะบันทึก */
+  candidate: Pick<VatRatePeriod, 'ratePct' | 'effectiveFrom' | 'effectiveTo'>
+  /** ช่วงเดิมที่กำลังแก้ — `null` = เพิ่มช่วงใหม่ */
+  current: VatRatePeriod | null
+  /** ทุกช่วงในองค์กร (รวมช่วงที่กำลังแก้ — จะถูกแทนด้วย candidate) */
+  existing: readonly VatRatePeriod[]
+  /** รายได้ที่ `revenue_date` ตกในช่วงเดิม (เฉพาะตอนแก้) — `null` = ไม่มีรายได้อ้าง */
+  revenueSpan: VatRevenueSpan | null
+  /** เวลาปัจจุบัน (instant) — ตัดสิน "วันนี้" ตามปฏิทินกรุงเทพ */
+  now: Date
+}
+
+function sameDay(a: Date | null, b: Date | null): boolean {
+  if (a === null || b === null) return a === b
+  return toDayNumber(a) === toDayNumber(b)
+}
+
+function gapCoveredBy(gap: VatRateGap, gaps: readonly VatRateGap[]): boolean {
+  const from = toDayNumber(gap.from)
+  const to = toDayNumber(gap.to)
+  return gaps.some((other) => toDayNumber(other.from) <= from && to <= toDayNumber(other.to))
+}
+
+/**
+ * กติกาแก้/เพิ่มช่วงอัตรา VAT (มติ D7-01) — **pure** ใช้ทั้ง service (ตัวบังคับ) และหน้าจอ (เตือนก่อนบันทึก)
+ * เรียกหลังตรวจ `VAT_RATE_OVERLAP` แล้ว (ช่วงไม่ทับกัน) ตรวจตามลำดับ:
+ * 1. แก้วันสิ้นสุดเป็นก่อนวันนี้ (เวลาไทย) ⇒ `VAT_RATE_END_DATE_PAST` — ปิดช่วงได้เฉพาะวันนี้/อนาคต
+ *    (ใช้กับการแก้เท่านั้น: เพิ่มช่วงในอดีตไม่ทำให้วันใดเสียอัตรา · แก้หมายเหตุของช่วงที่ปิดไปแล้วไม่โดน)
+ * 2. ช่วงที่มีรายได้อ้าง: เปลี่ยนอัตรา หรือขอบช่วงใหม่ไม่ครอบวันที่ของรายได้ทุกรายการ ⇒ `VAT_RATE_IN_USE`
+ * 3. ทำให้เกิดช่องว่างใหม่ระหว่างช่วง ⇒ `VAT_RATE_GAP` (ช่องว่างที่มีอยู่ก่อนแล้วไม่ถือเป็นผลของการบันทึกนี้)
+ */
+export function validateVatRateChange(input: VatRateChangeInput): VatRateChangeViolation | null {
+  const { candidate, current, existing, revenueSpan, now } = input
+
+  if (current !== null) {
+    const todayDay = toBangkokDayNumber(now)
+    const endChanged = !sameDay(candidate.effectiveTo, current.effectiveTo)
+    if (endChanged && candidate.effectiveTo !== null && toDayNumber(candidate.effectiveTo) < todayDay) {
+      return { code: 'VAT_RATE_END_DATE_PAST', today: fromDayNumber(todayDay) }
+    }
+
+    if (revenueSpan !== null) {
+      if (Math.round(candidate.ratePct * 100) !== Math.round(current.ratePct * 100)) {
+        return { code: 'VAT_RATE_IN_USE', reason: 'rate_changed', span: revenueSpan }
+      }
+      const range = rangeOf(candidate)
+      if (range.from > toDayNumber(revenueSpan.first) || range.to < toDayNumber(revenueSpan.last)) {
+        return { code: 'VAT_RATE_IN_USE', reason: 'range_excludes_revenue', span: revenueSpan }
+      }
+    }
+  }
+
+  const before = findVatRateGaps(existing)
+  const others = current === null ? existing : existing.filter((period) => period.id !== current.id)
+  const after = findVatRateGaps([...others, candidate])
+  const introduced = after.find((gap) => !gapCoveredBy(gap, before))
+  if (introduced !== undefined) return { code: 'VAT_RATE_GAP', gap: introduced }
+
+  return null
+}
+
+/** ข้อความไทยของการละเมิด (title/message) — ใช้ทั้ง service (ข้อความ error) และหน้าจอ (เตือนก่อนบันทึก) */
+export function vatRateViolationMessage(violation: VatRateChangeViolation): { title: string; message: string } {
+  switch (violation.code) {
+    case 'VAT_RATE_END_DATE_PAST':
+      return {
+        title: 'ปิดช่วงย้อนหลังไม่ได้',
+        message: `วันสิ้นสุดต้องเป็นวันนี้ (${fmtDate(violation.today)}) หรือหลังจากนี้ — ปิดช่วงย้อนหลังจะทำให้วันที่ผ่านมาไม่มีอัตรา VAT`,
+      }
+    case 'VAT_RATE_IN_USE': {
+      const span =
+        toDayNumber(violation.span.first) === toDayNumber(violation.span.last)
+          ? fmtDate(violation.span.first)
+          : `${fmtDate(violation.span.first)}–${fmtDate(violation.span.last)}`
+      return violation.reason === 'rate_changed'
+        ? {
+            title: 'อัตรานี้มีรายได้ใช้อยู่แล้ว',
+            message: `มีรายได้วันที่ ${span} ใช้อัตรานี้แล้ว จึงเปลี่ยนอัตราไม่ได้ — ต้องการเปลี่ยนอัตราให้ปิดช่วงเดิม (วันนี้หรืออนาคต) แล้วเพิ่มอัตราใหม่`,
+          }
+        : {
+            title: 'ช่วงนี้มีรายได้อ้างอยู่',
+            message: `ช่วงวันที่ใหม่ต้องครอบคลุมรายได้วันที่ ${span} ที่ใช้อัตรานี้อยู่ — ย่นวันสิ้นสุดหรือเลื่อนวันเริ่มเกินวันดังกล่าวไม่ได้`,
+          }
+    }
+    case 'VAT_RATE_GAP': {
+      const gap =
+        toDayNumber(violation.gap.from) === toDayNumber(violation.gap.to)
+          ? fmtDate(violation.gap.from)
+          : `${fmtDate(violation.gap.from)}–${fmtDate(violation.gap.to)}`
+      return {
+        title: 'ช่วงอัตรา VAT ไม่ต่อเนื่อง',
+        message: `วันที่ ${gap} จะไม่มีอัตรา VAT (รายได้วันนั้นสร้างไม่ได้) — ให้ช่วงใหม่เริ่มวันถัดจากวันสิ้นสุดของช่วงเดิมพอดี`,
+      }
+    }
+  }
 }

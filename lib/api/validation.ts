@@ -72,7 +72,11 @@ export function requiredSatangSchema(label: string) {
 /** เปอร์เซ็นต์ = NUMERIC(5,2) — ข้อยกเว้นเดียวของกฎ "เงินเป็น INTEGER" (`02` §2.2) */
 export function pctSchema(label: string, max = 100) {
   return z
-    .number({ message: `${label} ต้องเป็นตัวเลข` })
+    // ช่องว่าง (`null`/ไม่ส่ง) = "กรุณาระบุ…" — FE ห้ามแปลงช่องว่างเป็น 0 เอง (mytester7 S7-AG2-01: อัตรา VAT ว่างเคยกลายเป็น 0%)
+    .number({
+      error: (issue) =>
+        issue.input === undefined || issue.input === null ? `กรุณาระบุ${label}` : `${label} ต้องเป็นตัวเลข`,
+    })
     .min(0, `${label} ต้องอยู่ระหว่าง 0-${max}`)
     .max(max, `${label} ต้องอยู่ระหว่าง 0-${max}`)
     .refine((value) => Number.isInteger(Math.round(value * 100)) && Math.abs(value * 100 - Math.round(value * 100)) < 1e-9, {

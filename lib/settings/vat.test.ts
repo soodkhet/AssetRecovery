@@ -1,12 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import {
   findOverlappingPeriods,
+  findVatRateGaps,
+  formatVatPeriodLabel,
   isPeriodRangeValid,
   openEndedPeriod,
   periodsOverlap,
   resolveVatRateAt,
   sortPeriodsDesc,
   toDayNumber,
+  validateVatRateChange,
+  vatRateViolationMessage,
   type VatRatePeriod,
 } from '@/lib/settings/vat'
 
@@ -142,5 +146,181 @@ describe('sortPeriodsDesc / openEndedPeriod', () => {
   it('หาช่วงที่ยังเปิดปลายอยู่', () => {
     expect(openEndedPeriod(HISTORY)?.id).toBe('next')
     expect(openEndedPeriod([OLD_PERIOD])).toBeNull()
+  })
+})
+
+describe('formatVatPeriodLabel (mytester7 S7-AG2-04)', () => {
+  it('ช่วงที่ปิดแล้วแสดงวันสิ้นสุดจริง (พ.ศ.) ไม่ใช่ "เป็นต้นไป"', () => {
+    expect(formatVatPeriodLabel(period('a', 7, '2025-10-01', '2026-10-31'))).toBe('7% (01/10/2568–31/10/2569)')
+  })
+
+  it('ช่วงเปิดปลาย = "เป็นต้นไป"', () => {
+    expect(formatVatPeriodLabel(period('a', 10, '2026-11-01', null))).toBe('10% (01/11/2569 เป็นต้นไป)')
+  })
+})
+
+describe('findVatRateGaps', () => {
+  it('ช่วงต่อกันพอดี = ไม่มีช่องว่าง', () => {
+    expect(findVatRateGaps(HISTORY)).toEqual([])
+  })
+
+  it('7% ถึง 30/10 + 10% เริ่ม 01/11 ⇒ ช่องว่าง 31/10 วันเดียว', () => {
+    const gaps = findVatRateGaps([period('a', 7, '2025-10-01', '2026-10-30'), period('b', 10, '2026-11-01', null)])
+    expect(gaps).toEqual([{ from: d('2026-10-31'), to: d('2026-10-31') }])
+  })
+
+  it('ไม่นับก่อนช่วงแรก/หลังช่วงสุดท้าย', () => {
+    expect(findVatRateGaps([period('a', 7, '2025-10-01', '2026-10-31')])).toEqual([])
+  })
+})
+
+describe('validateVatRateChange (มติ D7-01 · mytester7 S7-AG2-02/03)', () => {
+  /** 19/10/2569 10:00 เวลาไทย */
+  const NOW = new Date('2026-10-19T03:00:00Z')
+  const CURRENT = period('cur', 7, '2025-10-01', null)
+  const REVENUE_SPAN = { first: d('2026-10-17'), last: d('2026-10-17') }
+
+  const edit = (to: string | null, overrides: Partial<{ ratePct: number; from: string }> = {}) => ({
+    ratePct: overrides.ratePct ?? 7,
+    effectiveFrom: d(overrides.from ?? '2025-10-01'),
+    effectiveTo: to === null ? null : d(to),
+  })
+
+  it('ปิดช่วงก่อนวันนี้ (16/10 ขณะวันนี้ 19/10) ⇒ VAT_RATE_END_DATE_PAST', () => {
+    const violation = validateVatRateChange({
+      candidate: edit('2026-10-16'),
+      current: CURRENT,
+      existing: [CURRENT],
+      revenueSpan: null,
+      now: NOW,
+    })
+    expect(violation).toEqual({ code: 'VAT_RATE_END_DATE_PAST', today: d('2026-10-19') })
+  })
+
+  it('"วันนี้" ตัดสินตามเวลาไทย — 18/10 23:30Z คือ 19/10 ไทย ⇒ ปิดที่ 18/10 ไม่ได้', () => {
+    const violation = validateVatRateChange({
+      candidate: edit('2026-10-18'),
+      current: CURRENT,
+      existing: [CURRENT],
+      revenueSpan: null,
+      now: new Date('2026-10-18T17:30:00Z'),
+    })
+    expect(violation?.code).toBe('VAT_RATE_END_DATE_PAST')
+  })
+
+  it('ปิดช่วงวันนี้หรืออนาคตได้ (แบบ S2: ปิด 31/10 แล้วเพิ่มช่วงใหม่)', () => {
+    for (const to of ['2026-10-19', '2026-10-31']) {
+      expect(
+        validateVatRateChange({ candidate: edit(to), current: CURRENT, existing: [CURRENT], revenueSpan: REVENUE_SPAN, now: NOW }),
+      ).toBeNull()
+    }
+  })
+
+  it('แก้หมายเหตุของช่วงที่ปิดไปแล้วในอดีต (วันสิ้นสุดไม่เปลี่ยน) ไม่โดน', () => {
+    const closed = period('old', 7, '2024-01-01', '2025-09-30')
+    const next = period('next', 7, '2025-10-01', null)
+    expect(
+      validateVatRateChange({
+        candidate: edit('2025-09-30', { from: '2024-01-01' }),
+        current: closed,
+        existing: [closed, next],
+        revenueSpan: { first: d('2025-01-05'), last: d('2025-09-30') },
+        now: NOW,
+      }),
+    ).toBeNull()
+  })
+
+  it('เปลี่ยนอัตราของช่วงที่มีรายได้อ้าง (7 → 7.5) ⇒ VAT_RATE_IN_USE rate_changed', () => {
+    const violation = validateVatRateChange({
+      candidate: edit(null, { ratePct: 7.5 }),
+      current: CURRENT,
+      existing: [CURRENT],
+      revenueSpan: REVENUE_SPAN,
+      now: NOW,
+    })
+    expect(violation).toMatchObject({ code: 'VAT_RATE_IN_USE', reason: 'rate_changed' })
+  })
+
+  it('เปลี่ยนอัตราของช่วงที่ยังไม่มีรายได้ได้', () => {
+    expect(
+      validateVatRateChange({
+        candidate: edit(null, { ratePct: 7.5 }),
+        current: CURRENT,
+        existing: [CURRENT],
+        revenueSpan: null,
+        now: NOW,
+      }),
+    ).toBeNull()
+  })
+
+  it('เลื่อนวันเริ่มเกินวันที่ของรายได้ ⇒ VAT_RATE_IN_USE range_excludes_revenue', () => {
+    const violation = validateVatRateChange({
+      candidate: edit(null, { from: '2026-10-18' }),
+      current: CURRENT,
+      existing: [CURRENT],
+      revenueSpan: REVENUE_SPAN,
+      now: NOW,
+    })
+    expect(violation).toMatchObject({ code: 'VAT_RATE_IN_USE', reason: 'range_excludes_revenue' })
+  })
+
+  it('ปิดช่วง 30/10 แล้วเพิ่ม 10% เริ่ม 01/11 ⇒ VAT_RATE_GAP (31/10)', () => {
+    const closed = period('cur', 7, '2025-10-01', '2026-10-30')
+    const violation = validateVatRateChange({
+      candidate: edit(null, { ratePct: 10, from: '2026-11-01' }),
+      current: null,
+      existing: [closed],
+      revenueSpan: null,
+      now: NOW,
+    })
+    expect(violation).toEqual({ code: 'VAT_RATE_GAP', gap: { from: d('2026-10-31'), to: d('2026-10-31') } })
+  })
+
+  it('ย่นช่วงเดิมจนห่างจากช่วงถัดไป ⇒ VAT_RATE_GAP', () => {
+    const first = period('a', 7, '2025-10-01', '2026-10-31')
+    const second = period('b', 10, '2026-11-01', null)
+    const violation = validateVatRateChange({
+      candidate: edit('2026-10-25'),
+      current: first,
+      existing: [first, second],
+      revenueSpan: null,
+      now: NOW,
+    })
+    expect(violation?.code).toBe('VAT_RATE_GAP')
+  })
+
+  it('เพิ่มช่วงใหม่ต่อจากวันสิ้นสุดพอดี ⇒ ผ่าน', () => {
+    const closed = period('cur', 7, '2025-10-01', '2026-10-31')
+    expect(
+      validateVatRateChange({
+        candidate: edit(null, { ratePct: 10, from: '2026-11-01' }),
+        current: null,
+        existing: [closed],
+        revenueSpan: null,
+        now: NOW,
+      }),
+    ).toBeNull()
+  })
+
+  it('ช่องว่างที่มีอยู่ก่อนแล้ว ไม่ทำให้การแก้อื่นถูกปฏิเสธ', () => {
+    const a = period('a', 7, '2024-01-01', '2024-12-30')
+    const b = period('b', 7, '2025-01-01', null)
+    expect(
+      validateVatRateChange({
+        candidate: { ratePct: 7, effectiveFrom: d('2025-01-01'), effectiveTo: null },
+        current: b,
+        existing: [a, b],
+        revenueSpan: null,
+        now: NOW,
+      }),
+    ).toBeNull()
+  })
+
+  it('ข้อความไทยระบุวันที่ พ.ศ. และไม่มีเลขอ้างอิงสเปค', () => {
+    const message = vatRateViolationMessage({ code: 'VAT_RATE_GAP', gap: { from: d('2026-10-31'), to: d('2026-10-31') } })
+    expect(message.message).toContain('31/10/2569')
+    const inUse = vatRateViolationMessage({ code: 'VAT_RATE_IN_USE', reason: 'rate_changed', span: REVENUE_SPAN })
+    expect(inUse.message).toContain('17/10/2569')
+    for (const text of [message.message, inUse.message, inUse.title]) expect(text).not.toMatch(/§|D7-/)
   })
 })

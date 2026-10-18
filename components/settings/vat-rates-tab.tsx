@@ -31,7 +31,13 @@ import { fmtDate, fromInputDate, toInputDate } from '@/lib/format/datetime'
 import { pctFromInput, vatRateHelp } from '@/lib/settings/help'
 import { vatRateCreateSchema } from '@/lib/settings/schemas'
 import type { VatRateDto } from '@/lib/settings/types'
-import { findOverlappingPeriods, type VatRatePeriod } from '@/lib/settings/vat'
+import {
+  findOverlappingPeriods,
+  formatVatPeriodLabel,
+  validateVatRateChange,
+  vatRateViolationMessage,
+  type VatRatePeriod,
+} from '@/lib/settings/vat'
 
 /**
  * แท็บ "อัตรา VAT" (`13` §6.5) — timeline แบบ effective-dated **ห้าม hardcode 7%** (Rule 01)
@@ -118,6 +124,28 @@ export function VatRatesTab() {
     return findOverlappingPeriods({ effectiveFrom: from, effectiveTo: to }, items.map(toPeriod), editing?.id)
   }, [form.effectiveFrom, form.effectiveTo, items, editing])
 
+  /**
+   * เตือนก่อนบันทึกตามมติ D7-01 — ปิดช่วงย้อนหลัง / ช่องว่างระหว่างช่วง (ตรวจ "มีรายได้อ้าง" ได้ที่ API เท่านั้น)
+   * ไม่บล็อกปุ่ม: API เป็นตัวตัดสินด้วยกติกาเดียวกัน (`validateVatRateChange`)
+   */
+  const changeViolation = useMemo(() => {
+    const from = fromInputDate(form.effectiveFrom)
+    if (from === null || overlapping.length > 0) return null
+    const ratePct = form.ratePct.trim() === '' ? Number.NaN : Number(form.ratePct)
+    const violation = validateVatRateChange({
+      candidate: {
+        ratePct: Number.isFinite(ratePct) ? ratePct : (editing?.ratePct ?? 0),
+        effectiveFrom: from,
+        effectiveTo: fromInputDate(form.effectiveTo),
+      },
+      current: editing === null ? null : toPeriod(editing),
+      existing: items.map(toPeriod),
+      revenueSpan: null,
+      now: new Date(),
+    })
+    return violation === null ? null : vatRateViolationMessage(violation)
+  }, [form.effectiveFrom, form.effectiveTo, form.ratePct, items, editing, overlapping.length])
+
   function openForm(target: VatRateDto | null): void {
     setEditing(target)
     setForm(
@@ -141,8 +169,9 @@ export function VatRatesTab() {
 
   async function save(): Promise<void> {
     // ส่ง **ค่าดิบ** (`YYYY-MM-DD`) ให้ API — parse ที่นี่ใช้เพื่อแสดง error รายฟิลด์เท่านั้น
+    // ช่องว่าง ⇒ `null` ให้ schema ตอบ "กรุณาระบุอัตรา VAT" — ห้าม `Number('')` = 0 (mytester7 S7-AG2-01)
     const payload = {
-      ratePct: Number(form.ratePct),
+      ratePct: form.ratePct.trim() === '' ? null : Number(form.ratePct),
       effectiveFrom: form.effectiveFrom,
       effectiveTo: form.effectiveTo.trim(),
       note: form.note.trim(),
@@ -325,9 +354,15 @@ export function VatRatesTab() {
             <InlineAlert tone="error" title="ช่วงวันที่นี้ทับกับอัตราที่มีอยู่แล้ว">
               ทับกับ{' '}
               {overlapping
-                .map((period) => `${period.ratePct}% (${fmtDate(period.effectiveFrom)} เป็นต้นไป)`)
+                .map(formatVatPeriodLabel)
                 .join(', ')}{' '}
               — ปิดช่วงเดิมด้วยวันสิ้นสุดก่อน ไม่งั้นระบบจะไม่ให้บันทึกเพราะช่วงวันที่ทับซ้อนกัน
+            </InlineAlert>
+          )}
+
+          {changeViolation !== null && (
+            <InlineAlert tone="error" title={changeViolation.title}>
+              {changeViolation.message}
             </InlineAlert>
           )}
 

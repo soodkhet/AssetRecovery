@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { toFieldErrors } from '@/lib/api/validation'
 import {
   DEFAULT_SUBSTITUTE_RECEIPT_MAX_PER_DOC_SATANG,
   DEFAULT_SUBSTITUTE_RECEIPT_MAX_PER_MONTH_SATANG,
@@ -326,6 +327,14 @@ describe('vatRateCreateSchema (§6.5)', () => {
   it('อัตรา VAT ทศนิยม 2 ตำแหน่งได้ (NUMERIC(5,2))', () => {
     expect(vatRateCreateSchema.safeParse({ ...base, ratePct: 7.5 }).success).toBe(true)
     expect(vatRateCreateSchema.safeParse({ ...base, ratePct: 7.555 }).success).toBe(false)
+  })
+
+  it('อัตราว่าง (null/ไม่ส่ง) = "กรุณาระบุอัตรา VAT" ไม่ใช่ 0% (mytester7 S7-AG2-01)', () => {
+    for (const ratePct of [null, undefined]) {
+      const parsed = vatRateCreateSchema.safeParse({ ...base, ratePct })
+      expect(parsed.success).toBe(false)
+      if (!parsed.success) expect(toFieldErrors(parsed.error).ratePct).toBe('กรุณาระบุอัตรา VAT')
+    }
   })
 })
 
