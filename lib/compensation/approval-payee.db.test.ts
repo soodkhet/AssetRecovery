@@ -1151,7 +1151,15 @@ suite('U131 — ข้อมูลรับเงินในฟอร์มผ�
     const { current, values } = await moveValues(AGENT_ID, OTHER_TEAM_ID)
     const error = await users.updateUser({ actor: admin, meta }, current, values).catch((e: unknown) => e)
     expect(codeOf(error)).toBe('USER_HAS_OPEN_ASSIGNMENTS')
-    expect((error as { userMessage: string }).userMessage).toContain('ค่าที่พัก ฿799.99')
+    // ผู้ดูแลไม่มีสิทธิ์ดูใบเบิก ⇒ เห็นชนิด ไม่เห็นยอดเงิน (mytester7 security L2)
+    expect((error as { userMessage: string }).userMessage).toContain('ค่าที่พัก')
+    expect((error as { userMessage: string }).userMessage).not.toContain('฿799.99')
+    const claimViewer: SessionUser = {
+      ...admin,
+      capabilities: { ...admin.capabilities, approve_expense_finance: 'view' },
+    }
+    const viewerError = await users.updateUser({ actor: claimViewer, meta }, current, values).catch((e: unknown) => e)
+    expect((viewerError as { userMessage: string }).userMessage).toContain('ค่าที่พัก ฿799.99')
 
     await tx.$executeRawUnsafe(`DELETE FROM expenses WHERE organization_id = '${ORG_ID}' AND assignment_id IS NULL`)
     const moved = await users.updateUser({ actor: admin, meta }, current, values)
