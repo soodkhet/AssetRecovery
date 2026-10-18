@@ -72,7 +72,16 @@ export async function runAdvanceOverdueJob(
     },
     orderBy: { dueClearDate: 'asc' },
     take: options.limit ?? 200,
-    select: { id: true, organizationId: true, payeeId: true, dueClearDate: true },
+    select: {
+      id: true,
+      organizationId: true,
+      payeeId: true,
+      dueClearDate: true,
+      advanceNumber: true,
+      requestedSatang: true,
+      approvedSatang: true,
+      payee: { select: { user: { select: { fullName: true } } } },
+    },
   })
 
   for (const advance of due) {
@@ -83,7 +92,16 @@ export async function runAdvanceOverdueJob(
     // หาผู้รับก่อนเปิดทรานแซกชัน (อ่านอย่างเดียว) แล้วเข้าคิว **ในทรานแซกชันเดียวกับการมาร์ค overdue**
     // (DEC-015 · มติ PO U120) · `dedupeKey` ผูกกับรายการ ⇒ job รันทุกวันก็แจ้งครั้งเดียวต่อคน
     const message = (audience: 'payee' | 'finance') =>
-      advanceOverdueMessage({ advanceId: advance.id, dueClearDate: advance.dueClearDate }, audience)
+      advanceOverdueMessage(
+        {
+          advanceId: advance.id,
+          advanceNumber: advance.advanceNumber,
+          amountSatang: advance.approvedSatang ?? advance.requestedSatang,
+          borrowerName: advance.payee.user.fullName,
+          dueClearDate: advance.dueClearDate,
+        },
+        audience,
+      )
     const [payeeIds, financeIds] = await Promise.all([
       payeeUserIds(advance.organizationId, [advance.payeeId]),
       usersWithCapability(advance.organizationId, 'approve_advance'),
