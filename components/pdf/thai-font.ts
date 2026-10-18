@@ -1,12 +1,14 @@
 import { join } from 'node:path'
 import { Font } from '@react-pdf/renderer'
+import { thaiHyphenationCallback } from '@/components/pdf/thai-line-break'
 
 /**
  * ฟอนต์ไทยของเอกสาร PDF ทุกใบ (`28` §7) — เรียก `ensureThaiFont()` **ก่อน** `renderToBuffer()` เสมอ
  *
  * ⚠️ ฟอนต์ในตัวของ `@react-pdf/renderer` ไม่มี glyph ภาษาไทย — ไม่ register = ตัวอักษรไทย
  *    **หายทั้งใบโดยไม่มี error**
- * ⚠️ คำไทยไม่มีช่องว่างคั่น ต้องปิดตัวตัดคำ ไม่งั้นบรรทัดล้นกรอบ
+ * ⚠️ คำไทยไม่มีช่องว่างคั่น — ตัวตัดคำภาษาอังกฤษในตัวต้องปิด (เติมขีดผิดที่) และใช้ตัวแบ่งคำไทย
+ *    `thaiHyphenationCallback()` แทน ไม่งั้นชื่อไทยยาวล้นทับคอลัมน์/ตกขอบกระดาษ (mytester7 S7-AG1-06/S7-AG4-01)
  * ⚠️ ตัว trace ของ Next มองไม่เห็นการอ่านไฟล์ฟอนต์ตอน runtime ⇒ route ที่เรนเดอร์ PDF ต้องอยู่ใน
  *    `outputFileTracingIncludes` ของ `next.config.ts` ไม่งั้นพังเฉพาะบน Vercel
  * ⚠️ ลงทะเบียน 2 น้ำหนัก (UAT BUG-171): ปกติ (400) + **ตัวหนา (700)** — ไฟล์ตัวหนาเป็น static instance ของ
@@ -35,6 +37,6 @@ export function ensureThaiFont(): void {
       { src: join(process.cwd(), 'public', 'fonts', 'NotoSansThai-Bold.ttf'), fontWeight: 'bold' },
     ],
   })
-  Font.registerHyphenationCallback((word) => [word])
+  Font.registerHyphenationCallback(thaiHyphenationCallback)
   registered = true
 }

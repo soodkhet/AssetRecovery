@@ -123,3 +123,19 @@ export function toTaxProfileAuditPayload(values: TaxProfileValues): Record<strin
     filing_form: values.filingForm,
   }
 }
+
+/**
+ * mytester7 S7-AG4-04 — เหตุที่ปิดใช้งาน Tax Profile ไม่ได้ (ตรงกับยาม `TAX_PROFILE_IN_USE` ฝั่ง server)
+ * · ใช้ในรอบจ่ายแล้ว ⇒ ปิดไม่ได้ถาวร (ยอดภาษีของรายการจ่ายเดิมต้องอ้างอิงกลับได้)
+ * · ผูกกับผู้รับ ⇒ ต้องเปลี่ยนกติกาของผู้รับก่อน · ไม่ทราบการใช้งาน/ยังไม่ถูกใช้ ⇒ `null` (ค่าเริ่มต้นตามประเภทผู้รับ server ตรวจตอนกด)
+ */
+export function taxProfileDeactivateBlock(usage: { payeeCount: number; payoutItemCount: number } | undefined): string | null {
+  if (usage === undefined) return null
+  if (usage.payoutItemCount > 0) return 'ใช้ในรอบจ่ายแล้ว — ปิดใช้งานไม่ได้ (รายการจ่ายเดิมต้องอ้างอิงกติกานี้)'
+  if (usage.payeeCount > 0) return `ผูกกับผู้รับ ${usage.payeeCount} คน — เปลี่ยนกติกาภาษีของผู้รับก่อนจึงปิดได้`
+  return null
+}
+
+/** ข้อความในกล่องยืนยันปิดใช้งาน — บอกเงื่อนไขเดียวกับที่ server ตรวจ */
+export const TAX_PROFILE_DEACTIVATE_DESCRIPTION =
+  'ปิดใช้งานได้เฉพาะกติกาที่ยังไม่ถูกใช้ — ไม่ได้ผูกกับผู้รับ ไม่ได้เป็นค่าเริ่มต้นตามประเภทผู้รับ และไม่เคยใช้ในรอบจ่าย · ปิดแล้วเลือกให้ผู้รับใหม่ไม่ได้'

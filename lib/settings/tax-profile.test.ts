@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { isSettingsError } from '@/lib/settings/errors'
 import {
+  TAX_PROFILE_DEACTIVATE_DESCRIPTION,
+  taxProfileDeactivateBlock,
   DEFAULT_WHT_MIN_THRESHOLD_SATANG,
   DEFAULT_WHT_PCT,
   assertWhtPctValid,
@@ -119,5 +121,24 @@ describe('ประเภทเงินได้จากรายการม�
     expect(incomeTypeCodeOf('ค่าเช่า')).toBe('rent')
     expect(incomeTypeCodeOf('ค่าจ้างทำของ/ค่าบริการ')).toBe('other')
     expect(incomeTypeCodeOf('ค่าบริการ (นิติบุคคล)')).toBe('other')
+  })
+})
+
+describe('taxProfileDeactivateBlock — บอกล่วงหน้าว่าปิดใช้งานไม่ได้ (mytester7 S7-AG4-04)', () => {
+  it('ใช้ในรอบจ่ายแล้ว ⇒ ปิดไม่ได้ (แม้ไม่มีผู้รับผูกแล้ว)', () => {
+    expect(taxProfileDeactivateBlock({ payeeCount: 0, payoutItemCount: 3 })).toContain('ใช้ในรอบจ่ายแล้ว')
+  })
+  it('ผูกกับผู้รับ ⇒ ให้เปลี่ยนกติกาของผู้รับก่อน', () => {
+    expect(taxProfileDeactivateBlock({ payeeCount: 2, payoutItemCount: 0 })).toBe(
+      'ผูกกับผู้รับ 2 คน — เปลี่ยนกติกาภาษีของผู้รับก่อนจึงปิดได้',
+    )
+  })
+  it('ยังไม่ถูกใช้/ไม่ทราบ ⇒ ปิดได้', () => {
+    expect(taxProfileDeactivateBlock({ payeeCount: 0, payoutItemCount: 0 })).toBeNull()
+    expect(taxProfileDeactivateBlock(undefined)).toBeNull()
+  })
+  it('ข้อความกล่องยืนยันไม่สื่อว่า "รอบจ่ายเดิมยังอ้างได้" อีก · ไม่มีเลขอ้างอิงสเปค', () => {
+    expect(TAX_PROFILE_DEACTIVATE_DESCRIPTION).toContain('ไม่เคยใช้ในรอบจ่าย')
+    expect(TAX_PROFILE_DEACTIVATE_DESCRIPTION).not.toMatch(/soft delete|§|ไฟล์ \d/)
   })
 })

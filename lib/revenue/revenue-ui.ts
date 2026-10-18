@@ -216,3 +216,29 @@ export function customerWhtSummary(
     expectedText: fmtSatangSymbol(batch.expectedReceiptSatang),
   }
 }
+
+/**
+ * รายชื่อบริษัทในฟอร์ม "สร้างรอบวางบิล" (mytester7 S7-AG2-07 · มติ D7-05 · `10` §9.3)
+ * — ระงับ = ห้ามรับเคสใหม่เท่านั้น งานเดิม/รายได้/วางบิล/รับชำระทำต่อได้ ⇒ บริษัทที่ระงับแต่มีรายได้รอวางบิล
+ *   ต้องเลือกได้ (ติดป้ายว่าระงับ) · บริษัทที่ระงับและไม่มีรายได้รอวางบิลไม่แสดง (ไม่มีอะไรให้วางบิล)
+ * · คงลำดับเดิมของรายการบริษัท (API เรียงให้แล้ว)
+ */
+export interface BillingCompanyOption<T> {
+  company: T
+  label: string
+  suspended: boolean
+}
+
+export const SUSPENDED_BILLING_COMPANY_SUFFIX = ' (ระงับ — วางบิลรายได้ที่เกิดแล้วได้)'
+
+export function billingCompanyOptions<T extends { id: string; name: string; status: 'active' | 'suspended' }>(
+  companies: readonly T[],
+  suspendedWithPendingRevenueIds: ReadonlySet<string>,
+): BillingCompanyOption<T>[] {
+  return companies
+    .filter((company) => company.status === 'active' || suspendedWithPendingRevenueIds.has(company.id))
+    .map((company) => {
+      const suspended = company.status === 'suspended'
+      return { company, suspended, label: suspended ? `${company.name}${SUSPENDED_BILLING_COMPANY_SUFFIX}` : company.name }
+    })
+}

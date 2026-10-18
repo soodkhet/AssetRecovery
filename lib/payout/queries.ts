@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { advanceExcessItemLabel, advanceExcessSource } from '@/lib/advances/advance'
 import { assertPeriodOpenAt } from '@/lib/accounting/period-guard'
-import { loadMonthToDate } from '@/lib/payout/month-to-date-queries'
+import { loadMonthToDate, loadMonthToDateThroughBatch } from '@/lib/payout/month-to-date-queries'
 import { lockOutstandingRecoveries, releasePayoutRecoveryOffsets } from '@/lib/payout/recoveries'
 import type { ApiWarning } from '@/lib/api/envelope'
 import { emitAudit } from '@/lib/audit/audit'
@@ -359,7 +359,24 @@ export async function getPayoutBatch(user: SessionUser, batchId: string): Promis
     select: itemSelect,
     orderBy: [{ createdAt: 'asc' }],
   })
-  return { ...toBatchDto(batch), items: items.map(toItemDto) }
+  // mytester7 S7-AG4-02 — รอบที่นับเกณฑ์สะสมต่อเดือน ⇒ แนบยอดสะสมของผู้รับ (ป้าย "ยังไม่ถึงเกณฑ์" ในหน้ารายละเอียด)
+  const monthToDate =
+    batch.whtThresholdScope === 'monthly_cumulative'
+      ? await loadMonthToDateThroughBatch(
+          user.organizationId,
+          batch,
+          items.map((item) => item.payeeId),
+        )
+      : null
+  return {
+    ...toBatchDto(batch),
+    items: items.map((item) => {
+      const dto = toItemDto(item)
+      const inThresholdBase =
+        dto.source === 'expense' && dto.whtBaseIncluded && (dto.whtIncomeCategory ?? 'sec_40_8') === 'sec_40_8'
+      return { ...dto, whtMonthToDateBaseSatang: inThresholdBase ? (monthToDate?.get(dto.payeeId) ?? null) : null }
+    }),
+  }
 }
 
 /**

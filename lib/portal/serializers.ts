@@ -255,6 +255,18 @@ export function portalCaseNetRevenueSatang(
   return Math.max(0, revenueTotalSatang - credited - uninvoicedReductionSatang)
 }
 
+/**
+ * pure — รายได้จริงของ **รอบติดตามที่เคสแสดงอยู่** (mytester7 S7-AG1-03)
+ * · รายได้แยกต่อ (เคส, `tracking_round`) — เคสที่รีไซเคิลแล้วมีรายได้ของรอบก่อนค้างอยู่ได้ ห้ามหยิบมาแสดงเป็นยอดของรอบปัจจุบัน
+ * · ไม่มีรายได้ของรอบนี้ ⇒ `null` (= ยังไม่เกิดรายได้ ⇒ แสดงยอดประมาณการ)
+ */
+export function portalCaseRevenueOfRound<T extends { trackingRound: number }>(
+  revenues: readonly T[],
+  trackingRound: number,
+): T | null {
+  return revenues.find((row) => row.trackingRound === trackingRound) ?? null
+}
+
 /** staging E-073 (`97` §17) — ป้าย VAT ของยอดค่าบริการในพอร์ทัล (ภาษาไทย ไม่ส่ง enum) */
 export const PORTAL_VAT_MODE_LABEL: Readonly<Record<VatMode, string>> = {
   exclude_vat: 'ก่อน VAT',

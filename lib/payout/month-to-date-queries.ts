@@ -27,3 +27,34 @@ export async function loadMonthToDate(
   })
   return monthToDateByPayee(rows)
 }
+
+/**
+ * mytester7 S7-AG4-02 — ยอดสะสมฐาน WHT ต่อผู้รับ "ณ รอบนี้" สำหรับหน้ารายละเอียดรอบจ่าย:
+ * รอบก่อนหน้าในเดือนเดียวกัน (สร้างก่อนรอบนี้ · ไม่ยกเลิก) + รายการของรอบนี้เอง · เงื่อนไขรายการเดียวกับ {@link loadMonthToDate}
+ * คิดจาก snapshot ของรายการเท่านั้น (ไม่อ่านค่าตั้ง/Tax Profile ปัจจุบัน)
+ */
+export async function loadMonthToDateThroughBatch(
+  organizationId: string,
+  batch: { id: string; createdAt: Date },
+  payeeIds: readonly string[],
+): Promise<Map<string, number>> {
+  if (payeeIds.length === 0) return new Map()
+  const { start } = periodRangeOf(periodKeyOf(batch.createdAt))
+  const rows = await prisma.payoutBatchItem.findMany({
+    where: {
+      organizationId,
+      payeeId: { in: [...new Set(payeeIds)] },
+      expenseId: { not: null },
+      whtBaseIncluded: true,
+      OR: [{ whtIncomeCategory: 'sec_40_8' }, { whtIncomeCategory: null }],
+      payoutBatch: {
+        OR: [
+          { id: batch.id },
+          { status: { not: 'cancelled' }, createdAt: { gte: start, lt: batch.createdAt } },
+        ],
+      },
+    },
+    select: { payeeId: true, grossSatang: true, whtSatang: true, whtCarriedBaseSatang: true, whtCondition: true },
+  })
+  return new Map([...monthToDateByPayee(rows)].map(([payeeId, total]) => [payeeId, total.priorBaseSatang]))
+}

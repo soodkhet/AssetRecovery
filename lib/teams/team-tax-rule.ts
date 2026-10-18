@@ -187,10 +187,13 @@ export function payeeEffectiveTaxRule(
       ignoredProfileName: payee.taxProfileName,
     }
   }
+  // mytester7 S7-AG4-03 — กติกาแบบ Tax Profile = เงินได้ 40(8) เสมอ (40(1)/40(2) ออกไปที่อัตรารายคนข้างบนแล้ว) ⇒ บอกประเภทเงินได้
+  // ให้เทียบกับแถว "หัก 40(2) ตามอัตรารายคน" ได้ · ไม่มีฝั่ง (`defaultLine === null`) = ไม่รู้ประเภทเงินได้ ⇒ แสดงแค่อัตรา
+  const profileIncome = defaultLine === null ? '' : `หัก ${WHT_INCOME_CATEGORY_LABEL.sec_40_8.replace(/^มาตรา\s*/, '')} `
   if (payee.taxProfileName !== null) {
     return {
       kind: 'own_profile',
-      label: fmtPercent(payee.whtPct),
+      label: `${profileIncome}${fmtPercent(payee.whtPct)}`,
       detail: `${payee.taxProfileName} ${PER_PAYEE_TAX_PROFILE_SUFFIX}`,
       warning: false,
       ignoredProfileName: null,
@@ -199,7 +202,7 @@ export function payeeEffectiveTaxRule(
   if (defaultLine !== null && defaultLine.kind === 'tax_profile' && defaultLine.profile !== null) {
     return {
       kind: 'default_profile',
-      label: fmtPercent(defaultLine.profile.whtPct),
+      label: `${profileIncome}${fmtPercent(defaultLine.profile.whtPct)}`,
       detail: `${defaultLine.profile.name} (ค่าเริ่มต้นตามประเภทผู้รับ)`,
       warning: false,
       ignoredProfileName: null,

@@ -42,7 +42,7 @@ export function PackCover({ doc, letterhead }: { doc: PackCoverDoc; letterhead: 
 
         <Text style={[docStyles.metaText, { fontWeight: 700, marginBottom: 4 }]}>Readiness Check</Text>
         <View style={docStyles.table}>
-          <View style={docStyles.tableHeader}>
+          <View style={docStyles.tableHeader} fixed>
             <Text style={[docStyles.th, { width: CHECK_COLUMNS[0] }]}>เงื่อนไข</Text>
             <Text style={[docStyles.th, { width: CHECK_COLUMNS[1] }]}>สถานะ</Text>
           </View>
@@ -58,7 +58,7 @@ export function PackCover({ doc, letterhead }: { doc: PackCoverDoc; letterhead: 
           รายการไฟล์แนบ ({doc.files.length} ไฟล์)
         </Text>
         <View style={docStyles.table}>
-          <View style={docStyles.tableHeader}>
+          <View style={docStyles.tableHeader} fixed>
             <Text style={[docStyles.th, { width: FILE_COLUMNS[0] }]}>ไฟล์</Text>
             <Text style={[docStyles.th, { width: FILE_COLUMNS[1] }]}>เนื้อหา</Text>
             <Text style={[docStyles.th, { width: FILE_COLUMNS[2], textAlign: 'right' }]}>จำนวนแถว</Text>
@@ -79,7 +79,7 @@ export function PackCover({ doc, letterhead }: { doc: PackCoverDoc; letterhead: 
               ยอดรวมควบคุม (รายละเอียดต่อไฟล์ใน 00_Control_Totals.csv)
             </Text>
             <View style={docStyles.table}>
-              <View style={docStyles.tableHeader}>
+              <View style={docStyles.tableHeader} fixed>
                 <Text style={[docStyles.th, { width: TOTAL_COLUMNS[0] }]}>รายการ</Text>
                 <Text style={[docStyles.th, { width: TOTAL_COLUMNS[1], textAlign: 'right' }]}>จำนวนเงิน (บาท)</Text>
               </View>

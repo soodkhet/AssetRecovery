@@ -71,6 +71,11 @@ export interface PayoutBatchItemDto {
   whtSatang: number
   /** staging E-054 — ฐานของรอบก่อนในเดือนที่ยกมาหักพร้อมรายการนี้ (เกณฑ์สะสมต่อเดือน) · 0 = ไม่มี */
   whtCarriedBaseSatang?: number
+  /**
+   * mytester7 S7-AG4-02 — ยอดสะสมฐาน WHT 40(8) ของผู้รับในเดือนจนถึงรอบนี้ (รอบก่อน ๆ ที่ไม่ยกเลิก + รอบนี้)
+   * · ส่งเฉพาะหน้ารายละเอียดรอบที่นับเกณฑ์สะสมต่อเดือน · `null`/ไม่ส่ง = ไม่ได้นับแบบสะสม
+   */
+  whtMonthToDateBaseSatang?: number | null
   /** staging E-014 — ยอดหักคืนยอดเรียกคืนจากผู้รับจากบรรทัดนี้ (หลังหักคืนเงินทดรอง) · ไม่ระบุ = 0 */
   recoveryOffsetSatang?: number
   netSatang: number

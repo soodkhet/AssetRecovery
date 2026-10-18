@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import type { BillingBatchStatus } from '@/lib/generated/prisma/enums'
 import {
   billingBatchVatLabel,
+  billingCompanyOptions,
+  SUSPENDED_BILLING_COMPANY_SUFFIX,
   revenueVatLabel,
   BILLING_STATUS_FILTERS,
   BILLING_STATUS_LABEL,
@@ -200,5 +202,22 @@ describe('mytester4 G4-01 — ลูกค้าชำระเกินยอ�
     expect(customerOverpaidSatang(batch('paid', 0))).toBe(0)
     expect(customerOverpaidSatang(batch('partially_paid', 1))).toBe(0)
     expect(customerOverpaidSatang(batch('draft', -100))).toBe(0)
+  })
+})
+
+describe('billingCompanyOptions — mytester7 S7-AG2-07 บริษัทระงับวางบิลรายได้เดิมได้', () => {
+  const ktp = { id: 'ktp', name: 'KTP', status: 'active' as const }
+  const pls = { id: 'pls', name: 'PLS', status: 'suspended' as const }
+  const old = { id: 'old', name: 'OLD', status: 'suspended' as const }
+
+  it('บริษัทระงับที่มีรายได้รอวางบิล ⇒ เลือกได้ + ติดป้ายระงับ', () => {
+    const options = billingCompanyOptions([ktp, pls, old], new Set(['pls']))
+    expect(options.map((option) => option.company.id)).toEqual(['ktp', 'pls'])
+    expect(options[0]).toMatchObject({ label: 'KTP', suspended: false })
+    expect(options[1]).toMatchObject({ label: `PLS${SUSPENDED_BILLING_COMPANY_SUFFIX}`, suspended: true })
+  })
+
+  it('บริษัทระงับที่ไม่มีรายได้รอวางบิล ⇒ ไม่แสดง', () => {
+    expect(billingCompanyOptions([ktp, old], new Set()).map((option) => option.company.id)).toEqual(['ktp'])
   })
 })

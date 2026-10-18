@@ -19,12 +19,13 @@ import {
 import { callApi } from '@/lib/api/types'
 import { fmtDate, fmtDateTime } from '@/lib/format/datetime'
 import { payoutItemTaxSplit } from '@/lib/finance/wht-calc'
-import { fmtCount, fmtPercent, fmtSatangSymbol } from '@/lib/format/money'
+import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
 import { PAYOUT_SIDE_LABEL } from '@/lib/payout/payout'
 import {
   canCancelPayout,
   PAYOUT_STATUS_LABEL_SHORT,
   payoutStatusBadgeGroup,
+  payoutItemWhtNote,
   payoutWhtCertificateLinks,
   type PayoutWhtCertificateLink,
 } from '@/lib/payout/payout-ui'
@@ -237,20 +238,9 @@ export function PayoutDetailModal({
                 error === null &&
                 items.map((item) => {
                   const split = payoutItemTaxSplit(item)
-                  const rateNote =
-                    item.whtPctSnapshot !== null && item.whtSatang > 0 ? (
-                      <p className="text-[10px] text-slate-400">
-                        {fmtPercent(item.whtPctSnapshot)} ·{' '}
-                        {item.whtIncomeCategory === 'sec_40_1'
-                          ? 'เงินได้ 40(1)'
-                          : item.whtIncomeCategory === 'sec_40_2'
-                            ? 'เงินได้ 40(2)'
-                            : (item.taxProfileName ?? '—')}
-                        {/* staging E-054 — ยอดสะสมในเดือนถึงเกณฑ์ ⇒ หักรวมฐานของรอบก่อนที่ยังไม่ได้หัก */}
-                        {(item.whtCarriedBaseSatang ?? 0) > 0 &&
-                          ` · รวมยอดรอบก่อนในเดือน ${fmtSatangSymbol(item.whtCarriedBaseSatang ?? 0)}`}
-                      </p>
-                    ) : null
+                  // mytester7 S7-AG4-02 — อัตรา · ประเภทเงินได้ · ยอดสะสม/ยังไม่ถึงเกณฑ์ (staging E-054)
+                  const whtNote = payoutItemWhtNote(item)
+                  const rateNote = whtNote === null ? null : <p className="text-[10px] text-slate-400">{whtNote}</p>
                   return (
                   <Tr key={item.id}>
                     <Td>
@@ -285,7 +275,8 @@ export function PayoutDetailModal({
                     </Td>
                     <Td numeric className={split.whtWithheldSatang > 0 ? 'text-red-600' : undefined}>
                       {fmtSatangSymbol(split.whtWithheldSatang)}
-                      {split.whtWithheldSatang > 0 && rateNote}
+                      {/* รายการที่ยังไม่หัก (ต่ำกว่าเกณฑ์/อัตรา 0%) แสดงป้ายในช่องนี้ด้วย — บอกเหตุผลแทน ฿0.00 เปล่า ๆ */}
+                      {split.whtPaidByPayerSatang === 0 && rateNote}
                       {/* ค่าตั้งฐาน WHT (มติ PO 05/10/2569 UAT U3) — รายการนอกฐานจ่ายเต็ม ไม่หัก */}
                       {item.source === 'expense' && !item.whtBaseIncluded && (
                         <p className="text-[10px] text-slate-400">ไม่อยู่ในฐานภาษี</p>

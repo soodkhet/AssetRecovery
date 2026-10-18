@@ -151,7 +151,8 @@ describe('payeeEffectiveTaxRule', () => {
     const line = payeeDefaultTaxRule('outsource', 'individual', BY_SIDE, DEFAULTS)
     expect(payeeEffectiveTaxRule(line, { taxProfileName: 'พิเศษ 1%', whtPct: 1, wht402Pct: 5 })).toMatchObject({
       kind: 'own_profile',
-      label: '1.00%',
+      // mytester7 S7-AG4-03 — บอกประเภทเงินได้เหมือนแถว 40(2)
+      label: 'หัก 40(8) 1.00%',
       detail: 'พิเศษ 1% (กำหนดเฉพาะคนนี้)',
     })
   })
@@ -160,7 +161,7 @@ describe('payeeEffectiveTaxRule', () => {
     const line = payeeDefaultTaxRule('outsource', 'corporate', BY_SIDE, DEFAULTS)
     expect(payeeEffectiveTaxRule(line, { taxProfileName: null, whtPct: null, wht402Pct: null })).toMatchObject({
       kind: 'default_profile',
-      label: '3.00%',
+      label: 'หัก 40(8) 3.00%',
       warning: false,
     })
   })

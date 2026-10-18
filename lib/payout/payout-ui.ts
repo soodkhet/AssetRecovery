@@ -1,7 +1,7 @@
-import { fmtSatangSymbol } from '@/lib/format/money'
+import { fmtPercent, fmtSatangSymbol } from '@/lib/format/money'
 import type { PayoutBatchSide, PayoutBatchStatus, WhtThresholdScope } from '@/lib/generated/prisma/enums'
 import { canPayoutAction } from '@/lib/payout/payout'
-import type { PayoutBatchDto } from '@/lib/payout/types'
+import type { PayoutBatchDto, PayoutBatchItemDto } from '@/lib/payout/types'
 import type { BankAccountDto, BankFileFormatDto } from '@/lib/settings/types'
 import type { StatusBadgeGroup } from '@/lib/ui/status-badge'
 
@@ -170,6 +170,51 @@ export function payoutWhtThresholdNote(scope: WhtThresholdScope): string {
   return scope === 'monthly_cumulative'
     ? 'เกณฑ์ขั้นต่ำ WHT นับยอดสะสมของผู้รับแต่ละคนทั้งเดือน (รวมรอบจ่ายก่อนหน้าในเดือนเดียวกัน) — ถึงเกณฑ์เมื่อไรหักจากยอดที่ยังไม่เคยหัก'
     : 'เกณฑ์ขั้นต่ำ WHT นับยอดรวมของผู้รับแต่ละคนในรอบจ่ายนี้เท่านั้น'
+}
+
+/**
+ * ป้ายภาษีใต้ยอด WHT ของแต่ละรายการในหน้ารายละเอียดรอบจ่าย — อัตรา · ประเภทเงินได้ (+ Tax Profile) ·
+ * ยอดยกมา/ยอดสะสม (staging E-054 · mytester7 S7-AG4-02)
+ *
+ * - รายการที่อยู่ในฐาน 40(8) แต่ภาษี 0 ทั้งที่มีอัตรา ⇒ บอกว่า "ยังไม่ถึงเกณฑ์" พร้อมยอดสะสมของเดือน
+ *   (เดิมแสดง ฿0.00 เปล่า ๆ — การเงินต้องเดาว่าทำไมไม่หัก)
+ * - ยอดสะสม = ฐานของผู้รับในรอบก่อน ๆ ของเดือน + รอบนี้ (คิดจาก snapshot ของรายการ — API ส่งมาเฉพาะรอบที่นับเกณฑ์สะสมต่อเดือน)
+ * - ไม่อยู่ในฐาน/เงินทดรอง/ไม่มีอัตรา ⇒ `null` (มีป้ายของตัวเองอยู่แล้ว)
+ */
+export function payoutItemWhtNote(
+  item: Pick<
+    PayoutBatchItemDto,
+    | 'source'
+    | 'whtBaseIncluded'
+    | 'whtPctSnapshot'
+    | 'whtSatang'
+    | 'whtIncomeCategory'
+    | 'taxProfileName'
+    | 'whtCarriedBaseSatang'
+    | 'whtMonthToDateBaseSatang'
+  >,
+): string | null {
+  if (item.source !== 'expense' || !item.whtBaseIncluded || item.whtPctSnapshot === null) return null
+  const category = item.whtIncomeCategory ?? 'sec_40_8'
+  const categoryLabel =
+    category === 'sec_40_8'
+      ? `เงินได้ 40(8)${item.taxProfileName === null ? '' : ` · ${item.taxProfileName}`}`
+      : category === 'sec_40_1'
+        ? 'เงินได้ 40(1)'
+        : 'เงินได้ 40(2)'
+  const parts = [fmtPercent(item.whtPctSnapshot), categoryLabel]
+  const monthToDate = item.whtMonthToDateBaseSatang ?? null
+  if (item.whtSatang > 0) {
+    if ((item.whtCarriedBaseSatang ?? 0) > 0) parts.push(`รวมยอดรอบก่อนในเดือน ${fmtSatangSymbol(item.whtCarriedBaseSatang ?? 0)}`)
+    if (monthToDate !== null) parts.push(`ยอดสะสมเดือนนี้ ${fmtSatangSymbol(monthToDate)}`)
+  } else if (category === 'sec_40_8' && item.whtPctSnapshot > 0) {
+    parts.push(
+      monthToDate === null
+        ? 'ยังไม่หัก — ยอดในรอบนี้ยังไม่ถึงเกณฑ์ขั้นต่ำ'
+        : `ยังไม่หัก — ยอดสะสมเดือนนี้ ${fmtSatangSymbol(monthToDate)} ยังไม่ถึงเกณฑ์ขั้นต่ำ`,
+    )
+  }
+  return parts.join(' · ')
 }
 
 /**

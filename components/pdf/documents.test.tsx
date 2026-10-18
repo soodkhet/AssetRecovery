@@ -636,6 +636,37 @@ describe('เอกสารภายใน — แถบหัวตามแ�
   })
 })
 
+describe('หน้าปกชุดเอกสารบัญชี — หัวตารางพิมพ์ซ้ำทุกหน้าเมื่อรายการยาว (mytester7 S7-AG6-05)', () => {
+  it('ตาราง Readiness Check ยาวข้ามหน้า ⇒ หัว "เงื่อนไข/สถานะ" ซ้ำบนหน้าที่ต่อ · ไม่โผล่บนหน้าที่ตารางจบไปแล้ว', async () => {
+    const checks = Array.from({ length: 70 }, (_, index) => ({
+      key: 'period_ended' as const,
+      label: `เงื่อนไขทดสอบที่ ${index + 1}`,
+      passed: true,
+      detail: '',
+    }))
+    const cover = await renderPackCover(
+      buildPackCoverDoc({
+        organizationName: LETTERHEAD.nameTh,
+        periodLabel: 'ตุลาคม 2569',
+        version: 3,
+        generatedByName: 'บัญชี',
+        generatedAt: new Date('2026-11-05T02:10:00Z'),
+        contentDigest: 'abc',
+        checks,
+      }),
+      LETTERHEAD,
+    )
+    save('11-pack-cover-long', cover)
+    const text = textOf(cover)
+    const pages = pageCount(cover)
+    expect(pages).toBeGreaterThanOrEqual(3)
+    const checkHeaders = count(text, 'เงื่อนไขสถานะ')
+    expect(checkHeaders).toBeGreaterThanOrEqual(2)
+    expect(checkHeaders).toBeLessThan(pages)
+    expect(count(text, 'ไฟล์เนื้อหาจำนวนแถว')).toBeGreaterThanOrEqual(1)
+  })
+})
+
 describe('มติ PO U122 — ข้อความท้าย + รูปลายเซ็นจากเทมเพลตเอกสาร', () => {
   const NO_LOGO = testLetterhead()
   const FOOTER = 'ข้อความท้ายทดสอบเทมเพลต'
@@ -770,5 +801,44 @@ describe('มติ PO U151 — ชื่อ/ตำแหน่งผู้ม�
       await renderWhtCertificate(buildWhtCertificateDoc({ ...whtSource, payerSigner: { name: ' ', title: null } })),
     )
     expect(blank).not.toContain('ตำแหน่ง')
+  })
+})
+
+// ── mytester7 S7-AG1-06 / S7-AG4-01 — ชื่อไทยยาวที่ไม่มีช่องว่างต้องตัดบรรทัดในช่องของตัวเอง ──────────
+
+describe('ชื่อไทยยาวไม่มีช่องว่าง — ตัดบรรทัดในช่อง ไม่ล้น ไม่ตกขอบ (mytester7 S7-AG1-06/S7-AG4-01)', () => {
+  const LONG_CORP = 'บริษัท สมพรรับเหมาติดตามทรัพย์สินและบริหารสินเชื่อภาคตะวันตกและภาคกลางตอนล่าง จำกัด (MT7)'
+  const LONG_PERSON = 'นางสาวพรรณรายพิไลวรรณ ศรีสุวรรณวิจิตรพงศ์ภักดีธรรมรงค์สกุลวงศ์ไพบูลย์'
+
+  /** จำนวนชิ้นข้อความ (1 ชิ้น = 1 บรรทัดที่วาด) ที่เป็นส่วนของ `needle` — ชื่อที่ไม่ถูกตัดบรรทัดอยู่ในชิ้นเดียวยาวเกินช่อง */
+  function linesOf(pdf: Buffer, needle: string): number {
+    return extractPdfText(new Uint8Array(pdf))
+      .split('\n')
+      .filter((line) => line.length > 3 && needle.includes(line)).length
+  }
+
+  it('ใบส่งมอบทรัพย์ — ชื่อลูกหนี้ยาวขึ้นหลายบรรทัด ข้อความครบทุกอักษร', async () => {
+    const base = lot(2)
+    const longDebtor = { ...base, assets: base.assets.map((row) => ({ ...row, debtorName: LONG_PERSON })) }
+    const pdf = await renderHandoverNote(buildHandoverDoc(longDebtor, HANDOVER_ISSUER, HANDOVER_RECIPIENT), LETTERHEAD)
+    save('10a-handover-note-long-thai-name', pdf)
+    expect(count(textOf(pdf), LONG_PERSON)).toBe(4)
+    expect(linesOf(pdf, LONG_PERSON)).toBeGreaterThanOrEqual(8)
+  })
+
+  it('ใบสำคัญจ่าย — ชื่อนิติบุคคลยาวในกรอบ "จ่ายให้" ครบทุกอักษร (เดิม "ง" ท้ายตกขอบหาย)', async () => {
+    const payees = new Map([['payee-1', { ...PAYEE_INFO, displayName: LONG_CORP, isCorporate: true }]])
+    const pdf = await renderPaymentVouchers(buildPaymentVoucherDocs(batch(payoutItems()), ISSUER, payees), LETTERHEAD)
+    save('10b-payment-voucher-long-thai-name', pdf)
+    expect(textOf(pdf)).toContain(LONG_CORP)
+    expect(linesOf(pdf, LONG_CORP)).toBeGreaterThanOrEqual(2)
+  })
+
+  it('สรุปรอบจ่าย — ชื่อผู้รับยาวขึ้นหลายบรรทัดในคอลัมน์ชื่อ', async () => {
+    const items = payoutItems().map((row) => ({ ...row, payeeName: LONG_CORP }))
+    const pdf = await renderPayoutBatchSummary(buildPayoutSummaryDoc(batch(items), ISSUER), LETTERHEAD)
+    save('10c-payout-summary-long-thai-name', pdf)
+    expect(textOf(pdf)).toContain(LONG_CORP)
+    expect(linesOf(pdf, LONG_CORP)).toBeGreaterThanOrEqual(3)
   })
 })

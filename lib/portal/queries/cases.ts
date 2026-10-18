@@ -7,6 +7,7 @@ import {
 } from '@/lib/portal/documented-amounts'
 import type { PortalContext } from '@/lib/portal/guard'
 import {
+  portalCaseRevenueOfRound,
   portalCaseUninvoicedReductionSatang,
   serializePortalCaseDetail,
   serializePortalCaseListItem,
@@ -179,11 +180,13 @@ export async function findPortalCaseDetail(ctx: PortalContext, id: string): Prom
       assetCapacity: true,
       assetColor: true,
       company: { select: { vatMode: true } },
-      // มติชั่วคราว M9 — รายได้จริงของเคส (1 เคส = 1 รายได้)
+      // มติชั่วคราว M9 — รายได้จริงของเคส · mytester7 S7-AG1-03 — รายได้แยกต่อ (เคส, รอบติดตาม)
+      // ดึงทุกรอบแล้วเลือกรอบของเคสด้วย `portalCaseRevenueOfRound()` (เคสรีไซเคิลมีรายได้ของรอบก่อนค้างอยู่ได้)
       revenues: {
         where: { deletedAt: null },
         select: {
           id: true,
+          trackingRound: true,
           totalSatang: true,
           vatSatang: true,
           vatRatePctUsed: true,
@@ -205,7 +208,6 @@ export async function findPortalCaseDetail(ctx: PortalContext, id: string): Prom
             },
           },
         },
-        take: 1,
       },
     },
   })
@@ -220,7 +222,7 @@ export async function findPortalCaseDetail(ctx: PortalContext, id: string): Prom
       assignmentStatus: row.assignments[0]?.status ?? null,
       asset,
       companyVatMode: row.company.vatMode,
-      revenue: await portalCaseRevenueSource(ctx, row.revenues[0] ?? null),
+      revenue: await portalCaseRevenueSource(ctx, portalCaseRevenueOfRound(row.revenues, row.trackingRound)),
     }),
   }
 }

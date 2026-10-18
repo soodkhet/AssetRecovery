@@ -3,6 +3,7 @@ import { AssignmentStatus, CaseStatus, HandoverLotStatus } from '@/lib/generated
 import {
   portalAssetPhotoMeta,
   portalCaseNetRevenueSatang,
+  portalCaseRevenueOfRound,
   portalCaseUninvoicedReductionSatang,
   type PortalCaseReductionAdjustment,
   serializePortalBillingBatch,
@@ -577,5 +578,24 @@ describe('BUG-184 — รายละเอียดเคสพอร์ทั�
 
   it('รายการเคสไม่มี deviceText (เฉพาะรายละเอียด)', () => {
     expect('deviceText' in serializePortalCaseListItem(caseRow('active', { assetDescription: 'iPhone 15' }))).toBe(false)
+  })
+})
+
+describe('portalCaseRevenueOfRound — mytester7 S7-AG1-03 รายได้แยกต่อรอบติดตาม', () => {
+  const round1 = { id: 'rev-r1', trackingRound: 1, totalSatang: 20000 }
+  const round2 = { id: 'rev-r2', trackingRound: 2, totalSatang: 535000 }
+
+  it('เคสรอบ 2 ที่ยังไม่เกิดรายได้ ⇒ null (ห้ามหยิบรายได้ของรอบ 1 มาแสดง)', () => {
+    expect(portalCaseRevenueOfRound([round1], 2)).toBeNull()
+  })
+
+  it('มีรายได้ทั้ง 2 รอบ ⇒ เลือกรอบของเคสเสมอ ไม่ขึ้นกับลำดับแถว', () => {
+    expect(portalCaseRevenueOfRound([round1, round2], 2)).toBe(round2)
+    expect(portalCaseRevenueOfRound([round2, round1], 2)).toBe(round2)
+    expect(portalCaseRevenueOfRound([round2, round1], 1)).toBe(round1)
+  })
+
+  it('ไม่มีรายได้เลย ⇒ null', () => {
+    expect(portalCaseRevenueOfRound([], 1)).toBeNull()
   })
 })

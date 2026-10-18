@@ -35,6 +35,8 @@ const profileSelect = {
   filingForm: true,
   deletedAt: true,
   updatedAt: true,
+  // mytester7 S7-AG4-04 — บอกหน้าจอล่วงหน้าว่า profile ถูกใช้แล้ว (ยามจริงคือ `countTaxProfileUsage()` ตอนลบ)
+  _count: { select: { payeeProfiles: true, payoutBatchItems: true } },
 } as const
 
 type ProfileRow = Prisma.TaxProfileGetPayload<{ select: typeof profileSelect }>
@@ -51,6 +53,7 @@ function toDto(row: ProfileRow): TaxProfileDto {
     filingForm: row.filingForm,
     isActive: row.deletedAt === null,
     updatedAt: toIso(row.updatedAt),
+    usage: { payeeCount: row._count.payeeProfiles, payoutItemCount: row._count.payoutBatchItems },
   }
 }
 
