@@ -9,7 +9,9 @@ import {
   duplicateMappedFields,
   ignoredHeaders,
   importResultToastDescription,
+  importableRowCount,
   missingRequiredFields,
+  reconcileLostImport,
 } from '@/lib/cases/import-wizard'
 
 /** `38` §7.1 — wizard: เลือกไฟล์ → mapping คอลัมน์ → preview → ยืนยัน */
@@ -125,5 +127,72 @@ describe('importResultToastDescription — mytester3 B3-01 แถวที่ม
     expect(importResultToastDescription({ failedCount: 2, rows: [row('failed', false)] })).toBe(
       'มี 2 แถวที่นำเข้าไม่ได้ — ดูรายละเอียดในตาราง',
     )
+  })
+})
+
+describe('mytester7 S7-AG6-01/02 — ปุ่มยืนยันนำเข้า + กู้ผลเมื่อไม่ได้รับคำตอบ', () => {
+  const row = (
+    rowNumber: number,
+    status: 'created' | 'failed',
+    errorCode: string | null = null,
+    existingCaseId?: string,
+  ): CaseImportResultDto['rows'][number] => ({
+    rowNumber,
+    caseRef: `SF-${rowNumber}`,
+    status,
+    caseId: null,
+    errorCode,
+    errorMessage: errorCode === null ? null : 'x',
+    fields: null,
+    warnings: null,
+    ...(existingCaseId === undefined ? {} : { existingCaseId }),
+  })
+  const result = (dryRun: boolean, rows: CaseImportResultDto['rows']): CaseImportResultDto => ({
+    dryRun,
+    totalRows: rows.length,
+    createdCount: rows.filter((item) => item.status === 'created').length,
+    failedCount: rows.filter((item) => item.status === 'failed').length,
+    unmappedHeaders: [],
+    rows,
+  })
+
+  it('ทุกแถวไม่ผ่าน ⇒ นำเข้าได้ 0 แถว (ปุ่มยืนยันต้องปิด)', () => {
+    expect(importableRowCount({ totalRows: 20, failedCount: 20 })).toBe(0)
+    expect(importableRowCount({ totalRows: 20, failedCount: 3 })).toBe(17)
+  })
+
+  it('ตรวจซ้ำพบเลขที่สัญญาของแถวที่เคยผ่านมีในระบบแล้วครบ ⇒ นำเข้าแล้ว (ผลแบบนำเข้าจริง ชี้เคสในระบบ)', () => {
+    const preview = result(true, [row(2, 'created'), row(3, 'created'), row(4, 'failed', 'REQUIRED_MISSING')])
+    const recheck = result(true, [
+      row(2, 'failed', 'CASE_REF_DUPLICATE', 'case-2'),
+      row(3, 'failed', 'CASE_REF_DUPLICATE', 'case-3'),
+      row(4, 'failed', 'REQUIRED_MISSING'),
+    ])
+    const outcome = reconcileLostImport(preview, recheck)
+    expect(outcome.importedCount).toBe(2)
+    expect(outcome.remainingCount).toBe(0)
+    expect(outcome.result.dryRun).toBe(false)
+    expect(outcome.result.createdCount).toBe(2)
+    expect(outcome.result.failedCount).toBe(1)
+    expect(outcome.result.rows.map((item) => [item.status, item.caseId])).toEqual([
+      ['created', 'case-2'],
+      ['created', 'case-3'],
+      ['failed', null],
+    ])
+  })
+
+  it('ยังไม่มีเคสในระบบ ⇒ ยังไม่ได้นำเข้า (คง preview ให้กดยืนยันใหม่)', () => {
+    const preview = result(true, [row(2, 'created')])
+    const outcome = reconcileLostImport(preview, preview)
+    expect(outcome).toEqual({ importedCount: 0, remainingCount: 1, result: preview })
+  })
+
+  it('นำเข้าไปบางส่วน ⇒ บอกจำนวน + คง preview ล่าสุดให้ยืนยันส่วนที่เหลือ', () => {
+    const preview = result(true, [row(2, 'created'), row(3, 'created')])
+    const recheck = result(true, [row(2, 'failed', 'CASE_REF_DUPLICATE', 'case-2'), row(3, 'created')])
+    const outcome = reconcileLostImport(preview, recheck)
+    expect(outcome.importedCount).toBe(1)
+    expect(outcome.remainingCount).toBe(1)
+    expect(outcome.result).toBe(recheck)
   })
 })
