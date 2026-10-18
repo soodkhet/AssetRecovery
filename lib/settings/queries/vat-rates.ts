@@ -2,7 +2,7 @@ import { emitAudit } from '@/lib/audit/audit'
 import { Prisma } from '@/lib/generated/prisma/client'
 import { prisma } from '@/lib/prisma'
 import { SettingsError } from '@/lib/settings/errors'
-import { toDateOnlyIso, toIso, type SettingsMutationContext } from '@/lib/settings/queries/shared'
+import { toDateOnlyIso, toIso, type SettingsMutationContext, type SettingsTxClient } from '@/lib/settings/queries/shared'
 import type { VatRateDto } from '@/lib/settings/types'
 import {
   findOverlappingPeriods,
@@ -10,8 +10,11 @@ import {
   isPeriodRangeValid,
   resolveVatRateAt,
   sortPeriodsDesc,
+  planVatRateAutoClose,
   validateVatRateChange,
+  validateVatRateCreate,
   vatRateViolationMessage,
+  type VatRateChangeViolation,
   type VatRatePeriod,
   type VatRevenueSpan,
 } from '@/lib/settings/vat'
@@ -24,7 +27,8 @@ import {
  *
  * ห้ามมีช่วงทับกัน (`VAT_RATE_OVERLAP`) — ตรวจทั้ง create และ update
  * มติ D7-01 (mytester7 S7-AG2-02/03): ช่วงที่มีรายได้อ้างห้ามเปลี่ยนอัตรา/ย่นช่วง (`VAT_RATE_IN_USE`) ·
- * ห้ามแก้วันสิ้นสุดย้อนหลังก่อนวันนี้เวลาไทย (`VAT_RATE_END_DATE_PAST`) · ห้ามเกิดช่องว่างใหม่ (`VAT_RATE_GAP`)
+ * ห้ามแก้วันสิ้นสุดย้อนหลังก่อนวันนี้เวลาไทย (`VAT_RATE_END_DATE_PAST`) · ห้ามเกิดช่องว่างใหม่ (`VAT_RATE_GAP`
+ * — รวมทำให้วันนี้/อนาคตไม่มีอัตรา: ช่วงล่าสุดต้องเปิดปลาย · เพิ่มช่วงใหม่ = ปิดช่วงเปิดปลายเดิมให้อัตโนมัติ)
  * — กติกาอยู่ใน pure `validateVatRateChange()` ที่นี่แค่หาข้อมูลรายได้มาป้อน
  */
 
@@ -78,8 +82,16 @@ function toAuditPayload(values: VatRateValues): Record<string, unknown> {
   }
 }
 
-async function loadPeriods(organizationId: string): Promise<VatRow[]> {
-  return prisma.vatRateHistory.findMany({ where: { organizationId }, select: vatSelect })
+async function loadPeriods(organizationId: string, db: SettingsTxClient = prisma): Promise<VatRow[]> {
+  return db.vatRateHistory.findMany({ where: { organizationId }, select: vatSelect })
+}
+
+/**
+ * ล็อกการแก้ช่วงอัตรา VAT ระดับองค์กรจนจบธุรกรรม (mytester7 review — TOCTOU): ตรวจทับกัน/ช่องว่าง/รายได้อ้าง
+ * แล้วบันทึกภายใต้ล็อกเดียวกัน ⇒ สองคำขอพร้อมกันเห็นผลของกันและกันเสมอ ไม่เกิดช่วงทับ/ช่องว่างจากการแข่งกัน
+ */
+async function lockVatRates(tx: SettingsTxClient, organizationId: string): Promise<void> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${TARGET}:${organizationId}`}))`
 }
 
 /** รายการอัตรา VAT ทั้งหมด เรียงใหม่→เก่า พร้อมธงว่าช่วงไหนมีผล "วันนี้" */
@@ -112,7 +124,11 @@ export async function resolveVatRate(organizationId: string, date: Date): Promis
   return toDto(row, resolved.id)
 }
 
-function assertNoOverlap(values: VatRateValues, existing: readonly VatRow[], exceptId?: string): void {
+function assertNoOverlap(
+  values: Pick<VatRateValues, 'effectiveFrom' | 'effectiveTo'>,
+  existing: readonly VatRow[],
+  exceptId?: string,
+): void {
   if (!isPeriodRangeValid(values)) {
     throw new SettingsError('VAT_RATE_OVERLAP', {
       detail: `invalid range from=${toDateOnlyIso(values.effectiveFrom)} to=${values.effectiveTo === null ? 'null' : toDateOnlyIso(values.effectiveTo)}`,
@@ -126,7 +142,7 @@ function assertNoOverlap(values: VatRateValues, existing: readonly VatRow[], exc
   throw new SettingsError('VAT_RATE_OVERLAP', {
     messages: {
       title: 'ช่วงเวลาอัตรา VAT ทับกัน',
-      message: `ช่วงวันที่นี้ทับกับ ${overlapping.map(formatVatPeriodLabel).join(', ')} — ปิดช่วงของอัตราเดิม (ระบุวันสิ้นสุด) ก่อน หรือเลือกวันที่ไม่ทับ`,
+      message: `ช่วงวันที่นี้ทับกับ ${overlapping.map(formatVatPeriodLabel).join(', ')} — เลือกวันที่ไม่ทับ (เพิ่มอัตราใหม่ที่เริ่มหลังวันเริ่มของอัตราที่ใช้อยู่ ระบบจะปิดช่วงเดิมให้)`,
     },
     detail: `overlaps=${overlapping.map((period) => period.id).join(',')}`,
     context: {
@@ -144,8 +160,12 @@ function assertNoOverlap(values: VatRateValues, existing: readonly VatRow[], exc
  * วันที่รายได้แรกสุด/ล่าสุดที่ `revenue_date` ตกในช่วงเดิม (ไม่นับที่ลบแล้ว) — `null` = ช่วงนี้ยังไม่มีรายได้อ้าง
  * นับทุกสถานะ (รวมยกเลิก/วางบิลแล้ว) เพราะ snapshot `vat_rate_pct_used` ของทุกแถวอ้างช่วงนี้อยู่
  */
-async function revenueSpanOf(organizationId: string, period: VatRatePeriod): Promise<VatRevenueSpan | null> {
-  const result = await prisma.revenue.aggregate({
+async function revenueSpanOf(
+  organizationId: string,
+  period: VatRatePeriod,
+  db: SettingsTxClient = prisma,
+): Promise<VatRevenueSpan | null> {
+  const result = await db.revenue.aggregate({
     where: {
       organizationId,
       deletedAt: null,
@@ -159,20 +179,7 @@ async function revenueSpanOf(organizationId: string, period: VatRatePeriod): Pro
   return first === null || last === null ? null : { first, last }
 }
 
-function assertChangeAllowed(
-  values: VatRateValues,
-  current: VatRatePeriod | null,
-  existing: readonly VatRow[],
-  revenueSpan: VatRevenueSpan | null,
-  now: Date,
-): void {
-  const violation = validateVatRateChange({
-    candidate: values,
-    current,
-    existing: existing.map(toPeriod),
-    revenueSpan,
-    now,
-  })
+function throwIfViolation(violation: VatRateChangeViolation | null): void {
   if (violation === null) return
   throw new SettingsError(violation.code, {
     messages: vatRateViolationMessage(violation),
@@ -186,11 +193,46 @@ export async function createVatRate(
   now: Date = new Date(),
 ): Promise<VatRateDto> {
   const organizationId = context.actor.organizationId
-  const existing = await loadPeriods(organizationId)
-  assertNoOverlap(values, existing)
-  assertChangeAllowed(values, null, existing, null, now)
 
   const created = await prisma.$transaction(async (tx) => {
+    await lockVatRates(tx, organizationId)
+    const existing = await loadPeriods(organizationId, tx)
+    const periods = existing.map(toPeriod)
+    // มติ D7-01 — เปลี่ยนอัตรา = เพิ่มช่วงใหม่ ⇒ ปิดช่วงเปิดปลายเดิมถึงวันก่อนวันเริ่มใหม่ในธุรกรรมเดียวกัน
+    // (ช่วงล่าสุดต้องเปิดปลายเสมอ จึงปิดแยกก่อนไม่ได้ — mytester7 review)
+    const autoClose = planVatRateAutoClose(values, periods)
+    assertNoOverlap(values, existing, autoClose?.period.id)
+    const revenueSpan = autoClose === null ? null : await revenueSpanOf(organizationId, autoClose.period, tx)
+    throwIfViolation(validateVatRateCreate({ candidate: values, existing: periods, autoClose, revenueSpan, now }))
+
+    if (autoClose !== null) {
+      const closedRow = existing.find((row) => row.id === autoClose.period.id)
+      if (!closedRow) throw new SettingsError('VAT_RATE_NOT_FOUND', { detail: `vat_rate=${autoClose.period.id}` })
+      await tx.vatRateHistory.update({ where: { id: closedRow.id }, data: { effectiveTo: autoClose.closedTo } })
+      const closedValues = {
+        ratePct: closedRow.ratePct.toNumber(),
+        effectiveFrom: closedRow.effectiveFrom,
+        effectiveTo: closedRow.effectiveTo,
+        note: closedRow.note,
+      }
+      await emitAudit(
+        {
+          organizationId,
+          actorId: context.actor.id,
+          actorRole: context.actor.roleName,
+          action: 'update',
+          targetType: TARGET,
+          targetId: closedRow.id,
+          before: toAuditPayload(closedValues),
+          after: { ...toAuditPayload({ ...closedValues, effectiveTo: autoClose.closedTo }), closed_by_new_rate: true },
+          reason: context.reason,
+          ipAddress: context.meta.ipAddress,
+          userAgent: context.meta.userAgent,
+        },
+        tx,
+      )
+    }
+
     const row = await tx.vatRateHistory.create({
       data: {
         organizationId,
@@ -236,14 +278,24 @@ export async function updateVatRate(
   now: Date = new Date(),
 ): Promise<VatRateDto> {
   const organizationId = context.actor.organizationId
-  const existing = await loadPeriods(organizationId)
-  assertNoOverlap(values, existing, current.id)
-  const currentRow = existing.find((row) => row.id === current.id)
-  if (!currentRow) throw new SettingsError('VAT_RATE_NOT_FOUND', { detail: `vat_rate=${current.id}` })
-  const currentPeriod = toPeriod(currentRow)
-  assertChangeAllowed(values, currentPeriod, existing, await revenueSpanOf(organizationId, currentPeriod), now)
 
   const updated = await prisma.$transaction(async (tx) => {
+    await lockVatRates(tx, organizationId)
+    const existing = await loadPeriods(organizationId, tx)
+    assertNoOverlap(values, existing, current.id)
+    const currentRow = existing.find((row) => row.id === current.id)
+    if (!currentRow) throw new SettingsError('VAT_RATE_NOT_FOUND', { detail: `vat_rate=${current.id}` })
+    const currentPeriod = toPeriod(currentRow)
+    throwIfViolation(
+      validateVatRateChange({
+        candidate: values,
+        current: currentPeriod,
+        existing: existing.map(toPeriod),
+        revenueSpan: await revenueSpanOf(organizationId, currentPeriod, tx),
+        now,
+      }),
+    )
+
     const row = await tx.vatRateHistory.update({
       where: { id: current.id },
       data: {

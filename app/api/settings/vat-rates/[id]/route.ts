@@ -10,7 +10,7 @@ type RouteContext = { params: Promise<{ id: string }> }
  * `GET/PATCH /api/settings/vat-rates/:id` (`13` §6.5)
  *
  * **ไม่มี DELETE**: `vat_rate_history` ไม่มี `deleted_at` (`02` §2.4 — ตาราง insert-only ด้านคอลัมน์)
- * ต้องการหยุดใช้อัตราให้ **ปิดช่วง** ด้วย `effectiveTo` แทน · ทุกการแก้ต้องมี `reason` (`13` §12)
+ * ต้องการเปลี่ยนอัตราให้เพิ่มอัตราใหม่ (POST — ระบบปิดช่วงเดิมให้) · ช่วงล่าสุดปิดแยกไม่ได้ (`VAT_RATE_GAP`) · ทุกการแก้ต้องมี `reason` (`13` §12)
  */
 export const GET = withApiPermission<RouteContext>(
   'view',

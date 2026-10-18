@@ -34,7 +34,9 @@ import type { VatRateDto } from '@/lib/settings/types'
 import {
   findOverlappingPeriods,
   formatVatPeriodLabel,
+  planVatRateAutoClose,
   validateVatRateChange,
+  validateVatRateCreate,
   vatRateViolationMessage,
   type VatRatePeriod,
 } from '@/lib/settings/vat'
@@ -116,13 +118,27 @@ export function VatRatesTab() {
     }
   }, [fetchItems])
 
+  /**
+   * เพิ่มอัตราใหม่ที่เริ่มหลังช่วงที่ยังใช้อยู่ ⇒ ระบบปิดช่วงนั้นให้ถึงวันก่อนวันเริ่มใหม่ (กติกาเดียวกับ API)
+   * ช่วงล่าสุดต้องไม่มีวันสิ้นสุดเสมอ จึงไม่ต้อง (และปิดแยกก่อนไม่ได้)
+   */
+  const autoClose = useMemo(() => {
+    const from = fromInputDate(form.effectiveFrom)
+    if (editing !== null || from === null) return null
+    return planVatRateAutoClose({ effectiveFrom: from }, items.map(toPeriod))
+  }, [form.effectiveFrom, items, editing])
+
   /** ช่วงที่ทับกับค่าที่กำลังกรอก — เตือนสดขณะพิมพ์ ไม่บล็อกปุ่ม (API เป็นตัวตัดสิน) */
   const overlapping = useMemo(() => {
     const from = fromInputDate(form.effectiveFrom)
     if (from === null) return []
     const to = fromInputDate(form.effectiveTo)
-    return findOverlappingPeriods({ effectiveFrom: from, effectiveTo: to }, items.map(toPeriod), editing?.id)
-  }, [form.effectiveFrom, form.effectiveTo, items, editing])
+    return findOverlappingPeriods(
+      { effectiveFrom: from, effectiveTo: to },
+      items.map(toPeriod),
+      editing?.id ?? autoClose?.period.id,
+    )
+  }, [form.effectiveFrom, form.effectiveTo, items, editing, autoClose])
 
   /**
    * เตือนก่อนบันทึกตามมติ D7-01 — ปิดช่วงย้อนหลัง / ช่องว่างระหว่างช่วง (ตรวจ "มีรายได้อ้าง" ได้ที่ API เท่านั้น)
@@ -132,19 +148,19 @@ export function VatRatesTab() {
     const from = fromInputDate(form.effectiveFrom)
     if (from === null || overlapping.length > 0) return null
     const ratePct = form.ratePct.trim() === '' ? Number.NaN : Number(form.ratePct)
-    const violation = validateVatRateChange({
-      candidate: {
-        ratePct: Number.isFinite(ratePct) ? ratePct : (editing?.ratePct ?? 0),
-        effectiveFrom: from,
-        effectiveTo: fromInputDate(form.effectiveTo),
-      },
-      current: editing === null ? null : toPeriod(editing),
-      existing: items.map(toPeriod),
-      revenueSpan: null,
-      now: new Date(),
-    })
+    const candidate = {
+      ratePct: Number.isFinite(ratePct) ? ratePct : (editing?.ratePct ?? 0),
+      effectiveFrom: from,
+      effectiveTo: fromInputDate(form.effectiveTo),
+    }
+    const existing = items.map(toPeriod)
+    const now = new Date()
+    const violation =
+      editing === null
+        ? validateVatRateCreate({ candidate, existing, autoClose, revenueSpan: null, now })
+        : validateVatRateChange({ candidate, current: toPeriod(editing), existing, revenueSpan: null, now })
     return violation === null ? null : vatRateViolationMessage(violation)
-  }, [form.effectiveFrom, form.effectiveTo, form.ratePct, items, editing, overlapping.length])
+  }, [form.effectiveFrom, form.effectiveTo, form.ratePct, items, editing, overlapping.length, autoClose])
 
   function openForm(target: VatRateDto | null): void {
     setEditing(target)
@@ -220,9 +236,9 @@ export function VatRatesTab() {
         </Can>
       </div>
 
-      <InlineAlert tone="warning" title="ช่วงวันที่ต้องไม่ทับซ้อนกัน">
-        ระบบตรวจก่อนบันทึกทุกครั้ง — ต้องการหยุดใช้อัตราเดิมให้{' '}
-        <b>ปิดช่วง</b> ด้วยวันสิ้นสุด ไม่มีการลบอัตราออกจากประวัติ
+      <InlineAlert tone="warning" title="ช่วงวันที่ต้องต่อเนื่องและไม่ทับซ้อนกัน">
+        ระบบตรวจก่อนบันทึกทุกครั้ง — ต้องการเปลี่ยนอัตราให้ <b>เพิ่มอัตราใหม่</b> ระบบจะปิดช่วงเดิมให้ถึงวันก่อนวันเริ่มใหม่
+        · ช่วงล่าสุดต้องไม่มีวันสิ้นสุด และไม่มีการลบอัตราออกจากประวัติ
       </InlineAlert>
 
       <SettingHelp className="mt-3" help={vatRateHelp(currentVatRateOf(items))} />
@@ -300,7 +316,7 @@ export function VatRatesTab() {
         open={formOpen}
         onClose={() => setFormOpen(false)}
         title={editing === null ? 'เพิ่มอัตรา VAT' : `แก้ไขอัตรา VAT — ${editing.ratePct}%`}
-        description="ช่วงวันที่นับแบบรวมปลายทั้งสองด้าน — เว้นวันสิ้นสุดว่างไว้ = ใช้ต่อจนกว่าจะปิดช่วง"
+        description="ช่วงวันที่นับแบบรวมปลายทั้งสองด้าน — เว้นวันสิ้นสุดว่างไว้ = ใช้ต่อจนกว่าจะเพิ่มอัตราใหม่"
         footer={
           <>
             <ModalCancelButton onClose={() => setFormOpen(false)} disabled={saving}>
@@ -339,7 +355,7 @@ export function VatRatesTab() {
               id="vat-to"
               label="วันสิ้นสุด"
               error={errors.effectiveTo}
-              hint="เว้นว่าง = ยังใช้อยู่จนกว่าจะปิดช่วง"
+              hint="เว้นว่าง = ใช้ต่อจนกว่าจะเพิ่มอัตราใหม่ (ช่วงล่าสุดต้องเว้นว่าง)"
             >
               <Input
                 id="vat-to"
@@ -356,7 +372,14 @@ export function VatRatesTab() {
               {overlapping
                 .map(formatVatPeriodLabel)
                 .join(', ')}{' '}
-              — ปิดช่วงเดิมด้วยวันสิ้นสุดก่อน ไม่งั้นระบบจะไม่ให้บันทึกเพราะช่วงวันที่ทับซ้อนกัน
+              — เลือกวันที่ไม่ทับ ไม่งั้นระบบจะไม่ให้บันทึกเพราะช่วงวันที่ทับซ้อนกัน
+            </InlineAlert>
+          )}
+
+          {autoClose !== null && overlapping.length === 0 && changeViolation === null && (
+            <InlineAlert tone="info" title="ระบบจะปิดช่วงเดิมให้">
+              {formatVatPeriodLabel(autoClose.period)} จะสิ้นสุดวันที่ {fmtDate(autoClose.closedTo)} แล้วใช้อัตราใหม่ตั้งแต่{' '}
+              {fmtDate(fromInputDate(form.effectiveFrom))}
             </InlineAlert>
           )}
 

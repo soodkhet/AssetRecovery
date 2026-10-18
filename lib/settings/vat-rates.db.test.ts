@@ -187,31 +187,70 @@ suite('ช่วงอัตรา VAT ที่ถูกใช้แล้ว �
     expect(updated.ratePct).toBe(7.5)
   })
 
-  it('S2: ปิดช่วงเดิม 31/10/2569 แล้วเพิ่ม 10% เริ่ม 01/11/2569 ⇒ ผ่าน', async () => {
+  it('S2 (mytester7 review): เพิ่ม 10% เริ่ม 01/11/2569 ⇒ ระบบปิด 7% ถึง 31/10/2569 ให้ในธุรกรรมเดียวกัน + audit', async () => {
     const current = await seedOpenSevenPercent()
     await seedRevenue('2026-10-17')
-    await vat.updateVatRate(
-      ctx,
-      current,
-      { ratePct: 7, effectiveFrom: day('2025-10-01'), effectiveTo: day('2026-10-31'), note: null },
-      NOW,
-    )
     const next = await vat.createVatRate(
       ctx,
       { ratePct: 10, effectiveFrom: day('2026-11-01'), effectiveTo: null, note: null },
       NOW,
     )
     expect(next.ratePct).toBe(10)
+    const closed = await db().vatRateHistory.findUniqueOrThrow({ where: { id: current.id } })
+    expect(closed.effectiveTo).toEqual(day('2026-10-31'))
+    const audit = await db().auditLog.findFirst({
+      where: { organizationId: ORG_ID, targetType: 'vat_rate_history', targetId: current.id, action: 'update' },
+      select: { afterData: true, reason: true },
+    })
+    expect(audit?.afterData).toMatchObject({ effective_to: '2026-10-31', closed_by_new_rate: true })
+    expect(audit?.reason).toBe(ctx.reason)
   })
 
-  it('S7-AG2-03: ปิด 30/10 แล้วเพิ่ม 10% เริ่ม 01/11 ⇒ VAT_RATE_GAP ระบุวันที่ 31/10/2569', async () => {
+  it('mytester7 review: ปิดช่วงล่าสุดโดยไม่มีช่วงต่อ ⇒ VAT_RATE_GAP · ช่วงในฐานยังเปิดปลาย', async () => {
     const current = await seedOpenSevenPercent()
-    await vat.updateVatRate(
-      ctx,
-      current,
-      { ratePct: 7, effectiveFrom: day('2025-10-01'), effectiveTo: day('2026-10-30'), note: null },
-      NOW,
-    )
+    await expect(
+      vat.updateVatRate(
+        ctx,
+        current,
+        { ratePct: 7, effectiveFrom: day('2025-10-01'), effectiveTo: day('2026-10-31'), note: null },
+        NOW,
+      ),
+    ).rejects.toSatisfy((error: unknown) => codeOf(error) === 'VAT_RATE_GAP')
+    expect((await db().vatRateHistory.findUniqueOrThrow({ where: { id: current.id } })).effectiveTo).toBeNull()
+  })
+
+  it('mytester7 review: เพิ่มช่วงใหม่แต่ช่วงเดิมมีรายได้หลังวันปิด ⇒ VAT_RATE_IN_USE · ไม่มีอะไรถูกบันทึก', async () => {
+    const current = await seedOpenSevenPercent()
+    await seedRevenue('2026-11-05')
+    await expect(
+      vat.createVatRate(ctx, { ratePct: 10, effectiveFrom: day('2026-11-01'), effectiveTo: null, note: null }, NOW),
+    ).rejects.toSatisfy((error: unknown) => codeOf(error) === 'VAT_RATE_IN_USE')
+    expect((await db().vatRateHistory.findUniqueOrThrow({ where: { id: current.id } })).effectiveTo).toBeNull()
+    expect(await db().vatRateHistory.count({ where: { organizationId: ORG_ID } })).toBe(1)
+  })
+
+  it('mytester7 review (TOCTOU): เพิ่มอัตราใหม่สองคำขอพร้อมกัน ⇒ ช่วงไม่ทับ ไม่มีช่องว่าง เปิดปลายช่วงเดียว', async () => {
+    await seedOpenSevenPercent()
+    await Promise.allSettled([
+      vat.createVatRate(ctx, { ratePct: 10, effectiveFrom: day('2026-11-01'), effectiveTo: null, note: null }, NOW),
+      vat.createVatRate(ctx, { ratePct: 8, effectiveFrom: day('2026-12-01'), effectiveTo: null, note: null }, NOW),
+    ])
+    const rows = await db().vatRateHistory.findMany({
+      where: { organizationId: ORG_ID },
+      orderBy: { effectiveFrom: 'asc' },
+    })
+    expect(rows.filter((row) => row.effectiveTo === null)).toHaveLength(1)
+    for (let index = 1; index < rows.length; index += 1) {
+      const previousTo = rows[index - 1]?.effectiveTo
+      expect(previousTo).not.toBeNull()
+      // ช่วงถัดไปเริ่มวันถัดจากวันสิ้นสุดของช่วงก่อนพอดี
+      expect(rows[index]?.effectiveFrom.getTime()).toBe((previousTo?.getTime() ?? 0) + 86_400_000)
+    }
+  })
+
+  it('S7-AG2-03: ข้อมูลเดิมปิดที่ 30/10 แล้วเพิ่ม 10% เริ่ม 01/11 ⇒ VAT_RATE_GAP ระบุวันที่ 31/10/2569', async () => {
+    const current = await seedOpenSevenPercent()
+    await db().vatRateHistory.update({ where: { id: current.id }, data: { effectiveTo: day('2026-10-30') } })
     const error = await vat
       .createVatRate(ctx, { ratePct: 10, effectiveFrom: day('2026-11-01'), effectiveTo: null, note: null }, NOW)
       .catch((caught: unknown) => caught)
@@ -221,12 +260,7 @@ suite('ช่วงอัตรา VAT ที่ถูกใช้แล้ว �
 
   it('S7-AG2-04: ข้อความ VAT_RATE_OVERLAP แสดงวันสิ้นสุดจริงของช่วงเดิม', async () => {
     const current = await seedOpenSevenPercent()
-    await vat.updateVatRate(
-      ctx,
-      current,
-      { ratePct: 7, effectiveFrom: day('2025-10-01'), effectiveTo: day('2026-10-31'), note: null },
-      NOW,
-    )
+    await db().vatRateHistory.update({ where: { id: current.id }, data: { effectiveTo: day('2026-10-31') } })
     const error = await vat
       .createVatRate(ctx, { ratePct: 10, effectiveFrom: day('2026-10-01'), effectiveTo: null, note: null }, NOW)
       .catch((caught: unknown) => caught)
