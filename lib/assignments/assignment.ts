@@ -1,5 +1,5 @@
 import type { AssignmentStatus } from '@/lib/generated/prisma/enums'
-import { AssignmentError } from '@/lib/assignments/errors'
+import { AssignmentError, REASSIGNMENT_EXPIRED_AWAITING_JOB_MESSAGE } from '@/lib/assignments/errors'
 import { ASSIGNMENT_REASON_MIN, isAssignmentReasonLongEnough } from '@/lib/assignments/schemas'
 import { AuthError } from '@/lib/auth/errors'
 
@@ -142,8 +142,10 @@ export function assertRespondable(pending: PendingRespondContext, responderId: s
   if (pending.fromAgentId !== responderId) {
     throw new AuthError('PERMISSION_DENIED', 'ผู้ตอบไม่ใช่ผู้ถือเคสปัจจุบัน')
   }
-  if (pending.resolved || isReassignmentExpired(pending.expiresAt, now)) {
-    throw new AssignmentError('REASSIGNMENT_ALREADY_TIMED_OUT')
+  if (pending.resolved) throw new AssignmentError('REASSIGNMENT_ALREADY_TIMED_OUT')
+  if (isReassignmentExpired(pending.expiresAt, now)) {
+    // job ยังไม่รัน — เคสยังไม่ถูกโอน ⇒ ข้อความต้องไม่บอกว่า "เปลี่ยนไปแล้ว" (S7-AG5-03)
+    throw new AssignmentError('REASSIGNMENT_ALREADY_TIMED_OUT', { message: REASSIGNMENT_EXPIRED_AWAITING_JOB_MESSAGE })
   }
 }
 

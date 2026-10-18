@@ -128,6 +128,12 @@ export interface FieldCaseListItemDto {
   /** มี draft ค้าง = ปุ่มบนการ์ดเป็น "จบงาน" + badge Draft (`41` §7.5) */
   hasDraft: boolean
   hasPendingReassignment: boolean
+  /**
+   * คำขอที่รอตอบ (มีเมื่อ `hasPendingReassignment`) — popup จำ "ดูทีหลัง" ต่อคำขอ + แสดงป้ายหมดเวลา
+   * (mytester7 S7-AG6-06/S7-AG5-03) · มุมมองทีม (เคสเพื่อน) ไม่มีช่องนี้
+   */
+  pendingReassignmentId?: string | null
+  pendingReassignmentExpiresAt?: string | null
   checkinCount: number
   /** `41` §6.8 — แสดงก่อนกดรับงานเสมอ (ค่าตายตัวต่อเคสจากแผนค่าตอบแทนของทีม) */
   commissionSatang: number | null

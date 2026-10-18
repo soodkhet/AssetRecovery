@@ -14,7 +14,7 @@ import {
   reassignmentResponseRecipientIds,
   reassignOutcome,
 } from '@/lib/assignments/assignment'
-import { AssignmentError } from '@/lib/assignments/errors'
+import { AssignmentError, REASSIGNMENT_EXPIRED_AWAITING_JOB_MESSAGE } from '@/lib/assignments/errors'
 
 /** เทสต์ตาม `40` §20 (Test Cases) — โฟกัสกฎที่ห้ามสลับกันของ reassign 2 สาขา */
 
@@ -147,6 +147,24 @@ describe('respond_reassignment_consent (`40` §12)', () => {
   it('คำขอที่ job resolve ไปแล้ว ตอบไม่ได้แม้ยังไม่ถึง expires_at', () => {
     expect(codeOf(() => assertRespondable({ ...pending, resolved: true }, AGENT, beforeExpiry))).toBe(
       'REASSIGNMENT_ALREADY_TIMED_OUT',
+    )
+  })
+
+  it('ข้อความ: เลยเวลาแต่ job ยังไม่รัน = "จะเปลี่ยนให้" · job resolve แล้ว = "เปลี่ยนไปแล้ว" (S7-AG5-03)', () => {
+    const messageOf = (fn: () => unknown): string => {
+      try {
+        fn()
+      } catch (error) {
+        if (error instanceof AssignmentError) return error.userMessage
+        throw error
+      }
+      return 'NO_ERROR'
+    }
+    const late = messageOf(() => assertRespondable(pending, AGENT, new Date('2026-08-14T06:30:00.000Z')))
+    expect(late).toBe(REASSIGNMENT_EXPIRED_AWAITING_JOB_MESSAGE.message)
+    expect(late).not.toContain('ไปแล้ว')
+    expect(messageOf(() => assertRespondable({ ...pending, resolved: true }, AGENT, beforeExpiry))).toContain(
+      'เปลี่ยนผู้รับผิดชอบอัตโนมัติไปแล้ว',
     )
   })
 
