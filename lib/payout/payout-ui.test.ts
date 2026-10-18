@@ -19,6 +19,8 @@ import {
   payoutTransferText,
   pendingPayoutTransferSatang,
   PAYOUT_STATUS_FILTERS,
+  payoutRaceToast,
+  recoveredPaymentFile,
 } from '@/lib/payout/payout-ui'
 
 function batch(overrides: Partial<PayoutBatchDto> = {}): PayoutBatchDto {
@@ -243,5 +245,51 @@ describe('payoutItemWhtNote — ป้ายภาษีของรายกา
     expect(payoutItemWhtNote({ ...base, whtBaseIncluded: false })).toBeNull()
     expect(payoutItemWhtNote({ ...base, source: 'advance' })).toBeNull()
     expect(payoutItemWhtNote({ ...base, whtPctSnapshot: null })).toBeNull()
+  })
+})
+
+describe('mytester7 S7-AG3-02/03/04 — แพ้การแข่งบนรอบจ่าย', () => {
+  it('สถานะเปลี่ยน ⇒ บอกสถานะล่าสุด + stale (ปิดกล่อง/โหลดใหม่)', () => {
+    const toast = payoutRaceToast({
+      code: 'PAYOUT_BATCH_INVALID_STATUS',
+      title: 'สถานะรอบจ่ายไม่ถูกต้อง',
+      message: 'สถานะปัจจุบันของรอบจ่ายเงินทำรายการนี้ไม่ได้',
+      payload: { code: 'PAYOUT_BATCH_INVALID_STATUS', title: 't', message: 'm', currentStatus: 'completed' },
+    })
+    expect(toast.stale).toBe(true)
+    expect(toast.message).toContain('สถานะล่าสุด: จ่ายสำเร็จ')
+    expect(toast.message).toContain('โหลดรายการล่าสุดให้แล้ว')
+  })
+
+  it('มีคนสร้างไฟล์ไปก่อน / ยกเลิกไม่ได้เพราะโอนแล้ว ⇒ ข้อความ server + stale', () => {
+    for (const code of ['PAYMENT_FILE_VERSION_CONFLICT', 'PAYOUT_BATCH_ALREADY_PAID']) {
+      const toast = payoutRaceToast({ code, title: 'หัวข้อ', message: 'ข้อความ' })
+      expect(toast).toEqual({ title: 'หัวข้อ', message: 'ข้อความ', stale: true })
+    }
+  })
+
+  it('ข้อผิดอื่นคงข้อความเดิม ไม่ปิดกล่อง', () => {
+    expect(payoutRaceToast({ code: 'REQUIRED_MISSING', title: 'a', message: 'b' })).toEqual({
+      title: 'a',
+      message: 'b',
+      stale: false,
+    })
+  })
+
+  it('ไม่ได้รับคำตอบตอนสร้างไฟล์ ⇒ พบไฟล์ใหม่จากระบบ = สำเร็จ · ไม่เปลี่ยน = ยังไม่ได้สร้าง', () => {
+    const before = batch({ status: 'checking' })
+    const after = batch({
+      status: 'file_generated',
+      paymentFileGeneratedAt: '2026-10-18T10:22:01.000Z',
+      paymentFileUrl: 'payout-batches/batch-1/PB-IN-25691018-ABC-v1.csv',
+    })
+    expect(recoveredPaymentFile(before.paymentFileGeneratedAt, after)).toEqual({
+      fileName: 'PB-IN-25691018-ABC-v1.csv',
+      generatedAt: '2026-10-18T10:22:01.000Z',
+      batch: after,
+    })
+    expect(recoveredPaymentFile(null, before)).toBeNull()
+    // สร้างซ้ำ: เวลาเดิม = ยังไม่มีเวอร์ชันใหม่
+    expect(recoveredPaymentFile(after.paymentFileGeneratedAt, after)).toBeNull()
   })
 })

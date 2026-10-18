@@ -27,7 +27,10 @@ vi.mock('@/lib/payout/payment-file-storage', async () => {
   return {
     ...actual,
     uploadPaymentFile: async (input: { path: string; bytes: Uint8Array }) => {
-      if (storage.has(input.path)) throw new Error(`ไฟล์ ${input.path} มีอยู่แล้ว (ห้าม overwrite)`)
+      // เหมือน storage จริง (`upsert: false`) — path ซ้ำ = "มีอยู่แล้ว" (mytester7 S7-AG3-04)
+      if (storage.has(input.path)) {
+        throw new actual.PaymentFileStorageError(`ไฟล์ ${input.path} มีอยู่แล้ว (ห้าม overwrite)`, { alreadyExists: true })
+      }
       storage.set(input.path, input.bytes)
     },
     downloadPaymentFile: async (path: string) => {
@@ -550,6 +553,46 @@ suite('ไฟล์โอนเงิน + idempotency (`17` §6.3/§16 · `13` 
 
     // ไม่มีไฟล์กำพร้าที่ผูกกับคีย์อื่นค้างใน storage
     expect([...storage.keys()].every((path) => path.includes(`${row.idempotencyKey}-v`))).toBe(true)
+  })
+
+  it('mytester7 S7-AG3-03 — สร้างไฟล์ครั้งแรกพร้อมกัน: สำเร็จคำขอเดียว อีกคำขอ 409 PAYMENT_FILE_VERSION_CONFLICT (ไม่ใช่ 500)', async () => {
+    const batchId = await batchWithOneItem()
+    const settled = await Promise.allSettled([
+      payout.generatePaymentFile(ctx, batchId, generateInput),
+      payout.generatePaymentFile(ctx, batchId, generateInput),
+    ])
+    const generated = settled.filter((outcome) => outcome.status === 'fulfilled' && outcome.value.result.generated)
+    expect(generated).toHaveLength(1)
+    for (const outcome of settled) {
+      if (outcome.status === 'fulfilled') continue
+      expect((outcome.reason as { code?: string; status?: number }).code).toBe('PAYMENT_FILE_VERSION_CONFLICT')
+      expect((outcome.reason as { status?: number }).status).toBe(409)
+    }
+    const audits = await db().auditLog.count({
+      where: { organizationId: ORG_ID, targetType: 'payout_batches', targetId: batchId, action: 'export' },
+    })
+    expect(audits).toBe(1)
+  })
+
+  it('mytester7 S7-AG3-04 — ยืนยันสร้างซ้ำพร้อมกัน: ได้ v2 ไฟล์เดียว · v1 ไม่ถูกทับ · ผู้แพ้ 409', async () => {
+    const batchId = await batchWithOneItem()
+    const first = await payout.generatePaymentFile(ctx, batchId, generateInput)
+    const confirm = { ...generateInput, confirmDuplicate: true }
+    const settled = await Promise.allSettled([
+      payout.generatePaymentFile(ctx, batchId, confirm),
+      payout.generatePaymentFile(ctx, batchId, confirm),
+    ])
+    const winners = settled.flatMap((outcome) =>
+      outcome.status === 'fulfilled' && outcome.value.result.generated ? [outcome.value.result] : [],
+    )
+    expect(winners).toHaveLength(1)
+    expect(winners[0]?.fileName).toBe(`${first.result.batch.idempotencyKey}-v2.csv`)
+    const losers = settled.filter((outcome): outcome is PromiseRejectedResult => outcome.status === 'rejected')
+    expect(losers).toHaveLength(1)
+    expect((losers[0]?.reason as { code?: string }).code).toBe('PAYMENT_FILE_VERSION_CONFLICT')
+    expect(storage.size).toBe(2)
+    const row = await db().payoutBatch.findUniqueOrThrow({ where: { id: batchId }, select: { paymentFileUrl: true } })
+    expect(row.paymentFileUrl).toMatch(/-v2\.csv$/)
   })
 
   it('ยิงซ้ำโดยไม่ยืนยัน → เตือน DUPLICATE_PAYMENT_FILE และยังไม่สร้างไฟล์ใหม่', async () => {

@@ -1497,6 +1497,31 @@ suite('Phase 2.9 — เบิกที่พัก + สรุปรายไ�
         ],
       ])
     })
+
+    it('mytester7 S7-AG3-01 — ส่งใหม่พร้อมกัน 2 คำขอ: สำเร็จคำขอเดียว อีกคำขอได้ EXPENSE_INVALID_STATUS · audit ชุดเดียว', async () => {
+      uploads.putFakeUpload(receiptPath('race.jpg'), uploads.sampleBytes('jpeg', 'race'))
+      const claim = await expenses.submitHotelClaim(agentA, hotelInput(receiptPath('race.jpg')), { actor: agentA, meta })
+      await db().expense.update({ where: { id: claim.id }, data: { status: 'needs_revision' } })
+
+      const results = await Promise.allSettled([
+        expenses.resubmitFieldExpense(agentA, claim.id, { note: 'คำชี้แจงแท็บหนึ่ง' }, { actor: agentA, meta }),
+        expenses.resubmitFieldExpense(agentA, claim.id, { note: 'คำชี้แจงแท็บสอง' }, { actor: agentA, meta }),
+      ])
+      const fulfilled = results.filter((result) => result.status === 'fulfilled')
+      const rejected = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+      expect(fulfilled).toHaveLength(1)
+      expect(rejected).toHaveLength(1)
+      expect((rejected[0]?.reason as { code?: string }).code).toBe('EXPENSE_INVALID_STATUS')
+
+      const winnerNote = fulfilled[0]?.status === 'fulfilled' ? fulfilled[0].value.resubmitNote : null
+      const row = await db().expense.findFirstOrThrow({ where: { id: claim.id } })
+      expect(row.status).toBe('pending_approval')
+      expect(row.resubmitNote).toBe(winnerNote)
+      const audits = await db().auditLog.count({
+        where: { targetType: 'expenses', targetId: claim.id, action: 'status_change' },
+      })
+      expect(audits).toBe(1)
+    })
   })
 
   describe('เพดานค่าที่พักต่อคืน (มติ PO U89 · `22` §6.15)', () => {

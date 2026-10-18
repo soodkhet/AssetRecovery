@@ -1,9 +1,20 @@
 'use client'
 
+import { usePathname } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AssignmentModal } from '@/components/assignments/assignment-modal'
 import { KanbanBoard } from '@/components/assignments/kanban-board'
 import { TeamCasesPanel } from '@/components/assignments/team-cases-panel'
+import {
+  assignmentListUrlParams,
+  parseAssignmentListParams,
+  sameAssignmentListFilters,
+  type AssignmentListFilters,
+  type AssignmentListParams,
+  type AssignmentView,
+} from '@/components/assignments/assignment-list-params'
+import { browserSearchParams, clampPage, clearUrlParamsExcept, replaceUrlParams } from '@/components/ui/url-state'
+import { useSearchQueryChange } from '@/components/ui/use-search-param-change'
 import { usePermission } from '@/components/auth/permission-provider'
 import { kpiValue } from '@/components/ui/kpi-value'
 import { CaseDetailModal } from '@/components/cases/case-detail-modal'
@@ -44,9 +55,7 @@ import {
 } from '@/lib/assignments/assignment-ui'
 import { ASSIGNMENT_MANAGE_CAPABILITY } from '@/lib/assignments/permissions'
 import { ASSIGNMENT_STATE_FILTERS } from '@/lib/assignments/schemas'
-import type { AssignmentState } from '@/lib/assignments/assignment'
 import type { AssignmentListItemDto, AssignmentListResultDto } from '@/lib/assignments/types'
-import type { TeamVisibleCaseStatus } from '@/lib/cases/team-visibility'
 import { fmtCount, fmtSatang } from '@/lib/format/money'
 
 /**
@@ -68,13 +77,7 @@ const KPI_STATES = [
   { state: 'accepted', hint: 'พนักงานรับงานแล้ว' },
 ] as const
 
-interface Filters {
-  search: string
-  status: string
-  team: string
-}
-
-const EMPTY_FILTERS: Filters = { search: '', status: 'all', team: 'all' }
+type Filters = AssignmentListFilters
 
 function buildListPath(filters: Filters, page: number): string {
   const query: Record<string, string | number> = { page, limit: PAGE_SIZE }
@@ -86,16 +89,14 @@ function buildListPath(filters: Filters, page: number): string {
 
 export function AssignmentsManager({
   canAct,
-  initialStatus = 'all',
-  initialView = 'list',
-  initialTeamStatus = 'all',
+  initialParams,
 }: {
   canAct: boolean
-  /** ตัวกรองสถานะตอนเปิดหน้า — ลิงก์จากคิวแดชบอร์ดส่ง `ready_to_assign` มา */
-  initialStatus?: AssignmentState | 'all'
-  /** staging E-005 — `team` = เปิดแท็บ "เคสทั้งหมดของทีม" (ลิงก์ "ดูเคสทั้งหมด" จากแดชบอร์ด) */
-  initialView?: 'list' | 'team'
-  initialTeamStatus?: TeamVisibleCaseStatus | 'all'
+  /**
+   * ตัวกรอง/หน้า/มุมมองจาก URL ตอนเปิดหน้า (mytester7 S7-AG6-04) — ลิงก์จากคิวแดชบอร์ดส่ง `?status=ready_to_assign`
+   * · `?view=team` (+ `caseStatus`) เปิดแท็บ "เคสทั้งหมดของทีม" (staging E-005)
+   */
+  initialParams: AssignmentListParams
 }) {
   const { can } = usePermission()
   /**
@@ -108,11 +109,48 @@ export function AssignmentsManager({
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<ApiCallError | null>(null)
 
-  const [filters, setFilters] = useState<Filters>({ ...EMPTY_FILTERS, status: initialStatus })
-  const [page, setPage] = useState(1)
+  // Back กลับมาจากหน้าอื่น: prop จาก server เป็นของ URL เก่า (router cache) ⇒ อ่าน URL จริงของ browser (แนว R6-004)
+  const pathname = usePathname()
+  const [initialFromUrl] = useState(() => {
+    const query = browserSearchParams(pathname)
+    return query === null ? initialParams : parseAssignmentListParams((key) => query.get(key))
+  })
+  const [filters, setFilters] = useState<Filters>(initialFromUrl.filters)
+  const [page, setPage] = useState(initialFromUrl.page)
   const [counts, setCounts] = useState<Readonly<Record<string, number | null>>>({})
 
-  const [view, setView] = useState<'list' | 'kanban' | 'team'>(initialView)
+  const [view, setViewState] = useState<AssignmentView>(initialFromUrl.view)
+  // ค่าเริ่มต้นของแท็บ "เคสทั้งหมดของทีม" (mount ใหม่ทุกครั้งที่เปิด) — จาก URL ตอนเปิดหน้า/นำทางมา · กดเปิดเอง = ว่าง
+  const [teamInitial, setTeamInitial] = useState(() => ({
+    filters: initialFromUrl.teamFilters,
+    page: initialFromUrl.teamPage,
+  }))
+  /** เปลี่ยนมุมมอง ⇒ ล้าง key ของมุมมองเดิมออกจาก URL ก่อน (search/page ใช้ชื่อเดียวกันทั้งสองมุมมอง) */
+  function setView(next: AssignmentView): void {
+    if (next === view) return
+    clearUrlParamsExcept([])
+    if (next === 'team') setTeamInitial({ filters: { search: '', status: 'all' }, page: 1 })
+    setViewState(next)
+  }
+  // นำทางมา route เดิมด้วย URL ใหม่ (เช่น กดคิวบนแดชบอร์ด) ⇒ ตาม URL · ค่าที่หน้าเขียนเองวนกลับมาเท่าเดิม = ไม่ทำอะไร
+  useSearchQueryChange((params) => {
+    const next = parseAssignmentListParams((key) => params.get(key))
+    if (next.view !== view) {
+      if (next.view === 'team') setTeamInitial({ filters: next.teamFilters, page: next.teamPage })
+      setViewState(next.view)
+    }
+    if (next.view !== 'list') return
+    if (!sameAssignmentListFilters(next.filters, filters)) {
+      setLoading(true)
+      setFilters(next.filters)
+    }
+    if (next.page !== page) setPage(next.page)
+  })
+  // ตัวกรอง/หน้า ของมุมมองรายการอยู่ใน URL — refresh/Back กลับมาที่รายการเดิม (แท็บของทีมเขียน URL ของตัวเอง)
+  useEffect(() => {
+    if (view === 'list') replaceUrlParams(assignmentListUrlParams(filters, page))
+    else if (view === 'kanban') replaceUrlParams({ view: 'kanban' })
+  }, [filters, page, view])
   /** เพิ่มค่าเมื่อ mutation สำเร็จ — ใช้บังคับให้กระดาน Kanban โหลดใหม่โดยไม่ล้าง filter ที่ตั้งไว้ */
   const [reloadToken, setReloadToken] = useState(0)
   const [target, setTarget] = useState<AssignmentTarget | null>(null)
@@ -142,11 +180,17 @@ export function AssignmentsManager({
       setLoading(false)
       return
     }
+    // `?page=` เกินหน้าสุดท้าย (รายการลดลง) ⇒ หน้าสุดท้าย (mytester7 แนวเดียวกับหน้ารับเคส S7-AG6-03)
+    const clamped = list.data === undefined ? page : clampPage(page, list.data.total, PAGE_SIZE)
+    if (clamped !== page) {
+      setPage(clamped)
+      return
+    }
     setResult(list.data ?? null)
     setCounts(kpi)
     setError(null)
     setLoading(false)
-  }, [fetchList, fetchCounts])
+  }, [fetchList, fetchCounts, page])
 
   useEffect(() => {
     let cancelled = false
@@ -159,6 +203,12 @@ export function AssignmentsManager({
         setLoading(false)
         return
       }
+      // `?page=` เกินหน้าสุดท้าย (รายการลดลง) ⇒ หน้าสุดท้าย (mytester7 แนวเดียวกับหน้ารับเคส S7-AG6-03)
+      const clamped = list.data === undefined ? page : clampPage(page, list.data.total, PAGE_SIZE)
+      if (clamped !== page) {
+        setPage(clamped)
+        return
+      }
       setResult(list.data ?? null)
       setCounts(kpi)
       setError(null)
@@ -167,7 +217,7 @@ export function AssignmentsManager({
     return () => {
       cancelled = true
     }
-  }, [fetchList, fetchCounts])
+  }, [fetchList, fetchCounts, page])
 
   function updateFilter(next: Partial<Filters>): void {
     const nextFilters = { ...filters, ...next }
@@ -187,7 +237,8 @@ export function AssignmentsManager({
     return (
       <>
         <TeamCasesPanel
-          initialStatus={initialTeamStatus}
+          initialFilters={teamInitial.filters}
+          initialPage={teamInitial.page}
           onBack={() => setView('list')}
           onOpenCase={(caseId) => setDetailCaseId(caseId)}
         />

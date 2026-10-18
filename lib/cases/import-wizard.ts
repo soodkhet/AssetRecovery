@@ -13,6 +13,45 @@ export function importResultToastDescription(result: Pick<CaseImportResultDto, '
   return warnedText === null ? `${failedText} — ดูรายละเอียดในตาราง` : `${failedText} · ${warnedText}`
 }
 
+/** จำนวนแถวที่ "ยืนยันนำเข้า" จะสร้างเคสได้จริงจากผล preview — 0 ⇒ ปุ่มยืนยันต้องปิด (mytester7 S7-AG6-02) */
+export function importableRowCount(result: Pick<CaseImportResultDto, 'totalRows' | 'failedCount'>): number {
+  return Math.max(0, result.totalRows - result.failedCount)
+}
+
+/**
+ * mytester7 S7-AG6-01 — ยืนยันนำเข้าแล้ว "ไม่ได้รับคำตอบ" (หมดเวลา/เน็ตหลุด/502–504) ⇒ ตรวจซ้ำด้วย preview (dryRun ไม่เขียนอะไร)
+ * แล้วเทียบกับ preview ก่อนยืนยัน: แถวที่เคยผ่านแต่ตอนนี้ตกด้วย `CASE_REF_DUPLICATE` = ถูกนำเข้าแล้ว (เลขที่สัญญามีในระบบแล้ว)
+ * · แถวที่ยังผ่าน = ยังไม่ได้นำเข้า (เช่น คำขอถูกตัดกลางทาง)
+ *
+ * `result` = ผลที่ใช้แสดงต่อ: นำเข้าครบ ⇒ ผลแบบนำเข้าจริง (แถวที่นำเข้าแล้วชี้เคสในระบบ) · เหลือแถวนำเข้าได้ ⇒ preview ล่าสุด
+ * ⚠️ แถวที่ผู้อื่นเพิ่งสร้างเลขเดียวกันในช่วงสั้น ๆ นี้จะถูกนับว่า "นำเข้าแล้ว" ด้วย — ยอมรับได้ (ผลต่อผู้ใช้เหมือนกัน: มีเคสนั้นในระบบแล้ว)
+ */
+export function reconcileLostImport(
+  preview: CaseImportResultDto,
+  recheck: CaseImportResultDto,
+): { importedCount: number; remainingCount: number; result: CaseImportResultDto } {
+  const previewOk = new Set(preview.rows.filter((row) => row.status === 'created').map((row) => row.rowNumber))
+  const imported = new Set(
+    recheck.rows
+      .filter((row) => previewOk.has(row.rowNumber) && row.status === 'failed' && row.errorCode === 'CASE_REF_DUPLICATE')
+      .map((row) => row.rowNumber),
+  )
+  const remainingCount = importableRowCount(recheck)
+  if (remainingCount > 0 || imported.size === 0) {
+    return { importedCount: imported.size, remainingCount, result: recheck }
+  }
+  const rows = recheck.rows.map((row) =>
+    imported.has(row.rowNumber)
+      ? { ...row, status: 'created' as const, caseId: row.existingCaseId ?? null, errorCode: null, errorMessage: null }
+      : row,
+  )
+  return {
+    importedCount: imported.size,
+    remainingCount,
+    result: { ...recheck, dryRun: false, createdCount: imported.size, failedCount: rows.length - imported.size, rows },
+  }
+}
+
 /**
  * ตรรกะของ Import wizard ฝั่งหน้าจอ (`38` §7.1 — เลือกไฟล์ → mapping คอลัมน์ → preview → ยืนยัน)
  * **pure ล้วน** — แยกจาก component เพื่อให้มีเทสต์จริงได้

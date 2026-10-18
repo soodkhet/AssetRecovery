@@ -265,7 +265,8 @@ export async function importCases(
   const failedCount = results.length - createdCount
 
   // audit ระดับ batch (`38` §14) — audit ของเคสรายตัวถูกบันทึกโดย `createCase()` แล้ว
-  if (!input.dryRun) {
+  // mytester7 S7-AG6-02 — ไม่มีแถวที่สร้างได้เลย = ไม่มีอะไรเปลี่ยนในระบบ ⇒ ไม่ลง audit "นำเข้า 0 รายการ"
+  if (!input.dryRun && createdCount > 0) {
     await emitAudit({
       organizationId,
       actorId: context.actor.id,

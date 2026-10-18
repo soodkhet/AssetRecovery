@@ -183,28 +183,29 @@ export function pendingClaimTotalSatang(items: readonly CompensationApprovalDto[
 export function approvalErrorToast(error: ApiCallError): { title: string; message: string; stale: boolean } {
   const requested = error.payload?.requestedStep
   const current = error.payload?.currentStep
+  // mytester7 S7-AG3-05 — "คนอื่นทำไปก่อน" ได้ข้อความเดียวกันทุกจังหวะที่แพ้ (อ่านขั้นก่อน = STEP_OUT_OF_ORDER ·
+  // แพ้ที่ conditional update = EXPENSE_INVALID_STATUS) และบอกตามจริงว่าโหลดคิวใหม่ให้แล้ว (ผู้เรียก reload เมื่อ stale)
+  const staleToast = (status: unknown) => {
+    const label =
+      typeof status === 'string' && status in EXPENSE_STATUS_LABEL ? EXPENSE_STATUS_LABEL[status as ExpenseStatus] : null
+    return {
+      title: 'รายการนี้ถูกดำเนินการไปแล้ว',
+      message: `มีผู้ทำรายการนี้ไปก่อนแล้ว${label === null ? '' : ` (สถานะล่าสุด: ${label})`} — โหลดรายการล่าสุดให้แล้ว`,
+      stale: true,
+    }
+  }
   if (
     error.code === 'APPROVAL_STEP_OUT_OF_ORDER' &&
     typeof requested === 'number' &&
     typeof current === 'number' &&
     requested < current
   ) {
-    return {
-      title: 'รายการนี้ผ่านขั้นของคุณแล้ว',
-      message: 'รายการนี้ผ่านขั้นของคุณแล้ว — รีเฟรชหน้า',
-      stale: true,
-    }
+    return staleToast(error.payload?.status)
   }
   // แท็บเก่า/คนอื่นทำไปก่อน (staging S-014) — server ปฏิเสธถูกแล้ว แต่ต้องบอกให้ชัดและโหลดคิวใหม่
   // (ยกเว้น "ปฏิเสธถาวรได้เฉพาะค่าที่พัก" ที่ใช้ code เดียวกันแต่ส่ง expenseType มา — ไม่ใช่เรื่องสถานะเปลี่ยน)
   if (error.code === 'EXPENSE_INVALID_STATUS' && error.payload?.expenseType === undefined) {
-    const status = error.payload?.status
-    const label = typeof status === 'string' && status in EXPENSE_STATUS_LABEL ? EXPENSE_STATUS_LABEL[status as ExpenseStatus] : null
-    return {
-      title: 'รายการนี้ถูกดำเนินการไปแล้ว',
-      message: `มีผู้ทำรายการนี้ไปก่อนแล้ว${label === null ? '' : ` (สถานะล่าสุด: ${label})`} — โหลดรายการล่าสุดให้แล้ว`,
-      stale: true,
-    }
+    return staleToast(error.payload?.status)
   }
   return { title: error.title, message: error.message, stale: false }
 }

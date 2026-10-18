@@ -151,6 +151,8 @@ export const ERROR_CATALOG = {
   PAYOUT_CANCEL_FILE_CONFIRM_REQUIRED: { status: 400, severity: 'reject', source: '24 §6.5' },
   NO_ITEMS_TO_PAY: { status: 400, severity: 'reject', source: '24 §6.5' },
   PAYMENT_FILE_NOT_GENERATED: { status: 404, severity: 'reject', source: '24 §6.5' },
+  // mytester7 S7-AG3-03/04 — สร้างไฟล์โอนพร้อมกัน ผู้แพ้ได้ 409 (แนวเดียวกับ EXPORT_VERSION_CONFLICT)
+  PAYMENT_FILE_VERSION_CONFLICT: { status: 409, severity: 'reject', source: '24 §6.5' },
   WHT_40_2_RATE_MISSING: { status: 400, severity: 'reject', source: '24 §6.5' },
   // มติ PO 06/10/2569 U105 — เงื่อนไข (2)/(3) ขณะค่าตั้งไม่อนุญาต (ฟอร์มผู้รับ + สร้างรอบจ่าย)
   WHT_CONDITION_NOT_ALLOWED: { status: 400, severity: 'reject', source: '24 §6.5' },

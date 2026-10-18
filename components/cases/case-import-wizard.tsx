@@ -50,7 +50,9 @@ import {
   importErrorFieldLabel,
   importFieldLabel,
   importResultToastDescription,
+  importableRowCount,
   missingRequiredFields,
+  reconcileLostImport,
 } from '@/lib/cases/import-wizard'
 import type { CaseImportResultDto } from '@/lib/cases/types'
 
@@ -130,19 +132,60 @@ export function CaseImportWizard({
     setStep('mapping')
   }
 
+  function postImport(dryRun: boolean) {
+    return callApi<CaseImportResultDto>(
+      apiPath('case.import'),
+      jsonRequest('POST', {
+        financeCompanyId: companyId,
+        rows: applyHeaderMapping(rows, mapping),
+        dryRun,
+      }),
+    )
+  }
+
+  /**
+   * mytester7 S7-AG6-01 — ยืนยันนำเข้าแล้วไม่ได้รับคำตอบ ⇒ ตรวจซ้ำด้วย preview (ไม่เขียนอะไร) แล้วบอกผลตามจริง
+   * แทน "เชื่อมต่อไม่สำเร็จ" (server อาจนำเข้าเสร็จแล้วแต่คำตอบหาย) · คืน `false` = ตรวจซ้ำไม่ได้ ให้ใช้ข้อความเดิม
+   */
+  async function recoverLostImport(preview: CaseImportResultDto): Promise<boolean> {
+    const recheck = await postImport(true)
+    if (recheck.data === undefined) return false
+    const outcome = reconcileLostImport(preview, recheck.data)
+    setResult(outcome.result)
+    setStep('preview')
+    if (outcome.importedCount === 0) {
+      setError({
+        title: 'ยังไม่ได้นำเข้า',
+        message: 'ไม่ได้รับคำตอบจากระบบ — ตรวจแล้วยังไม่มีเคสจากไฟล์นี้ในระบบ กดยืนยันนำเข้าอีกครั้งได้',
+      })
+      return true
+    }
+    onImported()
+    if (outcome.remainingCount > 0) {
+      setError({
+        title: 'นำเข้าไปแล้วบางส่วน',
+        message: `ไม่ได้รับคำตอบจากระบบ — ตรวจแล้วนำเข้าแล้ว ${outcome.importedCount} รายการ ยังเหลือ ${outcome.remainingCount} รายการที่นำเข้าได้ กดยืนยันนำเข้าอีกครั้งเพื่อนำเข้าส่วนที่เหลือ`,
+      })
+      return true
+    }
+    showToast({
+      tone: 'success',
+      title: `นำเข้าเคสแล้ว ${outcome.importedCount} รายการ`,
+      description: 'ไม่ได้รับคำตอบจากระบบ แต่ตรวจแล้วพบเคสจากไฟล์นี้ในระบบครบ',
+    })
+    return true
+  }
+
   async function runImport(dryRun: boolean): Promise<void> {
     setBusy(true)
     setError(null)
     try {
-      const response = await callApi<CaseImportResultDto>(
-        apiPath('case.import'),
-        jsonRequest('POST', {
-          financeCompanyId: companyId,
-          rows: applyHeaderMapping(rows, mapping),
-          dryRun,
-        }),
-      )
+      const response = await postImport(dryRun)
       if (response.error !== undefined || response.data === undefined) {
+        const preview = result
+        if (!dryRun && response.error?.outcomeUnknown === true && preview !== null && (await recoverLostImport(preview))) {
+          return
+        }
         setError(response.error ?? { title: 'นำเข้าไม่สำเร็จ', message: 'กรุณาลองใหม่' })
         return
       }
@@ -194,8 +237,9 @@ export function CaseImportWizard({
               <Button variant="secondary" disabled={busy} onClick={() => setStep('mapping')}>
                 ย้อนกลับไปแก้การจับคู่คอลัมน์
               </Button>
-              <Button loading={busy} disabled={result.totalRows === 0} onClick={() => void runImport(false)}>
-                ยืนยันนำเข้า {result.totalRows - result.failedCount} รายการ
+              {/* mytester7 S7-AG6-02 — ไม่มีแถวที่นำเข้าได้ ⇒ ปิดปุ่ม (คำบนปุ่มต้องตรง action) */}
+              <Button loading={busy} disabled={importableRowCount(result) === 0} onClick={() => void runImport(false)}>
+                ยืนยันนำเข้า {importableRowCount(result)} รายการ
               </Button>
             </>
           )}

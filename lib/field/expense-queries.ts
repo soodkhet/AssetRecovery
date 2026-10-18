@@ -1210,7 +1210,17 @@ export async function resubmitFieldExpense(
 
     // SV5-R2-01 — ล็อกใบเบิกแล้วอ่านสถานะใบรับรองซ้ำ: ถ้าใบเปลี่ยนระหว่างตรวจกับเขียน (เช่น ยกเลิก/ออกใบจากการ์ดอีกหน้าจอ)
     // ⇒ ปฏิเสธ ไม่ส่งใบเบิกเข้าคิวด้วยหลักฐานที่ตัดสินจากข้อมูลเก่า
-    await tx.$queryRaw`SELECT id FROM expenses WHERE id = ${expenseId}::uuid FOR UPDATE`
+    // mytester7 S7-AG3-01 — อ่านสถานะซ้ำหลังได้ล็อก: สองแท็บส่งใหม่พร้อมกัน คำขอที่สองต้องเห็นสถานะที่คำขอแรกเปลี่ยนแล้ว
+    // (`23` §6.3 resubmit_expense ได้จาก needs_revision เท่านั้น) ⇒ EXPENSE_INVALID_STATUS ไม่ใช่ส่งซ้ำ/เขียนทับคำชี้แจง
+    const lockedRows = await tx.$queryRaw<{ status: string }[]>`
+      SELECT status::text AS status FROM expenses WHERE id = ${expenseId}::uuid FOR UPDATE`
+    const lockedStatus = lockedRows[0]?.status ?? null
+    if (lockedStatus !== current.status) {
+      throw new ExpenseStateError('EXPENSE_INVALID_STATUS', {
+        detail: `expense=${expenseId} resubmit status_changed ${current.status}->${lockedStatus ?? 'missing'}`,
+        context: { status: lockedStatus, action: 'resubmit_expense' },
+      })
+    }
     const lockedState = await loadExpenseSubstituteReceiptState(tx as ExpenseTxClient, user.organizationId, expenseId)
     if (
       (lockedState.active?.id ?? null) !== (substituteState.active?.id ?? null) ||
@@ -1230,7 +1240,8 @@ export async function resubmitFieldExpense(
     }
 
     const row = await tx.expense.update({
-      where: { id: expenseId },
+      // S7-AG3-01 — เงื่อนไขสถานะซ้ำอีกชั้น (ล็อกแถวแล้วก็ยังกันไว้ให้ชัดใน where)
+      where: { id: expenseId, status: current.status },
       data: {
         status: nextStatus,
         ...(editable && input.amountSatang !== undefined ? { grossSatang: input.amountSatang } : {}),

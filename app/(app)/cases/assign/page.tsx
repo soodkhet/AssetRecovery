@@ -1,9 +1,8 @@
 import type { Metadata } from 'next'
 import { AssignmentsManager } from '@/components/assignments/assignments-manager'
-import { ASSIGNMENT_STATE_FILTERS } from '@/lib/assignments/schemas'
+import { parseAssignmentListParams } from '@/components/assignments/assignment-list-params'
 import { canPerformAssignmentAction } from '@/lib/assignments/policy'
 import { getAssignmentPolicy } from '@/lib/assignments/policy-queries'
-import { isTeamVisibleCaseStatus } from '@/lib/cases/team-visibility'
 import { requireMenuPage } from '@/lib/nav/menu-guard'
 
 export const metadata: Metadata = { title: 'มอบหมายงาน' }
@@ -18,22 +17,18 @@ export const metadata: Metadata = { title: 'มอบหมายงาน' }
 export default async function CaseAssignPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; view?: string; caseStatus?: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const user = await requireMenuPage('cases.assign')
   const policy = await getAssignmentPolicy(user.organizationId)
   const canAct = canPerformAssignmentAction({ roleName: user.roleName, roleGroup: user.roleGroup }, policy)
 
-  // ลิงก์จากคิวแดชบอร์ด (`?status=ready_to_assign`) เปิดมาที่ตัวกรองเดียวกับที่คิวนับ (มติ PO O72(4))
-  const { status, view, caseStatus } = await searchParams
-  const initialStatus = ASSIGNMENT_STATE_FILTERS.find((state) => state === status) ?? 'all'
-  // staging E-005 — `?view=team` เปิดแท็บ "เคสทั้งหมดของทีม" (+ `caseStatus` จากแถวกระดานเคสบนแดชบอร์ด)
-  return (
-    <AssignmentsManager
-      canAct={canAct}
-      initialStatus={initialStatus}
-      initialView={view === 'team' ? 'team' : 'list'}
-      initialTeamStatus={isTeamVisibleCaseStatus(caseStatus) ? caseStatus : 'all'}
-    />
-  )
+  // ตัวกรอง/หน้า/มุมมองอยู่ใน URL (mytester7 S7-AG6-04) — ลิงก์จากคิวแดชบอร์ด (`?status=ready_to_assign` มติ PO O72(4))
+  // · `?view=team` (+ `caseStatus`) เปิดแท็บ "เคสทั้งหมดของทีม" (staging E-005) อ่านด้วยตัวแปลงเดียวกับ component
+  const params = await searchParams
+  const initialParams = parseAssignmentListParams((key) => {
+    const value = params[key]
+    return Array.isArray(value) ? value[0] : value
+  })
+  return <AssignmentsManager canAct={canAct} initialParams={initialParams} />
 }

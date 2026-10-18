@@ -1281,6 +1281,22 @@ suite('Phase 2.3 — state machine + snapshot + recycle (DB จริง)', () =
     expect(preview.rows[0]?.existingCaseId).toBe(existing[0]?.id)
     expect(preview.rows[1]?.existingCaseId).toBeUndefined()
   })
+  it('mytester7 S7-AG6-02 — นำเข้าจริงที่ไม่มีแถวสร้างได้เลย ⇒ ไม่ลง audit นำเข้า', async () => {
+    const { importCases } = await import('@/lib/cases/import-queries')
+    const suffix = Date.now().toString(36).toUpperCase()
+    const ref = `AG602-${suffix}`
+    await importCases({ financeCompanyId: COMPANY_ID, dryRun: false, rows: [{ 'เลขที่สัญญา': ref }] }, { actor, meta })
+    const before = await db().auditLog.count({ where: { organizationId: ORG_ID, action: 'import', targetType: 'cases' } })
+    const again = await importCases(
+      { financeCompanyId: COMPANY_ID, dryRun: false, rows: [{ 'เลขที่สัญญา': ref }] },
+      { actor, meta },
+    )
+    expect(again.createdCount).toBe(0)
+    expect(again.rows[0]?.errorCode).toBe('CASE_REF_DUPLICATE')
+    const after = await db().auditLog.count({ where: { organizationId: ORG_ID, action: 'import', targetType: 'cases' } })
+    expect(after).toBe(before)
+  })
+
   it('Import dryRun: ผล preview (สถานะ/รหัส error ต่อแถว) ตรงกับนำเข้าจริง — เบอร์โทร/เลขบัตร (preship R3-006)', async () => {
     const { importCases } = await import('@/lib/cases/import-queries')
     const suffix = Date.now().toString(36).toUpperCase()

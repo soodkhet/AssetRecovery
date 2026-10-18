@@ -276,12 +276,21 @@ describe('approvalErrorToast — ทิศของ APPROVAL_STEP_OUT_OF_ORDER (
   const base = { code: 'APPROVAL_STEP_OUT_OF_ORDER', title: 'อนุมัติข้ามขั้น', message: 'รายการนี้ยังไม่ถึงขั้นอนุมัติของคุณ' }
   const payload = (requestedStep: number, currentStep: number) => ({ ...base, requestedStep, currentStep })
 
-  it('ขั้นที่ขอ < ขั้นปัจจุบัน (หน้าค้าง) → "ผ่านขั้นของคุณแล้ว — รีเฟรชหน้า"', () => {
-    expect(approvalErrorToast({ ...base, payload: payload(1, 2) })).toEqual({
-      title: 'รายการนี้ผ่านขั้นของคุณแล้ว',
-      message: 'รายการนี้ผ่านขั้นของคุณแล้ว — รีเฟรชหน้า',
+  it('ขั้นที่ขอ < ขั้นปัจจุบัน (หน้าค้าง) → ข้อความเดียวกับกรณีแพ้ที่ conditional update · ไม่บอกให้รีเฟรชเอง (mytester7 S7-AG3-05)', () => {
+    const stepToast = approvalErrorToast({ ...base, payload: payload(1, 2) })
+    const statusToast = approvalErrorToast({
+      code: 'EXPENSE_INVALID_STATUS',
+      title: 'สถานะรายการเบิกไม่ถูกต้อง',
+      message: 'm',
+    })
+    expect(stepToast).toEqual(statusToast)
+    expect(stepToast).toEqual({
+      title: 'รายการนี้ถูกดำเนินการไปแล้ว',
+      message: 'มีผู้ทำรายการนี้ไปก่อนแล้ว — โหลดรายการล่าสุดให้แล้ว',
       stale: true,
     })
+    expect(stepToast.message).not.toContain('รีเฟรช')
+    expect(stepToast.message).not.toContain(stepToast.title)
   })
 
   it('ขั้นที่ขอ > ขั้นปัจจุบัน → ข้อความเดิม "ยังไม่ถึงขั้น"', () => {

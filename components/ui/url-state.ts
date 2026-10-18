@@ -106,6 +106,15 @@ export function pickPage(value: string | string[] | undefined): number {
 }
 
 /**
+ * หน้าที่ขอเกินหน้าสุดท้าย (เช่น `?page=99` หรือ Back กลับไปหน้าลึกหลังรายการลดลง) ⇒ หน้าสุดท้ายที่มีข้อมูล
+ * ไม่มีข้อมูลเลย = 1 · หน้าที่อยู่ในช่วงคงเดิม (mytester7 S7-AG6-03)
+ */
+export function clampPage(page: number, total: number, pageSize: number): number {
+  const lastPage = Math.max(1, Math.ceil(total / pageSize))
+  return Math.min(Math.max(1, page), lastPage)
+}
+
+/**
  * ค่าเริ่มต้นของ state ที่ผูกกับ `?key=` — อ่านจาก URL จริงของ browser (preship R6-004)
  * prop จาก server (`fallback`) ใช้ตอน render ฝั่ง server และตอนนำทางฝั่ง client มาจากหน้าอื่นเท่านั้น:
  * Back/Forward กลับมาหน้าเดิม Next ใช้ payload/searchParams เก่าใน router cache (ก่อน `replaceUrlParams` เขียน
