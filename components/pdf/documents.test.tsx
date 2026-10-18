@@ -636,6 +636,37 @@ describe('เอกสารภายใน — แถบหัวตามแ�
   })
 })
 
+describe('หน้าปกชุดเอกสารบัญชี — หัวตารางพิมพ์ซ้ำทุกหน้าเมื่อรายการยาว (mytester7 S7-AG6-05)', () => {
+  it('ตาราง Readiness Check ยาวข้ามหน้า ⇒ หัว "เงื่อนไข/สถานะ" ซ้ำบนหน้าที่ต่อ · ไม่โผล่บนหน้าที่ตารางจบไปแล้ว', async () => {
+    const checks = Array.from({ length: 70 }, (_, index) => ({
+      key: 'period_ended' as const,
+      label: `เงื่อนไขทดสอบที่ ${index + 1}`,
+      passed: true,
+      detail: '',
+    }))
+    const cover = await renderPackCover(
+      buildPackCoverDoc({
+        organizationName: LETTERHEAD.nameTh,
+        periodLabel: 'ตุลาคม 2569',
+        version: 3,
+        generatedByName: 'บัญชี',
+        generatedAt: new Date('2026-11-05T02:10:00Z'),
+        contentDigest: 'abc',
+        checks,
+      }),
+      LETTERHEAD,
+    )
+    save('11-pack-cover-long', cover)
+    const text = textOf(cover)
+    const pages = pageCount(cover)
+    expect(pages).toBeGreaterThanOrEqual(3)
+    const checkHeaders = count(text, 'เงื่อนไขสถานะ')
+    expect(checkHeaders).toBeGreaterThanOrEqual(2)
+    expect(checkHeaders).toBeLessThan(pages)
+    expect(count(text, 'ไฟล์เนื้อหาจำนวนแถว')).toBeGreaterThanOrEqual(1)
+  })
+})
+
 describe('มติ PO U122 — ข้อความท้าย + รูปลายเซ็นจากเทมเพลตเอกสาร', () => {
   const NO_LOGO = testLetterhead()
   const FOOTER = 'ข้อความท้ายทดสอบเทมเพลต'
