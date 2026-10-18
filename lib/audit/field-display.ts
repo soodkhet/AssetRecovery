@@ -233,6 +233,8 @@ const FIELD_LABELS: LabelMap = {
   // ผู้ใช้/สิทธิ์
   role_group: 'กลุ่มบทบาท',
   must_change_password: 'ต้องเปลี่ยนรหัสผ่าน',
+  // มติ D7-02 — ตัวนับที่ trigger เดินเอง (ปกติไม่อยู่ใน audit แต่กันหลุดเป็นชื่อคอลัมน์ดิบ)
+  authz_version: 'เวอร์ชันสิทธิ์',
   manager_ids: 'ผู้จัดการทีม',
   company_id: 'บริษัทไฟแนนซ์',
   company_ids: 'บริษัทไฟแนนซ์',
