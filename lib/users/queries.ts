@@ -597,7 +597,12 @@ export async function updateUser(
 
   let paymentResult: UserPaymentWriteResult | null = null
   const updated = await prisma.$transaction(async (tx) => {
-    if (teamOrGroupChange) await assertNoTeamChangeBlockers(context.actor, current.id, tx)
+    if (teamOrGroupChange) {
+      // มติ D7-03 race (mytester7 review) — ล็อกแถวผู้ใช้ก่อนตรวจงานค้าง: การมอบงานที่กำลังเกิด (ล็อก `FOR KEY SHARE`
+      // แถวเดียวกัน) ต้อง commit ก่อนเราจะเห็น หรือรอเราย้ายเสร็จแล้วตรวจทีมใหม่ ⇒ ไม่มีงานหลุดเข้ามาระหว่างตรวจกับย้าย
+      await tx.$queryRaw`SELECT id FROM users WHERE id = ${current.id}::uuid FOR UPDATE`
+      await assertNoTeamChangeBlockers(context.actor, current.id, tx)
+    }
     const user = await tx.user.update({
       where: { id: current.id },
       data: {

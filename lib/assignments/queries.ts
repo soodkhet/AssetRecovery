@@ -224,6 +224,25 @@ async function loadAgentInCaseTeam(organizationId: string, agentId: string, case
   return agent
 }
 
+/**
+ * มติ D7-03 race (mytester7 review) — ล็อกแถวผู้รับงานแบบ `FOR KEY SHARE` ใน transaction ที่สร้าง assignment
+ * ⇒ ชนกับ `FOR UPDATE` ของการย้ายทีม/กลุ่ม (`updateUser`) ที่ตรวจงานค้าง: ฝั่งไหนมาทีหลังรอจนอีกฝั่ง commit
+ * (การมอบงานคนละเคสให้คนเดียวกันไม่รอกันเอง · UPDATE ปกติของแถวผู้ใช้ เช่น เวลา login ก็ไม่ถูกบล็อก)
+ * `caseTeamId` = ตรวจทีมซ้ำหลังได้ล็อก (ผู้รับอาจเพิ่งถูกย้ายทีมก่อนหน้า) · `null` = ล็อกอย่างเดียว
+ */
+async function lockAgentForAssignment(
+  tx: AssignmentTxClient,
+  organizationId: string,
+  agentId: string,
+  caseTeamId: string | null,
+): Promise<void> {
+  const rows = await tx.$queryRaw<{ team_id: string | null }[]>`
+    SELECT team_id FROM users WHERE id = ${agentId}::uuid AND organization_id = ${organizationId}::uuid FOR KEY SHARE
+  `
+  if (caseTeamId === null) return
+  assertAgentInCaseTeam(rows[0]?.team_id ?? null, caseTeamId)
+}
+
 /** เคสต้องถูกอนุมัติแล้ว (`40` §16 — `case.approved` คือจุดเริ่มของ `ready_to_assign`) */
 function assertCaseAssignable(row: CaseRow): void {
   if (row.status !== 'approved' && row.status !== 'active') {
@@ -379,6 +398,7 @@ export async function assignCase(
     await tx.$queryRaw`SELECT id FROM cases WHERE id = ${row.id}::uuid FOR UPDATE`
     const current = await loadActiveAssignment(row.id, row.trackingRound, tx as AssignmentTxClient)
     assertAssignable(assignmentStateOf(current))
+    await lockAgentForAssignment(tx as AssignmentTxClient, user.organizationId, agent.id, teamId)
 
     const assignment = await tx.caseAssignment.create({
       data: {
@@ -465,6 +485,7 @@ export async function reassignCase(
       if (closed.count === 0) {
         throw new AssignmentError('ASSIGNMENT_INVALID_STATUS', { detail: 'การมอบหมายเดิมถูกเปลี่ยนไปแล้ว' })
       }
+      await lockAgentForAssignment(tx as AssignmentTxClient, user.organizationId, agent.id, row.assignedTeamId)
       const replacement = await tx.caseAssignment.create({
         data: {
           organizationId: user.organizationId,
@@ -828,6 +849,8 @@ export async function swapAssignment(
     select: assignmentSelect,
   })
 
+  // ล็อกอย่างเดียว ไม่ตรวจทีมซ้ำ — ผู้รับถูกตรวจตอนสร้างคำขอแล้ว และ timeout job ต้องไม่ล้มซ้ำ ๆ (มติ D7-03 race)
+  await lockAgentForAssignment(tx, input.organizationId, input.toAgentId, null)
   await tx.caseAssignment.update({
     where: { id: input.assignmentId },
     // ไม่เขียนทับ `reassign_reason` ของแถวเดิม (UAT BUG-061 — ดู `reassignCase`)

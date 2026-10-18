@@ -226,6 +226,36 @@ suite('Phase 2.6 — assign / accept (`40` §8 · §20)', () => {
     expect(audit?.action).toBe('create')
   })
 
+  it('มติ D7-03 race (mytester7 review) — กำลังย้ายทีมผู้รับ (ถือล็อกแถวผู้ใช้) ⇒ การมอบงานรอจนย้ายเสร็จ แล้วตรวจทีมใหม่ = ASSIGNMENT_TEAM_MISMATCH', async () => {
+    const caseId = await seedApprovedCase({ teamId: TEAM_A })
+    let assigning: Promise<unknown> | null = null
+    try {
+      await db().$transaction(
+        async (tx) => {
+          // จำลอง `updateUser` ที่ล็อกแถวผู้ใช้แล้วกำลังตรวจงานค้าง/ย้ายทีม
+          await tx.$queryRawUnsafe(`SELECT id FROM users WHERE id = '${AGENT_A}' FOR UPDATE`)
+          assigning = queries
+            .assignCase(manager, caseId, { agentId: AGENT_A }, { actor: manager, meta })
+            .then(
+              () => 'assigned',
+              (error: unknown) => error,
+            )
+          await new Promise((resolve) => setTimeout(resolve, 300))
+          // การมอบงานยังรอล็อกอยู่ — ยังไม่มีงานเปิดของผู้รับ (ตรวจงานค้างตอนนี้จึงถูกต้อง)
+          const open = await tx.caseAssignment.count({ where: { caseId, agentId: AGENT_A } })
+          expect(open).toBe(0)
+          await tx.$executeRawUnsafe(`UPDATE users SET team_id = '${TEAM_B}' WHERE id = '${AGENT_A}'`)
+        },
+        { timeout: 10_000 },
+      )
+      const outcome = await (assigning as Promise<unknown> | null)
+      expect(codeOf(outcome)).toBe('ASSIGNMENT_TEAM_MISMATCH')
+      expect(await db().caseAssignment.count({ where: { caseId } })).toBe(0)
+    } finally {
+      await db().$executeRawUnsafe(`UPDATE users SET team_id = '${TEAM_A}' WHERE id = '${AGENT_A}'`)
+    }
+  })
+
   it('มอบหมายข้ามทีม = ASSIGNMENT_TEAM_MISMATCH (แม้ผู้จัดการดูแลทีมนั้นด้วย)', async () => {
     const caseId = await seedApprovedCase({ teamId: TEAM_A })
     await expectCode(
