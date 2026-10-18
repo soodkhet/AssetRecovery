@@ -11,7 +11,7 @@ import {
   type DebtorNationalityCode,
   type DocumentCounts,
 } from '@/lib/cases/case'
-import { CaseError } from '@/lib/cases/errors'
+import { CaseError, RECYCLE_INVALID_STATUS_MESSAGES } from '@/lib/cases/errors'
 import { calculateProjectedRevenue, caseProjectedRevenue, caseServiceFeeSnapshotOf } from '@/lib/cases/projected-revenue'
 import {
   caseScopeWhere,
@@ -377,7 +377,12 @@ export async function changeCaseStatus(
         select: { id: true },
       })
       // ไม่มีคำขอค้าง = ข้อมูลไม่สอดคล้องกับสถานะ `pending_recycle_review` → ให้ transaction ล้มทั้งก้อน
-      if (pending === null) throw new CaseError('CASE_RECYCLE_INVALID_STATUS', { context: { caseId } })
+      if (pending === null) {
+        throw new CaseError('CASE_RECYCLE_INVALID_STATUS', {
+          context: { caseId },
+          message: RECYCLE_INVALID_STATUS_MESSAGES.noPendingRequest,
+        })
+      }
 
       await tx.recycleRequest.update({
         where: { id: pending.id },
