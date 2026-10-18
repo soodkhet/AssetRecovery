@@ -74,7 +74,8 @@ function versionRow(template: ServiceFeeTemplateDto): VersionRow {
     version: template.version,
     isCurrent: template.isCurrent,
     updatedAt: template.updatedAt,
-    summary: `${SERVICE_FEE_MODEL_LABEL[template.model]} · สำเร็จ: ${chargeText(formula.onSuccess)} · ไม่สำเร็จ: ${chargeText(formula.onFail)}`,
+    // แต่ละเวอร์ชันมีชื่อของตัวเอง (เปลี่ยนชื่อไม่ทับเวอร์ชันเดิม — mytester7 S7-AG2-05)
+    summary: `${template.name} · ${SERVICE_FEE_MODEL_LABEL[template.model]} · สำเร็จ: ${chargeText(formula.onSuccess)} · ไม่สำเร็จ: ${chargeText(formula.onFail)}`,
   }
 }
 

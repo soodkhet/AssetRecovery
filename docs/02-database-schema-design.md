@@ -101,6 +101,7 @@
 | v4.74 | 13/10/2569 | **mytester DO-07 (มติ 13/10/2569 — Claude ตัดสินแทน PO)** — migration `20261013100000_advance_case_ref`: `advances` + `case_id UUID REFERENCES cases(id) ON DELETE SET NULL` (nullable · additive) + index `idx_advances_org_case(organization_id, case_id)` — ช่อง "อ้างอิงเคส (ไม่บังคับ)" ของฟอร์มขอเงินทดรอง (`15` §7.2 เดิมเขียน `case_ref` free text) · เลือกได้เฉพาะเคสที่ผู้รับเงินมีงานค้าง (`case_assignments` สถานะ active — ตรวจที่ service · ไม่ใช่ = `CASE_NOT_FOUND`) · ข้อมูลอ้างอิงเท่านั้น: ไม่กระทบยอด/สถานะ/เกตรายได้ของเคส · คำขอเบิกส่วนเกินตอนเคลียร์ยังไม่ผูก `expenses.case_id` (เลขเคสอยู่ในหมายเหตุ) · เงินทดรองเดิม = NULL |
 | v4.75 | 13/10/2569 | **known Q7/M2 (รีวิวโค้ด — Claude ตัดสินแทน PO)** — migration `20261013110000_hotel_receipt_required_default_false`: `compensation_plans.hotel_receipt_required` ค่าเริ่มต้นเปลี่ยน `true` → **`false`** (ไม่บังคับ — คงพฤติกรรมใบรับรองแทนใบเสร็จตามมติ PO U103 · องค์กรเปิดเองเป็นรายแผน) · เปลี่ยนเฉพาะ DEFAULT ของแถวใหม่ ไม่แก้แถวเดิม (แผนเดิมคงค่าที่ตั้งไว้) · ฟอร์มสร้างแผนใหม่ค่าเริ่มต้นไม่ติ๊ก |
 | v4.76 | 16/10/2569 | **มติ 16/10/2569 Q8 (mytester M1/B-03)** — migration `20261016100000_cases_org_imei_index` เพิ่ม `idx_cases_org_imei (organization_id, imei)` เท่านั้น ไม่เปลี่ยนคอลัมน์: คำเตือน IMEI ซ้ำกับเคสที่ยังดำเนินการอยู่ (เปิดเคส/นำเข้าไฟล์) ค้น `WHERE organization_id = ? AND imei = ?` / `imei IN (…)` ทุกครั้ง · เดิม seq scan |
+| v4.77 | 19/10/2569 | **mytester7 S7-AG2-05 (Claude ตัดสินแทน PO รอทบทวน)** — migration `20261019100000_service_fee_template_lineage`: เพิ่ม `service_fee_templates.lineage_id UUID NULL` (= id ของเวอร์ชันแรก · NULL = แถวนี้คือเวอร์ชันแรกเอง) + `UNIQUE (organization_id, lineage_id, version)` (`uniq_service_fee_templates_org_lineage_version`) · backfill เวอร์ชันที่ไม่ใช่ตัวแรกของแต่ละ (org, name) ให้ชี้ตัวแรก · เหตุผล: เดิมจับกลุ่มเวอร์ชันด้วย `name` ⇒ เปลี่ยนชื่อต้องทับชื่อเวอร์ชันเดิม ขัด snapshot pattern (`92` §7.1) · คง `UNIQUE (organization_id, name, version)` เดิม · nullable เพื่อให้ INSERT เวอร์ชันแรกไม่ต้องรู้ id ล่วงหน้า |
 
 ขอบเขตเอกสารนี้: Full Production Database Schema — ทุก table, column, type, FK, index, unique constraint, enum, migration order และ seed data สรุปจาก spec ไฟล์ทั้งหมดไว้ในที่เดียว ใช้เป็น source of truth เดียวก่อนเขียน Prisma schema
 
@@ -786,12 +787,16 @@ CREATE TABLE service_fee_templates (
   -- Versioning (snapshot ลงใน Case ตอน approved)
   version             INTEGER              NOT NULL DEFAULT 1,
   is_current          BOOLEAN              NOT NULL DEFAULT true,
+  -- (v4.77 mytester7 S7-AG2-05) สายเวอร์ชัน = id ของเวอร์ชันแรก · NULL = แถวนี้คือเวอร์ชันแรกเอง
+  -- เปลี่ยนชื่อในเวอร์ชันใหม่ไม่ทับชื่อเวอร์ชันเดิม
+  lineage_id          UUID,
   created_at          TIMESTAMPTZ          NOT NULL DEFAULT NOW(),
   created_by          UUID                 NOT NULL REFERENCES users(id),
   updated_at          TIMESTAMPTZ          NOT NULL DEFAULT NOW(),
   updated_by          UUID                 REFERENCES users(id),
   deleted_at          TIMESTAMPTZ,
-  UNIQUE(organization_id, name, version)
+  UNIQUE(organization_id, name, version),
+  CONSTRAINT uniq_service_fee_templates_org_lineage_version UNIQUE(organization_id, lineage_id, version)
 );
 
 -- ── tax_profiles ──────────────────────────────────────────────

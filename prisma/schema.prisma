@@ -1432,6 +1432,9 @@ model ServiceFeeTemplate {
 
   version   Int     @default(1)
   isCurrent Boolean @default(true) @map("is_current")
+  /// mytester7 S7-AG2-05 — สายเวอร์ชัน = id ของเวอร์ชันแรก · NULL = แถวนี้คือเวอร์ชันแรกเอง (สาย = id ตัวเอง)
+  /// เปลี่ยนชื่อในเวอร์ชันใหม่ไม่ทับชื่อเวอร์ชันเดิม (เคสที่ snapshot เวอร์ชันเดิมแสดงชื่อเดิม)
+  lineageId String? @map("lineage_id") @db.Uuid
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   createdBy String    @map("created_by") @db.Uuid
@@ -1447,6 +1450,7 @@ model ServiceFeeTemplate {
   cases            Case[]           @relation("cases_service_fee_template")
 
   @@unique([organizationId, name, version])
+  @@unique([organizationId, lineageId, version], map: "uniq_service_fee_templates_org_lineage_version")
   @@map("service_fee_templates")
 }
 
