@@ -832,6 +832,30 @@ suite('Phase 2.8 — รายการงาน 4 กลุ่ม + มุม�
     expect(teamView.items[0]?.assetDescription).toBeNull()
   })
 
+  it('mytester7 security L3 — การ์ดแสดงเฉพาะคำขอเปลี่ยนผู้รับผิดชอบที่ส่งถึงผู้เรียก (คำขอค้างของคนอื่นบนเคสเดียวกันไม่โผล่)', async () => {
+    const caseId = await seedAcceptedCase(agentA)
+    const insertPending = (fromAgent: string) =>
+      db().$executeRawUnsafe(`
+        INSERT INTO pending_reassignments (organization_id, case_id, assignment_id, from_agent_id, new_agent_id,
+                                           requested_by, expires_at, reason, created_by)
+        SELECT organization_id, case_id, id, '${fromAgent}', '${AGENT_FLAT}', '${MANAGER_ID}', NOW() + INTERVAL '1 day',
+               'ทดสอบ L3', '${MANAGER_ID}'
+        FROM case_assignments WHERE case_id = '${caseId}' AND agent_id = '${AGENT_A}'
+      `)
+    const ownItem = async () =>
+      (await field.listFieldCases(agentA, { status: 'accepted', view: 'own' })).items.find((item) => item.caseId === caseId)
+
+    // คำขอค้างที่ส่งถึงพนักงานคนอื่น (เช่น ผู้ถืองานคนก่อน) ⇒ ไม่ใช่ของผู้เรียก
+    await insertPending(AGENT_B)
+    expect((await ownItem())?.hasPendingReassignment).toBe(false)
+    expect((await ownItem())?.pendingReassignmentId ?? null).toBeNull()
+
+    await db().$executeRawUnsafe(`DELETE FROM pending_reassignments WHERE case_id = '${caseId}'`)
+    await insertPending(AGENT_A)
+    expect((await ownItem())?.hasPendingReassignment).toBe(true)
+    expect((await ownItem())?.pendingReassignmentId).not.toBeNull()
+  })
+
   it('มุมมองทีม: เคสของตัวเองในรายการทีมยังเห็นค่าตอบแทนครบ (preship R3-005)', async () => {
     await seedAcceptedCase(agentA)
     const teamView = await field.listFieldCases(agentA, { status: 'accepted', view: 'team' })

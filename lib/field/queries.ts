@@ -340,13 +340,20 @@ export function isCurrentAssignee(
 /**
  * คำขอเปลี่ยนผู้รับผิดชอบที่รอตอบ ต่อเคส — คืน id + เวลาหมดเขตด้วย เพื่อให้ popup บนมือถือ
  * จำ "ดูทีหลัง" ต่อคำขอ (S7-AG6-06) และแสดงป้ายหมดเวลาก่อนให้กด (S7-AG5-03)
+ * เฉพาะคำขอที่ส่งถึง**ผู้เรียก**ในองค์กรเดียวกัน (mytester7 security L3) — มุมมองทีมไม่เห็นคำขอของเพื่อนร่วมทีม
  */
 async function pendingReassignmentsByCase(
+  user: Pick<SessionUser, 'id' | 'organizationId'>,
   caseIds: readonly string[],
 ): Promise<Map<string, { id: string; expiresAt: string }>> {
   if (caseIds.length === 0) return new Map()
   const rows = await prisma.pendingReassignment.findMany({
-    where: { caseId: { in: [...caseIds] }, status: 'waiting_consent' },
+    where: {
+      organizationId: user.organizationId,
+      fromAgentId: user.id,
+      caseId: { in: [...caseIds] },
+      status: 'waiting_consent',
+    },
     select: { id: true, caseId: true, expiresAt: true },
   })
   return new Map(rows.map((row) => [row.caseId, { id: row.id, expiresAt: row.expiresAt.toISOString() }]))
@@ -452,7 +459,7 @@ export async function listFieldCases(user: SessionUser, query: FieldCaseListQuer
   })
 
   const [pending, closedExtras, previousFail] = await Promise.all([
-    pendingReassignmentsByCase(rows.map((row) => row.caseId)),
+    pendingReassignmentsByCase(user, rows.map((row) => row.caseId)),
     loadClosedCardExtras(user.organizationId, rows),
     loadPreviousRoundFailReasons(user.organizationId, rows),
   ])
