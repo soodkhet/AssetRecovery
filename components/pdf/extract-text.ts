@@ -69,12 +69,19 @@ export function extractPdfText(pdf: Uint8Array): string {
         current = fontCmaps.get(op[1])
         continue
       }
-      const hexes = op[2] !== undefined ? [...op[2].matchAll(/<([0-9a-fA-F]+)>/g)].map((m) => m[1] ?? '') : [op[3] ?? '']
-      for (const hex of hexes) {
+      // mytester7 S7-AG1-06 — จุดตัดบรรทัดไทย (U+FEFF · `thai-line-break.ts`) ถูกวาดเป็น glyph ช่องว่างกว้าง 0:
+      // react-pdf เขียนเป็นช่องว่างท้ายชิ้น hex ตามด้วยค่าเลื่อนกลับบวก (หักความกว้างช่องว่างทิ้ง) ⇒ ไม่นับเป็นช่องว่าง
+      const chunks =
+        op[2] !== undefined
+          ? [...op[2].matchAll(/<([0-9a-fA-F]+)>\s*(-?[\d.]+)?/g)].map((m) => ({ hex: m[1] ?? '', adjust: Number(m[2] ?? 0) }))
+          : [{ hex: op[3] ?? '', adjust: 0 }]
+      for (const { hex, adjust } of chunks) {
         if (simple) {
           for (let i = 0; i + 2 <= hex.length; i += 2) text += String.fromCharCode(parseInt(hex.slice(i, i + 2), 16))
         } else {
-          for (let i = 0; i + 4 <= hex.length; i += 4) text += glyph(parseInt(hex.slice(i, i + 4), 16))
+          let chunk = ''
+          for (let i = 0; i + 4 <= hex.length; i += 4) chunk += glyph(parseInt(hex.slice(i, i + 4), 16))
+          text += adjust > 0 && chunk.endsWith(' ') ? chunk.slice(0, -1) : chunk
         }
       }
       text += '\n'
