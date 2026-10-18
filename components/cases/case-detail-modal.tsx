@@ -27,7 +27,7 @@ import {
 } from '@/components/ui'
 import { apiPath } from '@/lib/api/contract'
 import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
-import { countDocuments, DOCUMENT_SLOT_LABEL, documentModeOf, type DocumentSlot } from '@/lib/cases/case'
+import { countDocuments, debtorIdentityDisplay, DOCUMENT_SLOT_LABEL, documentModeOf, type DocumentSlot } from '@/lib/cases/case'
 import {
   CASE_ACTION_CONFIRM,
   caseActionSuccessTitle,
@@ -550,6 +550,7 @@ function ReviewNoteAlert({ detail }: { detail: CaseDetailDto }) {
 }
 
 function CaseSummary({ detail }: { detail: CaseDetailDto }) {
+  const identity = debtorIdentityDisplay(detail)
   return (
     <section>
       <div className="mb-3 flex flex-wrap items-center gap-2 border-b border-slate-100 pb-2">
@@ -561,6 +562,9 @@ function CaseSummary({ detail }: { detail: CaseDetailDto }) {
       <dl className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
         <Row label="ลูกหนี้" value={detail.debtorName ?? '—'} />
         <Row label="เลขที่สัญญา" value={<RefText className="font-bold">{detail.caseRef}</RefText>} />
+        {/* มติ D7-04 — สัญชาติ + เลขเอกสารตัวตน ให้ผู้พิจารณาเทียบกับสำเนาที่แนบ (S7-AG1-04) */}
+        <Row label="สัญชาติ" value={identity.nationality} />
+        <Row label={identity.idLabel} value={<span className="font-mono">{identity.idValue}</span>} />
         <Row label="บริษัทไฟแนนซ์" value={detail.financeCompanyName} />
         <Row label="จังหวัด (ที่อยู่ปัจจุบัน)" value={detail.province ?? 'ยังไม่ระบุ'} />
         <Row
