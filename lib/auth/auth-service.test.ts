@@ -64,6 +64,7 @@ vi.mock('@/lib/auth/login-attempt-lock', () => ({
 }))
 
 const { login, changeOwnPassword, resetRateLimitAuditGateForTests } = await import('@/lib/auth/auth-service')
+const { clearSessionCache, getCachedSession } = await import('@/lib/auth/session-cache')
 const { LOGIN_FAILURE_MIN_DURATION_MS, remainingLoginDelayMs } = await import('@/lib/auth/login-timing')
 
 const ORG = '00000000-0000-4000-8000-0000000000aa'
@@ -175,6 +176,28 @@ describe('login — ผู้ใช้ภายใน', () => {
     const result = await login({ identifier: 'finance', password: 'secret' }, META)
     expect(result.redirectTo).toBe('/dashboard')
     expect(loadCompanyStatusMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('login — ใส่ cache เฉพาะเมื่อเวอร์ชันสิทธิ์ไม่ถูกแทรก (mytester7 security M1)', () => {
+  const internal = () =>
+    account({ roleName: 'การเงิน', roleGroup: 'system', companyId: null, capabilities: {}, authzVersion: { user: 5, role: 2 } })
+
+  beforeEach(() => clearSessionCache())
+
+  it('เวอร์ชันหลังอัปเดต = ตอนโหลด + 1 ⇒ ใส่ cache ด้วยเวอร์ชันใหม่', async () => {
+    loadSessionUserMock.mockResolvedValue(internal())
+    prismaMock.user.update.mockResolvedValue({ authzVersion: 6 })
+    await login({ identifier: 'finance', password: 'secret' }, META)
+    expect(getCachedSession('uid-1')?.authzVersion).toEqual({ user: 6, role: 2 })
+  })
+
+  it('มีการระงับ/เปลี่ยน role commit แทรกระหว่างโหลดกับอัปเดต (เวอร์ชันขยับเกิน 1) ⇒ ไม่ใส่ cache', async () => {
+    loadSessionUserMock.mockResolvedValue(internal())
+    prismaMock.user.update.mockResolvedValue({ authzVersion: 7 })
+    const result = await login({ identifier: 'finance', password: 'secret' }, META)
+    expect(result.user.authzVersion).toBeUndefined()
+    expect(getCachedSession('uid-1')).toBeNull()
   })
 })
 

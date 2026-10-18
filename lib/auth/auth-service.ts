@@ -292,14 +292,18 @@ async function authenticate(input: LoginInput, meta: RequestMeta): Promise<Login
     select: { authzVersion: true },
   })
 
-  // trigger ขยับ `users.authz_version` เมื่อ last_login_at เปลี่ยน (มติ D7-02) — เก็บเวอร์ชันหลังอัปเดตลง cache
-  // ไม่ได้เวอร์ชัน (เช่น mock ใน test) ⇒ ไม่ระบุ = request ถัดไปโหลดจากฐานใหม่ (ปลอดภัยไว้ก่อน)
+  // trigger ขยับ `users.authz_version` +1 เมื่อ last_login_at เปลี่ยน (มติ D7-02) — ใส่ cache เฉพาะเมื่อเวอร์ชันหลังอัปเดต
+  // = เวอร์ชันตอนโหลด + 1 พอดี (mytester7 security M1): ถ้ามีการระงับ/เปลี่ยน role/ทีม commit แทรกระหว่าง
+  // loadSessionUser กับ update นี้ เวอร์ชันจะขยับเกิน 1 ⇒ ข้อมูลที่โหลดมาเก่าแล้ว ⇒ ไม่ใส่ cache (คำขอถัดไปโหลดจากฐานใหม่)
+  // ไม่ได้เวอร์ชัน (เช่น mock ใน test) ⇒ ไม่ระบุ = ไม่ใส่ cache เช่นกัน (ปลอดภัยไว้ก่อน)
+  const loadedVersion = sessionAccount.authzVersion
   const authzVersion =
-    sessionAccount.authzVersion !== undefined && typeof updated.authzVersion === 'number'
-      ? { user: updated.authzVersion, role: sessionAccount.authzVersion.role }
+    loadedVersion !== undefined && updated.authzVersion === loadedVersion.user + 1
+      ? { user: updated.authzVersion, role: loadedVersion.role }
       : undefined
   const user: SessionUser = { ...sessionAccount, loginAt: now.toISOString(), authzVersion }
-  setCachedSession(uid, user, now.getTime())
+  if (authzVersion !== undefined) setCachedSession(uid, user, now.getTime())
+  else invalidateSessionCache(uid)
 
   await emitAudit({
     organizationId: user.organizationId,
