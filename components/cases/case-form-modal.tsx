@@ -43,7 +43,7 @@ import { caseCreateSchema, caseUpdateSchema } from '@/lib/cases/schemas'
 import { ASSET_TYPE_LABEL, caseReviewNoteNotice } from '@/lib/cases/status-display'
 import type { CaseDetailDto, CaseDocumentDto, CaseTeamOptionDto, CaseTeamOptionsDto } from '@/lib/cases/types'
 import { uploadCaseFile } from '@/lib/cases/upload-client'
-import { CASE_UPLOAD_CONCURRENCY, runWithConcurrency, uploadProgressLabel } from '@/lib/cases/upload-queue'
+import { CASE_UPLOAD_CONCURRENCY, isDocumentAttached, runWithConcurrency, uploadProgressLabel } from '@/lib/cases/upload-queue'
 import { parseBahtInput } from '@/lib/format/money'
 import {
   assetIdentifierWarning,
@@ -365,6 +365,15 @@ export function CaseFormModal({
         jsonRequest('POST', uploaded.value),
       )
       if (response.error !== undefined || response.data === undefined) {
+        // คำตอบหาย (เน็ตหลุด/หมดเวลา/502) แต่ server อาจบันทึกไปแล้ว ⇒ โหลดเคสมาตรวจก่อนแจ้งว่าไม่สำเร็จ
+        // เดิมแจ้ง "อัปโหลดไม่สำเร็จ" ทั้งที่ไฟล์ติดเคสแล้ว ผู้ใช้แนบซ้ำแล้วโดนปฏิเสธไฟล์ซ้ำ (mytester7 S7-AG5-01)
+        if (response.error?.outcomeUnknown === true) {
+          const check = await callApi<CaseDetailDto>(apiPath('case.detail', { id: saved.id }))
+          if (check.data !== undefined && isDocumentAttached(check.data.documents, uploaded.value)) {
+            latest = check.data
+            continue
+          }
+        }
         failed.push(`${item.file.name} (${response.error?.message ?? 'บันทึกไฟล์ไม่สำเร็จ'})`)
         continue
       }
