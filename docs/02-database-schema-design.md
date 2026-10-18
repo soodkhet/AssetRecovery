@@ -790,7 +790,7 @@ CREATE TABLE service_fee_templates (
   -- Versioning (snapshot ลงใน Case ตอน approved)
   version             INTEGER              NOT NULL DEFAULT 1,
   is_current          BOOLEAN              NOT NULL DEFAULT true,
-  -- (v4.77 mytester7 S7-AG2-05) สายเวอร์ชัน = id ของเวอร์ชันแรก · NULL = แถวนี้คือเวอร์ชันแรกเอง
+  -- (v4.78 mytester7 S7-AG2-05) สายเวอร์ชัน = id ของเวอร์ชันแรก · NULL = แถวนี้คือเวอร์ชันแรกเอง
   -- เปลี่ยนชื่อในเวอร์ชันใหม่ไม่ทับชื่อเวอร์ชันเดิม
   lineage_id          UUID,
   created_at          TIMESTAMPTZ          NOT NULL DEFAULT NOW(),
