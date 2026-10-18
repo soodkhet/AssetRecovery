@@ -28,7 +28,8 @@ import { BillingPreview } from '@/components/finance/billing-preview'
 import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
 import type { FinanceCompanyDto } from '@/lib/finance-companies/types'
 import { fmtDate, toInputDate } from '@/lib/format/datetime'
-import type { BillingBatchDetailDto } from '@/lib/revenue/types'
+import { billingCompanyOptions, type BillingCompanyOption } from '@/lib/revenue/revenue-ui'
+import type { BillingBatchDetailDto, RevenueDto } from '@/lib/revenue/types'
 import { resolveDueDate, suggestOpenCutoffDate } from '@/lib/settings/cycles'
 
 /** วันนี้ตามเวลาไทยในรูป date-only (เที่ยงคืน UTC) — ฐานของการเสนอวันตัดรอบ */
@@ -60,7 +61,7 @@ export function CreateBillingModal({
   // id ผูก label ↔ ช่อง + aria-invalid/aria-describedby ผ่าน `<Field id>` (ตรวจซ้ำ staging SV5-R9-01)
   const fieldId = useId()
   const { showToast } = useToast()
-  const [companies, setCompanies] = useState<readonly FinanceCompanyDto[]>([])
+  const [companies, setCompanies] = useState<readonly BillingCompanyOption<FinanceCompanyDto>[]>([])
   const [companyId, setCompanyId] = useState('')
   /** วันตัดรอบที่ผู้ใช้แก้เอง — `null` = ใช้ค่าที่ระบบเสนอ (คำนวณใหม่เมื่องวดปิดโหลดเสร็จ · R8-008) */
   const [cutoffOverride, setCutoffOverride] = useState<string | null>(null)
@@ -84,10 +85,24 @@ export function CreateBillingModal({
     if (!open) return
     let cancelled = false
     void (async () => {
-      const companyResult = await callApi<FinanceCompanyDto[]>('/api/finance-companies?status=active')
+      // mytester7 S7-AG2-07 (มติ D7-05) — บริษัทที่ระงับยังวางบิลรายได้ที่เกิดแล้วได้ ⇒ ดึงทุกสถานะ
+      // แล้วตรวจว่าบริษัทที่ระงับรายไหนมีรายได้รอวางบิล (ปกติมีไม่กี่ราย)
+      const companyResult = await callApi<FinanceCompanyDto[]>('/api/finance-companies?status=all')
+      const all = companyResult.data ?? []
+      const suspended = all.filter((company) => company.status === 'suspended')
+      const pending = await Promise.all(
+        suspended.map((company) =>
+          callApi<RevenueDto[]>(
+            `/api/revenues?${new URLSearchParams({ status: 'ready_for_billing', unbilledOnly: 'true', companyId: company.id }).toString()}`,
+          ),
+        ),
+      )
       if (cancelled) return
-      setCompaniesError(companyResult.error ?? null)
-      setCompanies(companyResult.data ?? [])
+      const pendingIds = new Set(
+        suspended.filter((_company, index) => (pending[index]?.data?.length ?? 0) > 0).map((company) => company.id),
+      )
+      setCompaniesError(companyResult.error ?? pending.find((result) => result.error !== undefined)?.error ?? null)
+      setCompanies(billingCompanyOptions(all, pendingIds))
     })()
     return () => {
       cancelled = true
@@ -96,7 +111,8 @@ export function CreateBillingModal({
 
   if (!open) return null
 
-  const selectedCompany = companies.find((company) => company.id === companyId)
+  const selectedOption = companies.find((option) => option.company.id === companyId)
+  const selectedCompany = selectedOption?.company
   const cycle = selectedCompany?.billingCycle ?? null
   // มติ PO U146 — เสนอวันตัดรอบล่าสุดตามกติกาของรอบบิล (ผู้ใช้แก้ได้) · ไม่เสนอวันในงวดที่ปิดแล้ว (P11 · R7-009)
   // คำนวณทุก render — งวดปิดโหลดเสร็จหลังเลือกบริษัทแล้วค่าที่เสนอขยับตาม (เดิมค้าง 30/09 · R8-008)
@@ -185,13 +201,19 @@ export function CreateBillingModal({
         <Field id={`${fieldId}-company-id`} label="บริษัทไฟแนนซ์" required error={submitError.fields.companyId}>
           <Select id={`${fieldId}-company-id`} value={companyId} onChange={(event) => selectCompany(event.target.value)}>
             <option value="">— เลือกบริษัท —</option>
-            {companies.map((company) => (
-              <option key={company.id} value={company.id}>
-                {company.name}
+            {companies.map((option) => (
+              <option key={option.company.id} value={option.company.id}>
+                {option.label}
               </option>
             ))}
           </Select>
         </Field>
+
+        {selectedOption?.suspended === true && (
+          <InlineAlert tone="warning" title="บริษัทนี้ถูกระงับ">
+            บริษัทที่ระงับรับเคสใหม่ไม่ได้ แต่ยังวางบิลและรับชำระรายได้ที่เกิดแล้วได้ตามปกติ
+          </InlineAlert>
+        )}
 
         {companiesError !== null && (
           <InlineAlert tone="error" title="โหลดรายชื่อบริษัทไม่สำเร็จ">
