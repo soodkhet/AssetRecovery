@@ -1,13 +1,15 @@
 import { SESSION_CACHE_TTL_MS } from '@/lib/auth/constants'
 import { isSessionExpired } from '@/lib/auth/permission'
-import type { SessionUser } from '@/lib/auth/types'
+import type { AuthzVersion, SessionUser } from '@/lib/auth/types'
 
 /**
  * Cache role+scope ระดับ instance — `01` §6.1 / `05` §17 กำหนดว่าห้าม query DB ทุก request
  *
  * ⚠️ ไม่ใช่ security boundary: การตรวจสิทธิ์จริงยังทำที่ `requirePermission()` ทุกครั้ง
- * ⚠️ เป็น cache ต่อ instance (Vercel serverless มีหลาย instance) — จึงต้องมี TTL สั้น
- *    และต้องเรียก `invalidateSessionCache()` ทุกครั้งที่ role/สถานะ/ทีม/บริษัทของผู้ใช้เปลี่ยน
+ * ⚠️ เป็น cache ต่อ instance (Vercel serverless มีหลาย instance) — `invalidateSessionCache()` ล้างได้แค่ instance ที่รับคำขอ
+ *    ⇒ มติ D7-02 (mytester7 S7-AG7-05): ก่อนใช้ค่าใน cache ทุกครั้ง `lib/auth/session.ts` เทียบ `authzVersion`
+ *    กับฐานด้วย query เดียว (`isAuthzVersionCurrent`) — ระงับ/ถอดสิทธิ์/เปลี่ยน role-capability/ทีม/บริษัท
+ *    มีผลกับคำขอถัดไปทุก instance โดยไม่มี window · TTL เป็นแค่เพดานอายุ entry ไม่ใช่กลไกความถูกต้อง
  */
 interface CacheEntry {
   value: SessionUser
@@ -51,6 +53,15 @@ export function setCachedSession(
     return
   }
   cache.set(supabaseUid, { value, expiresAt: now + ttlMs })
+}
+
+/**
+ * entry ใน cache ยังใช้ได้ไหม — ต้องมีเวอร์ชันและตรงกับเวอร์ชันล่าสุดในฐานทั้งฝั่งผู้ใช้และฝั่ง role
+ * `current = null` = ไม่พบผู้ใช้ในฐานแล้ว (ถูกลบ/ถอด supabase uid) ⇒ ใช้ไม่ได้
+ */
+export function isAuthzVersionCurrent(cached: SessionUser, current: AuthzVersion | null): boolean {
+  if (current === null || cached.authzVersion === undefined) return false
+  return cached.authzVersion.user === current.user && cached.authzVersion.role === current.role
 }
 
 /** ล้าง cache ของผู้ใช้ 1 คน — เรียกเมื่อ login/logout หรือ role/สถานะเปลี่ยน */

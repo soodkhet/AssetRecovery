@@ -1,9 +1,14 @@
 import { AuthError } from '@/lib/auth/errors'
 import { isSessionExpired } from '@/lib/auth/permission'
 import { resolveScope } from '@/lib/auth/scope'
-import { getCachedSession, setCachedSession } from '@/lib/auth/session-cache'
+import {
+  getCachedSession,
+  invalidateSessionCache,
+  isAuthzVersionCurrent,
+  setCachedSession,
+} from '@/lib/auth/session-cache'
 import { SUPERADMIN_ROLE_NAME } from '@/lib/auth/constants'
-import type { SessionUser } from '@/lib/auth/types'
+import type { AuthzVersion, SessionUser } from '@/lib/auth/types'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 import { prisma } from '@/lib/prisma'
 import type { CapabilityAccessLevel } from '@/lib/generated/prisma/enums'
@@ -30,9 +35,11 @@ export async function loadSessionUser(supabaseUid: string): Promise<SessionUser 
       lastLoginAt: true,
       mustChangePassword: true,
       deletedAt: true,
+      authzVersion: true,
       role: {
         select: {
           id: true,
+          authzVersion: true,
           name: true,
           roleGroup: true,
           capabilities: {
@@ -80,7 +87,37 @@ export async function loadSessionUser(supabaseUid: string): Promise<SessionUser 
     }),
     loginAt: user.lastLoginAt?.toISOString() ?? null,
     mustChangePassword: user.mustChangePassword,
+    authzVersion: { user: user.authzVersion, role: user.role.authzVersion },
   }
+}
+
+/**
+ * เวอร์ชันสิทธิ์ล่าสุดในฐาน — query เดียว (users ⋈ roles ตาม PK/unique) ใช้ตรวจ cache ทุก request (มติ D7-02)
+ * `null` = ไม่พบผู้ใช้ของ supabase uid นี้แล้ว
+ */
+export async function readAuthzVersion(supabaseUid: string): Promise<AuthzVersion | null> {
+  const rows = await prisma.$queryRaw<{ user_version: number; role_version: number }[]>`
+    SELECT u.authz_version AS user_version, r.authz_version AS role_version
+    FROM users u
+    JOIN roles r ON r.id = u.role_id
+    WHERE u.supabase_uid = ${supabaseUid}::uuid
+    LIMIT 1
+  `
+  const row = rows[0]
+  if (row === undefined) return null
+  return { user: Number(row.user_version), role: Number(row.role_version) }
+}
+
+/**
+ * ค่า session จาก cache ของ instance นี้ — ใช้ได้เฉพาะเมื่อเวอร์ชันสิทธิ์ยังตรงกับฐาน
+ * (ระงับ/ถอดสิทธิ์/เปลี่ยน role/ทีม/บริษัทที่ instance อื่น ⇒ เวอร์ชันในฐานขยับ ⇒ ทิ้ง cache โหลดใหม่ทันที)
+ */
+async function getVerifiedCachedSession(supabaseUid: string, now: number): Promise<SessionUser | null> {
+  const cached = getCachedSession(supabaseUid, now)
+  if (cached === null) return null
+  if (isAuthzVersionCurrent(cached, await readAuthzVersion(supabaseUid))) return cached
+  invalidateSessionCache(supabaseUid)
+  return null
 }
 
 /** อ่าน supabase uid ของ request ปัจจุบัน (verify JWT กับ Supabase Auth) — null = ยังไม่ได้ login */
@@ -100,7 +137,7 @@ export async function getRawSessionUser(now: Date = new Date()): Promise<Session
   const uid = await getAuthenticatedUid()
   if (uid === null) return null
 
-  const cached = getCachedSession(uid, now.getTime())
+  const cached = await getVerifiedCachedSession(uid, now.getTime())
   const sessionUser = cached ?? (await loadSessionUser(uid))
   if (!sessionUser) throw new AuthError('USER_NOT_PROVISIONED', `supabase_uid=${uid}`)
   if (!cached) setCachedSession(uid, sessionUser, now.getTime())

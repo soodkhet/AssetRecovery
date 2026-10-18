@@ -286,9 +286,19 @@ async function authenticate(input: LoginInput, meta: RequestMeta): Promise<Login
 
   // เวลาเริ่ม session — ใช้คำนวณ timeout 24 ชม. (`05` §10)
   const now = new Date()
-  await prisma.user.update({ where: { id: sessionAccount.id }, data: { lastLoginAt: now } })
+  const updated = await prisma.user.update({
+    where: { id: sessionAccount.id },
+    data: { lastLoginAt: now },
+    select: { authzVersion: true },
+  })
 
-  const user: SessionUser = { ...sessionAccount, loginAt: now.toISOString() }
+  // trigger ขยับ `users.authz_version` เมื่อ last_login_at เปลี่ยน (มติ D7-02) — เก็บเวอร์ชันหลังอัปเดตลง cache
+  // ไม่ได้เวอร์ชัน (เช่น mock ใน test) ⇒ ไม่ระบุ = request ถัดไปโหลดจากฐานใหม่ (ปลอดภัยไว้ก่อน)
+  const authzVersion =
+    sessionAccount.authzVersion !== undefined && typeof updated.authzVersion === 'number'
+      ? { user: updated.authzVersion, role: sessionAccount.authzVersion.role }
+      : undefined
+  const user: SessionUser = { ...sessionAccount, loginAt: now.toISOString(), authzVersion }
   setCachedSession(uid, user, now.getTime())
 
   await emitAudit({

@@ -909,6 +909,10 @@ model Role {
   isSeed         Boolean   @default(false) @map("is_seed")
   /// true = แก้ permission ได้
   isEditable     Boolean   @default(false) @map("is_editable")
+  /// เวอร์ชันสิทธิ์ของ role (มติ D7-02 · mytester7 S7-AG7-05) — DB trigger บวก 1 ทุกครั้งที่ `role_capabilities` ของ role นี้
+  /// เปลี่ยน หรือชื่อ/กลุ่ม/การลบ role เปลี่ยน ⇒ session cache ทุก instance เทียบค่านี้ทุก request (`lib/auth/session.ts`)
+  /// ห้ามเขียนเองจากแอป · trigger อยู่ใน raw SQL `20261019100000_authz_version`
+  authzVersion   Int       @default(0) @map("authz_version")
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -984,6 +988,10 @@ model User {
   lastLoginAt        DateTime?  @map("last_login_at") @db.Timestamptz(6)
   /// ผู้ดูแลตั้ง/รีเซ็ตรหัสผ่านให้ → ต้องเปลี่ยนรหัสเองก่อนใช้งาน (มติ PO 03/10/2569)
   mustChangePassword Boolean    @default(false) @map("must_change_password")
+  /// เวอร์ชันสิทธิ์ของผู้ใช้ (มติ D7-02 · mytester7 S7-AG7-05) — DB trigger บวก 1 เมื่อ role/ทีม/บริษัท/สถานะ/การลบ/
+  /// last_login/must_change_password/ตัวตนเปลี่ยน หรือ `team_managers`/`teams.supervisor_id` ที่ผูกผู้ใช้นี้เปลี่ยน
+  /// ห้ามเขียนเองจากแอป · trigger อยู่ใน raw SQL `20261019100000_authz_version`
+  authzVersion       Int        @default(0) @map("authz_version")
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   createdBy String?   @map("created_by") @db.Uuid

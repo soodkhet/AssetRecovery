@@ -101,6 +101,7 @@
 | v4.74 | 13/10/2569 | **mytester DO-07 (มติ 13/10/2569 — Claude ตัดสินแทน PO)** — migration `20261013100000_advance_case_ref`: `advances` + `case_id UUID REFERENCES cases(id) ON DELETE SET NULL` (nullable · additive) + index `idx_advances_org_case(organization_id, case_id)` — ช่อง "อ้างอิงเคส (ไม่บังคับ)" ของฟอร์มขอเงินทดรอง (`15` §7.2 เดิมเขียน `case_ref` free text) · เลือกได้เฉพาะเคสที่ผู้รับเงินมีงานค้าง (`case_assignments` สถานะ active — ตรวจที่ service · ไม่ใช่ = `CASE_NOT_FOUND`) · ข้อมูลอ้างอิงเท่านั้น: ไม่กระทบยอด/สถานะ/เกตรายได้ของเคส · คำขอเบิกส่วนเกินตอนเคลียร์ยังไม่ผูก `expenses.case_id` (เลขเคสอยู่ในหมายเหตุ) · เงินทดรองเดิม = NULL |
 | v4.75 | 13/10/2569 | **known Q7/M2 (รีวิวโค้ด — Claude ตัดสินแทน PO)** — migration `20261013110000_hotel_receipt_required_default_false`: `compensation_plans.hotel_receipt_required` ค่าเริ่มต้นเปลี่ยน `true` → **`false`** (ไม่บังคับ — คงพฤติกรรมใบรับรองแทนใบเสร็จตามมติ PO U103 · องค์กรเปิดเองเป็นรายแผน) · เปลี่ยนเฉพาะ DEFAULT ของแถวใหม่ ไม่แก้แถวเดิม (แผนเดิมคงค่าที่ตั้งไว้) · ฟอร์มสร้างแผนใหม่ค่าเริ่มต้นไม่ติ๊ก |
 | v4.76 | 16/10/2569 | **มติ 16/10/2569 Q8 (mytester M1/B-03)** — migration `20261016100000_cases_org_imei_index` เพิ่ม `idx_cases_org_imei (organization_id, imei)` เท่านั้น ไม่เปลี่ยนคอลัมน์: คำเตือน IMEI ซ้ำกับเคสที่ยังดำเนินการอยู่ (เปิดเคส/นำเข้าไฟล์) ค้น `WHERE organization_id = ? AND imei = ?` / `imei IN (…)` ทุกครั้ง · เดิม seq scan |
+| v4.77 | 19/10/2569 | **มติ D7-02 (mytester7 S7-AG7-05 — Claude ตัดสินแทน PO)** — migration `20261019100000_authz_version`: `users.authz_version INTEGER NOT NULL DEFAULT 0` + `roles.authz_version INTEGER NOT NULL DEFAULT 0` = "เวอร์ชันสิทธิ์" · เดินด้วย DB trigger เท่านั้น (แอปห้ามเขียนเอง): `users` BEFORE UPDATE เมื่อ organization/role/supabase_uid/username/email/full_name/team/company/status/last_login_at/must_change_password/deleted_at เปลี่ยน · `roles` BEFORE UPDATE เมื่อ name/role_group/deleted_at เปลี่ยน · `role_capabilities` INSERT/UPDATE/DELETE ⇒ role +1 · `team_managers` INSERT/UPDATE/DELETE และ `teams.supervisor_id` เปลี่ยน ⇒ ผู้ใช้ที่ผูก +1 — session cache ต่อ instance เทียบเวอร์ชันกับฐานด้วย query เดียวทุก request ก่อนใช้ค่าใน cache ⇒ ระงับ/ถอดสิทธิ์/เปลี่ยน role-capability/ทีม/บริษัท มีผลกับคำขอถัดไปทุก instance (`05` §17) |
 
 ขอบเขตเอกสารนี้: Full Production Database Schema — ทุก table, column, type, FK, index, unique constraint, enum, migration order และ seed data สรุปจาก spec ไฟล์ทั้งหมดไว้ในที่เดียว ใช้เป็น source of truth เดียวก่อนเขียน Prisma schema
 
@@ -570,6 +571,7 @@ CREATE TABLE roles (
   role_group      role_group    NOT NULL,
   is_seed         BOOLEAN       NOT NULL DEFAULT false,  -- true = ห้ามลบ/เปลี่ยนชื่อ
   is_editable     BOOLEAN       NOT NULL DEFAULT false,  -- true = แก้ permission ได้
+  authz_version   INTEGER       NOT NULL DEFAULT 0,      -- v4.77 มติ D7-02: trigger +1 เมื่อ role_capabilities/ชื่อ/กลุ่ม/การลบเปลี่ยน
   created_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
   updated_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
   deleted_at      TIMESTAMPTZ,
@@ -594,6 +596,7 @@ CREATE TABLE users (
   status          user_status   NOT NULL DEFAULT 'active',
   last_login_at   TIMESTAMPTZ,
   must_change_password BOOLEAN  NOT NULL DEFAULT false, -- DEC-010: ผู้ดูแลตั้งรหัสให้ → ต้องเปลี่ยนเอง
+  authz_version   INTEGER       NOT NULL DEFAULT 0, -- v4.77 มติ D7-02: trigger +1 เมื่อข้อมูลที่ session ใช้ตัดสินสิทธิ์เปลี่ยน
   created_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
   created_by      UUID          REFERENCES users(id),
   updated_at      TIMESTAMPTZ   NOT NULL DEFAULT NOW(),

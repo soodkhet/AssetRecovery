@@ -3,6 +3,7 @@ import {
   clearSessionCache,
   getCachedSession,
   invalidateSessionCache,
+  isAuthzVersionCurrent,
   isCacheableSession,
   sessionCacheSize,
   setCachedSession,
@@ -123,5 +124,22 @@ describe('BUG-150 — ไม่เสิร์ฟผล "session หมดอา
     setCachedSession(UID, user, T0)
     invalidateSessionCache(UID)
     expect(getCachedSession(UID, T0 + 1)).toBeNull()
+  })
+})
+
+describe('เวอร์ชันสิทธิ์ (มติ D7-02 — cache ต่อ instance ต้องตรงกับฐานทุกคำขอ)', () => {
+  it('ตรงทั้งผู้ใช้และ role → ใช้ได้', () => {
+    expect(isAuthzVersionCurrent({ ...user, authzVersion: { user: 3, role: 7 } }, { user: 3, role: 7 })).toBe(true)
+  })
+
+  it('ฝั่งผู้ใช้ขยับ (ระงับ/ย้ายทีม/เปลี่ยน role) หรือฝั่ง role ขยับ (แก้ capability) → ใช้ไม่ได้', () => {
+    const cached = { ...user, authzVersion: { user: 3, role: 7 } }
+    expect(isAuthzVersionCurrent(cached, { user: 4, role: 7 })).toBe(false)
+    expect(isAuthzVersionCurrent(cached, { user: 3, role: 8 })).toBe(false)
+  })
+
+  it('ไม่พบผู้ใช้ในฐาน หรือ entry ไม่มีเวอร์ชัน → ใช้ไม่ได้ (โหลดใหม่ไว้ก่อน)', () => {
+    expect(isAuthzVersionCurrent({ ...user, authzVersion: { user: 3, role: 7 } }, null)).toBe(false)
+    expect(isAuthzVersionCurrent(user, { user: 0, role: 0 })).toBe(false)
   })
 })

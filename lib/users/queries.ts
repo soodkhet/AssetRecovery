@@ -55,8 +55,8 @@ import {
  * ทุก query กรองด้วย `organization_id` เสมอ (`02` §2) · ทุก mutation อยู่ใน `$transaction`
  * เดียวกับ `emitAudit()` พร้อม `reason` (ผู้ใช้ = สิทธิ์การเข้าถึงข้อมูล — `90` §13)
  *
- * ⚠️ ทุกครั้งที่ role/สถานะ/ทีม/บริษัทเปลี่ยน ต้อง `invalidateSessionCache()` ของ user นั้น
- * ไม่งั้น session เดิมยังถือสิทธิ์เก่าได้อีกไม่เกิน 5 นาที (`lib/auth/session-cache.ts`)
+ * ⚠️ ทุกครั้งที่ role/สถานะ/ทีม/บริษัทเปลี่ยน ให้ `invalidateSessionCache()` ของ user นั้น (ล้าง instance นี้ทันที)
+ * instance อื่นเห็นผลในคำขอถัดไปเองผ่าน `users.authz_version` ที่ trigger ขยับ (มติ D7-02 · `lib/auth/session.ts`)
  *
  * **Provisioning (มติ PO 03/10/2569 — แทน flow เชิญของ D1)**: สร้างผู้ใช้ = สร้างบัญชี Supabase Auth
  * พร้อมรหัสผ่านที่ผู้ดูแลตั้งให้ **ก่อน** แล้วเขียน DB ในธุรกรรมเดียวกับ audit · DB ล้ม = ลบบัญชี Auth
