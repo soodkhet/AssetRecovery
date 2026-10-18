@@ -11,6 +11,7 @@ import {
   importResultToastDescription,
   importableRowCount,
   missingRequiredFields,
+  LOST_IMPORT_NOT_FOUND_MESSAGE,
   reconcileLostImport,
 } from '@/lib/cases/import-wizard'
 
@@ -185,6 +186,11 @@ describe('mytester7 S7-AG6-01/02 — ปุ่มยืนยันนำเข�
     const preview = result(true, [row(2, 'created')])
     const outcome = reconcileLostImport(preview, preview)
     expect(outcome).toEqual({ importedCount: 0, remainingCount: 1, result: preview })
+  })
+
+  it('mytester7 review — ยังไม่พบผล ⇒ ข้อความบอกว่าระบบอาจยังประมวลผลอยู่ ให้รอแล้วตรวจอีกครั้ง (ไม่มีเลขอ้างอิงสเปค)', () => {
+    expect(LOST_IMPORT_NOT_FOUND_MESSAGE.message).toContain('ระบบอาจยังประมวลผลอยู่ รอสักครู่แล้วตรวจอีกครั้ง')
+    expect(`${LOST_IMPORT_NOT_FOUND_MESSAGE.title}${LOST_IMPORT_NOT_FOUND_MESSAGE.message}`).not.toMatch(/§|S7-/)
   })
 
   it('นำเข้าไปบางส่วน ⇒ บอกจำนวน + คง preview ล่าสุดให้ยืนยันส่วนที่เหลือ', () => {

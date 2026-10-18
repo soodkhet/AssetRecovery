@@ -52,6 +52,7 @@ import {
   importResultToastDescription,
   importableRowCount,
   missingRequiredFields,
+  LOST_IMPORT_NOT_FOUND_MESSAGE,
   reconcileLostImport,
 } from '@/lib/cases/import-wizard'
 import type { CaseImportResultDto } from '@/lib/cases/types'
@@ -154,10 +155,7 @@ export function CaseImportWizard({
     setResult(outcome.result)
     setStep('preview')
     if (outcome.importedCount === 0) {
-      setError({
-        title: 'ยังไม่ได้นำเข้า',
-        message: 'ไม่ได้รับคำตอบจากระบบ — ตรวจแล้วยังไม่มีเคสจากไฟล์นี้ในระบบ กดยืนยันนำเข้าอีกครั้งได้',
-      })
+      setError({ ...LOST_IMPORT_NOT_FOUND_MESSAGE })
       return true
     }
     onImported()
