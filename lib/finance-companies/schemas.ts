@@ -99,6 +99,18 @@ export const financeCompanyStatusSchema = z.object({
   reason: reasonSchema,
 })
 
+/**
+ * ระงับโดยไม่กรอกเหตุผลเลย (ไม่ส่ง/ว่าง/ช่องว่างล้วน) ⇒ route ตอบ `SUSPEND_REASON_REQUIRED` ตาม `10` §11/§16
+ * **ก่อน** schema กลาง — ไม่งั้น `reasonSchema` ตัดเป็น `REQUIRED_MISSING` ไปก่อน (mytester7 S7-AG2-06)
+ * เหตุผลที่กรอกแต่สั้นเกินยังได้ `REQUIRED_MISSING` + ข้อความรายช่องเหมือนเดิม
+ */
+export function isSuspendReasonMissing(body: unknown): boolean {
+  if (typeof body !== 'object' || body === null) return false
+  const { status, reason } = body as { status?: unknown; reason?: unknown }
+  if (status !== 'suspended') return false
+  return typeof reason !== 'string' || reason.trim() === ''
+}
+
 export const financeCompanyListQuerySchema = z.object({
   status: z.enum(['active', 'suspended', 'all']).default('all'),
   search: z.string().trim().min(1).max(200).optional(),

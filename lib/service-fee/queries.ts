@@ -17,7 +17,8 @@ import { prisma } from '@/lib/prisma'
 /**
  * ชั้นข้อมูลของโมดูลเทมเพลตค่าบริการ (ไฟล์ 12) — **แยกจาก pure logic** (`lib/service-fee/template.ts`)
  *
- * โครงเดียวกับแผนค่าตอบแทน: 1 เทมเพลต = แถวชื่อเดียวกันหลายเวอร์ชัน · PATCH สร้างแถวใหม่แล้วย้าย
+ * 1 เทมเพลต = หลายเวอร์ชันใน "สาย" เดียวกัน (`lineage_id` = id ของเวอร์ชันแรก · NULL = ตัวแรกเอง — mytester7
+ * S7-AG2-05: เดิมจับกลุ่มด้วยชื่อ ทำให้เปลี่ยนชื่อแล้วต้องทับชื่อเวอร์ชันเดิม) · PATCH สร้างแถวใหม่แล้วย้าย
  * `finance_companies.service_fee_template_id` มาชี้เวอร์ชันปัจจุบัน ⇒ เคสที่ยังไม่ approved
  * เห็นค่าใหม่ทันที ส่วนเคสที่ approved ไปแล้วใช้ snapshot ของตัวเอง (`12` §9 · `10` §9.2)
  */
@@ -117,14 +118,29 @@ export async function getServiceFeeTemplate(
   return toRecord(row)
 }
 
-/** ประวัติทุกเวอร์ชันของเทมเพลตเดียวกัน — เรียงใหม่→เก่า */
+/** id ของสายเวอร์ชันที่แถวนี้อยู่ (= id ของเวอร์ชันแรก) */
+async function lineageKeyOf(organizationId: string, templateId: string): Promise<string> {
+  const row = await prisma.serviceFeeTemplate.findFirst({
+    where: { id: templateId, organizationId },
+    select: { id: true, lineageId: true },
+  })
+  if (!row) throw new ServiceFeeError('TEMPLATE_NOT_FOUND', { detail: `template=${templateId}` })
+  return row.lineageId ?? row.id
+}
+
+/** เงื่อนไข "ทุกเวอร์ชันในสายเดียวกัน" — ตัวแรก (id = key) + ตัวถัดไป (lineage_id = key) */
+function inLineage(lineageKey: string): Prisma.ServiceFeeTemplateWhereInput {
+  return { OR: [{ id: lineageKey }, { lineageId: lineageKey }] }
+}
+
+/** ประวัติทุกเวอร์ชันของเทมเพลตเดียวกัน — เรียงใหม่→เก่า (แต่ละเวอร์ชันแสดงชื่อของตัวเอง) */
 export async function listServiceFeeTemplateVersions(
   organizationId: string,
   templateId: string,
 ): Promise<ServiceFeeTemplateRecord[]> {
-  const template = await getServiceFeeTemplate(organizationId, templateId)
+  const lineageKey = await lineageKeyOf(organizationId, templateId)
   const rows = await prisma.serviceFeeTemplate.findMany({
-    where: { organizationId, name: template.name },
+    where: { organizationId, ...inLineage(lineageKey) },
     select: templateSelect,
     orderBy: { version: 'desc' },
   })
@@ -137,10 +153,14 @@ interface MutationContext {
   reason: string
 }
 
-async function assertNameAvailable(organizationId: string, name: string, exceptName?: string): Promise<void> {
-  if (exceptName !== undefined && exceptName === name) return
+/** ชื่อซ้ำกับเทมเพลตสายอื่นไม่ได้ — `exceptLineage` = สายที่กำลังแก้ (ใช้ชื่อเดิมของเวอร์ชันก่อนหน้าซ้ำได้) */
+async function assertNameAvailable(organizationId: string, name: string, exceptLineage?: string): Promise<void> {
   const duplicate = await prisma.serviceFeeTemplate.findFirst({
-    where: { organizationId, name },
+    where: {
+      organizationId,
+      name,
+      ...(exceptLineage === undefined ? {} : { NOT: inLineage(exceptLineage) }),
+    },
     select: { id: true },
   })
   if (duplicate) throw new ServiceFeeError('DUPLICATE_TEMPLATE_NAME', { detail: `name=${name}` })
@@ -159,10 +179,11 @@ async function rethrowDuplicateName(organizationId: string, name: string): Promi
 
 async function rethrowVersionConflict(
   organizationId: string,
-  current: { id: string; name: string },
+  current: { id: string },
+  lineageKey: string,
   nextName: string,
 ): Promise<never> {
-  await assertNameAvailable(organizationId, nextName, current.name)
+  await assertNameAvailable(organizationId, nextName, lineageKey)
   throw new ServiceFeeError('VERSION_NOT_CURRENT', { detail: `template=${current.id} (unique violation)` })
 }
 
@@ -225,7 +246,8 @@ export async function updateServiceFeeTemplate(
   const next = planNextTemplateVersion(current, values)
   if (next === null) return current
 
-  await assertNameAvailable(organizationId, next.values.name, current.name)
+  const lineageKey = await lineageKeyOf(organizationId, current.id)
+  await assertNameAvailable(organizationId, next.values.name, lineageKey)
 
   const updated = await prisma.$transaction(async (tx) => {
     await tx.serviceFeeTemplate.update({
@@ -233,20 +255,15 @@ export async function updateServiceFeeTemplate(
       data: { isCurrent: false, updatedBy: context.actor.id },
     })
 
-    // เปลี่ยนชื่อ = เปลี่ยนทั้งชุด — ประวัติเวอร์ชันจับกลุ่มด้วย `name` จึงต้องตรงกันทุกแถว
-    if (next.values.name !== current.name) {
-      await tx.serviceFeeTemplate.updateMany({
-        where: { organizationId, name: current.name },
-        data: { name: next.values.name, updatedBy: context.actor.id },
-      })
-    }
-
+    // เปลี่ยนชื่อ = ชื่อของเวอร์ชันใหม่เท่านั้น — ห้ามทับชื่อเวอร์ชันเดิม (เคสที่ snapshot เวอร์ชันเดิมต้องเห็นชื่อเดิม
+    // ให้ตรงยอด · `12` §9/`92` §7.1 — mytester7 S7-AG2-05) · ประวัติจับกลุ่มด้วย `lineage_id`
     const template = await tx.serviceFeeTemplate.create({
       data: {
         organizationId,
         ...toCreateData(next.values),
         version: next.version,
         isCurrent: true,
+        lineageId: lineageKey,
         createdBy: context.actor.id,
       },
       select: templateSelect,
@@ -277,7 +294,7 @@ export async function updateServiceFeeTemplate(
     )
 
     return template
-  }).catch(onUniqueViolation(() => rethrowVersionConflict(organizationId, current, next.values.name)))
+  }).catch(onUniqueViolation(() => rethrowVersionConflict(organizationId, current, lineageKey, next.values.name)))
 
   return toRecord(updated)
 }
@@ -285,13 +302,13 @@ export async function updateServiceFeeTemplate(
 /** ชื่อบริษัทที่ยังผูกเทมเพลตชุดนี้อยู่ (ทุกเวอร์ชัน) — `12` §11 ให้ reject พร้อมรายชื่อบริษัท */
 export async function listCompaniesUsingTemplate(
   organizationId: string,
-  templateName: string,
+  lineageKey: string,
 ): Promise<string[]> {
   const rows = await prisma.financeCompany.findMany({
     where: {
       organizationId,
       deletedAt: null,
-      serviceFeeTemplate: { organizationId, name: templateName },
+      serviceFeeTemplate: { organizationId, ...inLineage(lineageKey) },
     },
     select: { name: true },
     orderBy: { name: 'asc' },
@@ -309,9 +326,10 @@ export async function setServiceFeeTemplateActive(
   isActive: boolean,
 ): Promise<ServiceFeeTemplateRecord> {
   const organizationId = context.actor.organizationId
+  const lineageKey = await lineageKeyOf(organizationId, current.id)
 
   if (!isActive) {
-    const companies = await listCompaniesUsingTemplate(organizationId, current.name)
+    const companies = await listCompaniesUsingTemplate(organizationId, lineageKey)
     if (companies.length > 0) {
       throw new ServiceFeeError('TEMPLATE_IN_USE', {
         detail: `template=${current.name} companies=${companies.length}`,
@@ -324,7 +342,7 @@ export async function setServiceFeeTemplateActive(
 
   await prisma.$transaction(async (tx) => {
     await tx.serviceFeeTemplate.updateMany({
-      where: { organizationId, name: current.name },
+      where: { organizationId, ...inLineage(lineageKey) },
       data: { deletedAt, updatedBy: context.actor.id },
     })
 

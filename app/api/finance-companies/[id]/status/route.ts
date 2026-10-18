@@ -2,7 +2,8 @@ import type { NextRequest } from 'next/server'
 import { readJsonBody, toModuleErrorResponse, validationErrorResponse, withApiPermission } from '@/lib/api/http'
 import { getRequestMeta } from '@/lib/auth/request-meta'
 import { getFinanceCompany, setFinanceCompanyStatus } from '@/lib/finance-companies/queries'
-import { financeCompanyStatusSchema } from '@/lib/finance-companies/schemas'
+import { FinanceCompanyError } from '@/lib/finance-companies/errors'
+import { financeCompanyStatusSchema, isSuspendReasonMissing } from '@/lib/finance-companies/schemas'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -22,7 +23,10 @@ export const POST = withApiPermission<RouteContext>(
   toModuleErrorResponse,
   async (request: NextRequest, context, user) => {
     const { id } = await context.params
-    const parsed = financeCompanyStatusSchema.safeParse(await readJsonBody(request))
+    const body = await readJsonBody(request)
+    // ระงับไม่กรอกเหตุผล ⇒ code เฉพาะของโมดูล ไม่ใช่ REQUIRED_MISSING กลาง (mytester7 S7-AG2-06)
+    if (isSuspendReasonMissing(body)) throw new FinanceCompanyError('SUSPEND_REASON_REQUIRED')
+    const parsed = financeCompanyStatusSchema.safeParse(body)
     if (!parsed.success) return validationErrorResponse(parsed.error)
 
     const current = await getFinanceCompany(user, id)

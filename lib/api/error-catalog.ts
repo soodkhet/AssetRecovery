@@ -79,6 +79,10 @@ export const ERROR_CATALOG = {
   INVALID_WHT_RATE: { status: 400, severity: 'reject', source: '24 §6.2' },
   VAT_RATE_OVERLAP: { status: 400, severity: 'reject', source: '24 §6.2' },
   VAT_RATE_NOT_FOUND: { status: 404, severity: 'reject', source: '24 §6.2' },
+  // มติ D7-01 (mytester7 S7-AG2-02/03)
+  VAT_RATE_IN_USE: { status: 400, severity: 'reject', source: '24 §6.2' },
+  VAT_RATE_END_DATE_PAST: { status: 400, severity: 'reject', source: '24 §6.2' },
+  VAT_RATE_GAP: { status: 400, severity: 'reject', source: '24 §6.2' },
   TAX_PROFILE_NOT_FOUND: { status: 404, severity: 'reject', source: '24 §6.2' },
   DUPLICATE_TAX_PROFILE_NAME: { status: 400, severity: 'reject', source: '24 §6.2' },
   TAX_PROFILE_IN_USE: { status: 400, severity: 'reject', source: '24 §6.2' },

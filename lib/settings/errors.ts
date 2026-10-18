@@ -31,6 +31,10 @@ export const SETTINGS_ERROR_CODES = [
   // §6.5 VAT Rate
   'VAT_RATE_NOT_FOUND',
   'VAT_RATE_OVERLAP',
+  // มติ D7-01 (mytester7 S7-AG2-02/03) — ช่วงที่ถูกใช้แล้วห้ามแก้ย้อนหลัง + ห้ามช่องว่าง
+  'VAT_RATE_IN_USE',
+  'VAT_RATE_END_DATE_PAST',
+  'VAT_RATE_GAP',
   // §6.6 Cost Center
   'COST_CENTER_NOT_FOUND',
   'COST_CENTER_IN_USE',
@@ -75,6 +79,9 @@ const HTTP_STATUS: Record<SettingsErrorCode, number> = {
   INVALID_WHT_RATE: 400,
   VAT_RATE_NOT_FOUND: 404,
   VAT_RATE_OVERLAP: 400,
+  VAT_RATE_IN_USE: 400,
+  VAT_RATE_END_DATE_PAST: 400,
+  VAT_RATE_GAP: 400,
   COST_CENTER_NOT_FOUND: 404,
   COST_CENTER_IN_USE: 400,
   BANK_FILE_FORMAT_NOT_FOUND: 404,
@@ -155,6 +162,20 @@ const MESSAGES: Record<SettingsErrorCode, ErrorMessage> = {
   VAT_RATE_OVERLAP: {
     title: 'ช่วงเวลาอัตรา VAT ทับกัน',
     message: 'ช่วงวันที่มีผลของอัตราใหม่ทับกับอัตราที่มีอยู่ — ปิดช่วงของอัตราเดิม (ระบุวันสิ้นสุด) ก่อนเพิ่มอัตราใหม่',
+  },
+  // ข้อความค่าเริ่มต้น — service ส่งข้อความที่ระบุวันที่จริงผ่าน `vatRateViolationMessage()` แทนเสมอ
+  VAT_RATE_IN_USE: {
+    title: 'อัตรานี้มีรายได้ใช้อยู่แล้ว',
+    message:
+      'ช่วงนี้มีรายได้ใช้อัตรานี้แล้ว — เปลี่ยนอัตราหรือย่นช่วงจนรายได้หลุดช่วงไม่ได้ ต้องการเปลี่ยนอัตราให้ปิดช่วงเดิม (วันนี้หรืออนาคต) แล้วเพิ่มอัตราใหม่',
+  },
+  VAT_RATE_END_DATE_PAST: {
+    title: 'ปิดช่วงย้อนหลังไม่ได้',
+    message: 'วันสิ้นสุดต้องเป็นวันนี้หรือหลังจากนี้ — ปิดช่วงย้อนหลังจะทำให้วันที่ผ่านมาไม่มีอัตรา VAT',
+  },
+  VAT_RATE_GAP: {
+    title: 'ช่วงอัตรา VAT ไม่ต่อเนื่อง',
+    message: 'การบันทึกนี้ทำให้มีวันที่ไม่มีอัตรา VAT ระหว่างช่วง — ให้ช่วงใหม่เริ่มวันถัดจากวันสิ้นสุดของช่วงเดิมพอดี',
   },
   COST_CENTER_NOT_FOUND: {
     title: 'ไม่พบศูนย์ต้นทุน',
