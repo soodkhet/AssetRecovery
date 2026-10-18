@@ -26,6 +26,8 @@ import {
   INTAKE_PHOTO_ANGLES,
   INTAKE_PHOTO_ANGLE_LABELS,
   IMEI_MISMATCH_FORM_WARNING,
+  identityMismatchNoun,
+  identityMismatchTitle,
   requiredIntakeIdentity,
   requiresConditionNote,
   type IntakePhotoAngle,
@@ -115,6 +117,8 @@ export function IntakeModal({
   const imeiTouched = imeiActual.trim() !== '' || serialActual.trim() !== ''
   // รูปแบบผิดแสดงแค่ข้อความรูปแบบ — ไม่ขึ้นคำเตือน "ไม่ตรงสัญญา" ซ้อน (UAT BUG-083)
   const mismatch = imeiTouched && !imeiFormatInvalid && !comparison.matched
+  /** เครื่องมีแต่ Serial = เรียก "Serial" ไม่ใช่ "IMEI" (S7-AG1-05) */
+  const mismatchNoun = identityMismatchNoun(comparison)
   /** ช่องที่ต้องกรอกค่าที่ตรวจจริง (UAT BUG-074) — ตัวเดียวกับที่ API บังคับ */
   const requiredIdentity = requiredIntakeIdentity({
     imeiContract: asset.imeiContract,
@@ -264,7 +268,7 @@ export function IntakeModal({
             disabled={submitting || uploading !== null}
             onClick={() => void submit()}
           >
-            {mismatch && forceProceed ? 'ยืนยันรับทั้งที่ IMEI ไม่ตรง' : 'ยืนยันรับเข้าคลัง'}
+            {mismatch && forceProceed ? `ยืนยันรับทั้งที่ ${mismatchNoun} ไม่ตรง` : 'ยืนยันรับเข้าคลัง'}
           </Button>
         </>
       }
@@ -357,11 +361,11 @@ export function IntakeModal({
             </InlineAlert>
           )}
           {mismatch && (
-            <InlineAlert className="mt-3" tone="error" title={IMEI_MISMATCH_FORM_WARNING.title}>
+            <InlineAlert className="mt-3" tone="error" title={identityMismatchTitle(comparison)}>
               {IMEI_MISMATCH_FORM_WARNING.message}
               {forceProceed && (
                 <div className="mt-1 font-semibold">
-                  กด “ยืนยันรับทั้งที่ IMEI ไม่ตรง” อีกครั้งเพื่อรับเข้าคลัง — ระบบจะบันทึกค่าที่ตรวจจริงไว้
+                  กด “ยืนยันรับทั้งที่ {mismatchNoun} ไม่ตรง” อีกครั้งเพื่อรับเข้าคลัง — ระบบจะบันทึกค่าที่ตรวจจริงไว้
                 </div>
               )}
             </InlineAlert>

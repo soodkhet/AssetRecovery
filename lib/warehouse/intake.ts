@@ -106,9 +106,25 @@ export function imeiMismatchWarning(comparison: AssetIdentityComparison): ApiWar
     : 'เคสนี้ไม่มีทั้ง IMEI และ serial ในสัญญา — ตรวจสอบข้อมูลเคสก่อนรับเข้าคลัง'
   return {
     code: 'IMEI_MISMATCH',
-    title: IMEI_MISMATCH_WARNING.title,
+    title: identityMismatchTitle(comparison),
     message: `${IMEI_MISMATCH_WARNING.message} (${detail})`,
   }
+}
+
+/**
+ * คำเรียกช่องที่ไม่ตรง — เครื่องที่มีแต่ Serial ต้องเห็นคำว่า "Serial" ไม่ใช่ "IMEI" (mytester7 S7-AG1-05)
+ * code ยังเป็น `IMEI_MISMATCH` ตัวเดียว (`44` §12) เปลี่ยนแค่ข้อความที่ผู้ใช้เห็น
+ */
+export function identityMismatchNoun(comparison: AssetIdentityComparison): string {
+  const fields = comparison.comparable ? comparison.mismatchedFields : []
+  if (fields.length === 1) return fieldLabel(fields[0]!)
+  return 'IMEI/Serial'
+}
+
+/** หัวข้อคำเตือนไม่ตรงสัญญา ตามช่องที่ไม่ตรงจริง (ฟอร์ม/หลังบันทึก/หน้ารายละเอียด ใช้ตัวเดียวกัน) */
+export function identityMismatchTitle(comparison: AssetIdentityComparison): string {
+  if (!comparison.comparable) return 'สัญญาไม่มี IMEI/Serial ให้เทียบ'
+  return `${identityMismatchNoun(comparison)} ที่ตรวจจริงไม่ตรงกับสัญญา`
 }
 
 /**

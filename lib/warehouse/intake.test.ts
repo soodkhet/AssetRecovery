@@ -7,6 +7,8 @@ import {
   assertIntakeIdentity,
   assertRejectReason,
   IMEI_MISMATCH_FORM_WARNING,
+  identityMismatchNoun,
+  identityMismatchTitle,
   imeiMismatchWarning,
   INTAKE_PHOTO_ANGLES,
   requiredIntakeIdentity,
@@ -146,5 +148,37 @@ describe('assertIntakeIdentity — ต้องกรอกค่าที่ต
 
   it('ข้อความเตือนบนฟอร์ม (ก่อนบันทึก) ไม่อ้างว่า "บันทึกไว้แล้ว" (UAT BUG-083)', () => {
     expect(IMEI_MISMATCH_FORM_WARNING.message).not.toContain('บันทึกค่าที่ตรวจจริงไว้แล้ว')
+  })
+})
+
+describe('คำเตือนไม่ตรงสัญญาเรียกตามช่องที่ไม่ตรงจริง (mytester7 S7-AG1-05)', () => {
+  it('เครื่องมีแต่ Serial กรอก Serial ไม่ตรง = "Serial ที่ตรวจจริงไม่ตรงกับสัญญา" (ไม่ใช่ IMEI)', () => {
+    const serialOnly = compareAssetIdentity(
+      { imeiContract: null, serialContract: 'DMPXK7H2Q1GC' },
+      { imeiActual: null, serialActual: 'dmpxk7h2q1gc' },
+    )
+    expect(serialOnly.matched).toBe(false)
+    expect(identityMismatchNoun(serialOnly)).toBe('Serial')
+    expect(identityMismatchTitle(serialOnly)).toBe('Serial ที่ตรวจจริงไม่ตรงกับสัญญา')
+    expect(imeiMismatchWarning(serialOnly)?.title).toBe('Serial ที่ตรวจจริงไม่ตรงกับสัญญา')
+    expect(imeiMismatchWarning(serialOnly)?.code).toBe('IMEI_MISMATCH')
+  })
+
+  it('IMEI ไม่ตรง = คำว่า IMEI · ไม่ตรงทั้งคู่ = IMEI/Serial · สัญญาไม่มีทั้งคู่ = บอกว่าไม่มีให้เทียบ', () => {
+    const imeiOnly = compareAssetIdentity(
+      { imeiContract: IMEI, serialContract: null },
+      { imeiActual: '355000000000999', serialActual: null },
+    )
+    expect(identityMismatchTitle(imeiOnly)).toBe('IMEI ที่ตรวจจริงไม่ตรงกับสัญญา')
+    const both = compareAssetIdentity(
+      { imeiContract: IMEI, serialContract: 'SN1' },
+      { imeiActual: '355000000000999', serialActual: 'SN2' },
+    )
+    expect(identityMismatchNoun(both)).toBe('IMEI/Serial')
+    const nothing = compareAssetIdentity(
+      { imeiContract: null, serialContract: null },
+      { imeiActual: null, serialActual: 'X' },
+    )
+    expect(identityMismatchTitle(nothing)).toBe('สัญญาไม่มี IMEI/Serial ให้เทียบ')
   })
 })

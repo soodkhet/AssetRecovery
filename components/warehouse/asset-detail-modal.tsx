@@ -7,7 +7,7 @@ import { AssetSummaryHeader } from '@/components/warehouse/asset-summary-header'
 import { Button, InlineAlert, Modal, StatusBadge } from '@/components/ui'
 import { fmtDateTime } from '@/lib/format/datetime'
 import { compareAssetIdentity } from '@/lib/warehouse/imei'
-import { INTAKE_PHOTO_ANGLE_LABELS } from '@/lib/warehouse/intake'
+import { identityMismatchTitle, INTAKE_PHOTO_ANGLE_LABELS } from '@/lib/warehouse/intake'
 import { angleOfIntakePhoto, intakePhotoTitle, groupIntakePhotos } from '@/lib/warehouse/intake-photos'
 import { colorCapacityCheckText } from '@/lib/warehouse/handover-doc'
 import type { AssetDetailDto } from '@/lib/warehouse/types'
@@ -53,7 +53,7 @@ export function AssetDetailModal({
           <AssetSummaryHeader asset={asset} />
 
           {!comparison.matched && (
-            <InlineAlert tone="warning" title="IMEI ที่ตรวจจริงไม่ตรงกับสัญญา">
+            <InlineAlert tone="warning" title={identityMismatchTitle(comparison)}>
               เครื่องนี้ถูกรับเข้าคลังโดยธุรการยืนยันทับคำเตือน — ค่าที่ตรวจจริงถูกบันทึกไว้ครบ
             </InlineAlert>
           )}
