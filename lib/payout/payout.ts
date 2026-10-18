@@ -302,14 +302,20 @@ export function nextPaymentFileVersion(previousFileUrl: string | null): number {
   return matched === null ? 1 : Number(matched[1]) + 1
 }
 
-/** path บน object storage — versioned เช่นกัน (`payment-files` bucket, private) */
+/**
+ * path บน object storage — versioned เช่นกัน (`payment-files` bucket, private)
+ * `retryToken` = path สำรองเมื่อ path ปกติมีไฟล์กำพร้าค้าง (อัปโหลดสำเร็จแต่บันทึกฐานล้ม — mytester7 review M2)
+ * ⇒ แยกโฟลเดอร์ย่อย ชื่อไฟล์คงเดิม (เลขเวอร์ชัน/ชื่อดาวน์โหลดอ่านจากท้าย path ได้เหมือนเดิม) และไม่ทับไฟล์เดิม
+ */
 export function paymentFileStoragePath(input: {
   batchId: string
   idempotencyKey: string
   version: number
   extension: 'csv' | 'txt'
+  retryToken?: string
 }): string {
-  return `payout-batches/${input.batchId}/${paymentFileName(input)}`
+  const folder = input.retryToken === undefined ? '' : `r-${input.retryToken}/`
+  return `payout-batches/${input.batchId}/${folder}${paymentFileName(input)}`
 }
 
 /**

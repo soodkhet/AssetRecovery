@@ -251,6 +251,18 @@ describe('ชื่อ/เวอร์ชันไฟล์โอน (ห้า�
       }),
     ).toBe('payout-batches/batch-1/PB-OUT-25690815-AAA-v2.csv')
   })
+
+  it('mytester7 review M2 — path สำรองเมื่อชนไฟล์กำพร้า: โฟลเดอร์ย่อย ชื่อไฟล์เดิม เลขเวอร์ชันอ่านต่อได้', () => {
+    const path = paymentFileStoragePath({
+      batchId: 'batch-1',
+      idempotencyKey: 'PB-OUT-25690815-AAA',
+      version: 2,
+      extension: 'csv',
+      retryToken: 'a1b2c3d4',
+    })
+    expect(path).toBe('payout-batches/batch-1/r-a1b2c3d4/PB-OUT-25690815-AAA-v2.csv')
+    expect(nextPaymentFileVersion(path)).toBe(3)
+  })
 })
 
 describe('payoutItemTrackingRound (staging E-050)', () => {

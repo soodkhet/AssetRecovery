@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+import { randomBytes, randomUUID } from 'node:crypto'
 import { advanceExcessItemLabel, advanceExcessSource } from '@/lib/advances/advance'
 import { assertPeriodOpenAt } from '@/lib/accounting/period-guard'
 import { loadMonthToDate, loadMonthToDateThroughBatch } from '@/lib/payout/month-to-date-queries'
@@ -1343,6 +1343,9 @@ async function assignVoucherNumbers(
   return issued
 }
 
+/** อัปโหลดไฟล์โอนได้กี่ครั้งต่อคำขอ เมื่อ path ชนไฟล์กำพร้า (mytester7 review M2) */
+const PAYMENT_FILE_UPLOAD_ATTEMPTS = 3
+
 /** mytester7 S7-AG3-03/04 — แพ้การสร้างไฟล์โอนพร้อมกัน (สถานะยังสร้างได้ แต่ไฟล์ถูกสร้างเวอร์ชันใหม่ไปก่อน) */
 function paymentFileVersionConflict(batchId: string, why: string): PayoutError {
   return new PayoutError('PAYMENT_FILE_VERSION_CONFLICT', {
@@ -1484,19 +1487,26 @@ export async function generatePaymentFile(
   const fileHash = sha256Hex(bytes)
   const extension = PAYMENT_FILE_EXTENSION[format.fileType]
   const version = nextPaymentFileVersion(batch.paymentFileUrl)
-  const path = paymentFileStoragePath({ batchId, idempotencyKey, version, extension })
-
   // อัปโหลดก่อนแตะ DB — อัปโหลดไม่ผ่าน = ไม่มีอะไรเปลี่ยนใน DB (ไฟล์กำพร้าใน storage ปลอดภัยกว่า
   // แถวที่ชี้ไปไฟล์ที่ไม่มีจริง) · `upsert: false` ⇒ ไม่ทับไฟล์เวอร์ชันก่อน
   // mytester7 S7-AG3-04 — สองคำขอพร้อมกันได้เลขเวอร์ชันเดียวกัน (path เดียวกัน) ⇒ คนที่อัปโหลดทีหลังโดน
-  // "มีไฟล์อยู่แล้ว" = อีกคำขอสร้างไปก่อน ⇒ 409 ที่บอกความจริง ไม่ใช่ 500
-  try {
-    await uploadPaymentFile({ path, bytes, contentType: PAYMENT_FILE_MIME[format.fileType] })
-  } catch (error) {
-    if (error instanceof PaymentFileStorageError && error.alreadyExists) {
-      throw paymentFileVersionConflict(batchId, `upload ${path} already exists`)
+  // "มีไฟล์อยู่แล้ว" · mytester7 review M2 — แต่ "มีไฟล์อยู่แล้ว" อาจเป็นไฟล์กำพร้าของครั้งก่อนที่อัปโหลดสำเร็จ
+  // แล้วบันทึกฐานล้ม ⇒ ตอบ 409 เฉพาะเมื่อ `payment_file_url` ในฐานเปลี่ยนจริง · ยังเท่าเดิม = ไฟล์กำพร้า ⇒ ใช้ path
+  // สำรอง (โฟลเดอร์ย่อยสุ่ม) แล้วลองใหม่ ไม่ทับไฟล์เดิม (ถ้าอีกคำขอกำลังบันทึกอยู่ เงื่อนไขในธุรกรรมด้านล่างตัดสินเอง)
+  const contentType = PAYMENT_FILE_MIME[format.fileType]
+  let path = paymentFileStoragePath({ batchId, idempotencyKey, version, extension })
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      await uploadPaymentFile({ path, bytes, contentType })
+      break
+    } catch (error) {
+      if (!(error instanceof PaymentFileStorageError && error.alreadyExists)) throw error
+      const latest = await prisma.payoutBatch.findUnique({ where: { id: batchId }, select: { paymentFileUrl: true } })
+      if (latest?.paymentFileUrl !== batch.paymentFileUrl || attempt >= PAYMENT_FILE_UPLOAD_ATTEMPTS) {
+        throw paymentFileVersionConflict(batchId, `upload ${path} already exists`)
+      }
+      path = paymentFileStoragePath({ batchId, idempotencyKey, version, extension, retryToken: randomBytes(4).toString('hex') })
     }
-    throw error
   }
 
   const updated = await prisma.$transaction(async (tx) => {

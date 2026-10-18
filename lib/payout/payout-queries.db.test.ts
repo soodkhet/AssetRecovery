@@ -19,6 +19,8 @@ import { PrismaClient } from '@/lib/generated/prisma/client'
  */
 
 const storage = new Map<string, Uint8Array>()
+/** ใส่ค่าเพื่อจำลอง "อัปโหลดสำเร็จแต่ขั้นถัดไปล้ม" ครั้งเดียว (mytester7 review M2) */
+let failAfterUploadOnce: Error | null = null
 
 vi.mock('@/lib/payout/payment-file-storage', async () => {
   const actual = await vi.importActual<typeof import('@/lib/payout/payment-file-storage')>(
@@ -32,6 +34,11 @@ vi.mock('@/lib/payout/payment-file-storage', async () => {
         throw new actual.PaymentFileStorageError(`ไฟล์ ${input.path} มีอยู่แล้ว (ห้าม overwrite)`, { alreadyExists: true })
       }
       storage.set(input.path, input.bytes)
+      if (failAfterUploadOnce !== null) {
+        const error = failAfterUploadOnce
+        failAfterUploadOnce = null
+        throw error
+      }
     },
     downloadPaymentFile: async (path: string) => {
       const bytes = storage.get(path)
@@ -152,6 +159,7 @@ const generateInput = {
 async function reset(): Promise<void> {
   const tx = db()
   storage.clear()
+  failAfterUploadOnce = null
   // Phase 4.4/4.5 — รอบที่ `completed` ผลิตบัญชีค่าใช้จ่าย (+ exception) และใบ 50 ทวิ ต้องล้างก่อน FK
   // ใบ 50 ทวิ ลบไม่ได้ด้วย trigger (`02` §13 — เลขที่ห้ามขาดช่วง) — ปิดเฉพาะตอนล้างข้อมูลเทสต์
   await tx.$executeRawUnsafe(`ALTER TABLE wht_certificates DISABLE TRIGGER trg_wht_certificates_no_delete`)
@@ -590,9 +598,34 @@ suite('ไฟล์โอนเงิน + idempotency (`17` §6.3/§16 · `13` 
     const losers = settled.filter((outcome): outcome is PromiseRejectedResult => outcome.status === 'rejected')
     expect(losers).toHaveLength(1)
     expect((losers[0]?.reason as { code?: string }).code).toBe('PAYMENT_FILE_VERSION_CONFLICT')
-    expect(storage.size).toBe(2)
+    // ผู้แพ้อาจเห็นฐานยังไม่เปลี่ยน (ผู้ชนะยังไม่ commit) ⇒ อัปโหลด path สำรองที่ไม่มีแถวชี้ถึง (review M2) — path หลักมี 2 ไฟล์
+    expect([...storage.keys()].filter((path) => !path.includes('/r-'))).toHaveLength(2)
     const row = await db().payoutBatch.findUniqueOrThrow({ where: { id: batchId }, select: { paymentFileUrl: true } })
     expect(row.paymentFileUrl).toMatch(/-v2\.csv$/)
+  })
+
+  it('mytester7 review M2 — อัปโหลดสำเร็จแต่บันทึกฐานล้ม (ไฟล์กำพร้าค้าง) ⇒ สร้างใหม่ได้ ไม่ติด 409 ถาวร · ไม่ทับไฟล์กำพร้า', async () => {
+    const batchId = await batchWithOneItem()
+    failAfterUploadOnce = new Error('จำลองบันทึกฐานล้มหลังอัปโหลด')
+    await expect(payout.generatePaymentFile(ctx, batchId, generateInput)).rejects.toThrow('จำลองบันทึกฐานล้มหลังอัปโหลด')
+    const before = await db().payoutBatch.findUniqueOrThrow({ where: { id: batchId }, select: { paymentFileUrl: true } })
+    expect(before.paymentFileUrl).toBeNull()
+    const [orphanPath, orphanBytes] = [...storage.entries()][0] ?? []
+    expect(orphanPath).toMatch(/-v1\.csv$/)
+
+    const outcome = await payout.generatePaymentFile(ctx, batchId, generateInput)
+    expect(outcome.result.generated).toBe(true)
+    expect(outcome.result.fileName).toBe(`${outcome.result.batch.idempotencyKey}-v1.csv`)
+    const row = await db().payoutBatch.findUniqueOrThrow({ where: { id: batchId }, select: { paymentFileUrl: true } })
+    expect(row.paymentFileUrl).not.toBe(orphanPath)
+    expect(row.paymentFileUrl).toMatch(/\/r-[0-9a-f]+\/.*-v1\.csv$/)
+    expect(storage.get(orphanPath ?? '')).toBe(orphanBytes)
+    const file = await payout.readPaymentFile(finance, batchId)
+    expect(file.fileName).toBe(`${outcome.result.batch.idempotencyKey}-v1.csv`)
+
+    // สร้างซ้ำต่อจากไฟล์ใน path สำรอง ⇒ เวอร์ชันเดินต่อ v2 ตามปกติ
+    const again = await payout.generatePaymentFile(ctx, batchId, { ...generateInput, confirmDuplicate: true })
+    expect(again.result.fileName).toBe(`${outcome.result.batch.idempotencyKey}-v2.csv`)
   })
 
   it('ยิงซ้ำโดยไม่ยืนยัน → เตือน DUPLICATE_PAYMENT_FILE และยังไม่สร้างไฟล์ใหม่', async () => {
