@@ -35,4 +35,11 @@ describe('<PayeeTaxRuleCell>', () => {
     expect(html).toContain('ค่าเริ่มต้นตามประเภทผู้รับ')
     expect(html).not.toMatch(/§|ไฟล์ \d/)
   })
+
+  it('mytester7 S7-AG4-03 — outsource ผูก Tax Profile รายคน ⇒ บอกประเภทเงินได้ 40(8) เหมือนแถว 40(2)', () => {
+    const own = { ...in1, payoutSide: 'outsource', taxProfileName: 'MT7 ทดสอบเกณฑ์สะสม', whtPct: 3, incomeCategoryOverride: 'sec_40_8' } as PayeeDto
+    const html = renderToStaticMarkup(<PayeeTaxRuleCell payee={own} settings={settings} />)
+    expect(html).toContain('หัก 40(8) 3.00%')
+    expect(html).toContain('MT7 ทดสอบเกณฑ์สะสม (กำหนดเฉพาะคนนี้)')
+  })
 })
