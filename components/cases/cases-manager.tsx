@@ -1,7 +1,7 @@
 'use client'
 
 import { usePathname } from 'next/navigation'
-import { browserSearchParams, initialUrlUuid, pickUuid, replaceUrlParams } from '@/components/ui/url-state'
+import { browserSearchParams, clampPage, initialUrlUuid, pickUuid, replaceUrlParams } from '@/components/ui/url-state'
 import {
   caseListEmptyView,
   EMPTY_CASE_LIST_FILTERS,
@@ -206,11 +206,17 @@ export function CasesManager({
       setLoading(false)
       return
     }
+    // mytester7 S7-AG6-03 — หน้าเกินหน้าสุดท้าย (รายการลดลง) ⇒ ไปหน้าสุดท้าย (effect โหลดใหม่ให้)
+    const clamped = list.data === undefined ? page : clampPage(page, list.data.total, PAGE_SIZE)
+    if (clamped !== page) {
+      setPage(clamped)
+      return
+    }
     setResult(list.data ?? null)
     setCounts(kpi)
     setError(null)
     setLoading(false)
-  }, [fetchList, fetchCounts])
+  }, [fetchList, fetchCounts, page])
 
   useEffect(() => {
     let cancelled = false
@@ -222,6 +228,12 @@ export function CasesManager({
         setLoading(false)
         return
       }
+      // mytester7 S7-AG6-03 — `?page=99` / Back กลับหน้าลึกหลังรายการลดลง ⇒ แสดงหน้าสุดท้าย (ไม่ใช่ "ยังไม่มีเคส")
+      const clamped = list.data === undefined ? page : clampPage(page, list.data.total, PAGE_SIZE)
+      if (clamped !== page) {
+        setPage(clamped)
+        return
+      }
       setResult(list.data ?? null)
       setCounts(kpi)
       setError(null)
@@ -230,7 +242,7 @@ export function CasesManager({
     return () => {
       cancelled = true
     }
-  }, [fetchList, fetchCounts])
+  }, [fetchList, fetchCounts, page])
 
   function updateFilter(next: Partial<Filters>): void {
     const nextFilters = { ...filters, ...next }

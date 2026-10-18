@@ -12,6 +12,7 @@ import {
   pickParam,
   pickUuid,
   replaceUrlParams,
+  clampPage,
 } from '@/components/ui/url-state'
 
 describe('mergeSearchParams', () => {
@@ -185,5 +186,15 @@ describe('replaceUrlParams — จำ query ที่หน้าเขียน
     const location = stubBrowser('/accounting', '?tab=bank&bank_status=unmatched&cwht_age=d30')
     clearUrlParamsExcept(['tab'])
     expect(location.search).toBe('?tab=bank')
+  })
+})
+
+describe('clampPage — mytester7 S7-AG6-03', () => {
+  it('เกินหน้าสุดท้าย ⇒ หน้าสุดท้าย · ไม่มีข้อมูล ⇒ 1 · ในช่วงคงเดิม', () => {
+    expect(clampPage(99, 118, 20)).toBe(6)
+    expect(clampPage(7, 120, 20)).toBe(6)
+    expect(clampPage(3, 0, 20)).toBe(1)
+    expect(clampPage(2, 118, 20)).toBe(2)
+    expect(clampPage(0, 118, 20)).toBe(1)
   })
 })
