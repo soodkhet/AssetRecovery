@@ -237,6 +237,8 @@ const FIELD_LABELS: LabelMap = {
   authz_version: 'เวอร์ชันสิทธิ์',
   // mytester7 S7-AG2-05 — กลุ่มเวอร์ชันของเทมเพลตค่าบริการ
   lineage_id: 'กลุ่มเวอร์ชันเทมเพลต',
+  // mytester7 review — ช่วงอัตรา VAT ถูกปิดอัตโนมัติเพราะเพิ่มอัตราใหม่
+  closed_by_new_rate: 'ปิดช่วงอัตโนมัติจากการเพิ่มอัตราใหม่',
   manager_ids: 'ผู้จัดการทีม',
   company_id: 'บริษัทไฟแนนซ์',
   company_ids: 'บริษัทไฟแนนซ์',
