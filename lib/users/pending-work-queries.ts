@@ -1,8 +1,12 @@
+import { hasCapability } from '@/lib/auth/permission'
 import { loadSessionUser } from '@/lib/auth/session'
+import type { SessionUser } from '@/lib/auth/types'
+import { APPROVAL_STEP_CAPABILITIES } from '@/lib/compensation/approval'
 import { countQueuesForUser } from '@/lib/dashboard/queries'
 import type { DashboardQueueId } from '@/lib/dashboard/widgets'
 import type { AssignmentStatus, ExpenseStatus } from '@/lib/generated/prisma/enums'
 import { prisma } from '@/lib/prisma'
+import { maskClaimAmounts } from '@/lib/users/pending-work'
 import type {
   UserApprovalQueueDto,
   UserOpenAssignmentDto,
@@ -142,11 +146,24 @@ async function loadApprovalQueues(organizationId: string, userId: string): Promi
   )
 }
 
-/** `GET /api/users/:id/pending-work` — งานค้างทุกชนิด (ผู้เรียกผ่านยาม scope ของ `getUser()` มาแล้ว) */
-export async function loadUserPendingWork(organizationId: string, userId: string): Promise<UserPendingWorkDto> {
+/** ผู้เรียกดูใบเบิกได้ไหม — capability ชุดเดียวกับ `GET /api/claims` */
+export function canViewClaims(viewer: Pick<SessionUser, 'isSuperadmin' | 'capabilities'>): boolean {
+  return APPROVAL_STEP_CAPABILITIES.some((code) => hasCapability(viewer, 'view', code))
+}
+
+/**
+ * `GET /api/users/:id/pending-work` — งานค้างทุกชนิด (ผู้เรียกผ่านยาม scope ของ `getUser()` มาแล้ว)
+ * mytester7 security L2:
+ *  · ยอดเงินใบเบิกส่งเฉพาะผู้เรียกที่ดูใบเบิกได้ (ไม่งั้นส่งแค่ชนิด/จำนวน)
+ *  · คิวรออนุมัติ (นับตามสิทธิ์/scope ของ**ผู้ใช้เป้าหมาย** ซึ่งอาจกว้างกว่าผู้เรียก) ส่งเฉพาะผู้เรียก scope ทั้งองค์กร —
+ *    การนับตัดตาม scope ของผู้เรียกต้องแยกนับทุกคิวใหม่ทั้งชุด (ซับซ้อนเกินคุ้ม) · ผู้เรียก scope ย่อยไม่ได้กล่องเตือนนี้
+ */
+export async function loadUserPendingWork(viewer: SessionUser, userId: string): Promise<UserPendingWorkDto> {
+  const organizationId = viewer.organizationId
+  const globalViewer = viewer.isSuperadmin || viewer.scope.kind === 'global'
   const [blockers, approvalQueues] = await Promise.all([
     loadTeamChangeBlockers(organizationId, userId),
-    loadApprovalQueues(organizationId, userId),
+    globalViewer ? loadApprovalQueues(organizationId, userId) : Promise.resolve([]),
   ])
-  return { ...blockers, approvalQueues }
+  return { ...maskClaimAmounts(blockers, canViewClaims(viewer)), approvalQueues }
 }

@@ -19,6 +19,6 @@ export const GET = withApiPermission<RouteContext>(
   async (_request: NextRequest, context, user) => {
     const { id } = await context.params
     const target = await getUser(user, id)
-    return Response.json({ data: await loadUserPendingWork(user.organizationId, target.id) })
+    return Response.json({ data: await loadUserPendingWork(user, target.id) })
   },
 )

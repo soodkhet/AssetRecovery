@@ -37,8 +37,8 @@ import {
   setAuthPassword,
   syncAuthEmail,
 } from '@/lib/users/provisioning'
-import { blocksTeamChange, isTeamOrGroupChange, teamChangeBlockMessage } from '@/lib/users/pending-work'
-import { loadTeamChangeBlockers, type TeamChangeReadClient } from '@/lib/users/pending-work-queries'
+import { blocksTeamChange, isTeamOrGroupChange, maskClaimAmounts, teamChangeBlockMessage } from '@/lib/users/pending-work'
+import { canViewClaims, loadTeamChangeBlockers, type TeamChangeReadClient } from '@/lib/users/pending-work-queries'
 import type { UserListQuery } from '@/lib/users/schemas'
 import type { UserDto } from '@/lib/users/types'
 import {
@@ -592,12 +592,12 @@ export async function updateUser(
     { teamId: values.teamId, roleGroup: role.roleGroup },
   )
   // มติ D7-03 — ตรวจก่อนเตรียมข้อมูลรับเงิน (ปฏิเสธเร็ว) แล้วตรวจซ้ำใน transaction กันงานที่เพิ่งถูกมอบระหว่างนั้น
-  if (teamOrGroupChange) await assertNoTeamChangeBlockers(organizationId, current.id, prisma)
+  if (teamOrGroupChange) await assertNoTeamChangeBlockers(context.actor, current.id, prisma)
   const preparedPayment = await preparePayment(context.actor, current.id, role.roleGroup, payment)
 
   let paymentResult: UserPaymentWriteResult | null = null
   const updated = await prisma.$transaction(async (tx) => {
-    if (teamOrGroupChange) await assertNoTeamChangeBlockers(organizationId, current.id, tx)
+    if (teamOrGroupChange) await assertNoTeamChangeBlockers(context.actor, current.id, tx)
     const user = await tx.user.update({
       where: { id: current.id },
       data: {
@@ -679,11 +679,15 @@ export async function updateUser(
  * หรือใบเบิกไม่ผูกงานที่ยังอยู่ในสายอนุมัติ · ข้อความระบุเลขเคส/ใบเบิกที่ต้องจัดการก่อน
  */
 async function assertNoTeamChangeBlockers(
-  organizationId: string,
+  actor: SessionUser,
   userId: string,
   client: TeamChangeReadClient,
 ): Promise<void> {
-  const blockers = await loadTeamChangeBlockers(organizationId, userId, client)
+  // ยอดเงินใบเบิกในข้อความเฉพาะผู้ที่ดูใบเบิกได้ (mytester7 security L2)
+  const blockers = maskClaimAmounts(
+    await loadTeamChangeBlockers(actor.organizationId, userId, client),
+    canViewClaims(actor),
+  )
   if (!blocksTeamChange(blockers)) return
   throw new UserError('USER_HAS_OPEN_ASSIGNMENTS', {
     message: teamChangeBlockMessage(blockers),

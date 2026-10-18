@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   blocksTeamChange,
   isTeamOrGroupChange,
+  maskClaimAmounts,
   suspendWarnings,
   teamChangeBlockers,
   teamChangeBlockMessage,
@@ -82,5 +83,25 @@ describe('กล่องยืนยันระงับเตือนงา�
     })
     expect(lines[0]).toContain('งานภาคสนามที่ยังไม่จบ 1 เคส (SPC-1)')
     expect(lines[1]).toContain('ใบเบิกของผู้ใช้ที่รออนุมัติ/ถูกตีกลับ 1 รายการ')
+  })
+})
+
+describe('ซ่อนยอดเงินใบเบิกจากผู้ที่ดูใบเบิกไม่ได้ (mytester7 security L2)', () => {
+  const work = {
+    openAssignments: [],
+    pendingClaims: [{ expenseId: 'e1', expenseType: 'hotel' as const, grossSatang: 79_999, status: 'pending_approval' as const }],
+  }
+
+  it('ดูใบเบิกได้ ⇒ คงยอด · ดูไม่ได้ ⇒ ยอดเป็น null แต่ยังนับจำนวน/ชนิด (ยังกันการย้าย)', () => {
+    expect(maskClaimAmounts(work, true)).toBe(work)
+    const masked = maskClaimAmounts(work, false)
+    expect(masked.pendingClaims[0]?.grossSatang).toBeNull()
+    expect(blocksTeamChange(masked)).toBe(true)
+  })
+
+  it('ข้อความเมื่อซ่อนยอด: มีชนิดใบเบิก ไม่มียอดเงิน', () => {
+    const message = teamChangeBlockMessage(maskClaimAmounts(work, false))
+    expect(message).toContain('1 รายการ')
+    expect(message).not.toMatch(/฿|799\.99/)
   })
 })

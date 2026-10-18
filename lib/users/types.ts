@@ -54,7 +54,8 @@ export interface UserOpenAssignmentDto {
 export interface UserPendingClaimDto {
   expenseId: string
   expenseType: ExpenseType
-  grossSatang: number
+  /** `null` = ผู้เรียกไม่มีสิทธิ์ดูใบเบิก ⇒ ส่งแค่ชนิด/จำนวน ไม่ส่งยอดเงิน (mytester7 security L2) */
+  grossSatang: number | null
   status: ExpenseStatus
 }
 

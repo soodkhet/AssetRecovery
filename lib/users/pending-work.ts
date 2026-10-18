@@ -25,6 +25,15 @@ export function isTeamOrGroupChange(
   return before.teamId !== after.teamId || before.roleGroup !== after.roleGroup
 }
 
+/**
+ * ซ่อนยอดเงินใบเบิกจากผู้เรียกที่ไม่มีสิทธิ์ดูใบเบิก (mytester7 security L2) — ยังเห็นชนิด/จำนวนพอให้รู้ว่าต้องจัดการ
+ * ก่อนย้าย · สิทธิ์ดูใบเบิก = capability ชุดเดียวกับรายการใบเบิก (`GET /api/claims`)
+ */
+export function maskClaimAmounts<T extends Pick<UserPendingWorkDto, 'pendingClaims'>>(work: T, canViewClaims: boolean): T {
+  if (canViewClaims) return work
+  return { ...work, pendingClaims: work.pendingClaims.map((item) => ({ ...item, grossSatang: null })) }
+}
+
 /** มีงานที่กันการย้ายทีม/กลุ่มไหม */
 export function blocksTeamChange(work: Pick<UserPendingWorkDto, 'openAssignments' | 'pendingClaims'>): boolean {
   return work.openAssignments.length > 0 || work.pendingClaims.length > 0
@@ -44,8 +53,10 @@ export function teamChangeBlockers(work: Pick<UserPendingWorkDto, 'openAssignmen
     parts.push(`งานภาคสนามที่ยังไม่จบ ${refs.length} เคส (${listed(refs, 'เคส')})`)
   }
   if (work.pendingClaims.length > 0) {
-    const claims = work.pendingClaims.map(
-      (item) => `${EXPENSE_TYPE_LABEL[item.expenseType]} ${fmtSatangSymbol(item.grossSatang)}`,
+    const claims = work.pendingClaims.map((item) =>
+      item.grossSatang === null
+        ? EXPENSE_TYPE_LABEL[item.expenseType]
+        : `${EXPENSE_TYPE_LABEL[item.expenseType]} ${fmtSatangSymbol(item.grossSatang)}`,
     )
     parts.push(`ใบเบิกที่ไม่ผูกเคสซึ่งรออนุมัติ/ถูกตีกลับ ${claims.length} รายการ (${listed(claims, 'รายการ')})`)
   }
