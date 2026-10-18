@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useState } from 'react'
 import { Button, Field, InlineAlert, Modal, ModalCancelButton, Select, Textarea, useToast } from '@/components/ui'
-import { callApi, jsonRequest } from '@/lib/api/types'
+import { callApi, jsonRequest, type ApiWarning } from '@/lib/api/types'
 import {
   MATCH_TARGET_LABEL,
   allowedTargetKind,
@@ -40,6 +40,9 @@ export function ManualMatchModal({
   const [targetId, setTargetId] = useState('')
   const [note, setNote] = useState('')
   const [saving, setSaving] = useState(false)
+  // mytester7 S7-AG3-06 — ระหว่างเปิดกล่อง มีคน/แท็บอื่นจับคู่รายการนี้ไปแล้ว ⇒ server เตือน ALREADY_MATCHED
+  // ⇒ แสดงคำเตือนในกล่อง + เปลี่ยนเป็นโหมด "เปลี่ยนการจับคู่" (ต้องมีเหตุผล) ให้ผู้ใช้ตัดสินใจ · ตารางด้านหลังโหลดใหม่
+  const [serverRematch, setServerRematch] = useState<ApiWarning | null>(null)
 
   useEffect(() => {
     if (transaction === null) return
@@ -60,7 +63,8 @@ export function ManualMatchModal({
 
   const kind = allowedTargetKind(transaction.amountSatang)
   const selected = candidates.find((candidate) => candidate.id === targetId)
-  const isRematch = transaction.matchStatus === 'auto_matched' || transaction.matchStatus === 'manual_matched'
+  const wasMatchedOnOpen = transaction.matchStatus === 'auto_matched' || transaction.matchStatus === 'manual_matched'
+  const isRematch = wasMatchedOnOpen || serverRematch !== null
   // เงินรับรอตรวจสอบ (มติ PO U41) ⇒ ต้องบอกเสมอว่าทราบที่มาจากอะไร
   const fromSuspense = suspenseMatchRequiresNote(transaction.matchStatus)
   // staging E-057 — รอบจ่ายที่จับคู่กับรายการอื่นแล้ว: จับเพิ่มได้ (1:N) แต่ต้องยืนยันพร้อมเหตุผล
@@ -90,6 +94,10 @@ export function ManualMatchModal({
     }
     if (result.warning !== undefined) {
       showToast({ tone: 'warning', title: result.warning.title, description: result.warning.message })
+      if (result.warning.code === 'ALREADY_MATCHED') {
+        setServerRematch(result.warning)
+        onMatched()
+      }
       return
     }
 
@@ -137,7 +145,14 @@ export function ManualMatchModal({
           </div>
         </div>
 
-        {isRematch && (
+        {serverRematch !== null && (
+          <InlineAlert tone="warning" title={serverRematch.title}>
+            {serverRematch.message} — ระหว่างที่เปิดหน้าต่างนี้ มีการจับคู่รายการนี้ไปแล้ว ตารางด้านหลังโหลดสถานะล่าสุดให้แล้ว
+            ถ้าไม่ต้องการเปลี่ยน ให้กดยกเลิก
+          </InlineAlert>
+        )}
+
+        {wasMatchedOnOpen && serverRematch === null && (
           <InlineAlert tone="warning" title="รายการนี้จับคู่ไปแล้ว">
             การยืนยันจะเปลี่ยนการจับคู่เดิม ({transaction.matchedRef ?? '—'}) — เงินรับที่สร้างจากการจับคู่เดิม
             จะถูกถอนออกและบันทึกลง audit พร้อมเหตุผลที่กรอก
