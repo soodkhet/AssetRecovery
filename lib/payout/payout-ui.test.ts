@@ -4,6 +4,7 @@ import { withFieldsSuffix } from '@/lib/api/types'
 import { missingPayeeBankFields } from '@/lib/payout/payout'
 import {
   payoutWhtThresholdNote,
+  payoutItemWhtNote,
   payoutWhtCertificateLinks,
   canCancelPayout,
   defaultPayoutBankAccountId,
@@ -204,5 +205,43 @@ describe('mytester F-08 — ชื่อฟิลด์ใน toast ตอนบ
     const toast = withFieldsSuffix('ข้อมูลไม่ครบ', fields)
     expect(toast).not.toMatch(/bank_name|account_number/)
     expect(toast).toContain('เลขบัญชี')
+  })
+})
+
+describe('payoutItemWhtNote — ป้ายภาษีของรายการในรอบจ่าย (mytester7 S7-AG4-02)', () => {
+  const base = {
+    source: 'expense' as const,
+    whtBaseIncluded: true,
+    whtPctSnapshot: 3,
+    whtSatang: 0,
+    whtIncomeCategory: 'sec_40_8' as const,
+    taxProfileName: 'MT7 ทดสอบเกณฑ์สะสม',
+    whtCarriedBaseSatang: 0,
+    whtMonthToDateBaseSatang: 320_000,
+  }
+
+  it('ยังไม่ถึงเกณฑ์สะสมต่อเดือน ⇒ บอกเหตุผล + ยอดสะสม (เดิม ฿0.00 เปล่า ๆ)', () => {
+    expect(payoutItemWhtNote(base)).toBe(
+      '3.00% · เงินได้ 40(8) · MT7 ทดสอบเกณฑ์สะสม · ยังไม่หัก — ยอดสะสมเดือนนี้ ฿3,200.00 ยังไม่ถึงเกณฑ์ขั้นต่ำ',
+    )
+  })
+
+  it('นับเกณฑ์ต่อรอบ (ไม่มียอดสะสม) ⇒ บอกว่ายอดในรอบนี้ยังไม่ถึงเกณฑ์', () => {
+    expect(payoutItemWhtNote({ ...base, whtMonthToDateBaseSatang: null })).toContain('ยอดในรอบนี้ยังไม่ถึงเกณฑ์ขั้นต่ำ')
+  })
+
+  it('หักแล้ว ⇒ อัตรา · ประเภทเงินได้ · ยอดยกมา · ยอดสะสม', () => {
+    expect(payoutItemWhtNote({ ...base, whtSatang: 10_500, whtCarriedBaseSatang: 320_000, whtMonthToDateBaseSatang: 350_000 })).toBe(
+      '3.00% · เงินได้ 40(8) · MT7 ทดสอบเกณฑ์สะสม · รวมยอดรอบก่อนในเดือน ฿3,200.00 · ยอดสะสมเดือนนี้ ฿3,500.00',
+    )
+  })
+
+  it('40(2) ไม่มีเกณฑ์ขั้นต่ำ · นอกฐาน/เงินทดรอง/ไม่มีอัตรา ⇒ ไม่มีป้ายเกณฑ์', () => {
+    expect(payoutItemWhtNote({ ...base, whtIncomeCategory: 'sec_40_2', whtPctSnapshot: 0, whtMonthToDateBaseSatang: null })).toBe(
+      '0.00% · เงินได้ 40(2)',
+    )
+    expect(payoutItemWhtNote({ ...base, whtBaseIncluded: false })).toBeNull()
+    expect(payoutItemWhtNote({ ...base, source: 'advance' })).toBeNull()
+    expect(payoutItemWhtNote({ ...base, whtPctSnapshot: null })).toBeNull()
   })
 })
