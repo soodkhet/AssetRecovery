@@ -18,6 +18,7 @@ import {
   type CaseBoardDto,
   type CaseBoardStatus,
   type DashboardOverviewDto,
+  type DashboardQueueDef,
   type DashboardQueueId,
   type DashboardSetupDto,
 } from '@/lib/dashboard/widgets'
@@ -256,6 +257,23 @@ async function loadSetupChecklist(user: SessionUser): Promise<DashboardSetupDto 
     compensationPlans,
     payees,
   })
+}
+
+/**
+ * นับเฉพาะคิวที่ระบุของผู้ใช้คนหนึ่ง (กติกามองเห็น/scope เดียวกับแดชบอร์ดของเขาเอง) — คิวที่เขามองไม่เห็นถูกตัดทิ้ง
+ * ใช้เตือนงานรออนุมัติก่อนระงับผู้ใช้ (mytester7 S7-AG7-04 — `lib/users/pending-work-queries.ts`)
+ */
+export async function countQueuesForUser(
+  user: SessionUser,
+  ids: readonly DashboardQueueId[],
+): Promise<Array<{ def: DashboardQueueDef; count: number; capped: boolean }>> {
+  const defs = visibleDashboardQueues(user).filter((def) => ids.includes(def.id))
+  return Promise.all(
+    defs.map(async (def) => {
+      const counted = await QUEUE_COUNTERS[def.id](user)
+      return { def, count: Math.max(0, counted.count), capped: counted.capped === true }
+    }),
+  )
 }
 
 /** `GET /api/dashboard` — ภาพรวมของผู้ใช้คนนี้ (คิวงาน + กระดานเคส + แหล่ง KPI) */

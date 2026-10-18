@@ -19,6 +19,7 @@
 | v3.3 | 03/10/2569 | **DEC-010** — Login รับอีเมลหรือ username (§6.1) · ยกเลิกลิงก์คำเชิญของ D1: ผู้ดูแลตั้งรหัสผ่านให้ + บังคับผู้ใช้เปลี่ยนเองครั้งแรก (`/auth/change-password`, `PASSWORD_CHANGE_REQUIRED`) · เพิ่ม endpoint `POST /api/auth/change-password` (§14) · หน้า `/auth/set-password` คงไว้เป็นปลายทางลิงก์จาก Supabase (ลิงก์เชิญเดิมที่ค้าง / ลืมรหัสผ่าน D2) |
 | v3.4 | 05/10/2569 | **มติ PO 05/10/2569 (U6/O43 D2/D5/D11)** — §17: ผู้ใช้กลุ่ม `finance_company` login ไม่ได้เมื่อบริษัทไม่ `active` (`COMPANY_SUSPENDED` · signOut + audit login failed) และหลัง login ไป `/portal` เสมอ · หน้า/API ภายในตอบผู้ใช้บริษัท 403 / เด้งไป `/portal` (บังคับที่ `checkPermission()` + `requireInternalSession()`/`requireInternalSessionPage()`) · ผู้ใช้ภายใน/Superadmin เปิด `/portal` → `/dashboard` — sync `97` v5.1 |
 | v3.5 | 05/10/2569 | **มติ PO U64 (UAT BUG-140)** — §10: login ที่ล้มเหลวด้วยตัวตน/รหัสผ่านต้องตอบด้วยเวลาใกล้เคียงกันไม่ว่าบัญชีมีจริงหรือไม่ (กันไล่เดา username จากเวลาตอบ) — (1) ทางที่ไม่พบบัญชีเรียก Auth จำนวนครั้งเท่าทางปกติ (อ่านบัญชีด้วย uid หลอก + ตรวจรหัสกับอีเมลหลอก) (2) ทุกการตอบ `INVALID_CREDENTIALS` รอให้ครบเวลาขั้นต่ำคงที่ 800 ms นับจากรับคำขอ (`lib/auth/login-timing.ts`) · audit failed login ยังลงครบทุกครั้ง · ไม่แตะการตั้งค่า Supabase Auth (rate limit เดิม) · login สำเร็จ/ปฏิเสธหลังรหัสถูก (`ACCOUNT_INACTIVE` ฯลฯ) ไม่ถูกถ่วง |
+| v3.6 | 19/10/2569 | **มติ D7-02 (mytester7 S7-AG7-05)** — §17: session cache ต่อ instance ต้องตรวจเวอร์ชันสิทธิ์กับฐานทุก request (query เดียว) ก่อนใช้ — การเปลี่ยนสิทธิ์/สถานะมีผลทันทีทุก instance (เดิม instance อื่นถือค่าเก่าได้ถึง TTL 5 นาที) · schema `02` v4.77 |
 | v3.1 | 04/07/2569 | แก้จำนวน role อ้างอิง "14" → "15" ตามการนับใหม่ในไฟล์ 07 v2.2 / seed data ไฟล์ 02 §12 (แก้ตัวเลขอ้างอิงเท่านั้น ไม่กระทบ auth logic) |
 
 ขอบเขตเอกสารนี้: กลไก Authentication/Session/Route Guard เชิงเทคนิค — วิธี login, การตรวจสอบ session, การ guard route ตาม permission
@@ -192,7 +193,7 @@ sequenceDiagram
 ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions)
 
 - **Auth (Supabase Auth/JWT) แยกจาก Permission (backend middleware) เสมอ** — สอดคล้อง DEC-002 ใน `01-architecture.md` §6.1 ไม่ใช้ Supabase RLS
-- **Role + scope cache ใน server session** ไม่ query DB ทุก request — ตาม `01-architecture.md` §6.1
+- **Role + scope cache ใน server session** ไม่โหลด role/capability/scope เต็มจาก DB ทุก request — ตาม `01-architecture.md` §6.1 · **แต่ทุก request ตรวจ "เวอร์ชันสิทธิ์" (`users.authz_version` + `roles.authz_version` — DB trigger เดินเอง) ด้วย query เดียวก่อนใช้ค่าใน cache** — เวอร์ชันไม่ตรง/ตรวจไม่ได้ = ทิ้ง cache โหลดใหม่ ⇒ ระงับ/ถอดหรือคืนสิทธิ์/เปลี่ยน role-capability/ทีม/บริษัท มีผลกับคำขอถัดไปทุก instance ไม่มี window (มติ D7-02 · 19/10/2569)
 - **API permission สำคัญกว่า UI เสมอ** — UI hide/disable เป็นแค่ UX (ข้อ 8, 10)
 - **User ที่ status ≠ active ห้าม login เด็ดขาด** (ข้อ 10)
 - **ผู้ใช้บริษัทไฟแนนซ์: บริษัทต้อง `active` ทั้งตอน login และทุก request ของพอร์ทัล** (`COMPANY_SUSPENDED` — มติ PO 05/10/2569 O43 D5) · ผู้ใช้บริษัทใช้พอร์ทัลทางเดียว — หน้า/API ภายในปฏิเสธ (O43 D2 · `97` §11)

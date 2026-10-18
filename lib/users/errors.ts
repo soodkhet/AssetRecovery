@@ -19,6 +19,7 @@ export const USER_ERROR_CODES = [
   'INVALID_USER_SCOPE',
   'ROLE_NOT_FOUND',
   'AUTH_ACCOUNT_SYNC_FAILED',
+  'USER_HAS_OPEN_ASSIGNMENTS',
 ] as const
 
 export type UserErrorCode = (typeof USER_ERROR_CODES)[number]
@@ -35,6 +36,7 @@ const HTTP_STATUS: Record<UserErrorCode, number> = {
   ROLE_NOT_FOUND: 404,
   // 502 = ปลายทางภายนอก (Supabase Auth) ไม่ตอบ/ปฏิเสธ ไม่ใช่ข้อมูลของผู้เรียกผิด
   AUTH_ACCOUNT_SYNC_FAILED: 502,
+  USER_HAS_OPEN_ASSIGNMENTS: 400,
 }
 
 const MESSAGES: Record<UserErrorCode, ErrorMessage> = {
@@ -77,6 +79,12 @@ const MESSAGES: Record<UserErrorCode, ErrorMessage> = {
     message:
       'ระบบยืนยันตัวตน (Supabase Auth) ปฏิเสธหรือไม่ตอบ — ตรวจรหัสผ่านให้ตรงนโยบายของ Supabase project แล้วลองใหม่',
   },
+  // มติ D7-03 (mytester7 S7-AG7-01/03) — ข้อความจริงระบุเลขเคส/ใบเบิกที่ค้าง (ส่ง `message` ตอนโยน)
+  USER_HAS_OPEN_ASSIGNMENTS: {
+    title: 'ย้ายทีม/กลุ่มไม่ได้ — ยังมีงานค้าง',
+    message:
+      'ผู้ใช้คนนี้ยังมีงานภาคสนามที่ยังไม่จบหรือใบเบิกที่รออนุมัติ — มอบหมายงานให้คนอื่นต่อ และให้ผู้อนุมัติพิจารณาใบเบิกให้จบก่อน จึงจะย้ายทีม/กลุ่มได้',
+  },
 }
 
 export function userErrorStatus(code: UserErrorCode): number {
@@ -88,8 +96,13 @@ export function userErrorMessage(code: UserErrorCode): ErrorMessage {
 }
 
 export class UserError extends ModuleError<UserErrorCode> {
-  constructor(code: UserErrorCode, options?: { detail?: string; context?: Record<string, unknown> }) {
-    super(code, MESSAGES[code], HTTP_STATUS[code], options)
+  /** `message` = ข้อความเฉพาะกรณีแทนข้อความกลางของ code (เช่น รายชื่อเคสที่ค้าง) */
+  constructor(
+    code: UserErrorCode,
+    options?: { detail?: string; context?: Record<string, unknown>; message?: string },
+  ) {
+    const messages = options?.message === undefined ? MESSAGES[code] : { ...MESSAGES[code], message: options.message }
+    super(code, messages, HTTP_STATUS[code], { detail: options?.detail, context: options?.context })
     this.name = 'UserError'
   }
 }

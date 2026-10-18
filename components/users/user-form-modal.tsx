@@ -37,7 +37,8 @@ import { PASSWORD_MIN_LENGTH } from '@/lib/auth/schemas'
 import { canManageAccountIn } from '@/lib/users/auth-account'
 import { MANAGE_PAYEE_PROFILE_CAPABILITY } from '@/lib/payees/payee'
 import { userCreateSchema, userUpdateSchema } from '@/lib/users/schemas'
-import type { UserDto } from '@/lib/users/types'
+import { blocksTeamChange, isTeamOrGroupChange, teamChangeBlockMessage } from '@/lib/users/pending-work'
+import type { UserDto, UserPendingWorkDto } from '@/lib/users/types'
 import { requiredScopeFor } from '@/lib/users/user'
 import { TEAM_SIDE_LABEL } from '@/lib/ui/status-badge'
 
@@ -187,14 +188,40 @@ export function UserFormModal({
   const groupRoles = roles.filter((role) => role.roleGroup === form.roleGroup)
   const groupTeams = teams.filter((team) => team.side === (form.roleGroup === 'outsource' ? 'outsource' : 'inhouse'))
 
+  /**
+   * งานค้างของผู้ใช้ (มติ D7-03 · mytester7 S7-AG7-01/03) — โหลดครั้งแรกที่ผู้ดูแลเปลี่ยนทีม/กลุ่ม
+   * เพื่อเตือนก่อนกดบันทึก · API ตรวจซ้ำและปฏิเสธเสมอ (`USER_HAS_OPEN_ASSIGNMENTS`)
+   */
+  const [pendingWork, setPendingWork] = useState<UserPendingWorkDto | null>(null)
+  const [pendingWorkRequested, setPendingWorkRequested] = useState(false)
+
+  function ensurePendingWork(): void {
+    if (user === null || pendingWorkRequested) return
+    setPendingWorkRequested(true)
+    void callApi<UserPendingWorkDto>(`/api/users/${user.id}/pending-work`).then((result) => {
+      if (result.data !== undefined) setPendingWork(result.data)
+    })
+  }
+
   function set<K extends keyof FormState>(key: K, value: FormState[K]): void {
+    if (key === 'teamId') ensurePendingWork()
     setForm((current) => ({ ...current, [key]: value }))
   }
 
   /** เปลี่ยนกลุ่ม = ล้าง role + สังกัดที่ไม่เกี่ยวกับกลุ่มใหม่ทิ้ง (cascading — `08` §8) */
   function changeRoleGroup(roleGroup: RoleGroup): void {
+    ensurePendingWork()
     setForm((current) => ({ ...current, roleGroup, roleId: '', teamId: '', companyId: '' }))
   }
+
+  const teamChangeBlocked =
+    user !== null &&
+    pendingWork !== null &&
+    blocksTeamChange(pendingWork) &&
+    isTeamOrGroupChange(
+      { teamId: user.teamId, roleGroup: user.roleGroup },
+      { teamId: requiredScopeFor(form.roleGroup) === 'team' && form.teamId !== '' ? form.teamId : null, roleGroup: form.roleGroup },
+    )
 
   const showPayment = canManagePayment && hasPaymentSection(form.roleGroup)
   /** มติ PO U164 — ฝั่งของผู้รับตามทีม/กลุ่มที่เลือกในฟอร์ม (ตรรกะเดียวกับรอบจ่าย) · เปลี่ยนแล้วช่อง Tax Profile อัปเดตทันที */
@@ -440,7 +467,13 @@ export function UserFormModal({
           </InlineAlert>
         )}
 
-        {isEdit && user.roleGroup !== form.roleGroup && (
+        {teamChangeBlocked && pendingWork !== null && (
+          <InlineAlert tone="error" title="ย้ายทีม/กลุ่มไม่ได้ — ยังมีงานค้าง">
+            {teamChangeBlockMessage(pendingWork)}
+          </InlineAlert>
+        )}
+
+        {isEdit && user.roleGroup !== form.roleGroup && !teamChangeBlocked && (
           <InlineAlert tone="warning" title="กำลังย้ายผู้ใช้ข้ามกลุ่ม">
             การเปลี่ยนกลุ่ม/บทบาทเปลี่ยนขอบเขตข้อมูลที่ผู้ใช้คนนี้มองเห็นทันทีหลังบันทึก
           </InlineAlert>

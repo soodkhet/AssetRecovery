@@ -55,6 +55,17 @@ export interface SessionUser {
    * optional: ไม่ระบุ = false (fixture เดิมของ test ไม่ต้องแก้)
    */
   mustChangePassword?: boolean
+  /**
+   * เวอร์ชันสิทธิ์ตอนโหลดจากฐาน (`users.authz_version` + `roles.authz_version` — มติ D7-02)
+   * cache ต่อ instance ใช้ค่านี้เทียบกับฐานทุก request · optional: ไม่ระบุ = ถือว่าเก่า โหลดใหม่เสมอ
+   */
+  authzVersion?: AuthzVersion
+}
+
+/** เวอร์ชันสิทธิ์ — DB trigger เดินเองทุกครั้งที่ข้อมูลที่ session ใช้ตัดสินสิทธิ์เปลี่ยน (migration `20261019100000_authz_version`) */
+export interface AuthzVersion {
+  user: number
+  role: number
 }
 
 /** ข้อมูล session ที่ส่งลงฝั่ง client ได้ (ไม่มีข้อมูลอ่อนไหวเกินจำเป็น) */

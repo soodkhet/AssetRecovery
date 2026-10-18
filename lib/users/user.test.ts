@@ -143,6 +143,47 @@ describe('describeUserChanges (เหตุผลที่ระบบสร้�
   it('กดบันทึกโดยไม่ได้แก้อะไร', () => {
     expect(describeUserChanges(before, before)).toBe('แก้ไขข้อมูลผู้ใช้ (ไม่มีฟิลด์เปลี่ยน)')
   })
+
+  it('mytester7 S7-AG7-02 — ย้ายกลุ่ม/ทีม: ระบุกลุ่มและทีม จาก → ไป · บทบาทชื่อซ้ำข้ามกลุ่มต่อท้ายกลุ่ม', () => {
+    const inhouse = {
+      ...normalizeUserValues(base),
+      roleId: 'role-in',
+      roleName: 'พนักงานติดตามทรัพย์',
+      roleGroup: 'inhouse' as const,
+      teamId: 'team-in',
+      teamName: 'ทีม IN',
+      companyName: null,
+    }
+    const outsource = { ...inhouse, roleId: 'role-out', roleGroup: 'outsource' as const, teamId: 'team-out', teamName: 'ทีม OUT' }
+    expect(describeUserChanges(inhouse, outsource)).toBe(
+      'แก้ไขข้อมูลผู้ใช้: กลุ่ม Inhouse → Outsource, บทบาท พนักงานติดตามทรัพย์ (Inhouse) → พนักงานติดตามทรัพย์ (Outsource), ทีม ทีม IN → ทีม OUT',
+    )
+  })
+
+  it('ย้ายเข้ากลุ่มที่ไม่มีทีม ⇒ ทีม … → ไม่มี · บริษัทใหม่ระบุชื่อ', () => {
+    const agent = {
+      ...normalizeUserValues(base),
+      roleId: 'role-in',
+      roleName: 'พนักงานติดตามทรัพย์',
+      roleGroup: 'inhouse' as const,
+      teamId: 'team-in',
+      teamName: 'ทีม IN',
+      companyName: null,
+    }
+    const companyUser = {
+      ...agent,
+      roleId: 'role-fc',
+      roleName: 'ผู้ใช้บริษัท',
+      roleGroup: 'finance_company' as const,
+      teamId: null,
+      teamName: null,
+      companyId: 'company-1',
+      companyName: 'ไฟแนนซ์ A',
+    }
+    expect(describeUserChanges(agent, companyUser)).toBe(
+      'แก้ไขข้อมูลผู้ใช้: กลุ่ม Inhouse → บริษัทไฟแนนซ์, บทบาท พนักงานติดตามทรัพย์ → ผู้ใช้บริษัท, ทีม ทีม IN → ไม่มี, บริษัท ไม่มี → ไฟแนนซ์ A',
+    )
+  })
 })
 
 describe('toUserAuditPayload', () => {
