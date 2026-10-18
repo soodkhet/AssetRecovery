@@ -48,6 +48,7 @@
 | v3.31 | 12/10/2569 | **mytester3 LR3-02** — §6.10 เพิ่ม `GET /api/accounting/tax-invoices/preview?cashReceiptId=|replacesInvoiceId=` (ยอด/ส่วนประกอบที่ระบบจะออกจริง — เงินโอน + ภาษีที่ลูกค้าหัก + เครดิตใบลดหนี้ + ค่าธรรมเนียม · ครบยอด/บางส่วน · สูตรเดียวกับ POST · manage `manage_tax_invoice` · อ่านอย่างเดียว ไม่จองเลข ไม่ลง audit) |
 | v3.32 | 13/10/2569 | **mytester DO-07** — §6.4 `POST /api/advances` รับ `caseId?` (เคสที่ผู้รับเงินมีงานค้าง · ไม่ใช่ = `CASE_NOT_FOUND`) + `GET /api/advances/case-options` (`manage:request_advance` — ตัวเลือกช่องอ้างอิงเคส) · `AdvanceDto` เพิ่ม `caseId`/`caseRef` |
 | v3.33 | 13/10/2569 | **mytester5 F5-01 (มติ Q7/Q7-R)** — §6.4 เติม `GET /api/claims/hotel-receipt-policy?payeeId=&expenseDate=` → `{ hotelReceiptRequired }` แผนทีมของผู้รับเงิน ณ วันที่เกิดรายการบังคับแนบใบเสร็จค่าที่พักไหม (ตรรกะเดียวกับที่ `POST /api/claims` บังคับ) · สิทธิ์ชุดเดียวกับ `POST /api/claims` · ถามแทนผู้อื่นต้องบันทึกแทนได้ (ไม่งั้น `PERMISSION_DENIED`) · ฟอร์มสร้างรายการเบิกเอง (ค่าที่พัก) ใช้ซ่อน "ไม่มีใบเสร็จ" ก่อนกรอก |
+| v3.34 | 19/10/2569 | **mytester7 review** — §6.7 เติม `GET /api/revenues/unbilled-counts?companyIds=` → `[{ companyId, count }]` จำนวนรายได้ `ready_for_billing` ที่ยังไม่เข้ารอบต่อบริษัท (scope เดียวกับ `/api/revenues` · ไม่มีรายการ = ไม่อยู่ในผล) — ฟอร์มสร้างรอบวางบิลใช้คำขอเดียวแทนยิงทีละบริษัทที่ระงับ (มติ D7-05) |
 
 ขอบเขตเอกสารนี้: รวม API Endpoint ทั้งหมดของโมดูล Finance/Accounting เป็นรายการเดียว จัดกลุ่มตาม resource เพื่อให้ backend implement ตาม REST convention เดียวกันทั้งระบบ
 
@@ -172,6 +173,7 @@ POST   /api/payout-batches/:id/cancel                (v3.10 — ยกเลิ�
 
 ```
 GET    /api/revenues
+GET    /api/revenues/unbilled-counts?companyIds=a,b   (mytester7 review — นับรายได้รอวางบิลต่อบริษัทในคำขอเดียว · สิทธิ์เดียวกับ /api/revenues · อ่านอย่างเดียว)
 GET    /api/billing-batches
 POST   /api/billing-batches
 GET    /api/billing-batches/preview?companyId=&cutoffDate=   (mytester G-05 — สรุปรายได้/ยอดที่จะดึงเข้ารอบ + ยอดหลังวันตัดรอบ · manage_billing · อ่านอย่างเดียว)

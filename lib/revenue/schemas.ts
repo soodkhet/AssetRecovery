@@ -25,6 +25,19 @@ export const revenueListQuerySchema = z.object({
     .default(false),
 })
 
+/**
+ * `GET /api/revenues/unbilled-counts?companyIds=a,b` — นับรายได้รอวางบิลต่อบริษัท (mytester7 review — ฟอร์มสร้างรอบวางบิล
+ * ใช้ตัดสินว่าบริษัทที่ระงับรายไหนยังมีรายได้ให้วางบิล ด้วยคำขอเดียวแทนยิงทีละบริษัท)
+ */
+export const revenueUnbilledCountsQuerySchema = z.object({
+  companyIds: z
+    .string()
+    .transform((value) => [...new Set(value.split(',').map((item) => item.trim()).filter((item) => item !== ''))])
+    .pipe(z.array(uuidSchema).min(1, 'กรุณาระบุบริษัท').max(200, 'ระบุบริษัทได้ไม่เกิน 200 ราย')),
+})
+
+export type RevenueUnbilledCountsQuery = z.infer<typeof revenueUnbilledCountsQuerySchema>
+
 export const billingBatchListQuerySchema = z.object({
   companyId: uuidSchema.optional(),
   status: z.enum(['all', 'draft', 'sent', 'partially_paid', 'paid']).default('all'),

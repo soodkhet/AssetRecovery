@@ -29,7 +29,7 @@ import { callApi, jsonRequest, type ApiCallError } from '@/lib/api/types'
 import type { FinanceCompanyDto } from '@/lib/finance-companies/types'
 import { fmtDate, toInputDate } from '@/lib/format/datetime'
 import { billingCompanyOptions, type BillingCompanyOption } from '@/lib/revenue/revenue-ui'
-import type { BillingBatchDetailDto, RevenueDto } from '@/lib/revenue/types'
+import type { BillingBatchDetailDto } from '@/lib/revenue/types'
 import { resolveDueDate, suggestOpenCutoffDate } from '@/lib/settings/cycles'
 
 /** วันนี้ตามเวลาไทยในรูป date-only (เที่ยงคืน UTC) — ฐานของการเสนอวันตัดรอบ */
@@ -86,22 +86,19 @@ export function CreateBillingModal({
     let cancelled = false
     void (async () => {
       // mytester7 S7-AG2-07 (มติ D7-05) — บริษัทที่ระงับยังวางบิลรายได้ที่เกิดแล้วได้ ⇒ ดึงทุกสถานะ
-      // แล้วตรวจว่าบริษัทที่ระงับรายไหนมีรายได้รอวางบิล (ปกติมีไม่กี่ราย)
+      // แล้วนับรายได้รอวางบิลของบริษัทที่ระงับทั้งหมดในคำขอเดียว (mytester7 review — เดิมยิงทีละบริษัท)
       const companyResult = await callApi<FinanceCompanyDto[]>('/api/finance-companies?status=all')
       const all = companyResult.data ?? []
-      const suspended = all.filter((company) => company.status === 'suspended')
-      const pending = await Promise.all(
-        suspended.map((company) =>
-          callApi<RevenueDto[]>(
-            `/api/revenues?${new URLSearchParams({ status: 'ready_for_billing', unbilledOnly: 'true', companyId: company.id }).toString()}`,
-          ),
-        ),
-      )
+      const suspendedIds = all.filter((company) => company.status === 'suspended').map((company) => company.id)
+      const counts =
+        suspendedIds.length === 0
+          ? null
+          : await callApi<{ companyId: string; count: number }[]>(
+              `/api/revenues/unbilled-counts?${new URLSearchParams({ companyIds: suspendedIds.join(',') }).toString()}`,
+            )
       if (cancelled) return
-      const pendingIds = new Set(
-        suspended.filter((_company, index) => (pending[index]?.data?.length ?? 0) > 0).map((company) => company.id),
-      )
-      setCompaniesError(companyResult.error ?? pending.find((result) => result.error !== undefined)?.error ?? null)
+      const pendingIds = new Set((counts?.data ?? []).filter((row) => row.count > 0).map((row) => row.companyId))
+      setCompaniesError(companyResult.error ?? counts?.error ?? null)
       setCompanies(billingCompanyOptions(all, pendingIds))
     })()
     return () => {

@@ -342,6 +342,32 @@ export async function listRevenues(user: SessionUser, query: RevenueListQuery): 
 }
 
 /**
+ * จำนวนรายได้รอวางบิล (`ready_for_billing` ที่ยังไม่อยู่ในรอบ) ต่อบริษัท — `GET /api/revenues/unbilled-counts`
+ * scope เดียวกับ `listRevenues` (บริษัทนอก scope = ไม่นับ ไม่ leak) · บริษัทที่ไม่มีรายการ = ไม่อยู่ในผลลัพธ์
+ */
+export async function countUnbilledRevenuesByCompany(
+  user: SessionUser,
+  companyIds: readonly string[],
+): Promise<{ companyId: string; count: number }[]> {
+  const scoped = companyScopeFilter(user)
+  if (scoped === null || companyIds.length === 0) return []
+  const ids = scoped.companyId === undefined ? [...companyIds] : companyIds.filter((id) => id === scoped.companyId)
+  if (ids.length === 0) return []
+  const rows = await prisma.revenue.groupBy({
+    by: ['companyId'],
+    where: {
+      organizationId: user.organizationId,
+      deletedAt: null,
+      status: 'ready_for_billing',
+      billingBatchId: null,
+      companyId: { in: ids },
+    },
+    _count: { _all: true },
+  })
+  return rows.map((row) => ({ companyId: row.companyId, count: row._count._all }))
+}
+
+/**
  * ยามก่อน "แก้ยอดรายได้" (`19` §10/§11 `EDIT_BILLED_REVENUE`) — จุดเรียกคือ Adjustment (ไฟล์ 20)
  * ที่ต้องรู้ว่ารายการนี้ยังแก้ตรงได้ไหม · แยกไว้ที่นี่เพราะสถานะที่ตัดสินคือของ **รอบวางบิล** ไม่ใช่
  * ของตัว Revenue เอง (ใบที่อยู่ในรอบ `draft` ยังแก้ได้ ใบที่รอบส่งไปแล้วต้องผ่าน Adjustment)

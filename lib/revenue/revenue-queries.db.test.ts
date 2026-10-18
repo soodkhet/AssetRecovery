@@ -1004,6 +1004,20 @@ suite('Phase 3.6 — Billing Batch (`19` §9/§10/§11)', () => {
     expect(await revenue.listRevenues(finance, { status: 'all', unbilledOnly: true })).toHaveLength(1)
     expect(await revenue.listRevenues(finance, { status: 'all', unbilledOnly: false })).toHaveLength(2)
   })
+
+  it('mytester7 review — นับรายได้รอวางบิลต่อบริษัทในคำขอเดียว: ไม่นับที่เข้ารอบแล้ว · ผู้ใช้บริษัทนับได้เฉพาะของตัวเอง', async () => {
+    await seedBillableRevenue(COMPANY_A)
+    await revenue.createBillingBatch(ctx(), { companyId: COMPANY_A, cutoffDate: CUTOFF, cycleId: null, reason: 'วางบิล A' })
+    await seedBillableRevenue(COMPANY_A)
+    await seedBillableRevenue(COMPANY_B)
+    await seedBillableRevenue(COMPANY_B)
+
+    const counts = await revenue.countUnbilledRevenuesByCompany(finance, [COMPANY_A, COMPANY_B])
+    expect(Object.fromEntries(counts.map((row) => [row.companyId, row.count]))).toEqual({ [COMPANY_A]: 1, [COMPANY_B]: 2 })
+    expect(await revenue.countUnbilledRevenuesByCompany(companyUser, [COMPANY_A, COMPANY_B])).toEqual([
+      { companyId: COMPANY_A, count: 1 },
+    ])
+  })
 })
 
 // ════════════════════════════════════════════════════════════════════════════
