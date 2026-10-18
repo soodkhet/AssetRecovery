@@ -221,6 +221,21 @@ describe('mytester5 B5-01 — เคสที่รับแล้วคิด�
   })
 })
 
+describe('ข้อความประมาณการของเคสรอบที่ 2 ขึ้นไป (mytester7 S7-AG1-02)', () => {
+  const base = {
+    status: 'approved',
+    projectedRevenueSource: 'model=FLAT · v1 · base=150000',
+    projectedRevenueSourceLabel: null,
+    serviceFeeModelSnapshot: 'FLAT',
+  }
+  it('รอบ 2 = บันทึกไว้ตอนอนุมัติรีไซเคิล (ไม่ใช่ "ตอนรับเคส") · รอบ 1 คงเดิม', () => {
+    const round2 = projectedRevenueNote({ ...base, trackingRound: 2 })
+    expect(round2).toContain('บันทึกไว้ตอนอนุมัติรีไซเคิล (รอบที่ 2)')
+    expect(round2).not.toContain('ตอนรับเคส')
+    expect(projectedRevenueNote({ ...base, trackingRound: 1 })).toContain('บันทึกไว้ตอนรับเคส')
+  })
+})
+
 describe('mytester5 รีวิว B5-01 — ยอด + ที่มาจาก snapshot ตัวเดียวกันทุกจุด', () => {
   const TEMPLATE = '11111111-1111-4111-8111-111111111111'
   const snapshot = {

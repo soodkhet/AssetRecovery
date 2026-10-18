@@ -26,7 +26,7 @@ export async function loadCaseFieldEvidence(user: SessionUser, caseId: string): 
       ...(access === 'team' ? { teamId: { in: [...user.scope.teamIds] } } : {}),
     },
     orderBy: { createdAt: 'desc' },
-    select: { id: true, status: true, agent: { select: { fullName: true } } },
+    select: { id: true, status: true, trackingRound: true, agent: { select: { fullName: true } } },
   })
   if (assignment === null) return null
 
@@ -71,6 +71,7 @@ export async function loadCaseFieldEvidence(user: SessionUser, caseId: string): 
   return {
     assignmentId: assignment.id,
     assignmentStatus: assignment.status,
+    trackingRound: assignment.trackingRound,
     agentName: assignment.agent.fullName,
     outcome: evidence.outcome,
     evidenceStatus: evidence.status,

@@ -416,7 +416,11 @@ export function CaseDetailModal({
             />
 
             {detail.fieldEvidence !== null && (
-              <FieldEvidenceSection evidence={detail.fieldEvidence} onView={setViewing} />
+              <FieldEvidenceSection
+                evidence={detail.fieldEvidence}
+                caseTrackingRound={detail.trackingRound}
+                onView={setViewing}
+              />
             )}
 
             {/* ผู้ไม่เห็นกล่องหลักฐาน (เช่นบริษัทไฟแนนซ์) ยังเห็นเหตุผลที่ไม่สำเร็จ — UAT Q16 */}

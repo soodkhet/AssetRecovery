@@ -24,6 +24,21 @@ export function revisionEditableHint(showsTravelOrigin: boolean | null): string 
   return `แก้ไขได้เฉพาะ${editable} — เช็คอินและผลการติดตามล็อกไว้ตามรอบเดิม`
 }
 
+/**
+ * ป้ายรอบของกล่องหลักฐานปิดงาน (`38` §6.4 — tracking_round แสดงคู่ทุกจุด · mytester7 S7-AG1-02)
+ * - เคสรอบเดียว (รอบ 1 ทั้งคู่) = ไม่มีป้าย (หน้าจอเดิม)
+ * - หลักฐานเป็นของรอบก่อน (เคสรีไซเคิลแล้ว) = ป้าย "รอบที่ n (รอบก่อน)" + คำอธิบาย ไม่ให้เข้าใจว่าเป็นผลของรอบปัจจุบัน
+ */
+export function evidenceRoundBadge(
+  evidenceRound: number | undefined,
+  caseRound: number,
+): { label: string; previousRound: boolean } | null {
+  if (evidenceRound === undefined) return null
+  if (evidenceRound < caseRound) return { label: `รอบที่ ${evidenceRound} (รอบก่อน)`, previousRound: true }
+  if (evidenceRound <= 1 && caseRound <= 1) return null
+  return { label: `รอบที่ ${evidenceRound}`, previousRound: false }
+}
+
 /** ตีกลับได้จากสถานะปิดงานเท่านั้น (`41` §8 `reject_evidence` · state `closed_success`/`closed_fail` → `needs_revision`) */
 export function canRejectFieldEvidence(
   evidence: Pick<CaseFieldEvidenceDto, 'assignmentStatus' | 'evidenceStatus'> | null,

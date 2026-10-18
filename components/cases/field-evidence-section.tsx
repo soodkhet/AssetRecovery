@@ -1,9 +1,9 @@
 'use client'
 
 import type { ViewableFile } from '@/components/cases/file-viewer-modal'
-import { InlineAlert, StatusBadge } from '@/components/ui'
+import { Badge, InlineAlert, StatusBadge } from '@/components/ui'
 import type { CaseFieldEvidenceDto } from '@/lib/cases/types'
-import { checkinTypeLabel, fieldEvidenceFile } from '@/lib/field/evidence-review-ui'
+import { checkinTypeLabel, evidenceRoundBadge, fieldEvidenceFile } from '@/lib/field/evidence-review-ui'
 import { closeFailReasonText } from '@/lib/field/fail-reasons'
 import { fieldStatusBadgeGroup, fieldStatusLabel, mapsPointHref } from '@/lib/field/field-ui'
 import { FIELD_MEDIA_LABEL, type FieldMediaKind } from '@/lib/field/media-upload'
@@ -20,11 +20,15 @@ import type { AssignmentStatus } from '@/lib/generated/prisma/enums'
  */
 export function FieldEvidenceSection({
   evidence,
+  caseTrackingRound,
   onView,
 }: {
   evidence: CaseFieldEvidenceDto
+  /** รอบปัจจุบันของเคส — ใช้ติดป้ายเมื่อหลักฐานเป็นของรอบก่อน (S7-AG1-02) */
+  caseTrackingRound: number
   onView: (file: ViewableFile) => void
 }) {
+  const round = evidenceRoundBadge(evidence.trackingRound, caseTrackingRound)
   const groups: ReadonlyArray<{ kind: FieldMediaKind; files: readonly string[] }> = [
     { kind: 'photo', files: evidence.photos },
     { kind: 'video', files: evidence.videos },
@@ -39,7 +43,17 @@ export function FieldEvidenceSection({
       <div className="mb-3 flex flex-wrap items-center gap-2 border-b border-slate-100 pb-2">
         <h3 className="text-sm font-bold text-slate-800">หลักฐานปิดงาน</h3>
         <StatusBadge group={fieldStatusBadgeGroup(status)} label={fieldStatusLabel(status)} />
+        {round !== null && (
+          <Badge className={round.previousRound ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'}>
+            {round.label}
+          </Badge>
+        )}
       </div>
+      {round?.previousRound === true && (
+        <p className="mb-3 text-xs text-amber-700">
+          หลักฐานชุดนี้เป็นผลของรอบก่อน — รอบปัจจุบัน (รอบที่ {caseTrackingRound}) ยังไม่มีการปิดงาน
+        </p>
+      )}
 
       <p className="mb-3 text-xs text-slate-600">
         ส่งโดย <span className="font-semibold text-slate-800">{evidence.agentName}</span> · ปิดงานเมื่อ{' '}
