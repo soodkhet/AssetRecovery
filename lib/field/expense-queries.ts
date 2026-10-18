@@ -1218,7 +1218,7 @@ export async function resubmitFieldExpense(
     if (lockedStatus !== current.status) {
       throw new ExpenseStateError('EXPENSE_INVALID_STATUS', {
         detail: `expense=${expenseId} resubmit status_changed ${current.status}->${lockedStatus ?? 'missing'}`,
-        context: { currentStatus: lockedStatus },
+        context: { status: lockedStatus, action: 'resubmit_expense' },
       })
     }
     const lockedState = await loadExpenseSubstituteReceiptState(tx as ExpenseTxClient, user.organizationId, expenseId)

@@ -893,8 +893,11 @@ export async function approveCompensationExpense(
       data: { updatedBy: user.id },
     })
     if (claimed.count === 0) {
+      // mytester7 S7-AG3-05 — แนบสถานะล่าสุดให้หน้าจอบอกผู้แพ้ได้ตรงกับกรณีอ่านสถานะก่อน (ข้อความเดียวกันทุกจังหวะ)
+      const latest = await tx.expense.findUnique({ where: { id: expenseId }, select: { status: true } })
       throw new ExpenseStateError('EXPENSE_INVALID_STATUS', {
         detail: `expense=${expenseId} ถูกเปลี่ยนสถานะโดยผู้ใช้อื่นระหว่างทาง`,
+        ...(latest === null ? {} : { context: { status: latest.status } }),
       })
     }
 
@@ -1090,8 +1093,11 @@ async function rejectExpenseWith(
       data: { updatedBy: user.id },
     })
     if (claimed.count === 0) {
+      // mytester7 S7-AG3-05 — แนบสถานะล่าสุดให้หน้าจอบอกผู้แพ้ได้ตรงกับกรณีอ่านสถานะก่อน (ข้อความเดียวกันทุกจังหวะ)
+      const latest = await tx.expense.findUnique({ where: { id: expenseId }, select: { status: true } })
       throw new ExpenseStateError('EXPENSE_INVALID_STATUS', {
         detail: `expense=${expenseId} ถูกเปลี่ยนสถานะโดยผู้ใช้อื่นระหว่างทาง`,
+        ...(latest === null ? {} : { context: { status: latest.status } }),
       })
     }
 
