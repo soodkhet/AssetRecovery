@@ -8,7 +8,7 @@ import {
   setCachedSession,
 } from '@/lib/auth/session-cache'
 import { SUPERADMIN_ROLE_NAME } from '@/lib/auth/constants'
-import type { AuthzVersion, SessionUser } from '@/lib/auth/types'
+import type { CurrentAuthzVersion, SessionUser } from '@/lib/auth/types'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 import { prisma } from '@/lib/prisma'
 import type { CapabilityAccessLevel } from '@/lib/generated/prisma/enums'
@@ -95,9 +95,9 @@ export async function loadSessionUser(supabaseUid: string): Promise<SessionUser 
  * เวอร์ชันสิทธิ์ล่าสุดในฐาน — query เดียว (users ⋈ roles ตาม PK/unique) ใช้ตรวจ cache ทุก request (มติ D7-02)
  * `null` = ไม่พบผู้ใช้ของ supabase uid นี้แล้ว
  */
-export async function readAuthzVersion(supabaseUid: string): Promise<AuthzVersion | null> {
-  const rows = await prisma.$queryRaw<{ user_version: number; role_version: number }[]>`
-    SELECT u.authz_version AS user_version, r.authz_version AS role_version
+export async function readAuthzVersion(supabaseUid: string): Promise<CurrentAuthzVersion | null> {
+  const rows = await prisma.$queryRaw<{ user_id: string; user_version: number; role_version: number }[]>`
+    SELECT u.id AS user_id, u.authz_version AS user_version, r.authz_version AS role_version
     FROM users u
     JOIN roles r ON r.id = u.role_id
     WHERE u.supabase_uid = ${supabaseUid}::uuid
@@ -105,7 +105,7 @@ export async function readAuthzVersion(supabaseUid: string): Promise<AuthzVersio
   `
   const row = rows[0]
   if (row === undefined) return null
-  return { user: Number(row.user_version), role: Number(row.role_version) }
+  return { userId: row.user_id, user: Number(row.user_version), role: Number(row.role_version) }
 }
 
 /**

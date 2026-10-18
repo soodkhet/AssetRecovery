@@ -1,6 +1,6 @@
 import { SESSION_CACHE_TTL_MS } from '@/lib/auth/constants'
 import { isSessionExpired } from '@/lib/auth/permission'
-import type { AuthzVersion, SessionUser } from '@/lib/auth/types'
+import type { CurrentAuthzVersion, SessionUser } from '@/lib/auth/types'
 
 /**
  * Cache role+scope ระดับ instance — `01` §6.1 / `05` §17 กำหนดว่าห้าม query DB ทุก request
@@ -59,8 +59,10 @@ export function setCachedSession(
  * entry ใน cache ยังใช้ได้ไหม — ต้องมีเวอร์ชันและตรงกับเวอร์ชันล่าสุดในฐานทั้งฝั่งผู้ใช้และฝั่ง role
  * `current = null` = ไม่พบผู้ใช้ในฐานแล้ว (ถูกลบ/ถอด supabase uid) ⇒ ใช้ไม่ได้
  */
-export function isAuthzVersionCurrent(cached: SessionUser, current: AuthzVersion | null): boolean {
+export function isAuthzVersionCurrent(cached: SessionUser, current: CurrentAuthzVersion | null): boolean {
   if (current === null || cached.authzVersion === undefined) return false
+  // supabase uid ถูกย้ายไปผูกผู้ใช้อื่น ⇒ เวอร์ชันอาจบังเอิญตรง — ต้องเป็นผู้ใช้คนเดียวกันด้วย (mytester7 security L1)
+  if (cached.id !== current.userId) return false
   return cached.authzVersion.user === current.user && cached.authzVersion.role === current.role
 }
 

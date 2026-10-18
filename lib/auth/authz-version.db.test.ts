@@ -115,7 +115,7 @@ suite('เวอร์ชันสิทธิ์ขยับด้วย trigge
   it('loadSessionUser คืนเวอร์ชันเดียวกับ readAuthzVersion · uid ที่ไม่มี ⇒ null', async () => {
     const { uid } = await fixture()
     const loaded = await session.loadSessionUser(uid)
-    expect(loaded?.authzVersion).toEqual(await session.readAuthzVersion(uid))
+    expect({ userId: loaded?.id, ...loaded?.authzVersion }).toEqual(await session.readAuthzVersion(uid))
     expect(await session.readAuthzVersion(randomUUID())).toBeNull()
   })
 })

@@ -129,17 +129,23 @@ describe('BUG-150 — ไม่เสิร์ฟผล "session หมดอา
 
 describe('เวอร์ชันสิทธิ์ (มติ D7-02 — cache ต่อ instance ต้องตรงกับฐานทุกคำขอ)', () => {
   it('ตรงทั้งผู้ใช้และ role → ใช้ได้', () => {
-    expect(isAuthzVersionCurrent({ ...user, authzVersion: { user: 3, role: 7 } }, { user: 3, role: 7 })).toBe(true)
+    expect(isAuthzVersionCurrent({ ...user, authzVersion: { user: 3, role: 7 } }, { userId: 'user-1', user: 3, role: 7 })).toBe(true)
   })
 
   it('ฝั่งผู้ใช้ขยับ (ระงับ/ย้ายทีม/เปลี่ยน role) หรือฝั่ง role ขยับ (แก้ capability) → ใช้ไม่ได้', () => {
     const cached = { ...user, authzVersion: { user: 3, role: 7 } }
-    expect(isAuthzVersionCurrent(cached, { user: 4, role: 7 })).toBe(false)
-    expect(isAuthzVersionCurrent(cached, { user: 3, role: 8 })).toBe(false)
+    expect(isAuthzVersionCurrent(cached, { userId: 'user-1', user: 4, role: 7 })).toBe(false)
+    expect(isAuthzVersionCurrent(cached, { userId: 'user-1', user: 3, role: 8 })).toBe(false)
+  })
+
+  it('เวอร์ชันตรงแต่เป็นผู้ใช้คนละคน (supabase uid ย้ายไปผูกคนอื่น) → ใช้ไม่ได้ (mytester7 security L1)', () => {
+    expect(
+      isAuthzVersionCurrent({ ...user, authzVersion: { user: 3, role: 7 } }, { userId: 'user-2', user: 3, role: 7 }),
+    ).toBe(false)
   })
 
   it('ไม่พบผู้ใช้ในฐาน หรือ entry ไม่มีเวอร์ชัน → ใช้ไม่ได้ (โหลดใหม่ไว้ก่อน)', () => {
     expect(isAuthzVersionCurrent({ ...user, authzVersion: { user: 3, role: 7 } }, null)).toBe(false)
-    expect(isAuthzVersionCurrent(user, { user: 0, role: 0 })).toBe(false)
+    expect(isAuthzVersionCurrent(user, { userId: 'user-1', user: 0, role: 0 })).toBe(false)
   })
 })

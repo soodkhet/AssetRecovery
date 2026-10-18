@@ -54,8 +54,8 @@ function dbUser(overrides: {
   }
 }
 
-function dbVersion(user: number, role: number) {
-  return [{ user_version: user, role_version: role }]
+function dbVersion(user: number, role: number, userId = 'user-1') {
+  return [{ user_id: userId, user_version: user, role_version: role }]
 }
 
 beforeEach(() => {
@@ -117,6 +117,15 @@ describe('session cache ตรวจเวอร์ชันสิทธิ์�
     expect(err).toBeInstanceOf(AuthError)
     expect((err as AuthError).code).toBe('USER_NOT_PROVISIONED')
     expect(getCachedSession(UID, NOW.getTime())).toBeNull()
+  })
+
+  it('supabase uid ถูกย้ายไปผูกผู้ใช้อื่น (เวอร์ชันบังเอิญตรง) → ทิ้ง cache โหลดใหม่ (mytester7 security L1)', async () => {
+    prismaMock.user.findUnique.mockResolvedValueOnce(dbUser({}))
+    await getSessionUser(NOW)
+
+    prismaMock.$queryRaw.mockResolvedValue(dbVersion(1, 1, 'user-2'))
+    prismaMock.user.findUnique.mockResolvedValueOnce({ ...dbUser({}), id: 'user-2' })
+    expect((await getSessionUser(NOW))?.id).toBe('user-2')
   })
 
   it('ตรวจเวอร์ชันไม่สำเร็จ (ฐานล่ม) → โยน error ไม่เสิร์ฟ cache เก่า', async () => {

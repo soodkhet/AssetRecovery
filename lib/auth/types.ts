@@ -68,6 +68,11 @@ export interface AuthzVersion {
   role: number
 }
 
+/** เวอร์ชันสิทธิ์ล่าสุดในฐาน + id ผู้ใช้ที่ได้มา — ใช้เทียบว่า cache เป็นของผู้ใช้คนเดียวกันด้วย (mytester7 security L1) */
+export interface CurrentAuthzVersion extends AuthzVersion {
+  userId: string
+}
+
 /** ข้อมูล session ที่ส่งลงฝั่ง client ได้ (ไม่มีข้อมูลอ่อนไหวเกินจำเป็น) */
 export interface ClientSession {
   id: string
