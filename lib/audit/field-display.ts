@@ -235,6 +235,8 @@ const FIELD_LABELS: LabelMap = {
   must_change_password: 'ต้องเปลี่ยนรหัสผ่าน',
   // มติ D7-02 — ตัวนับที่ trigger เดินเอง (ปกติไม่อยู่ใน audit แต่กันหลุดเป็นชื่อคอลัมน์ดิบ)
   authz_version: 'เวอร์ชันสิทธิ์',
+  // mytester7 S7-AG2-05 — กลุ่มเวอร์ชันของเทมเพลตค่าบริการ
+  lineage_id: 'กลุ่มเวอร์ชันเทมเพลต',
   manager_ids: 'ผู้จัดการทีม',
   company_id: 'บริษัทไฟแนนซ์',
   company_ids: 'บริษัทไฟแนนซ์',
