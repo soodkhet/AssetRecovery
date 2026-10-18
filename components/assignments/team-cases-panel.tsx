@@ -17,13 +17,14 @@ import {
   Th,
   Tr,
 } from '@/components/ui'
+import { teamCasesUrlParams } from '@/components/assignments/assignment-list-params'
+import { clampPage, replaceUrlParams } from '@/components/ui/url-state'
 import { callApi, type ApiCallError } from '@/lib/api/types'
 import { caseStatusBadgeGroup, caseStatusLabel } from '@/lib/cases/status-display'
 import {
   TEAM_VISIBLE_CASE_STATUSES,
   teamCasesListPath,
   type TeamCaseFilters,
-  type TeamVisibleCaseStatus,
 } from '@/lib/cases/team-visibility'
 import type { CaseListResultDto } from '@/lib/cases/types'
 import { fmtDateTime } from '@/lib/format/datetime'
@@ -38,22 +39,30 @@ const PAGE_SIZE = 20
  * กดแถว = เปิดรายละเอียดเคสแบบอ่านอย่างเดียว (ผู้เรียกเป็นเจ้าของ modal)
  */
 export function TeamCasesPanel({
-  initialStatus = 'all',
+  initialFilters,
+  initialPage = 1,
   onBack,
   onOpenCase,
 }: {
-  initialStatus?: TeamVisibleCaseStatus | 'all'
+  /** จาก URL (`caseStatus`/`search`) — mytester7 S7-AG6-04 */
+  initialFilters: TeamCaseFilters
+  initialPage?: number
   onBack: () => void
   onOpenCase: (caseId: string) => void
 }) {
-  const [filters, setFilters] = useState<TeamCaseFilters>({ search: '', status: initialStatus })
-  const [page, setPage] = useState(1)
+  const [filters, setFilters] = useState<TeamCaseFilters>(initialFilters)
+  const [page, setPage] = useState(initialPage)
   const [result, setResult] = useState<CaseListResultDto | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<ApiCallError | null>(null)
   const [retryKey, setRetryKey] = useState(0)
 
   const listPath = teamCasesListPath(filters, page, PAGE_SIZE)
+
+  // ตัวกรอง/หน้า อยู่ใน URL — refresh/Back กลับมาที่มุมมองเดิม (mytester7 S7-AG6-04)
+  useEffect(() => {
+    replaceUrlParams(teamCasesUrlParams(filters, page))
+  }, [filters, page])
 
   useEffect(() => {
     let cancelled = false
@@ -65,6 +74,12 @@ export function TeamCasesPanel({
         setLoading(false)
         return
       }
+      // `?page=` เกินหน้าสุดท้าย ⇒ หน้าสุดท้าย
+      const clamped = response.data === undefined ? page : clampPage(page, response.data.total, PAGE_SIZE)
+      if (clamped !== page) {
+        setPage(clamped)
+        return
+      }
       setResult(response.data ?? null)
       setError(null)
       setLoading(false)
@@ -72,7 +87,7 @@ export function TeamCasesPanel({
     return () => {
       cancelled = true
     }
-  }, [listPath, retryKey])
+  }, [listPath, retryKey, page])
 
   function updateFilter(next: Partial<TeamCaseFilters>): void {
     const nextFilters = { ...filters, ...next }
