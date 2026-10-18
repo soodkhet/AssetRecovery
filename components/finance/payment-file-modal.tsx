@@ -18,13 +18,16 @@ import {
 } from '@/components/ui'
 import { REASON_MIN_LENGTH } from '@/components/settings/reason-confirm-modal'
 import { callApi, jsonRequest, type ApiWarning } from '@/lib/api/types'
+import { fmtDateTime } from '@/lib/format/datetime'
 import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
 import {
   defaultPayoutBankAccountId,
   hasAdvanceOffset,
   isDuplicatePaymentFile,
   paymentFileBankMismatchText,
+  payoutRaceToast,
   payoutTransferText,
+  recoveredPaymentFile,
 } from '@/lib/payout/payout-ui'
 import type { PaymentFileResultDto, PayoutBatchDto } from '@/lib/payout/types'
 import type { BankAccountDto, BankFileFormatDto } from '@/lib/settings/types'
@@ -62,6 +65,8 @@ export function PaymentFileModal({
   const [saving, setSaving] = useState(false)
   const [duplicateWarning, setDuplicateWarning] = useState<ApiWarning | null>(null)
   const [generated, setGenerated] = useState<PaymentFileResultDto | null>(null)
+  // mytester7 S7-AG3-03 — ไม่ได้รับคำตอบ แต่ตรวจจากระบบแล้วพบไฟล์ใหม่ (ไม่มี SHA-256/จำนวนแถวจากคำตอบ)
+  const [recovered, setRecovered] = useState<{ fileName: string; generatedAt: string } | null>(null)
   // ข้อผิดตอนกดสร้างไฟล์ ⇒ footer ติดจอ + ใต้ช่อง (มติผู้ใช้ 15/10/2569)
   const { ref: formRef, reveal: revealFormError } = useRevealFieldError()
   const submitError = useSubmitError(revealFormError)
@@ -131,13 +136,49 @@ export function PaymentFileModal({
         reason: reason.trim(),
       }),
     )
-    setSaving(false)
 
     if (result.error !== undefined) {
+      // mytester7 S7-AG3-03 — ไม่ได้รับคำตอบ (หมดเวลา/เน็ตหลุด/502–504) ⇒ ตรวจสถานะจริงจากระบบก่อนบอกผู้ใช้
+      // (server อาจสร้างไฟล์สำเร็จแล้วแต่คำตอบหาย — เดิมบอก "เชื่อมต่อไม่สำเร็จ" ทั้งที่สร้างแล้ว)
+      if (result.error.outcomeUnknown === true) {
+        const latest = await callApi<PayoutBatchDto>(`/api/payout-batches/${batch.id}`)
+        setSaving(false)
+        if (latest.data !== undefined) {
+          const found = recoveredPaymentFile(batch.paymentFileGeneratedAt, latest.data)
+          if (found !== null) {
+            setRecovered({ fileName: found.fileName, generatedAt: found.generatedAt })
+            showToast({
+              tone: 'success',
+              title: 'สร้างไฟล์โอนแล้ว',
+              description: `ไม่ได้รับคำตอบจากระบบ แต่ตรวจแล้วพบไฟล์ ${found.fileName}`,
+            })
+            onDone()
+            return
+          }
+          const message = 'ไม่ได้รับคำตอบจากระบบ — ตรวจแล้วยังไม่มีไฟล์โอนใหม่ของรอบนี้ กดสร้างอีกครั้งได้'
+          submitError.fail({ message })
+          showToast({ tone: 'error', title: 'ยังไม่ได้สร้างไฟล์โอน', description: message })
+          return
+        }
+        // ตรวจซ้ำไม่ได้ (เน็ตยังหลุด) ⇒ คงข้อความเดิมที่เตือนให้ตรวจรายการก่อนกดซ้ำ
+        submitError.fail(result.error)
+        showToast({ tone: 'error', title: result.error.title, description: result.error.message })
+        return
+      }
+      setSaving(false)
+      // mytester7 S7-AG3-02/03/04 — แพ้การแข่ง (รอบถูกยกเลิก/ยืนยันจ่าย/มีคนสร้างไฟล์ไปก่อน) ⇒ บอกสถานะล่าสุด ปิดกล่อง โหลดรายการใหม่
+      const race = payoutRaceToast(result.error)
+      if (race.stale) {
+        showToast({ tone: 'error', title: race.title, description: race.message })
+        close()
+        onDone()
+        return
+      }
       submitError.fail(result.error)
       showToast({ tone: 'error', title: result.error.title, description: result.error.message })
       return
     }
+    setSaving(false)
 
     const outcome = result.data
     if (outcome === undefined) return
@@ -172,6 +213,7 @@ export function PaymentFileModal({
     submitError.clear()
     setDuplicateWarning(null)
     setGenerated(null)
+    setRecovered(null)
     onClose()
   }
 
@@ -182,12 +224,12 @@ export function PaymentFileModal({
       open
       onClose={close}
       // สร้างไฟล์แล้ว = บันทึกแล้ว ⇒ Esc/X ปิดได้ทันที ไม่ถาม "ทิ้งข้อมูลที่กรอกไว้?" (staging E-051)
-      confirmDiscard={generated === null}
+      confirmDiscard={generated === null && recovered === null}
       size="lg"
       title={confirming ? '⚠️ สร้างไฟล์โอนซ้ำ' : 'สร้างไฟล์โอนเงินธนาคาร'}
       description={batch.name}
       footer={
-        generated === null ? (
+        generated === null && recovered === null ? (
           <FormSubmitFooter message={submitError.message} tick={submitError.tick}>
             <ModalCancelButton onClose={close} />
             <Button
@@ -214,7 +256,7 @@ export function PaymentFileModal({
       }
     >
       <div ref={formRef} className="space-y-4">
-        {wasGeneratedBefore && !confirming && generated === null && (
+        {wasGeneratedBefore && !confirming && generated === null && recovered === null && (
           <InlineAlert tone="warning" title="รอบจ่ายนี้เคยสร้างไฟล์โอนไปแล้ว">
             ระบบจะขอให้ยืนยันอีกครั้งก่อนสร้างไฟล์ใหม่ — ไฟล์ใหม่ใช้ Idempotency Key เดิม
             ตรวจให้แน่ใจว่ายังไม่ได้อัปโหลดไฟล์เดิมเข้าระบบธนาคาร
@@ -227,7 +269,12 @@ export function PaymentFileModal({
           </InlineAlert>
         )}
 
-        {generated !== null ? (
+        {recovered !== null ? (
+          <InlineAlert tone="success" title="สร้างไฟล์โอนแล้ว">
+            ไม่ได้รับคำตอบจากระบบ แต่ตรวจแล้วพบไฟล์ <RefText>{recovered.fileName}</RefText> สร้างเมื่อ{' '}
+            {fmtDateTime(recovered.generatedAt)} — ดาวน์โหลดจากปุ่มด้านล่างหรือจากรายการรอบจ่าย (อย่ากดสร้างซ้ำ)
+          </InlineAlert>
+        ) : generated !== null ? (
           <div className="space-y-3">
             <InlineAlert tone="success" title="สร้างไฟล์โอนสำเร็จ">
               ไฟล์ <RefText>{generated.fileName}</RefText> · {fmtCount(generated.rowCount)} รายการ ·
@@ -243,9 +290,11 @@ export function PaymentFileModal({
               <p>
                 Idempotency Key: <RefText>{generated.batch.idempotencyKey}</RefText>
               </p>
-              <p className="mt-1 break-all">
-                SHA-256: <RefText>{generated.fileHash}</RefText>
-              </p>
+              {generated.fileHash !== null && (
+                <p className="mt-1 break-all">
+                  SHA-256: <RefText>{generated.fileHash}</RefText>
+                </p>
+              )}
               <p className="mt-1 text-[11px] text-slate-500">
                 ใช้ค่านี้ยืนยันว่าไฟล์ที่อัปโหลดเข้าระบบธนาคารคือไฟล์เดียวกับที่ระบบสร้าง
               </p>

@@ -6,6 +6,7 @@ import { callApi, jsonRequest } from '@/lib/api/types'
 import { fmtDateTime } from '@/lib/format/datetime'
 import { fmtCount, fmtSatangSymbol } from '@/lib/format/money'
 import { PAYOUT_CANCEL_REASON_MIN_LENGTH } from '@/lib/payout/payout'
+import { payoutRaceToast } from '@/lib/payout/payout-ui'
 import type { PayoutBatchDto } from '@/lib/payout/types'
 
 /**
@@ -46,7 +47,13 @@ export function CancelPayoutModal({
     setSaving(false)
 
     if (result.error !== undefined) {
-      showToast({ tone: 'error', title: result.error.title, description: result.error.message })
+      // mytester7 S7-AG3-02 — แพ้การแข่ง (มีคนสร้างไฟล์/ยืนยันจ่ายไปก่อน) ⇒ บอกสถานะล่าสุด ปิดกล่อง โหลดรายการใหม่
+      const race = payoutRaceToast(result.error)
+      showToast({ tone: 'error', title: race.title, description: race.message })
+      if (race.stale) {
+        onCancelled()
+        onClose()
+      }
       return
     }
     const released = (result.data?.releasedExpenseCount ?? 0) + (result.data?.releasedAdvanceCount ?? 0)

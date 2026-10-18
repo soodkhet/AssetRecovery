@@ -77,6 +77,8 @@ export function CreatePayoutModal({
   const [cycleChoice, setCycleChoice] = useState<string | null>(null)
   const { ref: formRef, reveal: revealFormError } = useRevealFieldError()
   const submitError = useSubmitError(revealFormError)
+  // เปลี่ยนค่า ⇒ ตัวอย่างรายการโหลดใหม่ (หลังแพ้การแข่งกับรอบจ่ายอื่น)
+  const [previewVersion, setPreviewVersion] = useState(0)
   // ค้าง mount ⇒ ปิดแล้วล้างข้อผิดจากการกดส่ง (ร่างยังอยู่) · มติผู้ใช้ 15/10/2569
   useClearOnClose(open, submitError.clear)
 
@@ -141,6 +143,16 @@ export function CreatePayoutModal({
       return
     }
     if (result.error !== undefined) {
+      // mytester7 S7-AG3-02 — ตัวอย่างบอกว่ามีรายการ แต่สร้างแล้วไม่มี = มีรอบจ่ายอื่นเพิ่งดึงรายการไป
+      // ⇒ บอกตามจริง โหลดตัวอย่าง + รายการรอบจ่ายใหม่
+      if (result.error.code === 'NO_ITEMS_TO_PAY') {
+        const message = `${result.error.message} — ถ้าตัวอย่างเพิ่งแสดงว่ามีรายการ อาจมีรอบจ่ายอื่นดึงรายการเหล่านี้ไปแล้ว (โหลดตัวอย่างและรายการรอบจ่ายล่าสุดให้แล้ว)`
+        submitError.fail({ message })
+        showToast({ tone: 'error', title: result.error.title, description: message })
+        setPreviewVersion((version) => version + 1)
+        onCreated()
+        return
+      }
       submitError.fail(result.error)
       showToast({ tone: 'error', title: result.error.title, description: result.error.message })
       return
@@ -235,7 +247,7 @@ export function CreatePayoutModal({
         {showClosedAlert && <ClosedPeriodCutoffAlert onUseToday={setCutoffOverride} />}
 
         {/* staging E-049 — สรุปจำนวน/ยอด + กำหนดจ่ายก่อนกดสร้าง */}
-        <PayoutPreview side={side} cutoffDate={cutoffDate} cycle={cycleForCutoff} />
+        <PayoutPreview key={previewVersion} side={side} cutoffDate={cutoffDate} cycle={cycleForCutoff} />
 
         <Field
           id={`${fieldId}-selected-cycle`}

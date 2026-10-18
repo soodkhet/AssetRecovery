@@ -2,6 +2,7 @@ import { fmtSatangSymbol } from '@/lib/format/money'
 import type { PayoutBatchSide, PayoutBatchStatus, WhtThresholdScope } from '@/lib/generated/prisma/enums'
 import { canPayoutAction } from '@/lib/payout/payout'
 import type { PayoutBatchDto } from '@/lib/payout/types'
+import type { ApiCallError } from '@/lib/api/types'
 import type { BankAccountDto, BankFileFormatDto } from '@/lib/settings/types'
 import type { StatusBadgeGroup } from '@/lib/ui/status-badge'
 
@@ -90,6 +91,46 @@ export function canDownloadPaymentFile(batch: Pick<PayoutBatchDto, 'paymentFileU
 /** เคยสร้างไฟล์มาแล้ว = ครั้งต่อไปต้องยืนยัน `DUPLICATE_PAYMENT_FILE` ก่อนเสมอ (`17` §6.3) */
 export function isDuplicatePaymentFile(batch: Pick<PayoutBatchDto, 'paymentFileGeneratedAt'>): boolean {
   return batch.paymentFileGeneratedAt !== null
+}
+
+/**
+ * mytester7 S7-AG3-02/03/04 — ผลที่ "แพ้การแข่ง" กับคนอื่น (หลายแท็บ/หลายคนกดพร้อมกัน) บนรอบจ่าย
+ * ⇒ บอกสถานะล่าสุดตามจริง + `stale: true` ให้ผู้เรียกปิดกล่องและโหลดรายการใหม่ (แนวเดียวกับคิวอนุมัติ)
+ * ข้อผิดอื่น (กรอกไม่ครบ/ไม่มีสิทธิ์ ฯลฯ) คงข้อความเดิมและ `stale: false`
+ */
+export function payoutRaceToast(error: ApiCallError): { title: string; message: string; stale: boolean } {
+  // ข้อความจาก server บอกเหตุตรงอยู่แล้ว (มีคนสร้างไฟล์ไปก่อน · ยกเลิกไม่ได้เพราะโอนแล้ว) — แค่ต้องโหลดรายการใหม่
+  if (error.code === 'PAYMENT_FILE_VERSION_CONFLICT' || error.code === 'PAYOUT_BATCH_ALREADY_PAID') {
+    return { title: error.title, message: error.message, stale: true }
+  }
+  if (error.code === 'PAYOUT_BATCH_INVALID_STATUS') {
+    const status = error.payload?.currentStatus
+    const label =
+      typeof status === 'string' && status in PAYOUT_STATUS_LABEL_SHORT
+        ? PAYOUT_STATUS_LABEL_SHORT[status as PayoutBatchStatus]
+        : null
+    return {
+      title: 'รอบจ่ายนี้เปลี่ยนสถานะไปแล้ว',
+      message: `มีผู้ทำรายการกับรอบนี้ไปก่อน${label === null ? '' : ` (สถานะล่าสุด: ${label})`} — ระบบไม่ได้ทำรายการของคุณ และโหลดรายการล่าสุดให้แล้ว`,
+      stale: true,
+    }
+  }
+  return { title: error.title, message: error.message, stale: false }
+}
+
+/**
+ * mytester7 S7-AG3-03 — สร้างไฟล์โอนแล้ว "ไม่ได้รับคำตอบ" (หมดเวลา/เน็ตหลุด/502–504) ⇒ อ่านรอบจากระบบแล้วตัดสินตามจริง:
+ * เวลาสร้างไฟล์เปลี่ยนจากตอนเปิดกล่อง = มีไฟล์ใหม่แล้ว (ของคำขอนี้หรือแท็บอื่น) ⇒ แสดงผลสำเร็จพร้อมลิงก์ดาวน์โหลด
+ * ไม่เปลี่ยน = ยังไม่ได้สร้าง ⇒ กดใหม่ได้ (คืน `null`)
+ */
+export function recoveredPaymentFile(
+  previousGeneratedAt: string | null,
+  latest: PayoutBatchDto,
+): { fileName: string; generatedAt: string; batch: PayoutBatchDto } | null {
+  if (latest.paymentFileGeneratedAt === null || latest.paymentFileGeneratedAt === previousGeneratedAt) return null
+  if (latest.paymentFileUrl === null) return null
+  const fileName = latest.paymentFileUrl.split('/').pop() ?? latest.paymentFileUrl
+  return { fileName, generatedAt: latest.paymentFileGeneratedAt, batch: latest }
 }
 
 /**

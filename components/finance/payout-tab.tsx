@@ -42,6 +42,7 @@ import {
   hasAdvanceOffset,
   isDuplicatePaymentFile,
   payoutStatusBadgeGroup,
+  payoutRaceToast,
   payoutTransferText,
   pendingPayoutTransferSatang,
   PAYOUT_SIDE_BADGE_CLASS,
@@ -91,7 +92,14 @@ export function PayoutTab() {
     )
     setCompleting(false)
     if (result.error !== undefined) {
-      showToast({ tone: 'error', title: result.error.title, description: result.error.message })
+      // mytester7 S7-AG3-02 — แพ้การแข่ง (มีคนยืนยันจ่าย/ยกเลิกไปก่อน) ⇒ บอกสถานะล่าสุด ปิดกล่อง โหลดรายการใหม่
+      const race = payoutRaceToast(result.error)
+      showToast({ tone: 'error', title: race.title, description: race.message })
+      if (race.stale) {
+        setCompleteTarget(null)
+        setCompleteReason('')
+        void reload()
+      }
       return
     }
     showToast({

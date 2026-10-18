@@ -30,6 +30,8 @@ export const PAYOUT_ERROR_CODES = [
   'CANCEL_REQUIRES_REASON',
   'PAYOUT_BATCH_ALREADY_PAID',
   'PAYOUT_CANCEL_FILE_CONFIRM_REQUIRED',
+  // mytester7 S7-AG3-03/04 — สร้างไฟล์โอนพร้อมกัน: อีกคำขอสร้างไฟล์ (เวอร์ชันใหม่) ไปก่อน ⇒ ผู้แพ้ได้ 409 ไม่ใช่ 500
+  'PAYMENT_FILE_VERSION_CONFLICT',
 ] as const
 
 export type PayoutErrorCode = (typeof PAYOUT_ERROR_CODES)[number]
@@ -49,6 +51,7 @@ const HTTP_STATUS: Record<PayoutErrorCode, number> = {
   CANCEL_REQUIRES_REASON: 400,
   PAYOUT_BATCH_ALREADY_PAID: 400,
   PAYOUT_CANCEL_FILE_CONFIRM_REQUIRED: 400,
+  PAYMENT_FILE_VERSION_CONFLICT: 409,
 }
 
 const MESSAGES: Record<PayoutErrorCode, ErrorMessage> = {
@@ -110,6 +113,11 @@ const MESSAGES: Record<PayoutErrorCode, ErrorMessage> = {
     title: 'ต้องยืนยันว่ายังไม่ได้ส่งไฟล์โอนเข้าธนาคาร',
     message:
       'รอบจ่ายนี้สร้างไฟล์โอนแล้ว — ตรวจสอบกับระบบธนาคารว่ายังไม่ได้อัปโหลดไฟล์และยังไม่มีการโอน แล้วติ๊กยืนยันก่อนยกเลิก (ไม่งั้นรายการที่สร้างรอบใหม่อาจถูกโอนซ้ำ)',
+  },
+  PAYMENT_FILE_VERSION_CONFLICT: {
+    title: 'มีผู้สร้างไฟล์โอนของรอบนี้ไปก่อนแล้ว',
+    message:
+      'ระหว่างที่คุณกดสร้าง มีการสร้างไฟล์โอนของรอบจ่ายนี้สำเร็จไปก่อน — ระบบไม่ได้สร้างไฟล์ซ้ำให้ โหลดรายการล่าสุดให้แล้ว ดาวน์โหลดไฟล์ล่าสุดจากรายการ (สร้างซ้ำเมื่อจำเป็นเท่านั้น ระวังโอนซ้ำ)',
   },
 }
 

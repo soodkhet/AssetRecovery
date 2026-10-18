@@ -57,7 +57,12 @@ import {
   resolvePayoutSide,
   whtFallbackWarning,
 } from '@/lib/payout/payout'
-import { downloadPaymentFile, sha256Hex, uploadPaymentFile } from '@/lib/payout/payment-file-storage'
+import {
+  downloadPaymentFile,
+  PaymentFileStorageError,
+  sha256Hex,
+  uploadPaymentFile,
+} from '@/lib/payout/payment-file-storage'
 import { drainNotificationOutboxSafely } from '@/lib/notifications/outbox'
 import {
   enqueuePayoutCompletedNotice,
@@ -1277,7 +1282,10 @@ async function claimIdempotencyKey(
     select: { idempotencyKey: true, status: true },
   })
   if (claimed !== null && !statusesAllowing('generate_file').includes(claimed.status)) {
-    throw new PayoutError('PAYOUT_BATCH_INVALID_STATUS', { detail: `batch=${batch.id} at ${claimed.status}` })
+    throw new PayoutError('PAYOUT_BATCH_INVALID_STATUS', {
+      detail: `batch=${batch.id} at ${claimed.status}`,
+      context: { currentStatus: claimed.status },
+    })
   }
   // ไปไม่ถึงบรรทัดนี้ — แถวเพิ่งถูกอ่านมาแล้ว และคีย์ไม่มีทางถูกล้างกลับเป็น NULL
   if (claimed?.idempotencyKey == null) {
@@ -1316,6 +1324,14 @@ async function assignVoucherNumbers(
     issued.push(voucher.number)
   }
   return issued
+}
+
+/** mytester7 S7-AG3-03/04 — แพ้การสร้างไฟล์โอนพร้อมกัน (สถานะยังสร้างได้ แต่ไฟล์ถูกสร้างเวอร์ชันใหม่ไปก่อน) */
+function paymentFileVersionConflict(batchId: string, why: string): PayoutError {
+  return new PayoutError('PAYMENT_FILE_VERSION_CONFLICT', {
+    detail: `batch=${batchId} generate_file lost race: ${why}`,
+    context: { currentStatus: 'file_generated' },
+  })
 }
 
 export async function generatePaymentFile(
@@ -1455,13 +1471,28 @@ export async function generatePaymentFile(
 
   // อัปโหลดก่อนแตะ DB — อัปโหลดไม่ผ่าน = ไม่มีอะไรเปลี่ยนใน DB (ไฟล์กำพร้าใน storage ปลอดภัยกว่า
   // แถวที่ชี้ไปไฟล์ที่ไม่มีจริง) · `upsert: false` ⇒ ไม่ทับไฟล์เวอร์ชันก่อน
-  await uploadPaymentFile({ path, bytes, contentType: PAYMENT_FILE_MIME[format.fileType] })
+  // mytester7 S7-AG3-04 — สองคำขอพร้อมกันได้เลขเวอร์ชันเดียวกัน (path เดียวกัน) ⇒ คนที่อัปโหลดทีหลังโดน
+  // "มีไฟล์อยู่แล้ว" = อีกคำขอสร้างไปก่อน ⇒ 409 ที่บอกความจริง ไม่ใช่ 500
+  try {
+    await uploadPaymentFile({ path, bytes, contentType: PAYMENT_FILE_MIME[format.fileType] })
+  } catch (error) {
+    if (error instanceof PaymentFileStorageError && error.alreadyExists) {
+      throw paymentFileVersionConflict(batchId, `upload ${path} already exists`)
+    }
+    throw error
+  }
 
   const updated = await prisma.$transaction(async (tx) => {
     // มติ PO U67 — แข่งกับการยกเลิกรอบ: อัปเดตเฉพาะเมื่อสถานะยังสร้างไฟล์ได้ (Postgres ตรวจ WHERE ซ้ำหลัง
     // รอล็อกแถว) ⇒ ยกเลิกชนะก่อน = 0 แถว = ปฏิเสธ (ไฟล์ที่อัปโหลดไปแล้วเป็นไฟล์กำพร้า ไม่มีแถวชี้ถึง)
+    // mytester7 S7-AG3-03/04 — เงื่อนไข `payment_file_url` = ค่าที่ใช้คำนวณเลขเวอร์ชัน ⇒ เลขเวอร์ชันถูกยืนยันภายใต้
+    // ล็อกแถวเดียวกัน: อีกคำขอสร้างไฟล์ไปก่อน (เวอร์ชันเลื่อน) = 0 แถว = 409 ไม่ทับ/ไม่ข้ามเวอร์ชัน
     const claimed = await tx.payoutBatch.updateMany({
-      where: { id: batchId, status: { in: statusesAllowing('generate_file') } },
+      where: {
+        id: batchId,
+        status: { in: statusesAllowing('generate_file') },
+        paymentFileUrl: batch.paymentFileUrl,
+      },
       data: {
         status,
         idempotencyKey,
@@ -1472,7 +1503,18 @@ export async function generatePaymentFile(
       },
     })
     if (claimed.count !== 1) {
-      throw new PayoutError('PAYOUT_BATCH_INVALID_STATUS', { detail: `batch=${batchId} changed during generate_file` })
+      const latest = await tx.payoutBatch.findUnique({
+        where: { id: batchId },
+        select: { status: true, paymentFileUrl: true },
+      })
+      // สถานะเปลี่ยน (เช่น ถูกยกเลิก/ยืนยันจ่าย) ⇒ บอกสถานะล่าสุด · สถานะเดิมแต่ไฟล์เปลี่ยน ⇒ มีคนสร้างไปก่อน
+      if (latest !== null && !statusesAllowing('generate_file').includes(latest.status)) {
+        throw new PayoutError('PAYOUT_BATCH_INVALID_STATUS', {
+          detail: `batch=${batchId} changed during generate_file`,
+          context: { currentStatus: latest.status },
+        })
+      }
+      throw paymentFileVersionConflict(batchId, `payment_file_url changed ${batch.paymentFileUrl ?? 'null'} -> ${latest?.paymentFileUrl ?? 'null'}`)
     }
     // มติ PO U102 — ใบสำคัญจ่าย 1 เลขต่อผู้รับเงินต่อรอบ ออกตอนสร้างไฟล์ครั้งแรก (สร้างซ้ำใช้เลขเดิม)
     // ลำดับผู้รับ = ลำดับรายการแรกของแต่ละคน (ตรงกับลำดับบนเอกสาร) · ปีตามวันที่สร้างไฟล์ (เวลาไทย)
@@ -1589,7 +1631,12 @@ export async function completePayoutBatch(
       data: { status, updatedBy: user.id },
     })
     if (claimed.count !== 1) {
-      throw new PayoutError('PAYOUT_BATCH_INVALID_STATUS', { detail: `batch=${batchId} changed during complete` })
+      // mytester7 S7-AG3-02 — ผู้แพ้ต้องรู้สถานะล่าสุด (เช่น มีคนยืนยันจ่าย/ยกเลิกไปก่อน)
+      const latest = await tx.payoutBatch.findUnique({ where: { id: batchId }, select: { status: true } })
+      throw new PayoutError('PAYOUT_BATCH_INVALID_STATUS', {
+        detail: `batch=${batchId} changed during complete`,
+        ...(latest === null ? {} : { context: { currentStatus: latest.status } }),
+      })
     }
     const row = await tx.payoutBatch.findUniqueOrThrow({ where: { id: batchId }, select: batchSelect })
 

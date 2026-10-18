@@ -15,10 +15,29 @@ import { createSupabaseAdminClient } from '@/lib/supabase/server'
 export const PAYMENT_FILE_BUCKET = 'payment-files'
 
 export class PaymentFileStorageError extends Error {
-  constructor(message: string) {
+  /** `true` = path นี้มีไฟล์อยู่แล้ว (`upsert: false` ปฏิเสธ) — อีกคำขอสร้างเวอร์ชันเดียวกันไปก่อน (mytester7 S7-AG3-04) */
+  readonly alreadyExists: boolean
+
+  constructor(message: string, options?: { alreadyExists?: boolean }) {
     super(message)
     this.name = 'PaymentFileStorageError'
+    this.alreadyExists = options?.alreadyExists ?? false
   }
+}
+
+/**
+ * Supabase Storage ตอบ "มีไฟล์อยู่แล้ว" ได้หลายรูป (HTTP 409 · `statusCode: '409'` · ข้อความ "already exists"/"Duplicate")
+ * ⇒ รวมการตรวจไว้จุดเดียว
+ */
+export function isStorageAlreadyExistsError(error: {
+  message?: string
+  status?: unknown
+  statusCode?: unknown
+  error?: unknown
+}): boolean {
+  if (error.status === 409 || error.statusCode === '409' || error.statusCode === 409) return true
+  if (error.error === 'Duplicate') return true
+  return /already exists|duplicate/i.test(error.message ?? '')
 }
 
 /** SHA-256 (hex) ของไฟล์ที่สร้าง — ลง audit เพื่อยืนยันว่าไฟล์ที่อัปโหลดเข้าธนาคารคือไฟล์เดียวกัน */
@@ -39,6 +58,7 @@ export async function uploadPaymentFile(input: {
   if (error !== null) {
     throw new PaymentFileStorageError(
       `อัปโหลดไฟล์โอนเงินไม่สำเร็จ — ${error.message} (ตรวจว่าสร้าง bucket "${PAYMENT_FILE_BUCKET}" แบบ private ไว้แล้วหรือยัง)`,
+      { alreadyExists: isStorageAlreadyExistsError(error) },
     )
   }
 }
