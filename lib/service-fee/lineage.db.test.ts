@@ -185,5 +185,25 @@ suite('สายเวอร์ชันเทมเพลตค่าบริ�
       'เหมาจ่าย 1,500 บาท/เคส',
       'เหมาจ่าย 1,250 บาท/เคส',
     ])
+
+    // ชื่อของเวอร์ชันแรก (lineage_id = NULL) ในสายอื่นต้องถูกนับว่าซ้ำ — ตัวกรอง "ไม่อยู่ในสายนี้" ต้อง null-safe
+    const other = await serviceFee.createServiceFeeTemplate(ctx, {
+      name: 'เทมเพลตอีกชุด',
+      model: 'FLAT',
+      baseSatang: 100_000,
+      ratePct: 0,
+      basis: null,
+      failFeeSatang: null,
+    })
+    await expect(
+      serviceFee.updateServiceFeeTemplate(ctx, await serviceFee.getServiceFeeTemplate(ORG_ID, other.id), {
+        name: 'เหมาจ่าย 1,250 บาท/เคส',
+        model: 'FLAT',
+        baseSatang: 100_000,
+        ratePct: 0,
+        basis: null,
+        failFeeSatang: null,
+      }),
+    ).rejects.toMatchObject({ code: 'DUPLICATE_TEMPLATE_NAME' })
   })
 })

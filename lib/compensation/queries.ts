@@ -4,7 +4,7 @@ import { emitAudit } from '@/lib/audit/audit'
 import type { RequestMeta } from '@/lib/auth/request-meta'
 import type { SessionUser } from '@/lib/auth/types'
 import { CompensationError } from '@/lib/compensation/errors'
-import { inPlanLineage, planLineageKey } from '@/lib/compensation/lineage'
+import { inPlanLineage, notInPlanLineage, planLineageKey } from '@/lib/compensation/lineage'
 import {
   normalizePlanValues,
   planNextVersion,
@@ -196,7 +196,7 @@ async function assertNameAvailable(organizationId: string, name: string, exceptL
     where: {
       organizationId,
       name,
-      ...(exceptLineage === undefined ? {} : { NOT: inPlanLineage(exceptLineage) }),
+      ...(exceptLineage === undefined ? {} : notInPlanLineage(exceptLineage)),
     },
     select: { id: true },
   })

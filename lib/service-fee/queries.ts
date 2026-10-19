@@ -133,6 +133,11 @@ function inLineage(lineageKey: string): Prisma.ServiceFeeTemplateWhereInput {
   return { OR: [{ id: lineageKey }, { lineageId: lineageKey }] }
 }
 
+/** เงื่อนไข "ไม่อยู่ในสายนี้" — null-safe (เวอร์ชันแรกของสายอื่นมี `lineage_id` = NULL · ห้ามใช้ `NOT: inLineage(key)`) */
+function notInLineage(lineageKey: string): Prisma.ServiceFeeTemplateWhereInput {
+  return { NOT: { id: lineageKey }, OR: [{ lineageId: null }, { lineageId: { not: lineageKey } }] }
+}
+
 /** ประวัติทุกเวอร์ชันของเทมเพลตเดียวกัน — เรียงใหม่→เก่า (แต่ละเวอร์ชันแสดงชื่อของตัวเอง) */
 export async function listServiceFeeTemplateVersions(
   organizationId: string,
@@ -159,7 +164,7 @@ async function assertNameAvailable(organizationId: string, name: string, exceptL
     where: {
       organizationId,
       name,
-      ...(exceptLineage === undefined ? {} : { NOT: inLineage(exceptLineage) }),
+      ...(exceptLineage === undefined ? {} : notInLineage(exceptLineage)),
     },
     select: { id: true },
   })

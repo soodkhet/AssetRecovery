@@ -106,7 +106,7 @@ describe('updateServiceFeeTemplate — เปลี่ยนชื่อไม�
     await updateServiceFeeTemplate(ctx, V1, { ...V1, name: 'ชื่อใหม่' })
     expect(prismaMock.serviceFeeTemplate.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { organizationId: 'org-1', name: 'ชื่อใหม่', NOT: { OR: [{ id: V1.id }, { lineageId: V1.id }] } },
+        where: { organizationId: 'org-1', name: 'ชื่อใหม่', NOT: { id: V1.id }, OR: [{ lineageId: null }, { lineageId: { not: V1.id } }] },
       }),
     )
   })

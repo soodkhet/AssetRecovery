@@ -17,3 +17,11 @@ export function planLineageKey(row: { id: string; lineageId: string | null }): s
 export function inPlanLineage(lineageKey: string): Prisma.CompensationPlanWhereInput {
   return { OR: [{ id: lineageKey }, { lineageId: lineageKey }] }
 }
+
+/**
+ * เงื่อนไข "ไม่อยู่ในสายนี้" — **ห้ามใช้ `NOT: inPlanLineage(key)`**: เวอร์ชันแรกของสายอื่นมี `lineage_id` = NULL
+ * ⇒ `NOT (id = k OR lineage_id = k)` ได้ NULL (ไม่ใช่ true) แถวนั้นหลุดจากผลลัพธ์ ⇒ ตรวจชื่อซ้ำไม่เจอ
+ */
+export function notInPlanLineage(lineageKey: string): Prisma.CompensationPlanWhereInput {
+  return { NOT: { id: lineageKey }, OR: [{ lineageId: null }, { lineageId: { not: lineageKey } }] }
+}

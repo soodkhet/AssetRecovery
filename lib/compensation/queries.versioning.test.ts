@@ -121,7 +121,7 @@ describe('updateCompensationPlan — เปลี่ยนชื่อไม่�
   it('ตรวจชื่อซ้ำเฉพาะแผนสายอื่น (ไม่นับสายตัวเอง)', async () => {
     await updateCompensationPlan(ctx, V1, { ...valuesOf(V1), name: 'ชื่อใหม่' })
     expect(prismaMock.compensationPlan.findFirst).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { organizationId: 'org-1', name: 'ชื่อใหม่', NOT: LINEAGE_OF_V1 } }),
+      expect.objectContaining({ where: { organizationId: 'org-1', name: 'ชื่อใหม่', NOT: { id: V1.id }, OR: [{ lineageId: null }, { lineageId: { not: V1.id } }] } }),
     )
   })
 })
