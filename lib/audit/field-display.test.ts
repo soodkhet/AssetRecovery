@@ -50,6 +50,13 @@ describe('auditEnumValueLabel() / auditValueDisplay()', () => {
     expect(auditValueDisplay('debit', 'note_type', 'credit_notes')).toBe('ใบเพิ่มหนี้')
   })
 
+  it('mytester7 M2 — ระบบยกเลิกคำขอเปลี่ยนผู้รับผิดชอบ (ผู้รับใช้ไม่ได้) ⇒ "ระบบยกเลิก" ไม่ใช่ "ระบบเปลี่ยนให้"', () => {
+    const text = auditValueDisplay('system_cancelled', 'resolution', 'pending_reassignments')
+    expect(text).toContain('ระบบยกเลิก')
+    expect(text).not.toContain('เปลี่ยนให้อัตโนมัติ')
+    expect(auditValueDisplay('timeout_auto', 'resolution', 'pending_reassignments')).toBe('หมดเวลา — ระบบเปลี่ยนให้อัตโนมัติ')
+  })
+
   it('สถานะใช้ชุดของเป้าหมายก่อน แล้วค่อยชุดทั่วไป · ไม่รู้จัก ⇒ null (แสดงดิบ)', () => {
     expect(auditEnumValueLabel('cancelled', 'status', 'payout_batches')).toBe('ยกเลิกแล้ว')
     expect(auditEnumValueLabel('active', 'status', null)).toBe('ใช้งาน')

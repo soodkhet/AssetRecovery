@@ -822,6 +822,11 @@ suite('Phase 2.6 — timeout job + การแข่งกับคำตอบ
         })
         expect(audit.action).toBe('reject')
         expect(audit.reason).toContain(jobId)
+        // M2 — ไม่ใส่ event "ระบบเปลี่ยนให้" · ระบุว่าเป็นการยกเลิกโดยระบบ
+        const after = audit.afterData as Record<string, unknown>
+        expect(after['events']).toBeUndefined()
+        expect(after['resolution']).toBe(timeoutJob.REASSIGNMENT_SYSTEM_CANCELLED)
+
         // แจ้งในคิวของ job (ผู้ขอ + ผู้จัดการทีม + คนเดิม) แล้วส่งท้ายรอบ
         expect(
           await db().notificationOutbox.count({ where: { organizationId: ORG_ID, sourceJobRef: jobId, status: 'sent' } }),

@@ -30,6 +30,9 @@ import { jobTraceTag } from '@/lib/audit/system-text'
 
 export const REASSIGN_TIMEOUT_JOB_TYPE = 'reassign_timeout'
 
+/** ค่า `after.resolution` ใน audit เมื่อระบบปิดคำขอเพราะผู้รับใช้ไม่ได้ (ป้ายไทยใน `lib/audit/field-display.ts`) — ไม่ใช่ enum ในสคีมา */
+export const REASSIGNMENT_SYSTEM_CANCELLED = 'system_cancelled'
+
 export interface ReassignTimeoutOptions {
   /** เวลาอ้างอิง (เทสต์ส่งเวลาปลอมเข้ามาได้ — production ปล่อยว่าง) */
   now?: Date
@@ -132,9 +135,10 @@ export async function resolveExpiredReassignments(
               before: { status: 'waiting_consent' },
               after: {
                 status: 'declined',
+                // ไม่ใส่ `events` (`reassignment_timeout_resolved` = "ระบบเปลี่ยนให้" — ไม่จริงในกิ่งนี้ · M2)
+                resolution: REASSIGNMENT_SYSTEM_CANCELLED,
                 declineReason,
                 newAgentId: pending.newAgentId,
-                events: ['assignment.reassignment_timeout_resolved'],
               },
               reason: `${declineReason} ${jobTraceTag(jobId)}`,
               ipAddress: null,

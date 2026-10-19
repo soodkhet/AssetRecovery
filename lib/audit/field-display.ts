@@ -1090,6 +1090,9 @@ const TAC_UPDATE_TRIGGER_LABEL: LabelMap = { daily: 'อัปเดตราย
 const REASSIGNMENT_RESOLUTION_LABEL: LabelMap = {
   consented: 'ยินยอมแล้ว',
   timeout_auto: 'หมดเวลา — ระบบเปลี่ยนให้อัตโนมัติ',
+  // มติ D7-08 (mytester7 FX review M2) — ค่าเฉพาะ audit ไม่ใช่ enum ในสคีมา: job ปิดคำขอเป็น `declined` โดยระบบ
+  // (`resolved_by = NULL`) เพราะผู้รับใช้ไม่ได้แล้ว — ไม่ใช่ "ไม่ยินยอม" ของพนักงาน และไม่ใช่ "ระบบเปลี่ยนให้"
+  system_cancelled: 'ระบบยกเลิกคำขอ — ผู้รับใช้ไม่ได้แล้ว ไม่มีการเปลี่ยนผู้รับผิดชอบ',
 }
 /** id ของรายงาน (`kpi-summary`) ⇒ "E1 KPI ภาพรวม" — ชื่อเดียวกับหน้ารายงาน */
 const REPORT_ID_VALUE_LABEL: LabelMap = Object.fromEntries(
