@@ -108,3 +108,16 @@ export function payeeDocInfoOf(identity: PayeeDocIdentity, stats: PayslipStats):
     stats,
   }
 }
+
+/**
+ * ชื่อผู้รับของรายการในตารางรอบจ่าย — snapshot ชนะ (กติกาเดียวกับเอกสาร `resolvePayeeDocIdentity`)
+ * ยังไม่สร้างไฟล์โอน ⇒ ชื่อปัจจุบัน (มติ D7-07 · mytester7 SV7-VF3-01: ตารางเคยแสดงชื่อปัจจุบันขณะที่ PDF/50 ทวิเป็นชื่อเดิม)
+ */
+export function payoutItemPayeeName(row: {
+  payeeSnapshotAt: Date | null
+  payeeNameSnapshot: string | null
+  payee: { payeeType: PayeeProfileForDoc['payeeType']; legalName: string | null; user: { fullName: string } }
+}): string {
+  if (row.payeeSnapshotAt !== null && row.payeeNameSnapshot !== null) return row.payeeNameSnapshot
+  return payeeLegalName({ payeeType: row.payee.payeeType, legalName: row.payee.legalName, userFullName: row.payee.user.fullName })
+}

@@ -39,6 +39,7 @@ import {
   payeeIdentityFromProfile,
   payeeIdentityFromSnapshot,
   payeeSnapshotData,
+  payoutItemPayeeName,
   resolvePayeeDocIdentity,
   type PayeeDocIdentity,
 } from '@/lib/payout/payee-snapshot'
@@ -193,6 +194,9 @@ const itemSelect = {
   whtPctSnapshot: true,
   whtBaseIncluded: true,
   whtIncomeCategory: true,
+  // มติ D7-07 — ชื่อผู้รับในตารางรายการต้องตรงกับใบสำคัญจ่าย/50 ทวิ (mytester7 SV7-VF3-01)
+  payeeSnapshotAt: true,
+  payeeNameSnapshot: true,
   whtCondition: true,
   whtCarriedBaseSatang: true,
   advanceOffsetSatang: true,
@@ -293,7 +297,8 @@ function toItemDto(row: ItemRow): PayoutBatchItemDto {
     sourceId: (row.expenseId ?? row.advanceId) as string,
     payeeId: row.payeeId,
     // mytester2 F2-02 — นิติบุคคลแสดงชื่อตามหนังสือรับรอง (ชื่อเดียวกับ PDF สรุปรอบ/สลิป/50 ทวิ)
-    payeeName: payeeLegalName({ payeeType: row.payee.payeeType, legalName: row.payee.legalName, userFullName: row.payee.user.fullName }),
+    // มติ D7-07 — สร้างไฟล์โอนแล้ว ⇒ ชื่อ ณ ตอนนั้น (snapshot) ไม่ใช่ชื่อปัจจุบัน (mytester7 SV7-VF3-01)
+    payeeName: payoutItemPayeeName(row),
     teamName: row.payee.user.team?.name ?? null,
     description:
       source === 'expense'

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  payoutItemPayeeName,
   payeeDocInfoOf,
   payeeIdentityFromProfile,
   payeeIdentityFromSnapshot,
@@ -127,5 +128,17 @@ describe('payeeDocInfoOf', () => {
     const identity = payeeIdentityFromProfile(corporate)
     expect(payeeDocInfoOf(identity, STATS)).toMatchObject({ isCorporate: true, branchLabel: 'สาขาที่ 00002' })
     expect(payeeDocInfoOf({ ...identity, branchCode: null }, STATS).branchLabel).toBe('สำนักงานใหญ่')
+  })
+})
+
+describe('payoutItemPayeeName — ตารางรายการรอบจ่ายใช้ชื่อเดียวกับเอกสาร (mytester7 SV7-VF3-01)', () => {
+  const payee = { payeeType: 'corporate' as const, legalName: 'บริษัท ชื่อปัจจุบัน จำกัด', user: { fullName: 'สมพร ใจดี' } }
+  it('มี snapshot ⇒ ชื่อ ณ ตอนสร้างไฟล์โอน', () => {
+    expect(payoutItemPayeeName({ payeeSnapshotAt: new Date('2026-10-19T10:00:00Z'), payeeNameSnapshot: 'บริษัท ชื่อเดิม จำกัด', payee })).toBe(
+      'บริษัท ชื่อเดิม จำกัด',
+    )
+  })
+  it('ยังไม่มี snapshot ⇒ ชื่อตามหนังสือรับรองปัจจุบัน', () => {
+    expect(payoutItemPayeeName({ payeeSnapshotAt: null, payeeNameSnapshot: null, payee })).toBe('บริษัท ชื่อปัจจุบัน จำกัด')
   })
 })
