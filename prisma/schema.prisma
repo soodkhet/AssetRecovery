@@ -3177,6 +3177,22 @@ model PayoutBatchItem {
   /// NULL = ยังไม่สร้างไฟล์โอน · ตั้งแล้วแก้ไม่ได้ (trigger `trg_payout_batch_items_voucher_immutable`)
   voucherNumber     String?            @map("voucher_number")
 
+  /// ── มติ D7-07 (mytester7 FX3) — snapshot ผู้รับเงิน ณ ตอนสร้างไฟล์โอนครั้งแรก (จังหวะเดียวกับเลขใบสำคัญจ่าย)
+  /// ใบสำคัญจ่าย/สลิป/สรุปรอบจ่ายอ่านจากตรงนี้ก่อน (โครงเดียวกับ snapshot ของ `wht_certificates`) · `payee_snapshot_at` NULL =
+  /// ยังไม่สร้างไฟล์/รอบก่อนมติ ⇒ เอกสารใช้ค่าปัจจุบันตามเดิม (ไม่ backfill) · เขียนครั้งเดียว (trigger
+  /// `trg_payout_batch_items_payee_snapshot_write_once`) · CHECK ครบชุด ⇔ มี `payee_snapshot_at` (raw SQL)
+  payeeSnapshotAt          DateTime?  @map("payee_snapshot_at") @db.Timestamptz(6)
+  /// ชื่อตามกฎหมาย (`payeeLegalName()` — ไม่รวมคำนำหน้า)
+  payeeNameSnapshot        String?    @map("payee_name_snapshot")
+  payeeNameTitleSnapshot   String?    @map("payee_name_title_snapshot") @db.VarChar(50)
+  payeeTypeSnapshot        PayeeType? @map("payee_type_snapshot")
+  /// เลข 13 หลัก — NULL = โปรไฟล์ยังไม่กรอกตอนออก
+  payeeTaxIdSnapshot       String?    @map("payee_tax_id_snapshot") @db.VarChar(13)
+  /// ที่อยู่บรรทัดเดียว (`payeeAddressLine()`) — NULL = ยังไม่กรอกตอนออก
+  payeeAddressSnapshot     String?    @map("payee_address_snapshot")
+  /// นิติบุคคลเท่านั้น (`00000` = สำนักงานใหญ่) · บุคคลธรรมดา = NULL
+  payeeBranchCodeSnapshot  String?    @map("payee_branch_code_snapshot") @db.VarChar(5)
+
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   createdBy String   @map("created_by") @db.Uuid
 

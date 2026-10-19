@@ -59,8 +59,8 @@ export interface PayoutDocIssuer {
 }
 
 /**
- * ข้อมูลผู้รับเงินบนใบสำคัญจ่าย/สลิป (มติ PO U100/U101) — โหลดจากข้อมูลผู้รับ (U94: คำนำหน้า/ที่อยู่/สาขา)
- * ณ เวลาพิมพ์ (เอกสารภายใน — ไม่ใช่ snapshot) + สรุปจำนวนเคส/วันทำงาน/คืนที่พักของรอบนี้
+ * ข้อมูลผู้รับเงินบนใบสำคัญจ่าย/สลิป/สรุปรอบ (มติ PO U100/U101 · U94: คำนำหน้า/ที่อยู่/สาขา) + สรุปจำนวนเคส/วันทำงาน/คืนที่พักของรอบนี้
+ * · มติ D7-07 — ตัวตนผู้รับ = snapshot ตอนสร้างไฟล์โอนครั้งแรก (`lib/payout/payee-snapshot.ts`) · ไม่มี snapshot = ค่าปัจจุบัน
  */
 export interface PayoutPayeeDocInfo {
   displayName: string
@@ -491,42 +491,46 @@ export function buildPaymentVoucherDocs(
 ): PaymentVoucherDoc[] {
   const payDate = batch.paymentFileGeneratedAt ?? batch.createdAt
 
-  return groupPayoutItemsByPayee(batch.items).map((group) => ({
-    title: PAYMENT_VOUCHER_TITLE,
-    titleEn: 'Payment Voucher',
-    headerNote: INTERNAL_DOC_NOTE.voucher,
-    issuer,
-    voucherNo: orDash(voucherNumberOf(group.items)),
-    payeeName: group.payeeName,
-    payee: payees.get(group.payeeId) ?? fallbackPayeeInfo(group),
-    teamName: orDash(group.teamName),
-    // รีวิว F2-02 — ตารางรายการแสดงเฉพาะเงินได้ (เงินทดรองจ่ายเป็นบรรทัดสรุป `advancePaidLine` แยก) ⇒ ผลรวมแถว = "รวมค่าตอบแทนก่อนหักภาษี"
-    lines: voucherLinesOf(incomeItemsOf(group.items)),
-    whtLabel: whtLineLabel(group),
-    whtDeductText: group.whtWithheldSatang === 0 ? fmtSatang(0) : `(${fmtSatang(group.whtWithheldSatang)})`,
-    payerTaxLine: payerTaxLineOf(group),
-    paymentChannelText: `โอนเข้าบัญชี ${payeeBankLine(group)}`,
-    signers: ['ผู้จัดทำ', 'ผู้อนุมัติ', 'ผู้รับเงิน'],
-    footnote: hasWhtCertificate(group, batch) ? WHT_CERTIFICATE_SEPARATE_NOTE : '',
-    bankLine: payeeBankLine(group),
-    description: `${describeVoucherItems(group.items)} รอบ ${batch.name}`,
-    batchName: batch.name,
-    methodLabel: 'โอนผ่านธนาคาร (Bank Transfer)',
-    payDateLabel: fmtDate(payDate),
-    // U105 — ค่าตอบแทนที่ผู้รับได้ (ไม่รวมภาษีที่บริษัทออกให้ — แยกบรรทัด `payerTaxLine`)
-    // mytester2 F2-02 — ไม่รวมเงินทดรองจ่าย (ไม่ใช่เงินได้) แยกบรรทัด `advancePaidLine`
-    grossText: fmtSatang(compensationOf(group)),
-    advancePaidLine: advancePaidLineOf(group),
-    whtText: fmtSatang(group.whtWithheldSatang),
-    netAfterWhtText: fmtSatang(group.totals.netSatang),
-    offsetLines: group.offsetLines.map((line) => ({ label: line.label, amountText: `(${fmtSatang(line.amountSatang)})` })),
-    netText: fmtSatang(group.transferSatang),
-    netInWords: bahtInWords(group.transferSatang),
-    pendingNote:
-      batch.status === 'completed'
-        ? null
-        : 'รอบจ่ายนี้ยังไม่ถูกยืนยันว่าจ่ายสำเร็จ — ใบสำคัญจ่ายฉบับนี้ใช้ประกอบการตรวจสอบก่อนกระทบยอดธนาคาร',
-  }))
+  return groupPayoutItemsByPayee(batch.items).map((group) => {
+    const payee = payees.get(group.payeeId) ?? fallbackPayeeInfo(group)
+    return {
+      title: PAYMENT_VOUCHER_TITLE,
+      titleEn: 'Payment Voucher',
+      headerNote: INTERNAL_DOC_NOTE.voucher,
+      issuer,
+      voucherNo: orDash(voucherNumberOf(group.items)),
+      // มติ D7-07 — ชื่อเดียวกับกล่องผู้รับ (snapshot ตอนออก · ไม่มี = ค่าปัจจุบัน)
+      payeeName: payee.displayName,
+      payee,
+      teamName: orDash(group.teamName),
+      // รีวิว F2-02 — ตารางรายการแสดงเฉพาะเงินได้ (เงินทดรองจ่ายเป็นบรรทัดสรุป `advancePaidLine` แยก) ⇒ ผลรวมแถว = "รวมค่าตอบแทนก่อนหักภาษี"
+      lines: voucherLinesOf(incomeItemsOf(group.items)),
+      whtLabel: whtLineLabel(group),
+      whtDeductText: group.whtWithheldSatang === 0 ? fmtSatang(0) : `(${fmtSatang(group.whtWithheldSatang)})`,
+      payerTaxLine: payerTaxLineOf(group),
+      paymentChannelText: `โอนเข้าบัญชี ${payeeBankLine(group)}`,
+      signers: ['ผู้จัดทำ', 'ผู้อนุมัติ', 'ผู้รับเงิน'],
+      footnote: hasWhtCertificate(group, batch) ? WHT_CERTIFICATE_SEPARATE_NOTE : '',
+      bankLine: payeeBankLine(group),
+      description: `${describeVoucherItems(group.items)} รอบ ${batch.name}`,
+      batchName: batch.name,
+      methodLabel: 'โอนผ่านธนาคาร (Bank Transfer)',
+      payDateLabel: fmtDate(payDate),
+      // U105 — ค่าตอบแทนที่ผู้รับได้ (ไม่รวมภาษีที่บริษัทออกให้ — แยกบรรทัด `payerTaxLine`)
+      // mytester2 F2-02 — ไม่รวมเงินทดรองจ่าย (ไม่ใช่เงินได้) แยกบรรทัด `advancePaidLine`
+      grossText: fmtSatang(compensationOf(group)),
+      advancePaidLine: advancePaidLineOf(group),
+      whtText: fmtSatang(group.whtWithheldSatang),
+      netAfterWhtText: fmtSatang(group.totals.netSatang),
+      offsetLines: group.offsetLines.map((line) => ({ label: line.label, amountText: `(${fmtSatang(line.amountSatang)})` })),
+      netText: fmtSatang(group.transferSatang),
+      netInWords: bahtInWords(group.transferSatang),
+      pendingNote:
+        batch.status === 'completed'
+          ? null
+          : 'รอบจ่ายนี้ยังไม่ถูกยืนยันว่าจ่ายสำเร็จ — ใบสำคัญจ่ายฉบับนี้ใช้ประกอบการตรวจสอบก่อนกระทบยอดธนาคาร',
+    }
+  })
 }
 
 function payeeBankLine(group: PayoutPayeeGroup): string {

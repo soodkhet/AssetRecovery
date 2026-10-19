@@ -104,6 +104,7 @@
 | v4.77 | 19/10/2569 | **มติ D7-02 (mytester7 S7-AG7-05 — Claude ตัดสินแทน PO)** — migration `20261019100000_authz_version`: `users.authz_version INTEGER NOT NULL DEFAULT 0` + `roles.authz_version INTEGER NOT NULL DEFAULT 0` = "เวอร์ชันสิทธิ์" · เดินด้วย DB trigger เท่านั้น (แอปห้ามเขียนเอง): `users` BEFORE UPDATE เมื่อ organization/role/supabase_uid/username/email/full_name/team/company/status/last_login_at/must_change_password/deleted_at เปลี่ยน · `roles` BEFORE UPDATE เมื่อ name/role_group/deleted_at เปลี่ยน · `role_capabilities` INSERT/UPDATE/DELETE ⇒ role +1 · `team_managers` INSERT/UPDATE/DELETE และ `teams.supervisor_id` เปลี่ยน ⇒ ผู้ใช้ที่ผูก +1 — session cache ต่อ instance เทียบเวอร์ชันกับฐานด้วย query เดียวทุก request ก่อนใช้ค่าใน cache ⇒ ระงับ/ถอดสิทธิ์/เปลี่ยน role-capability/ทีม/บริษัท มีผลกับคำขอถัดไปทุก instance (`05` §17) |
 | v4.78 | 19/10/2569 | **mytester7 S7-AG2-05 (Claude ตัดสินแทน PO รอทบทวน)** — migration `20261019100100_service_fee_template_lineage`: เพิ่ม `service_fee_templates.lineage_id UUID NULL` (= id ของเวอร์ชันแรก · NULL = แถวนี้คือเวอร์ชันแรกเอง) + `UNIQUE (organization_id, lineage_id, version)` (`uniq_service_fee_templates_org_lineage_version`) · backfill เวอร์ชันที่ไม่ใช่ตัวแรกของแต่ละ (org, name) ให้ชี้ตัวแรก · เหตุผล: เดิมจับกลุ่มเวอร์ชันด้วย `name` ⇒ เปลี่ยนชื่อต้องทับชื่อเวอร์ชันเดิม ขัด snapshot pattern (`92` §7.1) · คง `UNIQUE (organization_id, name, version)` เดิม · nullable เพื่อให้ INSERT เวอร์ชันแรกไม่ต้องรู้ id ล่วงหน้า |
 | v4.79 | 19/10/2569 | **mytester7 FX2 (Claude ตัดสินแทน PO รอทบทวน — แบบเดียวกับ v4.78)** — migration `20261019110000_compensation_plan_lineage`: เพิ่ม `compensation_plans.lineage_id UUID NULL` (= id ของเวอร์ชันแรก · NULL = แถวนี้คือเวอร์ชันแรกเอง) + `UNIQUE (organization_id, lineage_id, version)` (`uniq_compensation_plans_org_lineage_version`) · backfill เวอร์ชันที่ไม่ใช่ตัวแรกของแต่ละ (org, name) ให้ชี้ตัวแรก · เหตุผล: เดิมจับกลุ่มเวอร์ชันด้วย `name` ⇒ แก้แผนแล้วเปลี่ยนชื่อต้องทับชื่อทุกเวอร์ชันเดิม ⇒ รายการเบิกที่ snapshot `comp_plan_id` + `comp_plan_version` เดิมแสดงชื่อที่ไม่ตรงยอด ขัด snapshot pattern (`92` §7.1) · ประวัติเวอร์ชัน/ตรวจชื่อซ้ำ/ทีมที่ผูก/เปิด-ปิด/resolve แผน ณ วันที่ของรายการเบิก ใช้สายเวอร์ชันแทนชื่อ · คง `UNIQUE (organization_id, name, version)` เดิม · nullable เพื่อให้ INSERT เวอร์ชันแรกไม่ต้องรู้ id ล่วงหน้า |
+| v4.80 | 19/10/2569 | **มติ D7-07 (mytester7 FX3 — Claude ตัดสินแทน PO)** — migration `20261019120000_payout_item_payee_snapshot`: `payout_batch_items` + snapshot ผู้รับเงิน ณ ตอนสร้างไฟล์โอนครั้งแรก (ทรานแซกชันเดียวกับเลขใบสำคัญจ่าย): `payee_snapshot_at TIMESTAMPTZ` · `payee_name_snapshot TEXT` (ชื่อตามกฎหมาย ไม่รวมคำนำหน้า) · `payee_name_title_snapshot VARCHAR(50)` · `payee_type_snapshot payee_type` · `payee_tax_id_snapshot VARCHAR(13)` · `payee_address_snapshot TEXT` · `payee_branch_code_snapshot VARCHAR(5)` — ทั้งหมด nullable · CHECK `chk_payout_batch_items_payee_snapshot` (ไม่มี `payee_snapshot_at` ⇒ ว่างทั้งชุด · มี ⇒ ชื่อ+ประเภทบังคับ) · trigger `trg_payout_batch_items_payee_snapshot_write_once` (ตั้งแล้วแก้/ล้างไม่ได้) · ใบสำคัญจ่าย/สลิปค่าตอบแทน/สรุปรอบจ่าย อ่าน snapshot ก่อน · **ไม่ backfill**: รอบที่สร้างไฟล์ก่อน migration/ยังไม่สร้างไฟล์ ⇒ ค่าปัจจุบันตามเดิม · โครงเดียวกับ snapshot ผู้ถูกหักของ `wht_certificates` (`92` §7.1) · ไม่มี enum ใหม่ |
 
 ขอบเขตเอกสารนี้: Full Production Database Schema — ทุก table, column, type, FK, index, unique constraint, enum, migration order และ seed data สรุปจาก spec ไฟล์ทั้งหมดไว้ในที่เดียว ใช้เป็น source of truth เดียวก่อนเขียน Prisma schema
 
@@ -1951,6 +1952,15 @@ CREATE TABLE payout_batch_items (
   advance_offset_satang INTEGER NOT NULL DEFAULT 0 CHECK (advance_offset_satang BETWEEN 0 AND net_satang),
   -- v4.41 (มติ PO U102) เลขที่ใบสำคัญจ่าย — 1 เลข/ผู้รับ/รอบ ออกตอนสร้างไฟล์โอนครั้งแรก · NULL = ยังไม่สร้างไฟล์ · ตั้งแล้วแก้ไม่ได้
   voucher_number    TEXT,
+  -- v4.80 (มติ D7-07) snapshot ผู้รับเงินตอนสร้างไฟล์โอนครั้งแรก — เอกสารการจ่ายอ่านจากตรงนี้ก่อน · NULL ทั้งชุด = ยังไม่สร้างไฟล์/รอบก่อนมติ (ใช้ค่าปัจจุบัน)
+  -- CHECK chk_payout_batch_items_payee_snapshot (ครบชุด ⇔ payee_snapshot_at) · trigger write-once
+  payee_snapshot_at          TIMESTAMPTZ,
+  payee_name_snapshot        TEXT,
+  payee_name_title_snapshot  VARCHAR(50),
+  payee_type_snapshot        payee_type,
+  payee_tax_id_snapshot      VARCHAR(13),
+  payee_address_snapshot     TEXT,
+  payee_branch_code_snapshot VARCHAR(5),
   created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   created_by        UUID    NOT NULL REFERENCES users(id),
   UNIQUE(payout_batch_id, expense_id),
@@ -2931,6 +2941,7 @@ VALUES ('...org_id...', NULL, false, '{30,60,90}');  -- NULL = ไม่จำ�
 | `substitute_receipts` | any (v4.43 — มติ PO U103) | เลข/ผู้จ่าย/การผูก/วันที่/ยอดห้ามแก้ · `pending_signature` → `signed` ได้ครั้งเดียว ไฟล์ฉบับเซ็นเปลี่ยนไม่ได้ (trigger `trg_substitute_receipts_guard`) · บรรทัด (`substitute_receipt_lines`) ห้าม UPDATE |
 | `advance_returns` | any | แก้ได้ทางเดียวคือกลับรายการครั้งเดียว (มีเหตุผล) — ช่องอื่นห้ามแก้ (trigger) · ไม่มีเส้นทางลบในระบบ (มติ PO U30) |
 | `case_edit_history` | any | append-only ที่ชั้น service — มีแต่ INSERT ไม่มี endpoint/โค้ดที่ UPDATE/DELETE (เพิ่ม 14/08/2569 · ไฟล์ 38 §6.4 "ไม่เขียนทับประวัติเดิม") · **ไม่ใส่ trigger ระดับ DB** เพราะตารางนี้ผูก `ON DELETE CASCADE` กับ `cases` — trigger จะไปบล็อก cascade ด้วย (audit ตัวจริงที่ห้ามแตะเด็ดขาดคือ `audit_logs`) |
+| `payout_batch_items` | `payee_snapshot_at` IS NOT NULL (v4.80 — มติ D7-07) | snapshot ผู้รับเงิน 7 ช่อง (`payee_*_snapshot` + `payee_snapshot_at`) เขียนครั้งเดียว — ห้ามแก้/ล้าง (trigger `trg_payout_batch_items_payee_snapshot_write_once`) |
 | `roles` | is_seed = true | ห้าม DELETE, ห้าม UPDATE name/role_group |
 | `accounting_periods` | status = 'locked' | แก้ตรงไม่ได้ — ต้องผ่าน Adjustment + Executive |
 
