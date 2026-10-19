@@ -4,6 +4,7 @@ import type { SessionUser } from '@/lib/auth/types'
 import { PrismaClient } from '@/lib/generated/prisma/client'
 import type { PayoutTxClient } from '@/lib/payout/queries'
 import { markAdvancePaidOut } from '@/tests/helpers/advance-paid-out'
+import { deletePayoutBatchItemsOfOrg } from '@/tests/helpers/payout-items'
 
 /**
  * เทสต์ระดับ DB — มติ PO 05/10/2569 (UAT U30 · BUG-109 · A6): ปิดยอดคืนเงินทดรอง
@@ -179,7 +180,7 @@ async function reset(): Promise<void> {
   await tx.$executeRawUnsafe(`DELETE FROM advance_returns WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM expense_records WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM exceptions WHERE organization_id = '${ORG_ID}'`)
-  await tx.$executeRawUnsafe(`DELETE FROM payout_batch_items WHERE organization_id = '${ORG_ID}'`)
+  await deletePayoutBatchItemsOfOrg(db(), ORG_ID)
   await tx.$executeRawUnsafe(`DELETE FROM payout_batches WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM expenses WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM advances WHERE organization_id = '${ORG_ID}'`)

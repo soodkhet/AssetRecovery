@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { SessionUser } from '@/lib/auth/types'
 import { PrismaClient } from '@/lib/generated/prisma/client'
 import { INCOME_TYPE_TEXT_40_2, INCOME_TYPE_TEXT_CORPORATE } from '@/lib/settings/wht-policy'
+import { deletePayoutBatchItemsOfOrg } from '@/tests/helpers/payout-items'
 
 /**
  * เทสต์ระดับ DB ของ Phase 4.5 — DoD ของไฟล์ 33
@@ -188,6 +189,8 @@ async function junePeriodId(): Promise<string> {
  * ⚠️ `audit_logs` **ลบไม่ได้** (immutable `02` §13 — DB trigger ปฏิเสธ DELETE) จึงสะสมได้
  *    ⇒ ทุก assertion ที่แตะ audit ต้องเป็นแบบ "อย่างน้อย"/"ล่าสุด" ไม่ใช่จำนวนเป๊ะ
  */
+const PAYOUT_ITEMS = 'payout_batch_items'
+
 async function resetOrgData(): Promise<void> {
   const tx = db()
   // ใบ 50 ทวิ ลบไม่ได้ด้วย trigger (`02` §13 — เลขที่ห้ามขาดช่วง) — ปิดเฉพาะตอนล้างข้อมูลเทสต์
@@ -198,7 +201,8 @@ async function resetOrgData(): Promise<void> {
       `DELETE FROM wht_filing_summaries WHERE organization_id = '${ORG_ID}'`,
       `DELETE FROM expense_records WHERE organization_id = '${ORG_ID}'`,
       `DELETE FROM exceptions WHERE organization_id = '${ORG_ID}'`,
-      `DELETE FROM payout_batch_items WHERE organization_id = '${ORG_ID}'`,
+      // รายการรอบจ่ายที่มี snapshot ผู้รับลบไม่ได้ด้วย trigger — ล้างผ่านตัวช่วย (ปิด trigger ในทรานแซกชันเดียวกัน)
+      PAYOUT_ITEMS,
       `DELETE FROM expenses WHERE organization_id = '${ORG_ID}'`,
       `DELETE FROM payout_batches WHERE organization_id = '${ORG_ID}'`,
       // ค่าตั้งวิธียื่น (U45) ที่เทสต์เพิ่ม — ห้ามค้างข้ามรอบรัน (วันกำหนดของงวดถัดไปจะเพี้ยน)
@@ -207,7 +211,8 @@ async function resetOrgData(): Promise<void> {
       `DELETE FROM public_holidays WHERE organization_id = '${ORG_ID}'`,
       `DELETE FROM accounting_periods WHERE organization_id = '${ORG_ID}'`,
     ]) {
-      await tx.$executeRawUnsafe(statement)
+      if (statement === PAYOUT_ITEMS) await deletePayoutBatchItemsOfOrg(db(), ORG_ID)
+      else await tx.$executeRawUnsafe(statement)
     }
   } finally {
     await tx.$executeRawUnsafe(`ALTER TABLE wht_certificates ENABLE TRIGGER trg_wht_certificates_no_delete`)

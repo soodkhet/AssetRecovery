@@ -3,6 +3,7 @@ import { PrismaPg } from '@prisma/adapter-pg'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SessionUser } from '@/lib/auth/types'
 import { PrismaClient } from '@/lib/generated/prisma/client'
+import { deletePayoutBatchItemsOfOrg } from '@/tests/helpers/payout-items'
 
 /**
  * เทสต์ระดับ DB ของ Phase 3.4 — DoD ตาม `17` §16:
@@ -172,7 +173,7 @@ async function reset(): Promise<void> {
   await tx.$executeRawUnsafe(`DELETE FROM wht_filing_summaries WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM expense_records WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM exceptions WHERE organization_id = '${ORG_ID}'`)
-  await tx.$executeRawUnsafe(`DELETE FROM payout_batch_items WHERE organization_id = '${ORG_ID}'`)
+  await deletePayoutBatchItemsOfOrg(db(), ORG_ID)
   await tx.$executeRawUnsafe(`DELETE FROM payout_batches WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM billing_payout_cycles WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM expenses WHERE organization_id = '${ORG_ID}'`)
@@ -619,6 +620,10 @@ suite('ไฟล์โอนเงิน + idempotency (`17` §6.3/§16 · `13` 
       await expect(
         db().payoutBatchItem.updateMany({ where: { payoutBatchId: batchId }, data: { payeeNameSnapshot: 'แก้ทับ' } }),
       ).rejects.toThrow(/แก้ไขไม่ได้/)
+      // FX review — ลบแถวที่ออกเอกสารแล้วก็ไม่ได้ (trigger BEFORE DELETE)
+      await expect(
+        db().$executeRawUnsafe(`DELETE FROM payout_batch_items WHERE payout_batch_id = '${batchId}'`),
+      ).rejects.toThrow(/ลบไม่ได้/)
     } finally {
       await db().user.update({ where: { id: AGENT_OUT_ID }, data: { fullName: user.fullName } })
       await db().payeeProfile.update({ where: { id: PAYEE_OUT_ID }, data: profile })

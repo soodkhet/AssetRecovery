@@ -5,6 +5,7 @@ import type { SessionUser } from '@/lib/auth/types'
 import { PrismaClient } from '@/lib/generated/prisma/client'
 import { markAdvancePaidOut } from '@/tests/helpers/advance-paid-out'
 import { settleFieldDaysToday } from '@/tests/helpers/field-day'
+import { deletePayoutBatchItemsOfOrg } from '@/tests/helpers/payout-items'
 
 // UAT Q13 — server ตรวจไฟล์ที่อัปโหลดเอง: เทสต์ไม่ยิง Storage จริง (Rule 07) · ดู tests/helpers/fake-uploads.ts
 vi.mock('@/lib/uploads/storage', async () => (await import('@/tests/helpers/fake-uploads')).fakeStorageModule())
@@ -312,7 +313,7 @@ async function cleanup(): Promise<void> {
     await tx.$executeRawUnsafe(`DELETE FROM expense_records WHERE organization_id = '${ORG_ID}'`)
     await tx.$executeRawUnsafe(`UPDATE expenses SET payout_batch_item_id = NULL WHERE organization_id = '${ORG_ID}'`)
     await tx.$executeRawUnsafe(`UPDATE advances SET payout_batch_item_id = NULL WHERE organization_id = '${ORG_ID}'`)
-    await tx.$executeRawUnsafe(`DELETE FROM payout_batch_items WHERE organization_id = '${ORG_ID}'`)
+    await deletePayoutBatchItemsOfOrg(db(), ORG_ID)
     await tx.$executeRawUnsafe(`DELETE FROM payout_batches WHERE organization_id = '${ORG_ID}'`)
     await tx.$executeRawUnsafe(`DELETE FROM advances WHERE organization_id = '${ORG_ID}'`)
     await tx.$executeRawUnsafe(`DELETE FROM revenues WHERE organization_id = '${ORG_ID}'`)

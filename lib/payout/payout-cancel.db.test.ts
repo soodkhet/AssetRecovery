@@ -2,6 +2,7 @@ import { PrismaPg } from '@prisma/adapter-pg'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SessionUser } from '@/lib/auth/types'
 import { PrismaClient } from '@/lib/generated/prisma/client'
+import { deletePayoutBatchItemsOfOrg } from '@/tests/helpers/payout-items'
 
 /**
  * เทสต์ระดับ DB — มติ PO 05/10/2569 (UAT U67): ยกเลิกรอบจ่าย
@@ -189,7 +190,7 @@ async function reset(): Promise<void> {
   await tx.$executeRawUnsafe(`DELETE FROM exceptions WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`UPDATE expenses SET payout_batch_item_id = NULL WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`UPDATE advances SET payout_batch_item_id = NULL WHERE organization_id = '${ORG_ID}'`)
-  await tx.$executeRawUnsafe(`DELETE FROM payout_batch_items WHERE organization_id = '${ORG_ID}'`)
+  await deletePayoutBatchItemsOfOrg(db(), ORG_ID)
   // trigger ของรอบที่ยกเลิกเป็น BEFORE UPDATE เท่านั้น ⇒ DELETE ตอนล้างข้อมูลเทสต์ผ่านได้
   await tx.$executeRawUnsafe(`DELETE FROM payout_batches WHERE organization_id = '${ORG_ID}'`)
   await tx.$executeRawUnsafe(`DELETE FROM expenses WHERE organization_id = '${ORG_ID}'`)
