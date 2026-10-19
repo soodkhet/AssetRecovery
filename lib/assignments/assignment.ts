@@ -3,6 +3,7 @@ import { AssignmentError, REASSIGNMENT_EXPIRED_AWAITING_JOB_MESSAGE } from '@/li
 import { ASSIGNMENT_REASON_MIN, isAssignmentReasonLongEnough } from '@/lib/assignments/schemas'
 import { FIELD_AGENT_ROLE_NAME } from '@/lib/auth/constants'
 import { AuthError } from '@/lib/auth/errors'
+import type { ErrorMessage } from '@/lib/api/errors'
 
 /**
  * State machine + กติกาการมอบหมายงาน (ไฟล์ 40 §8–§12) — **pure ล้วน**
@@ -100,6 +101,17 @@ const REPLACEMENT_AGENT_PROBLEM_TEXT: Readonly<Record<ReplacementAgentProblem, s
   inactive: 'พนักงานที่จะรับงานถูกระงับหรือลบออกจากระบบแล้ว',
   not_field_agent: 'พนักงานที่จะรับงานไม่ได้เป็นพนักงานติดตามทรัพย์แล้ว',
   team_mismatch: 'พนักงานที่จะรับงานไม่ได้อยู่ในทีมของเคสนี้แล้ว',
+}
+
+/**
+ * mytester7 FX review L6 — ข้อความสำหรับผู้กดยินยอมเมื่อผู้รับใช้ไม่ได้แล้ว (code เดิม `ASSIGNMENT_TEAM_MISMATCH`)
+ * ข้อความกลางของ code ("พนักงานไม่ได้อยู่ในทีม") ไม่ตรงเมื่อสาเหตุคือถูกระงับ/ลบ/เปลี่ยน role
+ */
+export function replacementAgentConsentMessage(problem: ReplacementAgentProblem): ErrorMessage {
+  return {
+    title: 'เปลี่ยนผู้รับผิดชอบไม่ได้ในตอนนี้',
+    message: `${REPLACEMENT_AGENT_PROBLEM_TEXT[problem]} — ยังไม่มีอะไรเปลี่ยน เคสยังอยู่กับผู้รับผิดชอบเดิม เมื่อคำขอหมดเวลาระบบจะยกเลิกคำขอและแจ้งผู้จัดการให้เลือกผู้รับใหม่`,
+  }
 }
 
 /** เหตุผลที่ลง `decline_reason`/audit เมื่อระบบปิดคำขอเพราะผู้รับใช้ไม่ได้ (ข้อความผู้ใช้เห็น — ห้ามมีเลขอ้างอิงสเปค) */

@@ -14,6 +14,7 @@ import {
   reassignmentResponseRecipientIds,
   reassignOutcome,
   replacementAgentProblem,
+  replacementAgentConsentMessage,
   replacementAgentProblemText,
 } from '@/lib/assignments/assignment'
 import { FIELD_AGENT_ROLE_NAME } from '@/lib/auth/constants'
@@ -240,6 +241,16 @@ describe('mytester7 FX1 — ผู้รับงานใหม่ยังร�
       const text = replacementAgentProblemText(problem)
       expect(text).toContain('เคสยังอยู่กับผู้รับผิดชอบเดิม')
       expect(text).not.toMatch(/§|`\d{2}`/)
+    }
+  })
+  it('L6 — ข้อความผู้กดยินยอมตามสาเหตุจริง (ระงับ ≠ ย้ายทีม) · ไม่มีเลขอ้างอิงสเปค', () => {
+    expect(replacementAgentConsentMessage('inactive').message).toContain('ถูกระงับหรือลบ')
+    expect(replacementAgentConsentMessage('team_mismatch').message).toContain('ไม่ได้อยู่ในทีม')
+    expect(replacementAgentConsentMessage('not_field_agent').message).toContain('ไม่ได้เป็นพนักงานติดตามทรัพย์')
+    for (const problem of ['not_found', 'inactive', 'not_field_agent', 'team_mismatch'] as const) {
+      const { title, message } = replacementAgentConsentMessage(problem)
+      expect(`${title} ${message}`).not.toMatch(/§|`\d{2}`/)
+      expect(message).toContain('ยังไม่มีอะไรเปลี่ยน')
     }
   })
 })

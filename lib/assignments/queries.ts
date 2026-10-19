@@ -17,6 +17,7 @@ import {
   reassignmentExpiresAt,
   reassignmentResponseRecipientIds,
   reassignOutcome,
+  replacementAgentConsentMessage,
   replacementAgentProblem,
   type AssignmentState,
   type ReplacementAgentProblem,
@@ -888,7 +889,11 @@ export async function swapAssignment(
   // ก่อนเรียกแล้วปิดคำขอเอง (ไม่มาถึงตรงนี้ ⇒ ไม่ล้มซ้ำ) · ฝั่งกดยินยอมได้ error แล้วไม่มีอะไรเปลี่ยน
   const problem = await lockReplacementAgent(tx, input)
   if (problem !== null) {
-    throw new AssignmentError('ASSIGNMENT_TEAM_MISMATCH', { detail: `replacement agent ${problem}` })
+    throw new AssignmentError('ASSIGNMENT_TEAM_MISMATCH', {
+      detail: `replacement agent ${problem}`,
+      // ข้อความตามสาเหตุจริง (ถูกระงับ/ลบ/ไม่ใช่พนักงานติดตามทรัพย์/ย้ายทีม) — L6
+      message: replacementAgentConsentMessage(problem),
+    })
   }
   await tx.caseAssignment.update({
     where: { id: input.assignmentId },
