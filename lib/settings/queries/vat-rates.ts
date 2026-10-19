@@ -3,6 +3,7 @@ import { Prisma } from '@/lib/generated/prisma/client'
 import { prisma } from '@/lib/prisma'
 import { SettingsError } from '@/lib/settings/errors'
 import { toDateOnlyIso, toIso, type SettingsMutationContext, type SettingsTxClient } from '@/lib/settings/queries/shared'
+import { lockVatRateHistory } from '@/lib/settings/queries/vat-rate-lock'
 import type { VatRateDto } from '@/lib/settings/types'
 import {
   findOverlappingPeriods,
@@ -91,7 +92,7 @@ async function loadPeriods(organizationId: string, db: SettingsTxClient = prisma
  * แล้วบันทึกภายใต้ล็อกเดียวกัน ⇒ สองคำขอพร้อมกันเห็นผลของกันและกันเสมอ ไม่เกิดช่วงทับ/ช่องว่างจากการแข่งกัน
  */
 async function lockVatRates(tx: SettingsTxClient, organizationId: string): Promise<void> {
-  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${TARGET}:${organizationId}`}))`
+  await lockVatRateHistory(tx, organizationId, 'exclusive')
 }
 
 /** รายการอัตรา VAT ทั้งหมด เรียงใหม่→เก่า พร้อมธงว่าช่วงไหนมีผล "วันนี้" */
@@ -114,7 +115,19 @@ export async function getVatRate(organizationId: string, rateId: string): Promis
  * ไม่มีช่วงครอบคลุม = `VAT_RATE_NOT_FOUND` (ห้าม fallback เป็น 7% เงียบ ๆ)
  */
 export async function resolveVatRate(organizationId: string, date: Date): Promise<VatRateDto> {
-  const rows = await loadPeriods(organizationId)
+  return resolveFromRows(await loadPeriods(organizationId), date)
+}
+
+/**
+ * resolve อัตรา **ภายในทรานแซกชันที่จะ snapshot อัตราลงเอกสาร** (mytester7 FX1 — TOCTOU) — ถือล็อกแบบ shared
+ * ก่อนอ่าน ⇒ ถ้ามีคนกำลังเพิ่ม/แก้ช่วง (exclusive) อยู่ จะรอจนเสร็จแล้วได้อัตราของช่วงหลังแก้เสมอ
+ */
+export async function resolveVatRateLocked(tx: SettingsTxClient, organizationId: string, date: Date): Promise<VatRateDto> {
+  await lockVatRateHistory(tx, organizationId, 'shared')
+  return resolveFromRows(await loadPeriods(organizationId, tx), date)
+}
+
+function resolveFromRows(rows: readonly VatRow[], date: Date): VatRateDto {
   const resolved = resolveVatRateAt(date, rows.map(toPeriod))
   if (!resolved) {
     throw new SettingsError('VAT_RATE_NOT_FOUND', { detail: `date=${toDateOnlyIso(date)}` })

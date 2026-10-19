@@ -63,7 +63,7 @@ import type {
 } from '@/lib/sales/types'
 import { documentYear, formatDocumentNumber, nextDocumentSequence } from '@/lib/document-numbering/format'
 import { lockDocumentSeries, nextDocumentNumber } from '@/lib/document-numbering/queries'
-import { resolveVatRate } from '@/lib/settings/queries/vat-rates'
+import { resolveVatRate, resolveVatRateLocked } from '@/lib/settings/queries/vat-rates'
 
 /**
  * บัญชีขาย / ใบกำกับภาษี / เงินรับ (ไฟล์ 31) — ชั้น DB (`31` §14)
@@ -551,7 +551,8 @@ async function planReceiptInvoice(
   // U96 #3 — ตรวจก่อนหาอัตรา (บริษัท no_vat อาจไม่มีอัตราในระบบเลย)
   if (vat.modes.includes('no_vat')) assertVatApplicable({ vatModes: vat.modes, vatRatePct: 0, vatSatang: 0 })
   // U96 #9 — อัตรา ณ จุดความรับผิด = วันรับเงิน (ไม่ใช่อัตราใน snapshot รายได้ตอนวางบิล)
-  const vatRatePct = (await resolveVatRate(organizationId, receipt.receivedDate)).ratePct
+  // ค่านี้ใช้ตรวจก่อนเข้า transaction + พรีวิว · ตอนออกใบจริง resolve ซ้ำใต้ล็อกใน `amounts()` (mytester7 FX1)
+  const plannedVatRatePct = (await resolveVatRate(organizationId, receipt.receivedDate)).ratePct
 
   const replaces =
     forcedReplaces ??
@@ -574,6 +575,11 @@ async function planReceiptInvoice(
       if (options.lock) {
         await tx.$queryRaw`SELECT id FROM billing_batches WHERE id = ${receipt.billingBatchId}::uuid FOR UPDATE`
       }
+      // mytester7 FX1 (TOCTOU) — ออกใบจริง: resolve อัตรา ณ วันรับเงินใหม่ใต้ล็อกช่วง VAT แบบ shared ⇒ ไม่ snapshot
+      // อัตราของช่วงที่มีคนกำลังปิด/แก้อยู่ (ลำดับล็อก: แถวรอบวางบิล → ล็อก VAT — ฝั่งแก้ช่วงไม่แตะรอบวางบิล)
+      const vatRatePct = options.lock
+        ? (await resolveVatRateLocked(tx, organizationId, receipt.receivedDate)).ratePct
+        : plannedVatRatePct
       // ตรวจซ้ำหลังล็อก — คำขอที่ต่อคิวมาหลังอีกคนออกใบของเงินรับนี้ไปแล้วต้องได้ code ที่ตรงความจริง
       const raced = await tx.taxInvoice.findFirst({
         where: { cashReceiptId, status: 'active' },
