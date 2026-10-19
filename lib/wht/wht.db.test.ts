@@ -920,6 +920,46 @@ suite('มติ PO 06/10/2569 (U94 ข้อ 1 · U96 #2/#4/#13) — snapshot �
     }
   })
 
+  it('มติ D7-07 (mytester7 FX review M3) — แก้โปรไฟล์หลังสร้างไฟล์โอน ⇒ 50 ทวิ = ใบสำคัญจ่าย (snapshot ของรายการ) ไม่ใช่โปรไฟล์ปัจจุบัน', async () => {
+    const { payeeDocInfoOf, payeeIdentityFromSnapshot } = await import('@/lib/payout/payee-snapshot')
+    await setPeriodStatus('collecting')
+    try {
+      const seeded = await seedBatch([{ payeeId: PAYEE_PERSON_ID, gross: 20_000_00, wht: 600_00 }])
+      // จำลองจังหวะสร้างไฟล์โอน: snapshot ผู้รับลงรายการ (ใบสำคัญจ่าย/สลิปพิมพ์ค่านี้)
+      await db().$executeRawUnsafe(`
+        UPDATE payout_batch_items
+        SET payee_snapshot_at = NOW(), payee_name_snapshot = 'ชื่อตอนจ่าย ทดสอบ', payee_name_title_snapshot = 'นาย',
+            payee_type_snapshot = 'individual', payee_tax_id_snapshot = '1100000000017',
+            payee_address_snapshot = '1 ถนนตอนจ่าย', payee_branch_code_snapshot = NULL
+        WHERE payout_batch_id = '${seeded.batchId}'
+      `)
+      // ผู้รับแก้โปรไฟล์ภายหลัง (หลังยืนยันจ่าย ก่อนออกใบ)
+      await db().$executeRawUnsafe(`
+        UPDATE payee_profiles SET name_title = 'นาง', address_detail = '99 ถ.ใหม่' WHERE id = '${PAYEE_PERSON_ID}'
+      `)
+      await expenses.syncExpenseRecordsFromPayout(ctx, seeded.batchId)
+      const certificate = await db().whtCertificate.findFirstOrThrow({
+        where: { organizationId: ORG_ID, expenseRecord: { payoutBatchItem: { payoutBatchId: seeded.batchId } } },
+      })
+      expect(certificate.payeeName).toBe('ชื่อตอนจ่าย ทดสอบ')
+      expect(certificate.payeeNameTitle).toBe('นาย')
+      expect(certificate.payeeTaxId).toBe('1100000000017')
+      expect(certificate.payeeAddress).toBe('1 ถนนตอนจ่าย')
+
+      const item = await db().payoutBatchItem.findFirstOrThrow({ where: { payoutBatchId: seeded.batchId } })
+      const identity = payeeIdentityFromSnapshot(item)
+      if (identity === null) throw new Error('รายการต้องมี snapshot ผู้รับ')
+      const voucherPayee = payeeDocInfoOf(identity, { successCases: 0, fieldDays: 0, hotelNights: 0 })
+      const source = await wht.getWhtCertificateDocSource(accountant, certificate.id)
+      expect(source.payee.name).toBe(voucherPayee.displayName)
+      expect(source.payee.address).toBe(voucherPayee.address)
+    } finally {
+      await db().$executeRawUnsafe(
+        `UPDATE payee_profiles SET name_title = NULL, address_detail = NULL WHERE id = '${PAYEE_PERSON_ID}'`,
+      )
+    }
+  })
+
   it('นิติบุคคล: ภ.ง.ด.53 + snapshot สาขา + PDF ข้อมูลสาขา/แถวเงินได้ 5 + ลำดับที่ในแบบ', async () => {
     await setPeriodStatus('collecting')
     await db().$executeRawUnsafe(`UPDATE payee_profiles SET branch_code = '00002' WHERE id = '${PAYEE_COMPANY_ID}'`)

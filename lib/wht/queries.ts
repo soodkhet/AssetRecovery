@@ -1,5 +1,6 @@
 import { assertOrgWideReadable } from '@/lib/auth/scope'
-import { payeeAddressLine, payeeDisplayName, payeeLegalName } from '@/lib/payees/payee'
+import { payeeDisplayName } from '@/lib/payees/payee'
+import { payeeIdentityFromProfile, payeeIdentityFromSnapshot } from '@/lib/payout/payee-snapshot'
 import type { AccountingMutationContext } from '@/lib/accounting/queries'
 import { isPeriodEnded, PERIOD_ASSUMED_OPEN, periodCloseAvailableFrom, type PeriodClosedLookup } from '@/lib/accounting/period'
 import { AccountingError } from '@/lib/accounting/errors'
@@ -366,6 +367,14 @@ const EXPENSE_SOURCE_SELECT = {
       whtCarriedBaseSatang: true,
       // มติ PO U105 — เงื่อนไขการหักที่ snapshot ตอนสร้างรอบ (ตัวที่ใช้คิดยอดจริง) — ไม่ใช่ค่าปัจจุบันของผู้รับ
       whtCondition: true,
+      // มติ D7-07 (mytester7 FX review M3) — ผู้รับ ณ ตอนสร้างไฟล์โอน (ใบสำคัญจ่ายพิมพ์ค่านี้) ⇒ 50 ทวิ ใช้ค่าเดียวกัน
+      payeeSnapshotAt: true,
+      payeeNameSnapshot: true,
+      payeeNameTitleSnapshot: true,
+      payeeTypeSnapshot: true,
+      payeeTaxIdSnapshot: true,
+      payeeAddressSnapshot: true,
+      payeeBranchCodeSnapshot: true,
       payoutBatch: {
         select: {
           name: true,
@@ -482,6 +491,7 @@ async function issueCertificate(
   })
   const perBatch = group.mode === 'per_payee_batch'
   const payee = item.payee
+  const payeeIdentity = payeeIdentityFromSnapshot(item) ?? payeeIdentityFromProfile(payee)
   // มติ PO U105 — ช่อง "ผู้จ่ายเงิน" ต้องตรงกับวิธีคิดยอดจริงของรอบ ⇒ ใช้ snapshot ของรายการ (NULL = รอบเก่า = (1))
   // เงินได้บนใบ (gross) ของ (2)/(3) รวมภาษีที่ออกให้อยู่แล้วตั้งแต่สร้างรอบ (`payout_batch_items.gross_satang`)
   const whtCondition = item.whtCondition ?? 'withhold'
@@ -505,13 +515,14 @@ async function issueCertificate(
       payeeId: payee.id,
       expenseRecordId: source.id,
       incomeType: incomeTypeOf(item.taxProfile?.incomeType ?? null, incomeCategory, payee.payeeType),
-      // snapshot ผู้ถูกหักจากโปรไฟล์ ณ วันออกใบ — แก้โปรไฟล์ภายหลังไม่กระทบใบนี้ (immutable ที่ DB)
-      payeeName: payeeLegalName({ payeeType: payee.payeeType, legalName: payee.legalName, userFullName: payee.user.fullName }),
-      payeeNameTitle: payee.payeeType === 'corporate' ? null : payee.nameTitle,
-      payeeType: payee.payeeType,
-      payeeTaxId: payee.nationalId,
-      payeeAddress: payeeAddressLine(payee),
-      payeeBranchCode: payee.payeeType === 'corporate' ? payee.branchCode : null,
+      // snapshot ผู้ถูกหัก — มติ D7-07: ค่าที่รายการในรอบจ่าย snapshot ไว้ตอนสร้างไฟล์โอน (ตรงกับใบสำคัญจ่าย)
+      // ไม่มี (รอบเก่า/ยังไม่สร้างไฟล์) ⇒ โปรไฟล์ ณ วันออกใบ · แก้โปรไฟล์ภายหลังไม่กระทบใบนี้ (immutable ที่ DB)
+      payeeName: payeeIdentity.name,
+      payeeNameTitle: payeeIdentity.nameTitle,
+      payeeType: payeeIdentity.payeeType,
+      payeeTaxId: payeeIdentity.taxId,
+      payeeAddress: payeeIdentity.address,
+      payeeBranchCode: payeeIdentity.branchCode,
       whtCondition,
       payerName: payer.name,
       payerTaxId: payer.taxId,
@@ -542,14 +553,10 @@ async function issueCertificate(
       targetId: created.id,
       after: {
         certificate_number: certificateNumber,
-        payee_name: payeeLegalName({
-          payeeType: item.payee.payeeType,
-          legalName: item.payee.legalName,
-          userFullName: item.payee.user.fullName,
-        }),
-        payee_tax_id: payee.nationalId,
-        payee_address: payeeAddressLine(payee),
-        payee_branch_code: payee.payeeType === 'corporate' ? payee.branchCode : null,
+        payee_name: payeeIdentity.name,
+        payee_tax_id: payeeIdentity.taxId,
+        payee_address: payeeIdentity.address,
+        payee_branch_code: payeeIdentity.branchCode,
         wht_condition: whtCondition,
         expense_record_id: source.id,
         payout_batch_id: item.payoutBatchId,
