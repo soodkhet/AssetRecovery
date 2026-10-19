@@ -21,8 +21,7 @@ import { nextDocumentNumber } from '@/lib/document-numbering/queries'
 import { summarizePayoutBatch } from '@/lib/finance/payout-calc'
 import { Prisma } from '@/lib/generated/prisma/client'
 import type { PayoutBatchSide, PayoutBatchStatus, WhtCondition, WhtThresholdScope } from '@/lib/generated/prisma/enums'
-import { maskAccountNumber, payeeAddressLine, payeeDisplayName, payeeLegalName } from '@/lib/payees/payee'
-import { formatBranch } from '@/lib/format/branch'
+import { maskAccountNumber, payeeLegalName } from '@/lib/payees/payee'
 import { PayeeError } from '@/lib/payees/errors'
 import { resolveBankCode } from '@/lib/payout/bank-codes'
 import {
@@ -35,6 +34,14 @@ import {
 } from '@/lib/payout/bank-file-builder'
 import { PayoutError } from '@/lib/payout/errors'
 import { payslipStatsOf, type PayoutDocIssuer, type PayoutPayeeDocInfo } from '@/lib/payout/payout-doc'
+import {
+  payeeDocInfoOf,
+  payeeIdentityFromProfile,
+  payeeIdentityFromSnapshot,
+  payeeSnapshotData,
+  resolvePayeeDocIdentity,
+  type PayeeDocIdentity,
+} from '@/lib/payout/payee-snapshot'
 import {
   assertHasItemsToPay,
   assertPayeeAccountNumbersValid,
@@ -420,8 +427,10 @@ export async function getPayoutDocSource(
 }
 
 /**
- * ข้อมูลผู้รับบนใบสำคัญจ่าย/สลิป (มติ PO U100/U101) — ชื่อพร้อมคำนำหน้า · เลข 13 หลัก · ที่อยู่ (U94) · สาขา (นิติบุคคล)
- * + สรุปเคสสำเร็จ/วันทำงาน/คืนที่พัก จากรายการเบิกในรอบ · ข้อมูลผู้รับอ่าน ณ เวลาพิมพ์ (เอกสารภายใน)
+ * ข้อมูลผู้รับบนใบสำคัญจ่าย/สลิป/สรุปรอบจ่าย (มติ PO U100/U101) — ชื่อพร้อมคำนำหน้า · เลข 13 หลัก · ที่อยู่ (U94) · สาขา (นิติบุคคล)
+ * + สรุปเคสสำเร็จ/วันทำงาน/คืนที่พัก จากรายการเบิกในรอบ
+ * · มติ D7-07 — ตัวตนผู้รับใช้ snapshot ของรายการ (ตอนสร้างไฟล์โอนครั้งแรก) ก่อน · ไม่มี snapshot (ยังไม่สร้างไฟล์/รอบก่อนมติ)
+ *   ⇒ ค่าปัจจุบันตามเดิม
  */
 async function payoutPayeeDocInfo(
   organizationId: string,
@@ -429,23 +438,10 @@ async function payoutPayeeDocInfo(
 ): Promise<Map<string, PayoutPayeeDocInfo>> {
   const payeeIds = [...new Set(batch.items.map((item) => item.payeeId))]
   const expenseIds = batch.items.filter((item) => item.source === 'expense').map((item) => item.sourceId)
-  const [payees, expenses] = await Promise.all([
+  const [payees, expenses, snapshotRows] = await Promise.all([
     prisma.payeeProfile.findMany({
       where: { id: { in: payeeIds }, organizationId },
-      select: {
-        id: true,
-        payeeType: true,
-        nameTitle: true,
-        legalName: true,
-        nationalId: true,
-        branchCode: true,
-        addressDetail: true,
-        addressSubdistrict: true,
-        addressDistrict: true,
-        addressProvince: true,
-        addressPostalCode: true,
-        user: { select: { fullName: true } },
-      },
+      select: { id: true, ...PAYEE_DOC_PROFILE_SELECT },
     }),
     prisma.expense.findMany({
       where: { id: { in: expenseIds }, organizationId },
@@ -458,28 +454,80 @@ async function payoutPayeeDocInfo(
         hotelNights: true,
       },
     }),
-  ])
-  return new Map(
-    payees.map((payee) => {
-      const isCorporate = payee.payeeType === 'corporate'
-      return [
-        payee.id,
-        {
-          // mytester F-04 — นิติบุคคลใช้ชื่อตามทะเบียน (helper เดียวกับ 50 ทวิ) ไม่ใช่ชื่อผู้ใช้
-          displayName: payeeDisplayName({
-            name: payeeLegalName({ payeeType: payee.payeeType, legalName: payee.legalName, userFullName: payee.user.fullName }),
-            nameTitle: payee.nameTitle,
-            payeeType: payee.payeeType,
-          }),
-          taxId: payee.nationalId,
-          isCorporate,
-          address: payeeAddressLine(payee),
-          branchLabel: isCorporate ? formatBranch(payee.branchCode) : null,
-          stats: payslipStatsOf(expenses.filter((expense) => expense.payeeId === payee.id)),
-        },
-      ]
+    prisma.payoutBatchItem.findMany({
+      where: { payoutBatchId: batch.id, organizationId, payeeSnapshotAt: { not: null } },
+      select: { payeeId: true, ...PAYEE_SNAPSHOT_SELECT },
+      orderBy: [{ createdAt: 'asc' }],
     }),
-  )
+  ])
+  const snapshots = new Map<string, PayeeDocIdentity>()
+  for (const row of snapshotRows) {
+    if (snapshots.has(row.payeeId)) continue
+    const identity = payeeIdentityFromSnapshot(row)
+    if (identity !== null) snapshots.set(row.payeeId, identity)
+  }
+  const current = new Map(payees.map((payee) => [payee.id, payeeIdentityFromProfile(payee)]))
+  const out = new Map<string, PayoutPayeeDocInfo>()
+  for (const payeeId of payeeIds) {
+    const identity = resolvePayeeDocIdentity(snapshots.get(payeeId) ?? null, current.get(payeeId) ?? null)
+    if (identity === null) continue
+    out.set(payeeId, payeeDocInfoOf(identity, payslipStatsOf(expenses.filter((expense) => expense.payeeId === payeeId))))
+  }
+  return out
+}
+
+/** ฟิลด์โปรไฟล์ผู้รับที่เอกสารการจ่ายใช้ (ค่าปัจจุบัน + แหล่งของ snapshot ตอนออก) */
+const PAYEE_DOC_PROFILE_SELECT = {
+  payeeType: true,
+  nameTitle: true,
+  legalName: true,
+  nationalId: true,
+  branchCode: true,
+  addressDetail: true,
+  addressSubdistrict: true,
+  addressDistrict: true,
+  addressProvince: true,
+  addressPostalCode: true,
+  user: { select: { fullName: true } },
+} as const
+
+const PAYEE_SNAPSHOT_SELECT = {
+  payeeSnapshotAt: true,
+  payeeNameSnapshot: true,
+  payeeNameTitleSnapshot: true,
+  payeeTypeSnapshot: true,
+  payeeTaxIdSnapshot: true,
+  payeeAddressSnapshot: true,
+  payeeBranchCodeSnapshot: true,
+} as const
+
+/**
+ * มติ D7-07 — snapshot ตัวตนผู้รับลงรายการที่ยังไม่มี (เรียกในทรานแซกชันของการสร้างไฟล์โอนเท่านั้น คู่กับ
+ * `assignVoucherNumbers`) · สร้างไฟล์ซ้ำ = ไม่มีแถวค้าง ⇒ คงชุดเดิม (trigger เขียนครั้งเดียวกันอีกชั้น) · คืนจำนวนผู้รับที่ snapshot ใหม่
+ */
+async function snapshotPayeeIdentities(
+  tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
+  organizationId: string,
+  batchId: string,
+  at: Date,
+): Promise<number> {
+  const pending = await tx.payoutBatchItem.findMany({
+    where: { payoutBatchId: batchId, organizationId, payeeSnapshotAt: null },
+    select: { payeeId: true },
+    distinct: ['payeeId'],
+  })
+  if (pending.length === 0) return 0
+  const profiles = await tx.payeeProfile.findMany({
+    where: { id: { in: pending.map((row) => row.payeeId) }, organizationId },
+    select: { id: true, ...PAYEE_DOC_PROFILE_SELECT },
+  })
+  for (const profile of profiles) {
+    await tx.payoutBatchItem.updateMany({
+      where: { payoutBatchId: batchId, organizationId, payeeId: profile.id, payeeSnapshotAt: null },
+      data: payeeSnapshotData(payeeIdentityFromProfile(profile), at),
+    })
+  }
+  return profiles.length
 }
 
 // ── POST /api/payout-batches (batch builder — `17` §9) ──────────────────────
@@ -1546,6 +1594,8 @@ export async function generatePaymentFile(
     // มติ PO U102 — ใบสำคัญจ่าย 1 เลขต่อผู้รับเงินต่อรอบ ออกตอนสร้างไฟล์ครั้งแรก (สร้างซ้ำใช้เลขเดิม)
     // ลำดับผู้รับ = ลำดับรายการแรกของแต่ละคน (ตรงกับลำดับบนเอกสาร) · ปีตามวันที่สร้างไฟล์ (เวลาไทย)
     const vouchers = await assignVoucherNumbers(tx, user.organizationId, batchId, items, now)
+    // มติ D7-07 — ชื่อ/เลขผู้เสียภาษี/ที่อยู่ผู้รับบนใบสำคัญจ่าย/สลิป/สรุปรอบ = ค่า ณ ตอนออก (สร้างซ้ำคงชุดเดิม)
+    await snapshotPayeeIdentities(tx, user.organizationId, batchId, now)
     // มติ PO 07/10/2569 U130 — หัวกระดาษใบสำคัญจ่าย/สลิป snapshot ตอนสร้างไฟล์ครั้งแรก (สร้างซ้ำคงชุดเดิม · trigger เขียนครั้งเดียว)
     await tx.payoutBatch.updateMany({
       where: { id: batchId, letterheadSnapshot: { equals: Prisma.DbNull } },

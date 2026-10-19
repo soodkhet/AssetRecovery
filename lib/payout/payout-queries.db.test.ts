@@ -568,6 +568,63 @@ suite('ไฟล์โอนเงิน + idempotency (`17` §6.3/§16 · `13` 
     }
   })
 
+  it('มติ D7-07 — ชื่อ/เลข/ที่อยู่ผู้รับบนใบสำคัญจ่าย/สลิป/สรุปรอบ = ค่าตอนสร้างไฟล์ครั้งแรก · เปลี่ยนโปรไฟล์ภายหลัง/สร้างซ้ำไม่เปลี่ยน · DB แก้ไม่ได้', async () => {
+    const { buildPaymentVoucherDocs, buildPayslipDocs, buildPayoutSummaryDoc } = await import('@/lib/payout/payout-doc')
+    const batchId = await batchWithOneItem()
+    const user = await db().user.findUniqueOrThrow({ where: { id: AGENT_OUT_ID }, select: { fullName: true } })
+    const profile = await db().payeeProfile.findUniqueOrThrow({
+      where: { id: PAYEE_OUT_ID },
+      select: { nameTitle: true, nationalId: true, addressDetail: true },
+    })
+    try {
+      // ก่อนสร้างไฟล์ (checking) ไม่มี snapshot ⇒ เอกสารใช้ค่าปัจจุบัน
+      await db().payeeProfile.update({ where: { id: PAYEE_OUT_ID }, data: { nameTitle: 'นาย', addressDetail: '1 ถนนเดิม' } })
+      const draft = await payout.getPayoutDocSource(finance, batchId)
+      expect(draft.payees.get(PAYEE_OUT_ID)?.displayName).toBe(`นาย${user.fullName}`)
+
+      await payout.generatePaymentFile(ctx, batchId, generateInput)
+      const items = await db().payoutBatchItem.findMany({
+        where: { payoutBatchId: batchId },
+        select: { payeeSnapshotAt: true, payeeNameSnapshot: true, payeeTaxIdSnapshot: true, payeeAddressSnapshot: true },
+      })
+      expect(items.length).toBeGreaterThan(0)
+      for (const item of items) {
+        expect(item.payeeSnapshotAt).not.toBeNull()
+        expect(item.payeeNameSnapshot).toBe(user.fullName)
+        expect(item.payeeTaxIdSnapshot).toBe(profile.nationalId)
+        expect(item.payeeAddressSnapshot).toContain('1 ถนนเดิม')
+      }
+
+      // ผู้รับเปลี่ยนชื่อ/คำนำหน้า/เลข/ที่อยู่หลังออกเอกสาร
+      await db().user.update({ where: { id: AGENT_OUT_ID }, data: { fullName: `${user.fullName} (ชื่อใหม่)` } })
+      await db().payeeProfile.update({
+        where: { id: PAYEE_OUT_ID },
+        data: { nameTitle: 'นางสาว', nationalId: '3100000000000', addressDetail: '99 ถนนใหม่' },
+      })
+      await payout.generatePaymentFile(ctx, batchId, { ...generateInput, confirmDuplicate: true })
+
+      const source = await payout.getPayoutDocSource(finance, batchId)
+      const info = source.payees.get(PAYEE_OUT_ID)
+      expect(info?.displayName).toBe(`นาย${user.fullName}`)
+      expect(info?.taxId).toBe(profile.nationalId)
+      expect(info?.address).toContain('1 ถนนเดิม')
+      const [voucher] = buildPaymentVoucherDocs(source.batch, source.issuer, source.payees)
+      expect(voucher?.payee.displayName).toBe(`นาย${user.fullName}`)
+      expect(voucher?.payeeName).toBe(`นาย${user.fullName}`)
+      const [slip] = buildPayslipDocs(source.batch, source.issuer, source.payees)
+      expect(slip?.payeeName).toBe(`นาย${user.fullName}`)
+      const summary = buildPayoutSummaryDoc(source.batch, source.issuer, new Date(), source.payees)
+      expect(summary.rows.map((row) => row.payeeName)).toContain(`นาย${user.fullName}`)
+
+      await expect(
+        db().payoutBatchItem.updateMany({ where: { payoutBatchId: batchId }, data: { payeeNameSnapshot: 'แก้ทับ' } }),
+      ).rejects.toThrow(/แก้ไขไม่ได้/)
+    } finally {
+      await db().user.update({ where: { id: AGENT_OUT_ID }, data: { fullName: user.fullName } })
+      await db().payeeProfile.update({ where: { id: PAYEE_OUT_ID }, data: profile })
+    }
+  })
+
   it('สร้างไฟล์พร้อมกันสองคำขอ → คีย์กันโอนซ้ำต้องมีค่าเดียว (Rule 09 — ธนาคารต้องจับซ้ำได้)', async () => {
     const batchId = await batchWithOneItem()
 
