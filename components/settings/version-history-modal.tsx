@@ -35,6 +35,25 @@ export interface VersionRow {
   summary: ReactNode
 }
 
+const MS_PER_DAY = 86_400_000
+
+/**
+ * ป้ายช่วงวันที่มีผลของเวอร์ชัน — เวอร์ชันที่ถูกแทนแล้วแต่ `effectiveTo` ยังว่าง (แผนที่แก้แล้วไม่ได้ปิดวันสิ้นสุด)
+ * ต้องไม่แสดง "ปัจจุบัน" ซ้ำกับเวอร์ชันล่าสุด (mytester7 SV7-VFX-01) ⇒ ใช้วันก่อนวันเริ่มของเวอร์ชันถัดไป
+ * ถ้าเวอร์ชันถัดไปเริ่มวันเดียวกันหรือก่อน ⇒ "ถูกแทนที่" · `effectiveFrom` เป็นคอลัมน์ `DATE` (เที่ยงคืน UTC)
+ */
+export function versionRangeEnd(row: VersionRow, rows: readonly VersionRow[]): string {
+  if (row.effectiveTo != null) return fmtDate(row.effectiveTo)
+  if (row.isCurrent) return 'ปัจจุบัน'
+  const newer = rows
+    .filter((other) => other.version > row.version && other.effectiveFrom !== undefined)
+    .sort((a, b) => a.version - b.version)[0]
+  if (newer?.effectiveFrom === undefined || row.effectiveFrom === undefined) return 'ถูกแทนที่'
+  const newerFrom = Date.parse(newer.effectiveFrom)
+  if (Number.isNaN(newerFrom) || newerFrom <= Date.parse(row.effectiveFrom)) return 'ถูกแทนที่'
+  return fmtDate(new Date(newerFrom - MS_PER_DAY))
+}
+
 interface VersionHistoryModalProps<T> {
   open: boolean
   onClose: () => void
@@ -112,7 +131,7 @@ export function VersionHistoryModal<T>({ open, onClose, title, url, toRow }: Ver
                 {hasEffectiveRange && (
                   <Td>
                     <span className="text-xs text-slate-600">
-                      {fmtDate(row.effectiveFrom)} – {row.effectiveTo == null ? 'ปัจจุบัน' : fmtDate(row.effectiveTo)}
+                      {fmtDate(row.effectiveFrom)} – {versionRangeEnd(row, rows)}
                     </span>
                   </Td>
                 )}
