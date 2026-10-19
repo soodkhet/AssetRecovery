@@ -83,6 +83,8 @@ export const ERROR_CATALOG = {
   VAT_RATE_IN_USE: { status: 400, severity: 'reject', source: '24 §6.2' },
   VAT_RATE_END_DATE_PAST: { status: 400, severity: 'reject', source: '24 §6.2' },
   VAT_RATE_GAP: { status: 400, severity: 'reject', source: '24 §6.2' },
+  // mytester7 FX review sec — รอล็อกช่วงอัตรา VAT เกิน lock_timeout ⇒ ลองใหม่
+  VAT_RATE_LOCK_TIMEOUT: { status: 409, severity: 'reject', source: '24 §6.2' },
   TAX_PROFILE_NOT_FOUND: { status: 404, severity: 'reject', source: '24 §6.2' },
   DUPLICATE_TAX_PROFILE_NAME: { status: 400, severity: 'reject', source: '24 §6.2' },
   TAX_PROFILE_IN_USE: { status: 400, severity: 'reject', source: '24 §6.2' },

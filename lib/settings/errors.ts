@@ -35,6 +35,8 @@ export const SETTINGS_ERROR_CODES = [
   'VAT_RATE_IN_USE',
   'VAT_RATE_END_DATE_PAST',
   'VAT_RATE_GAP',
+  // mytester7 FX review sec — รอล็อกช่วงอัตรา VAT เกินเวลา (มีการปรับอัตราค้างอยู่) ⇒ ให้ลองใหม่
+  'VAT_RATE_LOCK_TIMEOUT',
   // §6.6 Cost Center
   'COST_CENTER_NOT_FOUND',
   'COST_CENTER_IN_USE',
@@ -82,6 +84,7 @@ const HTTP_STATUS: Record<SettingsErrorCode, number> = {
   VAT_RATE_IN_USE: 400,
   VAT_RATE_END_DATE_PAST: 400,
   VAT_RATE_GAP: 400,
+  VAT_RATE_LOCK_TIMEOUT: 409,
   COST_CENTER_NOT_FOUND: 404,
   COST_CENTER_IN_USE: 400,
   BANK_FILE_FORMAT_NOT_FOUND: 404,
@@ -176,6 +179,10 @@ const MESSAGES: Record<SettingsErrorCode, ErrorMessage> = {
   VAT_RATE_GAP: {
     title: 'ช่วงอัตรา VAT ไม่ต่อเนื่อง',
     message: 'การบันทึกนี้ทำให้มีวันที่ไม่มีอัตรา VAT — ช่วงต้องต่อเนื่องและช่วงล่าสุดต้องไม่มีวันสิ้นสุด',
+  },
+  VAT_RATE_LOCK_TIMEOUT: {
+    title: 'ระบบกำลังปรับอัตรา VAT',
+    message: 'ระบบกำลังปรับอัตรา VAT อยู่ กรุณาลองใหม่อีกครั้ง',
   },
   COST_CENTER_NOT_FOUND: {
     title: 'ไม่พบศูนย์ต้นทุน',
