@@ -123,7 +123,6 @@ export async function resolveExpiredReassignments(
             after: {
               status: 'declined',
               declineReason,
-              replacementAgentProblem: problem,
               newAgentId: pending.newAgentId,
               events: ['assignment.reassignment_timeout_resolved'],
             },
