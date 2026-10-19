@@ -876,6 +876,94 @@ suite('Phase 2.6 — timeout job + การแข่งกับคำตอบ
         await db().$executeRawUnsafe(`UPDATE users SET team_id = '${TEAM_A}'::uuid WHERE id = '${AGENT_B}'`)
       }
     })
+
+    /**
+     * FX review sec — ฝั่งผู้ใช้ล็อก `FOR UPDATE` ก่อนระงับ ⇒ ชนกับ `FOR KEY SHARE` ของการโอนงาน (สองฝั่งรอกันจริง)
+     */
+    it('race: ระงับผู้รับ (ถือล็อกอยู่) คู่กับ job โอน ⇒ job รอจนระงับ commit แล้วไม่โอน', async () => {
+      const caseId = await seedWaitingRequest()
+      await expireLatestRequest(caseId)
+      let release: () => void = () => undefined
+      const gate = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      let locked: () => void = () => undefined
+      const lockedSignal = new Promise<void>((resolve) => {
+        locked = resolve
+      })
+      // จำลองลำดับของ setUserStatus: ล็อก FOR UPDATE → UPDATE status แล้วค้าง transaction ไว้
+      const suspension = db().$transaction(
+        async (tx) => {
+          await tx.$queryRawUnsafe(`SELECT id FROM users WHERE id = '${AGENT_B}' FOR UPDATE`)
+          await tx.$executeRawUnsafe(`UPDATE users SET status = 'suspended' WHERE id = '${AGENT_B}'`)
+          locked()
+          await gate
+        },
+        { timeout: 15_000 },
+      )
+      try {
+        await lockedSignal
+        let settled = false
+        const job = timeoutJob.resolveExpiredReassignments({ organizationId: ORG_ID }).finally(() => {
+          settled = true
+        })
+        await new Promise((resolve) => setTimeout(resolve, 400))
+        expect(settled).toBe(false)
+        release()
+        await suspension
+        const result = await job
+        expect(result).toMatchObject({ resolved: 0, cancelled: 1 })
+        await expectNotTransferred(caseId)
+      } finally {
+        release()
+        await suspension.catch(() => undefined)
+        await db().$executeRawUnsafe(`UPDATE users SET status = 'active' WHERE id = '${AGENT_B}'`)
+      }
+    })
+
+    it('race: การโอนถือล็อกผู้รับอยู่ (FOR KEY SHARE) ⇒ setUserStatus จริงต้องรอ (ก่อนแก้ไม่รอ)', async () => {
+      const userQueries = await import('@/lib/users/queries')
+      const admin = sessionUser({
+        id: MANAGER_ID,
+        isSuperadmin: true,
+        scope: { kind: 'global', teamIds: [], companyId: null, userId: MANAGER_ID },
+      })
+      const target = await userQueries.getUser(admin, AGENT_B)
+      let release: () => void = () => undefined
+      const gate = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      let locked: () => void = () => undefined
+      const lockedSignal = new Promise<void>((resolve) => {
+        locked = resolve
+      })
+      const transfer = db().$transaction(
+        async (tx) => {
+          await tx.$queryRawUnsafe(`SELECT id FROM users WHERE id = '${AGENT_B}' FOR KEY SHARE`)
+          locked()
+          await gate
+        },
+        { timeout: 15_000 },
+      )
+      try {
+        await lockedSignal
+        let settled = false
+        const suspend = userQueries
+          .setUserStatus({ actor: admin, meta, reason: 'ทดสอบล็อกระงับผู้ใช้' }, target, 'suspended')
+          .finally(() => {
+            settled = true
+          })
+        await new Promise((resolve) => setTimeout(resolve, 400))
+        expect(settled).toBe(false)
+        release()
+        await transfer
+        expect((await suspend).status).toBe('suspended')
+      } finally {
+        release()
+        await transfer.catch(() => undefined)
+        await db().$executeRawUnsafe(`UPDATE users SET status = 'active' WHERE id = '${AGENT_B}'`)
+      }
+    })
   })
 })
 

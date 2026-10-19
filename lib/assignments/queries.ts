@@ -228,7 +228,7 @@ async function loadAgentInCaseTeam(organizationId: string, agentId: string, case
 
 /**
  * มติ D7-03 race (mytester7 review) — ล็อกแถวผู้รับงานแบบ `FOR KEY SHARE` ใน transaction ที่สร้าง assignment
- * ⇒ ชนกับ `FOR UPDATE` ของการย้ายทีม/กลุ่ม (`updateUser`) ที่ตรวจงานค้าง: ฝั่งไหนมาทีหลังรอจนอีกฝั่ง commit
+ * ⇒ ชนกับ `FOR UPDATE` ที่ฝั่งผู้ใช้ขอก่อนย้ายทีม/กลุ่ม/เปลี่ยน role/ระงับ/ลบ: ฝั่งไหนมาทีหลังรอจนอีกฝั่ง commit
  * (การมอบงานคนละเคสให้คนเดียวกันไม่รอกันเอง · UPDATE ปกติของแถวผู้ใช้ เช่น เวลา login ก็ไม่ถูกบล็อก)
  * `caseTeamId` = ตรวจทีมซ้ำหลังได้ล็อก (ผู้รับอาจเพิ่งถูกย้ายทีมก่อนหน้า) · `null` = ล็อกอย่างเดียว
  */
@@ -246,8 +246,10 @@ async function lockAgentForAssignment(
 }
 
 /**
- * mytester7 FX1 — ล็อกแถวผู้รับงานใหม่แบบ `FOR KEY SHARE` (ล็อกเดียวกับ {@link lockAgentForAssignment} — ชนกับ
- * `FOR UPDATE` ของการย้ายทีม/กลุ่ม) แล้วตรวจว่ายังรับงานได้ ณ ตอนโอนจริง · คืนปัญหาแทนการโยน error เพื่อให้
+ * mytester7 FX1 — ล็อกแถวผู้รับงานใหม่แบบ `FOR KEY SHARE` (ล็อกเดียวกับ {@link lockAgentForAssignment}) แล้วตรวจว่า
+ * ยังรับงานได้ ณ ตอนโอนจริง · ฝั่งผู้ใช้ล็อก `FOR UPDATE` ก่อนระงับ/ลบ/เปลี่ยน role/ย้ายทีม-กลุ่ม (`lockUserRowForUpdate`
+ * ใน `lib/users/queries.ts`) ⇒ สองฝั่งรอกันจริง (UPDATE ธรรมดาได้แค่ `FOR NO KEY UPDATE` ซึ่งไม่ชน `FOR KEY SHARE`):
+ * ระงับมาก่อน ⇒ เรารอแล้วอ่านสถานะล่าสุด (ถูกระงับ ⇒ ไม่โอน) · เรามาก่อน ⇒ การระงับรอเรา commit · คืนปัญหาแทนการโยน error เพื่อให้
  * timeout job ปิดคำขอได้โดยไม่ล้มซ้ำ (`91` idempotent) · ทีมที่เทียบ = ทีมของเคส (ไม่มี = ทีมของ assignment เดิม)
  */
 export async function lockReplacementAgent(

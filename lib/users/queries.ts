@@ -597,12 +597,11 @@ export async function updateUser(
 
   let paymentResult: UserPaymentWriteResult | null = null
   const updated = await prisma.$transaction(async (tx) => {
-    if (teamOrGroupChange) {
-      // มติ D7-03 race (mytester7 review) — ล็อกแถวผู้ใช้ก่อนตรวจงานค้าง: การมอบงานที่กำลังเกิด (ล็อก `FOR KEY SHARE`
-      // แถวเดียวกัน) ต้อง commit ก่อนเราจะเห็น หรือรอเราย้ายเสร็จแล้วตรวจทีมใหม่ ⇒ ไม่มีงานหลุดเข้ามาระหว่างตรวจกับย้าย
-      await tx.$queryRaw`SELECT id FROM users WHERE id = ${current.id}::uuid FOR UPDATE`
-      await assertNoTeamChangeBlockers(context.actor, current.id, tx)
-    }
+    // มติ D7-03 race (mytester7 review) — ล็อกแถวผู้ใช้ก่อนตรวจงานค้าง: การมอบงานที่กำลังเกิด (ล็อก `FOR KEY SHARE`
+    // แถวเดียวกัน) ต้อง commit ก่อนเราจะเห็น หรือรอเราย้ายเสร็จแล้วตรวจทีมใหม่ ⇒ ไม่มีงานหลุดเข้ามาระหว่างตรวจกับย้าย
+    // เปลี่ยน role ก็ต้องล็อก (FX review sec) — การโอนงานตรวจ role ผู้รับใต้ล็อกเดียวกัน
+    if (teamOrGroupChange || values.roleId !== before.roleId) await lockUserRowForUpdate(tx, current.id)
+    if (teamOrGroupChange) await assertNoTeamChangeBlockers(context.actor, current.id, tx)
     const user = await tx.user.update({
       where: { id: current.id },
       data: {
@@ -680,6 +679,18 @@ export async function updateUser(
 }
 
 /**
+ * ล็อกแถวผู้ใช้แบบ `FOR UPDATE` ก่อนเปลี่ยน status/deleted_at/role/ทีม/กลุ่ม (mytester7 FX review sec)
+ *
+ * ฝั่งมอบงาน/โอนงานล็อกแถวผู้รับแบบ `FOR KEY SHARE` แล้วตรวจว่ายังรับงานได้ (`lockAgentForAssignment` ·
+ * `lockReplacementAgent` ใน `lib/assignments/queries.ts`) — `UPDATE` ธรรมดาที่ไม่แตะคีย์ได้แค่ `FOR NO KEY UPDATE`
+ * ซึ่ง **ไม่ชน** `FOR KEY SHARE` ⇒ ต้องขอ `FOR UPDATE` เองให้สองฝั่งรอกันจริง: ฝั่งที่มาทีหลังรอจนอีกฝั่ง commit
+ * แล้วอ่านค่าล่าสุด (โอนงานที่รอจะเห็นว่าผู้รับถูกระงับแล้ว ⇒ ไม่โอน)
+ */
+async function lockUserRowForUpdate(tx: Pick<typeof prisma, '$queryRaw'>, userId: string): Promise<void> {
+  await tx.$queryRaw`SELECT id FROM users WHERE id = ${userId}::uuid FOR UPDATE`
+}
+
+/**
  * มติ D7-03 (mytester7 S7-AG7-01/03) — ย้ายทีม/กลุ่มไม่ได้ถ้ายังมีงานภาคสนามที่ยังไม่จบ
  * หรือใบเบิกไม่ผูกงานที่ยังอยู่ในสายอนุมัติ · ข้อความระบุเลขเคส/ใบเบิกที่ต้องจัดการก่อน
  */
@@ -723,6 +734,7 @@ export async function setUserStatus(
   )
 
   const updated = await prisma.$transaction(async (tx) => {
+    await lockUserRowForUpdate(tx, current.id)
     const user = await tx.user.update({
       where: { id: current.id },
       data: { status: nextStatus, updatedBy: context.actor.id },
@@ -813,6 +825,7 @@ export async function deleteUser(context: MutationContext, current: UserDto): Pr
   assertUserDeletable(await countUserReferences(organizationId, current.id))
 
   const deleted = await prisma.$transaction(async (tx) => {
+    await lockUserRowForUpdate(tx, current.id)
     const user = await tx.user.update({
       where: { id: current.id },
       data: { status: 'deleted', deletedAt: new Date(), updatedBy: context.actor.id },
