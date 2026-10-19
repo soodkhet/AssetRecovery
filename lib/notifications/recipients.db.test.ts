@@ -156,4 +156,18 @@ suite('usersWithCapability กรองตาม scope (UAT Q17 · BUG-064)', ()
     expect(await recipients.teamLeadIds(ORG_ID, TEAM_B)).toEqual([SUPERVISOR_B])
     expect(await recipients.teamLeadIds(ORG_ID, null)).toEqual([])
   })
+
+  it('teamLeadIds (mytester7 M1): หัวหน้า/ผู้จัดการที่ถูกระงับไม่ได้รับ · อ่านผ่าน transaction client ได้', async () => {
+    await db().$executeRawUnsafe(`UPDATE users SET status = 'suspended' WHERE id IN ('${SUPERVISOR_B}', '${MANAGER_A}')`)
+    try {
+      expect(await recipients.teamLeadIds(ORG_ID, TEAM_B)).toEqual([])
+      expect(await recipients.teamLeadIds(ORG_ID, TEAM_A)).toEqual([])
+    } finally {
+      await db().$executeRawUnsafe(`UPDATE users SET status = 'active' WHERE id IN ('${SUPERVISOR_B}', '${MANAGER_A}')`)
+    }
+    // client ของเทสต์เป็น PrismaClient แยก (ชนิด tx ต่างจาก `@/lib/prisma`) — ตรวจแค่ว่าอ่านผ่าน tx ได้จริง
+    type TxClient = Parameters<typeof recipients.teamLeadIds>[2]
+    const inTx = await db().$transaction((tx) => recipients.teamLeadIds(ORG_ID, TEAM_B, tx as unknown as TxClient))
+    expect(inTx).toEqual([SUPERVISOR_B])
+  })
 })

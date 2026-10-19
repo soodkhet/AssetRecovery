@@ -170,6 +170,10 @@ beforeAll(async () => {
     WHERE id IN ('${AGENT_A}', '${AGENT_B}', '${AGENT_C}')
   `)
   await tx.$executeRawUnsafe(`UPDATE users SET team_id = '${TEAM_A}'::uuid WHERE id = '${MANAGER_2}'`)
+  // ผู้ขอ (MANAGER_ID) เป็นผู้จัดการทีม A — job แจ้งผู้ขอเฉพาะเมื่อยังเป็นหัวหน้า/ผู้จัดการ active ของทีมเคส (mytester7 M1)
+  await tx.$executeRawUnsafe(`
+    INSERT INTO team_managers (team_id, user_id) VALUES ('${TEAM_A}', '${MANAGER_ID}') ON CONFLICT DO NOTHING
+  `)
   await tx.$executeRawUnsafe(`
     INSERT INTO service_fee_templates
       (id, organization_id, name, model, base_satang, rate_pct, basis, fail_fee_satang, version, is_current, created_by)
@@ -818,7 +822,6 @@ suite('Phase 2.6 — timeout job + การแข่งกับคำตอบ
         })
         expect(audit.action).toBe('reject')
         expect(audit.reason).toContain(jobId)
-
         // แจ้งในคิวของ job (ผู้ขอ + ผู้จัดการทีม + คนเดิม) แล้วส่งท้ายรอบ
         expect(
           await db().notificationOutbox.count({ where: { organizationId: ORG_ID, sourceJobRef: jobId, status: 'sent' } }),
@@ -875,6 +878,68 @@ suite('Phase 2.6 — timeout job + การแข่งกับคำตอบ
       } finally {
         await db().$executeRawUnsafe(`UPDATE users SET team_id = '${TEAM_A}'::uuid WHERE id = '${AGENT_B}'`)
       }
+    })
+
+    it('M1 — ผู้ขอไม่ได้เป็นผู้จัดการทีมเคสแล้ว ⇒ ไม่ได้แจ้งเตือน (ทั้งกิ่งโอนสำเร็จและกิ่งยกเลิก)', async () => {
+      await db().$executeRawUnsafe(`DELETE FROM team_managers WHERE team_id = '${TEAM_A}' AND user_id = '${MANAGER_ID}'`)
+      try {
+        const okCase = await seedWaitingRequest()
+        await expireLatestRequest(okCase)
+        const jobOk = `m1-ok-${Date.now()}`
+        expect(await timeoutJob.resolveExpiredReassignments({ organizationId: ORG_ID, jobId: jobOk })).toMatchObject({
+          resolved: 1,
+        })
+        const okRecipients = await db().notificationOutbox.findMany({
+          where: { organizationId: ORG_ID, sourceJobRef: jobOk },
+          select: { payload: true },
+        })
+        expect(okRecipients).toHaveLength(2)
+        expect(JSON.stringify(okRecipients)).not.toContain(MANAGER_ID)
+
+        const cancelCase = await seedWaitingRequest()
+        await expireLatestRequest(cancelCase)
+        await db().$executeRawUnsafe(`UPDATE users SET status = 'suspended' WHERE id = '${AGENT_B}'`)
+        const jobCancel = `m1-cancel-${Date.now()}`
+        try {
+          expect(
+            await timeoutJob.resolveExpiredReassignments({ organizationId: ORG_ID, jobId: jobCancel }),
+          ).toMatchObject({ cancelled: 1 })
+        } finally {
+          await db().$executeRawUnsafe(`UPDATE users SET status = 'active' WHERE id = '${AGENT_B}'`)
+        }
+        const cancelRecipients = await db().notificationOutbox.findMany({
+          where: { organizationId: ORG_ID, sourceJobRef: jobCancel },
+          select: { payload: true },
+        })
+        expect(cancelRecipients).toHaveLength(1)
+        expect(JSON.stringify(cancelRecipients)).not.toContain(MANAGER_ID)
+      } finally {
+        await db().$executeRawUnsafe(`
+          INSERT INTO team_managers (team_id, user_id) VALUES ('${TEAM_A}', '${MANAGER_ID}') ON CONFLICT DO NOTHING
+        `)
+      }
+    })
+
+    it('M1 — รายการเดียวล้มไม่ลากทั้งรอบ: นับ failed + ยังรอยินยอม · รายการอื่นโอนสำเร็จ', async () => {
+      const badCase = await seedWaitingRequest()
+      const goodCase = await seedWaitingRequest()
+      await expireLatestRequest(badCase)
+      await expireLatestRequest(goodCase)
+      // ชี้คำขอของเคสแรกไปที่ assignment ของอีกเคส ⇒ สร้างแถวใหม่ชน unique "1 เคส : 1 ผู้ถือ" ⇒ transaction ของรายการนี้ล้ม
+      await db().$executeRawUnsafe(`
+        UPDATE pending_reassignments SET assignment_id = (
+          SELECT id FROM case_assignments WHERE case_id = '${goodCase}' AND status = 'accepted_unscheduled'
+        ) WHERE case_id = '${badCase}'
+      `)
+      const result = await timeoutJob.resolveExpiredReassignments({ organizationId: ORG_ID, jobId: `m1-fail-${Date.now()}` })
+      expect(result).toMatchObject({ due: 2, resolved: 1, failed: 1 })
+      expect(result.caseIds).toEqual([goodCase])
+      expect(result.failures).toHaveLength(1)
+      expect(result.failures[0]?.caseId).toBe(badCase)
+      const bad = await db().pendingReassignment.findFirstOrThrow({ where: { caseId: badCase } })
+      expect(bad.status).toBe('waiting_consent')
+      const goodActive = await db().caseAssignment.findFirstOrThrow({ where: { caseId: goodCase, status: 'pending_accept' } })
+      expect(goodActive.agentId).toBe(AGENT_B)
     })
 
     /**

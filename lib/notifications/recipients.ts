@@ -104,20 +104,31 @@ export async function usersWithAnyCapability(
   return [...new Set(lists.flat())]
 }
 
+/** client ที่อ่านทีมได้ — `prisma` หรือ transaction client (เรียกระหว่างถือ tx ต้องส่ง tx เข้ามา — mytester7 M1) */
+export type TeamLeadReadClient = Pick<typeof prisma, 'team'>
+
 /**
  * ผู้จัดการ + หัวหน้าของทีม (ผู้ดูแลงานมอบหมายของทีม — `40` §13) — ผู้รับ "พนักงานกดรับงานแล้ว" (`40` §15)
  * ไม่ผูก capability: หัวหน้าที่ settings ปิดสิทธิ์มอบหมายยังต้องเห็นความคืบหน้าทีมตน (read scope เสมอ — `40` §13)
+ * เฉพาะผู้ใช้ที่ยัง active และไม่ถูกลบ (ทั้งหัวหน้าและผู้จัดการ — mytester7 FX review M1)
  */
-export async function teamLeadIds(organizationId: string, teamId: string | null): Promise<string[]> {
+export async function teamLeadIds(
+  organizationId: string,
+  teamId: string | null,
+  client: TeamLeadReadClient = prisma,
+): Promise<string[]> {
   if (teamId === null) return []
-  const team = await prisma.team.findFirst({
+  const team = await client.team.findFirst({
     where: { id: teamId, organizationId, deletedAt: null },
     select: {
-      supervisorId: true,
+      supervisor: { select: { id: true, status: true, deletedAt: true } },
       managers: { where: { user: { status: 'active', deletedAt: null } }, select: { userId: true } },
     },
   })
   if (team === null) return []
-  const supervisor = team.supervisorId === null ? [] : [team.supervisorId]
+  const supervisor =
+    team.supervisor !== null && team.supervisor.status === 'active' && team.supervisor.deletedAt === null
+      ? [team.supervisor.id]
+      : []
   return [...new Set([...supervisor, ...team.managers.map((manager) => manager.userId)])]
 }
