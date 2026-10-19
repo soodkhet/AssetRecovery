@@ -1040,6 +1040,46 @@ suite('มติ PO U95 — รับเงิน ⇒ ใบเสร็จร�
     await setNumbering({ seq: 0 })
   })
 
+  it('mytester7 FX review L3 — แก้ช่วง VAT ค้างทรานแซกชัน (ล็อก exclusive) ⇒ ออกใบเสร็จฯ รอจนเสร็จแล้วได้อัตราใหม่', async () => {
+    const { vatRateLockKey } = await import('@/lib/settings/queries/vat-rate-lock')
+    await setNumbering({ seq: 950 })
+    const batch = await seedBilling({ status: 'sent' })
+    const received = new Date(Date.UTC(2027, 6, 5))
+    const receiptId = await seedReceipt(batch.id, { amountSatang: 1_320_000, receivedDate: received })
+    let signalLocked: () => void = () => undefined
+    const editorLocked = new Promise<void>((resolve) => {
+      signalLocked = resolve
+    })
+    let editorDoneAt = 0
+    // จำลองฝั่งแก้ช่วง: ถือล็อก exclusive + เปลี่ยนอัตราของช่วง 01/07/2570 เป็น 12% แล้วค้างไว้ก่อน commit
+    const editor = db().$transaction(
+      async (tx) => {
+        await tx.$executeRawUnsafe(`SELECT pg_advisory_xact_lock(hashtext('${vatRateLockKey(ORG_ID)}'))`)
+        await tx.$executeRawUnsafe(
+          `UPDATE vat_rate_history SET rate_pct = 12.00 WHERE organization_id = '${ORG_ID}' AND effective_from = '2027-07-01'`,
+        )
+        signalLocked()
+        await new Promise((resolve) => setTimeout(resolve, 400))
+        editorDoneAt = Date.now()
+      },
+      { timeout: 15_000 },
+    )
+    try {
+      await editorLocked
+      const invoice = await sales.issueTaxInvoice(ctx, { cashReceiptId: receiptId }, new Date(Date.UTC(2027, 6, 6, 3)))
+      const issuedAt = Date.now()
+      await editor
+      expect(issuedAt).toBeGreaterThanOrEqual(editorDoneAt)
+      expect(invoice.vatRatePctUsed).toBe('12')
+    } finally {
+      await editor.catch(() => undefined)
+      await db().$executeRawUnsafe(
+        `UPDATE vat_rate_history SET rate_pct = 10.00 WHERE organization_id = '${ORG_ID}' AND effective_from = '2027-07-01'`,
+      )
+      await setNumbering({ seq: 0 })
+    }
+  })
+
   it('U96 #3 — บริษัทโหมด no_vat ⇒ ออกไม่ได้ TAX_INVOICE_NO_VAT_COMPANY (ไม่กินเลขที่)', async () => {
     await setNumbering({ seq: 60 })
     const batch = await seedBilling({ status: 'sent' })
