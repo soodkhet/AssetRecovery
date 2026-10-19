@@ -1,10 +1,10 @@
 @import 'tailwindcss';
 
-/* Design System — `04` §8.1 (theme slate/emerald · font Inter + Noto Sans Thai)
+/* Design System — `04` §8.1 (theme slate/emerald · font Inter + Sarabun)
    UI Kit อยู่ที่ `components/ui/*` (Phase 1.5) — คลาสเฉพาะทางที่ Tailwind ไม่มีให้เท่านั้นที่มาอยู่ไฟล์นี้ */
 @theme {
-  /* ตัวแปร --font-inter / --font-noto-sans-thai มาจาก `next/font` ใน `app/layout.tsx` */
-  --font-sans: var(--font-inter), var(--font-noto-sans-thai), ui-sans-serif, system-ui, sans-serif;
+  /* ตัวแปร --font-inter / --font-sarabun มาจาก `next/font` ใน `app/layout.tsx` */
+  --font-sans: var(--font-inter), var(--font-sarabun), ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, 'SFMono-Regular', 'Menlo', monospace;
 }
 

@@ -1,14 +1,20 @@
 import type { Metadata, Viewport } from 'next'
-import { Inter, Noto_Sans_Thai } from 'next/font/google'
+import { Inter, Sarabun } from 'next/font/google'
 import { APP_NAME } from '@/lib/constants'
 import './globals.css'
 
 /**
- * Font มาตรฐานทั้งระบบ — Inter (อังกฤษ/ตัวเลข) + Noto Sans Thai (ไทย) fallback `sans-serif` (`04` §8.1)
+ * Font มาตรฐานทั้งระบบ — Inter (อังกฤษ/ตัวเลข) + Sarabun (ไทย — มติผู้ใช้ 19/10/2569 แทน Noto Sans Thai) fallback `sans-serif` (`04` §8.1)
+ * Sarabun ไม่ใช่ variable font ⇒ ต้องระบุ weight ที่ใช้ (400–700 ตาม UI Kit)
  * โหลดผ่าน `next/font` (self-host ตอน build) แทน `<link>` ไป Google Fonts — ไม่มี request ออกนอกตอน runtime
  */
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'swap' })
-const notoSansThai = Noto_Sans_Thai({ subsets: ['thai'], variable: '--font-noto-sans-thai', display: 'swap' })
+const sarabun = Sarabun({
+  subsets: ['thai'],
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-sarabun',
+  display: 'swap',
+})
 
 export const metadata: Metadata = {
   // ชื่อแท็บตามหน้า: แต่ละ page.tsx ตั้ง `metadata.title` เป็นชื่อหน้า (ชื่อเดียวกับเมนู/หัวหน้า) — staging S-009
@@ -37,7 +43,7 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="th" className={`${inter.variable} ${notoSansThai.variable}`}>
+    <html lang="th" className={`${inter.variable} ${sarabun.variable}`}>
       <body className="min-h-screen bg-slate-50 text-slate-900 antialiased">{children}</body>
     </html>
   )

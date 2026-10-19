@@ -232,7 +232,7 @@
 | 196 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
 | 204 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
-### `docs/04-ui-ux-design-system.md` (19 KB, 214 บรรทัด — v3)
+### `docs/04-ui-ux-design-system.md` (19 KB, 215 บรรทัด — v3.1)
 
 | บรรทัด | หัวข้อ |
 |---|---|
@@ -240,24 +240,24 @@
 | 3 | # 04 — UI/UX Design System |
 | 4 | ## AssetRecovery — Asset Recovery Operations Platform |
 | 11 | ## Changelog |
-| 25 | ## 1. Summary |
-| 29 | ## 2. Purpose |
-| 33 | ## 3. In Scope |
-| 39 | ## 4. Out of Scope |
-| 44 | ## 5. Actors & Responsibilities |
-| 59 | ## 6. Core Concepts |
-| 67 | ## 7. Data Entities / Required Objects |
-| 75 | ## 8. UI / UX Rules |
-| 86 | ### 8.1 Design Token Reference (สกัดจริงจาก Mockup HTML — ไม่ใช่ค่าที่กำหนดขึ้นใหม่) |
-| 141 | ## 10. Security / Control Rules |
-| 147 | ## 11. Validation & Error Handling |
-| 156 | ## 12. Permission Requirements |
-| 163 | ## 13. Audit Log Requirements |
-| 170 | ## 14. API / Integration Draft |
-| 178 | ## 15. Acceptance Criteria |
-| 185 | ## 16. Test Cases |
-| 196 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
-| 205 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
+| 26 | ## 1. Summary |
+| 30 | ## 2. Purpose |
+| 34 | ## 3. In Scope |
+| 40 | ## 4. Out of Scope |
+| 45 | ## 5. Actors & Responsibilities |
+| 60 | ## 6. Core Concepts |
+| 68 | ## 7. Data Entities / Required Objects |
+| 76 | ## 8. UI / UX Rules |
+| 87 | ### 8.1 Design Token Reference (สกัดจริงจาก Mockup HTML — ไม่ใช่ค่าที่กำหนดขึ้นใหม่) |
+| 142 | ## 10. Security / Control Rules |
+| 148 | ## 11. Validation & Error Handling |
+| 157 | ## 12. Permission Requirements |
+| 164 | ## 13. Audit Log Requirements |
+| 171 | ## 14. API / Integration Draft |
+| 179 | ## 15. Acceptance Criteria |
+| 186 | ## 16. Test Cases |
+| 197 | ## 17. การตัดสินใจที่เกี่ยวข้อง (Decisions) |
+| 206 | ## 18. สิ่งที่ยังต้องตัดสินใจ (Open Items) |
 
 ### `docs/05-auth-and-access-control.md` (19 KB, 213 บรรทัด — v3.6)
 
