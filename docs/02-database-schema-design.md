@@ -103,6 +103,7 @@
 | v4.76 | 16/10/2569 | **มติ 16/10/2569 Q8 (mytester M1/B-03)** — migration `20261016100000_cases_org_imei_index` เพิ่ม `idx_cases_org_imei (organization_id, imei)` เท่านั้น ไม่เปลี่ยนคอลัมน์: คำเตือน IMEI ซ้ำกับเคสที่ยังดำเนินการอยู่ (เปิดเคส/นำเข้าไฟล์) ค้น `WHERE organization_id = ? AND imei = ?` / `imei IN (…)` ทุกครั้ง · เดิม seq scan |
 | v4.77 | 19/10/2569 | **มติ D7-02 (mytester7 S7-AG7-05 — Claude ตัดสินแทน PO)** — migration `20261019100000_authz_version`: `users.authz_version INTEGER NOT NULL DEFAULT 0` + `roles.authz_version INTEGER NOT NULL DEFAULT 0` = "เวอร์ชันสิทธิ์" · เดินด้วย DB trigger เท่านั้น (แอปห้ามเขียนเอง): `users` BEFORE UPDATE เมื่อ organization/role/supabase_uid/username/email/full_name/team/company/status/last_login_at/must_change_password/deleted_at เปลี่ยน · `roles` BEFORE UPDATE เมื่อ name/role_group/deleted_at เปลี่ยน · `role_capabilities` INSERT/UPDATE/DELETE ⇒ role +1 · `team_managers` INSERT/UPDATE/DELETE และ `teams.supervisor_id` เปลี่ยน ⇒ ผู้ใช้ที่ผูก +1 — session cache ต่อ instance เทียบเวอร์ชันกับฐานด้วย query เดียวทุก request ก่อนใช้ค่าใน cache ⇒ ระงับ/ถอดสิทธิ์/เปลี่ยน role-capability/ทีม/บริษัท มีผลกับคำขอถัดไปทุก instance (`05` §17) |
 | v4.78 | 19/10/2569 | **mytester7 S7-AG2-05 (Claude ตัดสินแทน PO รอทบทวน)** — migration `20261019100100_service_fee_template_lineage`: เพิ่ม `service_fee_templates.lineage_id UUID NULL` (= id ของเวอร์ชันแรก · NULL = แถวนี้คือเวอร์ชันแรกเอง) + `UNIQUE (organization_id, lineage_id, version)` (`uniq_service_fee_templates_org_lineage_version`) · backfill เวอร์ชันที่ไม่ใช่ตัวแรกของแต่ละ (org, name) ให้ชี้ตัวแรก · เหตุผล: เดิมจับกลุ่มเวอร์ชันด้วย `name` ⇒ เปลี่ยนชื่อต้องทับชื่อเวอร์ชันเดิม ขัด snapshot pattern (`92` §7.1) · คง `UNIQUE (organization_id, name, version)` เดิม · nullable เพื่อให้ INSERT เวอร์ชันแรกไม่ต้องรู้ id ล่วงหน้า |
+| v4.79 | 19/10/2569 | **mytester7 FX2 (Claude ตัดสินแทน PO รอทบทวน — แบบเดียวกับ v4.78)** — migration `20261019110000_compensation_plan_lineage`: เพิ่ม `compensation_plans.lineage_id UUID NULL` (= id ของเวอร์ชันแรก · NULL = แถวนี้คือเวอร์ชันแรกเอง) + `UNIQUE (organization_id, lineage_id, version)` (`uniq_compensation_plans_org_lineage_version`) · backfill เวอร์ชันที่ไม่ใช่ตัวแรกของแต่ละ (org, name) ให้ชี้ตัวแรก · เหตุผล: เดิมจับกลุ่มเวอร์ชันด้วย `name` ⇒ แก้แผนแล้วเปลี่ยนชื่อต้องทับชื่อทุกเวอร์ชันเดิม ⇒ รายการเบิกที่ snapshot `comp_plan_id` + `comp_plan_version` เดิมแสดงชื่อที่ไม่ตรงยอด ขัด snapshot pattern (`92` §7.1) · ประวัติเวอร์ชัน/ตรวจชื่อซ้ำ/ทีมที่ผูก/เปิด-ปิด/resolve แผน ณ วันที่ของรายการเบิก ใช้สายเวอร์ชันแทนชื่อ · คง `UNIQUE (organization_id, name, version)` เดิม · nullable เพื่อให้ INSERT เวอร์ชันแรกไม่ต้องรู้ id ล่วงหน้า |
 
 ขอบเขตเอกสารนี้: Full Production Database Schema — ทุก table, column, type, FK, index, unique constraint, enum, migration order และ seed data สรุปจาก spec ไฟล์ทั้งหมดไว้ในที่เดียว ใช้เป็น source of truth เดียวก่อนเขียน Prisma schema
 
@@ -694,12 +695,16 @@ CREATE TABLE compensation_plans (
   effective_from        DATE         NOT NULL,
   effective_to          DATE,
   is_current            BOOLEAN      NOT NULL DEFAULT true,
+  -- (v4.79 mytester7 FX2) สายเวอร์ชัน = id ของเวอร์ชันแรก · NULL = แถวนี้คือเวอร์ชันแรกเอง
+  -- เปลี่ยนชื่อในเวอร์ชันใหม่ไม่ทับชื่อเวอร์ชันเดิม
+  lineage_id            UUID,
   created_at            TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
   created_by            UUID         NOT NULL REFERENCES users(id),
   updated_at            TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
   updated_by            UUID         REFERENCES users(id),
   deleted_at            TIMESTAMPTZ,
-  UNIQUE(organization_id, name, version)
+  UNIQUE(organization_id, name, version),
+  CONSTRAINT uniq_compensation_plans_org_lineage_version UNIQUE(organization_id, lineage_id, version)
 );
 CREATE INDEX idx_comp_plans_org ON compensation_plans(organization_id, is_current);
 

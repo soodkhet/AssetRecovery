@@ -1289,6 +1289,9 @@ model CompensationPlan {
   effectiveFrom DateTime  @map("effective_from") @db.Date
   effectiveTo   DateTime? @map("effective_to") @db.Date
   isCurrent     Boolean   @default(true) @map("is_current")
+  /// mytester7 FX2 — สายเวอร์ชัน = id ของเวอร์ชันแรก · NULL = แถวนี้คือเวอร์ชันแรกเอง (สาย = id ตัวเอง)
+  /// เปลี่ยนชื่อในเวอร์ชันใหม่ไม่ทับชื่อเวอร์ชันเดิม (รายการเบิกที่ snapshot เวอร์ชันเดิมแสดงชื่อเดิม)
+  lineageId     String?   @map("lineage_id") @db.Uuid
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   createdBy String    @map("created_by") @db.Uuid
@@ -1305,6 +1308,7 @@ model CompensationPlan {
   fieldDaySettlements FieldDaySettlement[] @relation("field_day_settlements_comp_plan")
 
   @@unique([organizationId, name, version])
+  @@unique([organizationId, lineageId, version], map: "uniq_compensation_plans_org_lineage_version")
   @@index([organizationId, isCurrent], map: "idx_comp_plans_org")
   @@map("compensation_plans")
 }

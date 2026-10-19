@@ -60,7 +60,8 @@ function versionRow(plan: CompensationPlanDto): VersionRow {
     updatedAt: plan.updatedAt,
     effectiveFrom: plan.effectiveFrom,
     effectiveTo: plan.effectiveTo,
-    summary: `${fuelLabel(plan)} · เบี้ยเลี้ยง ${fmtSatang(plan.allowanceSatang)} · คอม ${fmtSatang(plan.commissionSatang)} · เบี้ยเสี่ยง ${fmtSatang(plan.noSuccessFeeSatang)}`,
+    // แต่ละเวอร์ชันมีชื่อของตัวเอง (เปลี่ยนชื่อไม่ทับเวอร์ชันเดิม — mytester7 FX2)
+    summary: `${plan.name} · ${fuelLabel(plan)} · เบี้ยเลี้ยง ${fmtSatang(plan.allowanceSatang)} · คอม ${fmtSatang(plan.commissionSatang)} · เบี้ยเสี่ยง ${fmtSatang(plan.noSuccessFeeSatang)}`,
   }
 }
 

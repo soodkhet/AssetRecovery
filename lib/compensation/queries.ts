@@ -4,6 +4,7 @@ import { emitAudit } from '@/lib/audit/audit'
 import type { RequestMeta } from '@/lib/auth/request-meta'
 import type { SessionUser } from '@/lib/auth/types'
 import { CompensationError } from '@/lib/compensation/errors'
+import { inPlanLineage, planLineageKey } from '@/lib/compensation/lineage'
 import {
   normalizePlanValues,
   planNextVersion,
@@ -19,8 +20,8 @@ import { prisma } from '@/lib/prisma'
  * ทุก query กรองด้วย `organization_id` เสมอ (`02` §2) · ทุก mutation อยู่ใน `$transaction`
  * เดียวกับ `emitAudit()` พร้อม `reason` เพราะ `compensation_plans` อยู่หมวด **เงิน** (`90` §13)
  *
- * **แผนหนึ่งชุด = แถวที่มี `name` เดียวกันหลายเวอร์ชัน** (UNIQUE `organization_id, name, version`)
- * — PATCH สร้างแถวใหม่แล้วย้าย `teams.compensation_plan_id` มาชี้เวอร์ชันปัจจุบัน ส่วนแถวเก่า
+ * **แผนหนึ่งชุด = หลายเวอร์ชันใน "สาย" เดียวกัน** (`lineage_id` = id ของเวอร์ชันแรก · NULL = ตัวแรกเอง —
+ * mytester7 FX2: เดิมจับกลุ่มด้วย `name` ทำให้เปลี่ยนชื่อแล้วต้องทับชื่อเวอร์ชันเดิม) — PATCH สร้างแถวใหม่แล้วย้าย `teams.compensation_plan_id` มาชี้เวอร์ชันปัจจุบัน ส่วนแถวเก่า
  * ยังอยู่ครบเพื่อให้ `expenses` ที่ snapshot ไว้แล้วอ้างถึงได้เสมอ (`92` §7.1)
  */
 
@@ -159,14 +160,24 @@ export async function getCompensationPlan(
   return toRecord(row)
 }
 
-/** ประวัติทุกเวอร์ชันของแผนเดียวกัน (`11` §14 `GET /:id/versions`) — เรียงใหม่→เก่า */
+/** id ของสายเวอร์ชันที่แถวนี้อยู่ (= id ของเวอร์ชันแรก) */
+async function lineageKeyOf(organizationId: string, planId: string): Promise<string> {
+  const row = await prisma.compensationPlan.findFirst({
+    where: { id: planId, organizationId },
+    select: { id: true, lineageId: true },
+  })
+  if (!row) throw new CompensationError('PLAN_NOT_FOUND', { detail: `plan=${planId}` })
+  return planLineageKey(row)
+}
+
+/** ประวัติทุกเวอร์ชันของแผนเดียวกัน (`11` §14 `GET /:id/versions`) — เรียงใหม่→เก่า (แต่ละเวอร์ชันแสดงชื่อของตัวเอง) */
 export async function listCompensationPlanVersions(
   organizationId: string,
   planId: string,
 ): Promise<CompensationPlanRecord[]> {
-  const plan = await getCompensationPlan(organizationId, planId)
+  const lineageKey = await lineageKeyOf(organizationId, planId)
   const rows = await prisma.compensationPlan.findMany({
-    where: { organizationId, name: plan.name },
+    where: { organizationId, ...inPlanLineage(lineageKey) },
     select: planSelect,
     orderBy: { version: 'desc' },
   })
@@ -179,10 +190,14 @@ interface MutationContext {
   reason: string
 }
 
-async function assertNameAvailable(organizationId: string, name: string, exceptName?: string): Promise<void> {
-  if (exceptName !== undefined && exceptName === name) return
+/** ชื่อซ้ำกับแผนสายอื่นไม่ได้ — `exceptLineage` = สายที่กำลังแก้ (ใช้ชื่อเดิมของเวอร์ชันก่อนหน้าซ้ำได้) */
+async function assertNameAvailable(organizationId: string, name: string, exceptLineage?: string): Promise<void> {
   const duplicate = await prisma.compensationPlan.findFirst({
-    where: { organizationId, name },
+    where: {
+      organizationId,
+      name,
+      ...(exceptLineage === undefined ? {} : { NOT: inPlanLineage(exceptLineage) }),
+    },
     select: { id: true },
   })
   if (duplicate) throw new CompensationError('DUPLICATE_TEMPLATE_NAME', { detail: `name=${name}` })
@@ -201,10 +216,11 @@ async function rethrowDuplicateName(organizationId: string, name: string): Promi
 
 async function rethrowVersionConflict(
   organizationId: string,
-  current: { id: string; name: string },
+  current: { id: string },
+  lineageKey: string,
   nextName: string,
 ): Promise<never> {
-  await assertNameAvailable(organizationId, nextName, current.name)
+  await assertNameAvailable(organizationId, nextName, lineageKey)
   throw new CompensationError('VERSION_NOT_CURRENT', { detail: `plan=${current.id} (unique violation)` })
 }
 
@@ -265,7 +281,8 @@ export async function updateCompensationPlan(
   const next = planNextVersion(current, values)
   if (next === null) return current
 
-  await assertNameAvailable(organizationId, next.values.name, current.name)
+  const lineageKey = await lineageKeyOf(organizationId, current.id)
+  await assertNameAvailable(organizationId, next.values.name, lineageKey)
 
   const updated = await prisma.$transaction(async (tx) => {
     await tx.compensationPlan.update({
@@ -277,20 +294,15 @@ export async function updateCompensationPlan(
       },
     })
 
-    // เปลี่ยนชื่อ = เปลี่ยนทั้งชุด — ประวัติเวอร์ชันจับกลุ่มด้วย `name` จึงต้องตรงกันทุกแถว
-    if (next.values.name !== current.name) {
-      await tx.compensationPlan.updateMany({
-        where: { organizationId, name: current.name },
-        data: { name: next.values.name, updatedBy: context.actor.id },
-      })
-    }
-
+    // เปลี่ยนชื่อ = ชื่อของเวอร์ชันใหม่เท่านั้น — ห้ามทับชื่อเวอร์ชันเดิม (รายการเบิกที่ snapshot เวอร์ชันเดิมต้องเห็น
+    // ชื่อเดิมให้ตรงยอด · `92` §7.1 — mytester7 FX2) · ประวัติจับกลุ่มด้วย `lineage_id`
     const plan = await tx.compensationPlan.create({
       data: {
         organizationId,
         ...toCreateData(next.values),
         version: next.version,
         isCurrent: true,
+        lineageId: lineageKey,
         createdBy: context.actor.id,
       },
       select: planSelect,
@@ -321,15 +333,15 @@ export async function updateCompensationPlan(
     )
 
     return plan
-  }).catch(onUniqueViolation(() => rethrowVersionConflict(organizationId, current, next.values.name)))
+  }).catch(onUniqueViolation(() => rethrowVersionConflict(organizationId, current, lineageKey, next.values.name)))
 
   return toRecord(updated)
 }
 
 /** จำนวนทีมที่ยังผูกอยู่กับแผนชุดนี้ (ทุกเวอร์ชัน) — ยาม `PLAN_IN_USE` */
-export async function countTeamsUsingPlan(organizationId: string, planName: string): Promise<number> {
+export async function countTeamsUsingPlan(organizationId: string, lineageKey: string): Promise<number> {
   return prisma.team.count({
-    where: { organizationId, deletedAt: null, compensationPlan: { organizationId, name: planName } },
+    where: { organizationId, deletedAt: null, compensationPlan: { organizationId, ...inPlanLineage(lineageKey) } },
   })
 }
 
@@ -343,9 +355,10 @@ export async function setCompensationPlanActive(
   isActive: boolean,
 ): Promise<CompensationPlanRecord> {
   const organizationId = context.actor.organizationId
+  const lineageKey = await lineageKeyOf(organizationId, current.id)
 
   if (!isActive) {
-    const teamCount = await countTeamsUsingPlan(organizationId, current.name)
+    const teamCount = await countTeamsUsingPlan(organizationId, lineageKey)
     if (teamCount > 0) {
       throw new CompensationError('PLAN_IN_USE', {
         detail: `plan=${current.name} teams=${teamCount}`,
@@ -358,7 +371,7 @@ export async function setCompensationPlanActive(
 
   await prisma.$transaction(async (tx) => {
     await tx.compensationPlan.updateMany({
-      where: { organizationId, name: current.name },
+      where: { organizationId, ...inPlanLineage(lineageKey) },
       data: { deletedAt, updatedBy: context.actor.id },
     })
 
