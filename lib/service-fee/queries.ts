@@ -13,7 +13,7 @@ import {
 import type { ServiceFeeTemplateListQuery } from '@/lib/service-fee/schemas'
 import type { ServiceFeeTemplateDto, ServiceFeeTemplateListDto } from '@/lib/service-fee/types'
 import { prisma } from '@/lib/prisma'
-import { inLineage, lineageKeyOfRow, notInLineage } from '@/lib/versioning/lineage'
+import { inLineage, lineageKeyOfRow, lockVersionedNames, notInLineage } from '@/lib/versioning/lineage'
 
 /**
  * ชั้นข้อมูลของโมดูลเทมเพลตค่าบริการ (ไฟล์ 12) — **แยกจาก pure logic** (`lib/service-fee/template.ts`)
@@ -150,8 +150,13 @@ interface MutationContext {
 }
 
 /** ชื่อซ้ำกับเทมเพลตสายอื่นไม่ได้ — `exceptLineage` = สายที่กำลังแก้ (ใช้ชื่อเดิมของเวอร์ชันก่อนหน้าซ้ำได้) */
-async function assertNameAvailable(organizationId: string, name: string, exceptLineage?: string): Promise<void> {
-  const duplicate = await prisma.serviceFeeTemplate.findFirst({
+async function assertNameAvailable(
+  organizationId: string,
+  name: string,
+  exceptLineage?: string,
+  client: Pick<typeof prisma, 'serviceFeeTemplate'> = prisma,
+): Promise<void> {
+  const duplicate = await client.serviceFeeTemplate.findFirst({
     where: {
       organizationId,
       name,
@@ -192,6 +197,9 @@ export async function createServiceFeeTemplate(
   await assertNameAvailable(organizationId, values.name)
 
   const created = await prisma.$transaction(async (tx) => {
+    // FX review L1 — ตรวจซ้ำใต้ล็อกชื่อระดับองค์กร (กันคำขอพร้อมกันที่ผ่านการตรวจนอกทรานแซกชันทั้งคู่)
+    await lockVersionedNames(tx, 'service_fee_templates', organizationId)
+    await assertNameAvailable(organizationId, values.name, undefined, tx)
     const template = await tx.serviceFeeTemplate.create({
       data: {
         organizationId,
@@ -246,6 +254,8 @@ export async function updateServiceFeeTemplate(
   await assertNameAvailable(organizationId, next.values.name, lineageKey)
 
   const updated = await prisma.$transaction(async (tx) => {
+    await lockVersionedNames(tx, 'service_fee_templates', organizationId)
+    await assertNameAvailable(organizationId, next.values.name, lineageKey, tx)
     await tx.serviceFeeTemplate.update({
       where: { id: current.id },
       data: { isCurrent: false, updatedBy: context.actor.id },

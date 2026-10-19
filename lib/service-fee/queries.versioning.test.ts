@@ -10,8 +10,9 @@ import type { ServiceFeeTemplateDto } from '@/lib/service-fee/types'
  */
 
 const txMock = vi.hoisted(() => ({
-  serviceFeeTemplate: { update: vi.fn(), updateMany: vi.fn(), create: vi.fn() },
+  serviceFeeTemplate: { update: vi.fn(), updateMany: vi.fn(), create: vi.fn(), findFirst: vi.fn(async () => null) },
   financeCompany: { updateMany: vi.fn() },
+  $executeRaw: vi.fn(async () => 1),
 }))
 
 const prismaMock = vi.hoisted(() => ({
@@ -108,6 +109,12 @@ describe('updateServiceFeeTemplate — เปลี่ยนชื่อไม�
       expect.objectContaining({
         where: { organizationId: 'org-1', name: 'ชื่อใหม่', NOT: { id: V1.id }, OR: [{ lineageId: null }, { lineageId: { not: V1.id } }] },
       }),
+    )
+    // FX review L1 — ตรวจซ้ำในทรานแซกชันใต้ล็อกชื่อระดับองค์กรก่อน insert
+    expect(txMock.$executeRaw).toHaveBeenCalledTimes(1)
+    expect(txMock.$executeRaw.mock.calls[0]?.slice(1)).toEqual(['service_fee_templates:name:org-1'])
+    expect(txMock.serviceFeeTemplate.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ name: 'ชื่อใหม่', NOT: { id: V1.id } }) }),
     )
   })
 })

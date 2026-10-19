@@ -141,6 +141,27 @@ suite('สายเวอร์ชันเทมเพลตค่าบริ�
     await expect(insertRaw('สาย B (ชื่อใหม่)', 2, other)).resolves.toBeTypeOf('string')
   })
 
+  it('FX review L1 — สร้างเทมเพลตชื่อ X พร้อมกับเปลี่ยนชื่ออีกสายเป็น X ⇒ สำเร็จได้ทางเดียว อีกทาง DUPLICATE_TEMPLATE_NAME', async () => {
+    const base = { model: 'FLAT' as const, baseSatang: 125_000, ratePct: 0, basis: null, failFeeSatang: null }
+    const other = await serviceFee.createServiceFeeTemplate(ctx, { ...base, name: 'เทมเพลตเดิมของอีกสาย' })
+    const current = await serviceFee.getServiceFeeTemplate(ORG_ID, other.id)
+    // เปลี่ยนชื่อเริ่มก่อน (มีอ่านสายก่อนตรวจชื่อ) แล้วสร้างตามมาในจังหวะที่การตรวจนอกทรานแซกชันของทั้งคู่ยังไม่เห็นกัน
+    const renaming = serviceFee.updateServiceFeeTemplate(ctx, current, { ...base, baseSatang: 150_000, name: 'ชื่อแข่งกัน' })
+    await new Promise((resolve) => setImmediate(resolve))
+    const results = await Promise.allSettled([
+      serviceFee.createServiceFeeTemplate(ctx, { ...base, name: 'ชื่อแข่งกัน' }),
+      renaming,
+    ])
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1)
+    const rejected = results.find((result) => result.status === 'rejected')
+    expect(rejected?.status === 'rejected' ? rejected.reason : null).toMatchObject({ code: 'DUPLICATE_TEMPLATE_NAME' })
+    const lineages = await db().serviceFeeTemplate.findMany({
+      where: { organizationId: ORG_ID, name: 'ชื่อแข่งกัน' },
+      select: { id: true, lineageId: true },
+    })
+    expect(new Set(lineages.map((row) => row.lineageId ?? row.id)).size).toBe(1)
+  })
+
   it('service: แก้แล้วเปลี่ยนชื่อ ⇒ เวอร์ชันใหม่ชื่อใหม่ในสายเดิม · ชื่อ v1 ไม่ถูกทับ · ประวัติครบทุกชื่อ', async () => {
     const created = await serviceFee.createServiceFeeTemplate(ctx, {
       name: 'เหมาจ่าย 1,250 บาท/เคส',

@@ -5,6 +5,7 @@ import type { RequestMeta } from '@/lib/auth/request-meta'
 import type { SessionUser } from '@/lib/auth/types'
 import { CompensationError } from '@/lib/compensation/errors'
 import { inPlanLineage, notInPlanLineage, planLineageKey } from '@/lib/compensation/lineage'
+import { lockVersionedNames } from '@/lib/versioning/lineage'
 import {
   normalizePlanValues,
   planNextVersion,
@@ -191,8 +192,13 @@ interface MutationContext {
 }
 
 /** ชื่อซ้ำกับแผนสายอื่นไม่ได้ — `exceptLineage` = สายที่กำลังแก้ (ใช้ชื่อเดิมของเวอร์ชันก่อนหน้าซ้ำได้) */
-async function assertNameAvailable(organizationId: string, name: string, exceptLineage?: string): Promise<void> {
-  const duplicate = await prisma.compensationPlan.findFirst({
+async function assertNameAvailable(
+  organizationId: string,
+  name: string,
+  exceptLineage?: string,
+  client: Pick<typeof prisma, 'compensationPlan'> = prisma,
+): Promise<void> {
+  const duplicate = await client.compensationPlan.findFirst({
     where: {
       organizationId,
       name,
@@ -232,6 +238,9 @@ export async function createCompensationPlan(
   await assertNameAvailable(organizationId, values.name)
 
   const created = await prisma.$transaction(async (tx) => {
+    // FX review L1 — ตรวจซ้ำใต้ล็อกชื่อระดับองค์กร (กันคำขอพร้อมกันที่ผ่านการตรวจนอกทรานแซกชันทั้งคู่)
+    await lockVersionedNames(tx, 'compensation_plans', organizationId)
+    await assertNameAvailable(organizationId, values.name, undefined, tx)
     const plan = await tx.compensationPlan.create({
       data: {
         organizationId,
@@ -285,6 +294,8 @@ export async function updateCompensationPlan(
   await assertNameAvailable(organizationId, next.values.name, lineageKey)
 
   const updated = await prisma.$transaction(async (tx) => {
+    await lockVersionedNames(tx, 'compensation_plans', organizationId)
+    await assertNameAvailable(organizationId, next.values.name, lineageKey, tx)
     await tx.compensationPlan.update({
       where: { id: current.id },
       data: {

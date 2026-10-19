@@ -11,8 +11,9 @@ import type { CompensationPlanDto } from '@/lib/compensation/types'
  */
 
 const txMock = vi.hoisted(() => ({
-  compensationPlan: { update: vi.fn(), updateMany: vi.fn(), create: vi.fn() },
+  compensationPlan: { update: vi.fn(), updateMany: vi.fn(), create: vi.fn(), findFirst: vi.fn(async () => null) },
   team: { updateMany: vi.fn() },
+  $executeRaw: vi.fn(async () => 1),
 }))
 
 const prismaMock = vi.hoisted(() => ({
@@ -122,6 +123,12 @@ describe('updateCompensationPlan — เปลี่ยนชื่อไม่�
     await updateCompensationPlan(ctx, V1, { ...valuesOf(V1), name: 'ชื่อใหม่' })
     expect(prismaMock.compensationPlan.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({ where: { organizationId: 'org-1', name: 'ชื่อใหม่', NOT: { id: V1.id }, OR: [{ lineageId: null }, { lineageId: { not: V1.id } }] } }),
+    )
+    // FX review L1 — ตรวจซ้ำในทรานแซกชันใต้ล็อกชื่อระดับองค์กรก่อน insert
+    expect(txMock.$executeRaw).toHaveBeenCalledTimes(1)
+    expect(txMock.$executeRaw.mock.calls[0]?.slice(1)).toEqual(['compensation_plans:name:org-1'])
+    expect(txMock.compensationPlan.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ name: 'ชื่อใหม่', NOT: { id: V1.id } }) }),
     )
   })
 })

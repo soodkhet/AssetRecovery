@@ -37,3 +37,27 @@ export interface NotInLineageWhere {
 export function notInLineage(lineageKey: string): NotInLineageWhere {
   return { NOT: { id: lineageKey }, OR: [{ lineageId: null }, { lineageId: { not: lineageKey } }] }
 }
+
+/** ตารางที่ชื่อต้องไม่ซ้ำข้ามสายเวอร์ชัน (unique ระดับ DB คุมได้แค่ `(org, name, version)`) */
+export type VersionedNameTable = 'compensation_plans' | 'service_fee_templates'
+
+interface NameLockClient {
+  $executeRaw: (query: TemplateStringsArray, ...values: unknown[]) => Promise<number>
+}
+
+export function versionedNameLockKey(table: VersionedNameTable, organizationId: string): string {
+  return `${table}:name:${organizationId}`
+}
+
+/**
+ * mytester7 FX review L1 — ล็อกการตั้งชื่อของตารางระดับองค์กร (advisory lock ระดับทรานแซกชัน) ก่อนตรวจชื่อซ้ำ
+ * **ในทรานแซกชันที่ insert** · เดิมตรวจนอกทรานแซกชันอย่างเดียว ⇒ สร้างชื่อ X (v1) พร้อมกับเปลี่ยนชื่อสายอื่นเป็น X
+ * (v n+1) ผ่านทั้งคู่ เพราะ unique `(org, name, version)` ไม่ชนเมื่อเลขเวอร์ชันต่างกัน
+ */
+export async function lockVersionedNames(
+  tx: NameLockClient,
+  table: VersionedNameTable,
+  organizationId: string,
+): Promise<void> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${versionedNameLockKey(table, organizationId)}))`
+}
