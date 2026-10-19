@@ -13,7 +13,10 @@ import {
   reassignmentExpiresAt,
   reassignmentResponseRecipientIds,
   reassignOutcome,
+  replacementAgentProblem,
+  replacementAgentProblemText,
 } from '@/lib/assignments/assignment'
+import { FIELD_AGENT_ROLE_NAME } from '@/lib/auth/constants'
 import { AssignmentError, REASSIGNMENT_EXPIRED_AWAITING_JOB_MESSAGE } from '@/lib/assignments/errors'
 
 /** เทสต์ตาม `40` §20 (Test Cases) — โฟกัสกฎที่ห้ามสลับกันของ reassign 2 สาขา */
@@ -212,5 +215,31 @@ describe('ตัวเลือกกรองจังหวัด Kanban (myte
   })
   it('ทีมไม่ได้ตั้งจังหวัดและไม่มีเคส ⇒ ว่าง', () => {
     expect(kanbanProvinceOptions([], [])).toEqual([])
+  })
+})
+
+describe('mytester7 FX1 — ผู้รับงานใหม่ยังรับงานได้ไหม ณ ตอนโอนจริง', () => {
+  const TEAM = 'team-a'
+  const ok = { status: 'active', deletedAt: null, roleName: FIELD_AGENT_ROLE_NAME, teamId: TEAM }
+
+  it('active · role พนักงาน · ทีมเดียวกับเคส ⇒ ไม่มีปัญหา', () => {
+    expect(replacementAgentProblem(ok, TEAM)).toBeNull()
+  })
+  it('ไม่พบ / ระงับ / ลบ / เปลี่ยน role / ย้ายทีม / เคสไม่มีทีม ⇒ ระบุปัญหา', () => {
+    expect(replacementAgentProblem(null, TEAM)).toBe('not_found')
+    expect(replacementAgentProblem({ ...ok, status: 'suspended' }, TEAM)).toBe('inactive')
+    expect(replacementAgentProblem({ ...ok, status: 'deleted' }, TEAM)).toBe('inactive')
+    expect(replacementAgentProblem({ ...ok, deletedAt: new Date() }, TEAM)).toBe('inactive')
+    expect(replacementAgentProblem({ ...ok, roleName: 'หัวหน้าทีม' }, TEAM)).toBe('not_field_agent')
+    expect(replacementAgentProblem({ ...ok, teamId: 'team-b' }, TEAM)).toBe('team_mismatch')
+    expect(replacementAgentProblem({ ...ok, teamId: null }, TEAM)).toBe('team_mismatch')
+    expect(replacementAgentProblem(ok, null)).toBe('team_mismatch')
+  })
+  it('ข้อความเหตุผลบอกว่าเคสยังอยู่กับคนเดิม และไม่มีเลขอ้างอิงสเปค', () => {
+    for (const problem of ['not_found', 'inactive', 'not_field_agent', 'team_mismatch'] as const) {
+      const text = replacementAgentProblemText(problem)
+      expect(text).toContain('เคสยังอยู่กับผู้รับผิดชอบเดิม')
+      expect(text).not.toMatch(/§|`\d{2}`/)
+    }
   })
 })

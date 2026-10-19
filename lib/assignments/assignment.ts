@@ -1,6 +1,7 @@
 import type { AssignmentStatus } from '@/lib/generated/prisma/enums'
 import { AssignmentError, REASSIGNMENT_EXPIRED_AWAITING_JOB_MESSAGE } from '@/lib/assignments/errors'
 import { ASSIGNMENT_REASON_MIN, isAssignmentReasonLongEnough } from '@/lib/assignments/schemas'
+import { FIELD_AGENT_ROLE_NAME } from '@/lib/auth/constants'
 import { AuthError } from '@/lib/auth/errors'
 
 /**
@@ -66,6 +67,44 @@ export function assertAgentInCaseTeam(agentTeamId: string | null, caseTeamId: st
   if (caseTeamId === null || agentTeamId === null || agentTeamId !== caseTeamId) {
     throw new AssignmentError('ASSIGNMENT_TEAM_MISMATCH')
   }
+}
+
+/**
+ * mytester7 FX1 — ผู้รับงานใหม่ของคำขอที่รอความยินยอม "ยังรับงานได้หรือไม่" ณ ตอนโอนจริง (consent/timeout job)
+ * ผู้รับถูกตรวจตอนสร้างคำขอแล้ว แต่ระหว่างรอ (สูงสุดหลายชั่วโมง) อาจถูกระงับ/ลบ/ย้ายทีม/เปลี่ยน role ได้
+ * — กติกาเดียวกับตอนเลือกผู้รับ (`loadAgentInCaseTeam`): active · ไม่ถูกลบ · role พนักงานติดตามทรัพย์ · ทีมเดียวกับเคส
+ * `null` = รับงานได้
+ */
+export type ReplacementAgentProblem = 'not_found' | 'inactive' | 'not_field_agent' | 'team_mismatch'
+
+export interface ReplacementAgentSnapshot {
+  status: string
+  deletedAt: Date | null
+  roleName: string
+  teamId: string | null
+}
+
+export function replacementAgentProblem(
+  agent: ReplacementAgentSnapshot | null,
+  caseTeamId: string | null,
+): ReplacementAgentProblem | null {
+  if (agent === null) return 'not_found'
+  if (agent.status !== 'active' || agent.deletedAt !== null) return 'inactive'
+  if (agent.roleName !== FIELD_AGENT_ROLE_NAME) return 'not_field_agent'
+  if (caseTeamId === null || agent.teamId === null || agent.teamId !== caseTeamId) return 'team_mismatch'
+  return null
+}
+
+const REPLACEMENT_AGENT_PROBLEM_TEXT: Readonly<Record<ReplacementAgentProblem, string>> = {
+  not_found: 'ไม่พบพนักงานที่จะรับงาน',
+  inactive: 'พนักงานที่จะรับงานถูกระงับหรือลบออกจากระบบแล้ว',
+  not_field_agent: 'พนักงานที่จะรับงานไม่ได้เป็นพนักงานติดตามทรัพย์แล้ว',
+  team_mismatch: 'พนักงานที่จะรับงานไม่ได้อยู่ในทีมของเคสนี้แล้ว',
+}
+
+/** เหตุผลที่ลง `decline_reason`/audit เมื่อระบบปิดคำขอเพราะผู้รับใช้ไม่ได้ (ข้อความผู้ใช้เห็น — ห้ามมีเลขอ้างอิงสเปค) */
+export function replacementAgentProblemText(problem: ReplacementAgentProblem): string {
+  return `ระบบยกเลิกคำขอเปลี่ยนผู้รับผิดชอบ — ${REPLACEMENT_AGENT_PROBLEM_TEXT[problem]} เคสยังอยู่กับผู้รับผิดชอบเดิม`
 }
 
 /**

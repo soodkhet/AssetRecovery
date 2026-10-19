@@ -17,7 +17,9 @@ import {
   reassignmentExpiresAt,
   reassignmentResponseRecipientIds,
   reassignOutcome,
+  replacementAgentProblem,
   type AssignmentState,
+  type ReplacementAgentProblem,
 } from '@/lib/assignments/assignment'
 import { AssignmentError } from '@/lib/assignments/errors'
 import { canPerformAssignmentAction } from '@/lib/assignments/policy'
@@ -241,6 +243,37 @@ async function lockAgentForAssignment(
   `
   if (caseTeamId === null) return
   assertAgentInCaseTeam(rows[0]?.team_id ?? null, caseTeamId)
+}
+
+/**
+ * mytester7 FX1 — ล็อกแถวผู้รับงานใหม่แบบ `FOR KEY SHARE` (ล็อกเดียวกับ {@link lockAgentForAssignment} — ชนกับ
+ * `FOR UPDATE` ของการย้ายทีม/กลุ่ม) แล้วตรวจว่ายังรับงานได้ ณ ตอนโอนจริง · คืนปัญหาแทนการโยน error เพื่อให้
+ * timeout job ปิดคำขอได้โดยไม่ล้มซ้ำ (`91` idempotent) · ทีมที่เทียบ = ทีมของเคส (ไม่มี = ทีมของ assignment เดิม)
+ */
+export async function lockReplacementAgent(
+  tx: AssignmentTxClient,
+  input: Pick<SwapAssignmentInput, 'organizationId' | 'assignmentId' | 'toAgentId' | 'teamId'>,
+): Promise<ReplacementAgentProblem | null> {
+  const rows = await tx.$queryRaw<
+    { team_id: string | null; status: string; deleted_at: Date | null; role_name: string }[]
+  >`
+    SELECT u.team_id::text AS team_id, u.status::text AS status, u.deleted_at, r.name AS role_name
+      FROM users u
+      JOIN roles r ON r.id = u.role_id
+     WHERE u.id = ${input.toAgentId}::uuid AND u.organization_id = ${input.organizationId}::uuid
+       FOR KEY SHARE OF u
+  `
+  const row = rows[0]
+  const caseTeamId =
+    input.teamId ??
+    (await tx.caseAssignment.findUnique({ where: { id: input.assignmentId }, select: { teamId: true } }))?.teamId ??
+    null
+  return replacementAgentProblem(
+    row === undefined
+      ? null
+      : { status: row.status, deletedAt: row.deleted_at, roleName: row.role_name, teamId: row.team_id },
+    caseTeamId,
+  )
 }
 
 /** เคสต้องถูกอนุมัติแล้ว (`40` §16 — `case.approved` คือจุดเริ่มของ `ready_to_assign`) */
@@ -849,8 +882,12 @@ export async function swapAssignment(
     select: assignmentSelect,
   })
 
-  // ล็อกอย่างเดียว ไม่ตรวจทีมซ้ำ — ผู้รับถูกตรวจตอนสร้างคำขอแล้ว และ timeout job ต้องไม่ล้มซ้ำ ๆ (มติ D7-03 race)
-  await lockAgentForAssignment(tx, input.organizationId, input.toAgentId, null)
+  // mytester7 FX1 — ตรวจผู้รับซ้ำใต้ล็อก (อาจถูกระงับ/ลบ/ย้ายทีมระหว่างรอความยินยอม) · timeout job ตรวจด้วยตัวเดียวกัน
+  // ก่อนเรียกแล้วปิดคำขอเอง (ไม่มาถึงตรงนี้ ⇒ ไม่ล้มซ้ำ) · ฝั่งกดยินยอมได้ error แล้วไม่มีอะไรเปลี่ยน
+  const problem = await lockReplacementAgent(tx, input)
+  if (problem !== null) {
+    throw new AssignmentError('ASSIGNMENT_TEAM_MISMATCH', { detail: `replacement agent ${problem}` })
+  }
   await tx.caseAssignment.update({
     where: { id: input.assignmentId },
     // ไม่เขียนทับ `reassign_reason` ของแถวเดิม (UAT BUG-061 — ดู `reassignCase`)

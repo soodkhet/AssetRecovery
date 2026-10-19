@@ -226,6 +226,34 @@ export function reassignmentTimeoutMessage(
   }
 }
 
+/**
+ * คำขอหมดเวลาแต่ผู้รับใช้ไม่ได้แล้ว (ถูกระงับ/ลบ/ย้ายทีม — mytester7 FX1 · มติ D7-08) ⇒ ระบบปิดคำขอ ไม่โอน
+ * แจ้งผู้ขอ/ผู้จัดการทีม (ต้องเลือกผู้รับใหม่ถ้ายังต้องการเปลี่ยน) และคนเดิม (เคสยังเป็นของคุณ)
+ */
+export function reassignmentTimeoutCancelledMessage(
+  input: { caseRef: string; pendingReassignmentId: string; declineReason: string },
+  audience: Extract<ReassignmentAudience, 'requester' | 'previous_agent'>,
+): NotificationMessage {
+  const dedupeKey = `pending-reassignment-${input.pendingReassignmentId}`
+  const eventCode = 'assignment.reassignment_timeout_resolved'
+  if (audience === 'previous_agent') {
+    return {
+      eventCode,
+      title: 'คำขอเปลี่ยนผู้รับผิดชอบถูกยกเลิก',
+      body: `เคส ${input.caseRef} — ยังเป็นงานของคุณ ทำงานต่อได้ตามปกติ`,
+      linkPath: AGENT_NEW_WORK_PATH,
+      dedupeKey,
+    }
+  }
+  return {
+    eventCode,
+    title: 'คำขอเปลี่ยนผู้รับผิดชอบถูกยกเลิก — ไม่ได้โอนเคส',
+    body: clip(`เคส ${input.caseRef} — ${input.declineReason} หากยังต้องการเปลี่ยน กรุณาเลือกพนักงานใหม่`, 200),
+    linkPath: ASSIGNER_PATH,
+    dedupeKey,
+  }
+}
+
 // ── Field Tracker (41 §17.2) ────────────────────────────────────────────────
 
 export function caseClosedSuccessMessage(input: {

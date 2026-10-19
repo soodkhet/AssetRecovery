@@ -780,6 +780,103 @@ suite('Phase 2.6 — timeout job + การแข่งกับคำตอบ
     const assignment = await db().caseAssignment.findFirst({ where: { caseId, status: 'accepted_unscheduled' } })
     expect(assignment?.agentId).toBe(AGENT_A)
   })
+
+  /**
+   * mytester7 FX1 · มติ D7-08 — ผู้รับใช้ไม่ได้แล้วระหว่างรอความยินยอม (ย้ายทีม/ระงับ) ⇒ job ไม่โอน
+   * เคสคงอยู่กับคนเดิม · คำขอปิดเป็น `declined` (resolved_by = NULL) + เหตุผล + audit ระบุ job · แจ้งผู้ขอ + คนเดิม
+   * · รันซ้ำไม่ล้ม ไม่ทำซ้ำ (`91` idempotent)
+   */
+  describe('mytester7 FX1 — ผู้รับใช้ไม่ได้แล้วตอนหมดเวลา', () => {
+    async function expectNotTransferred(caseId: string): Promise<void> {
+      const assignments = await db().caseAssignment.findMany({ where: { caseId } })
+      expect(assignments).toHaveLength(1)
+      expect(assignments[0]?.agentId).toBe(AGENT_A)
+      expect(assignments[0]?.status).toBe('accepted_unscheduled')
+      expect(await db().reassignmentHistory.count({ where: { caseId } })).toBe(0)
+    }
+
+    it('ผู้รับถูกย้ายไปทีมอื่น ⇒ ไม่โอน · ปิดคำขอ declined + เหตุผล + audit + แจ้งผู้ขอ/คนเดิม · รันซ้ำไม่ทำซ้ำ', async () => {
+      const caseId = await seedWaitingRequest()
+      await expireLatestRequest(caseId)
+      const jobId = `fx1-team-${Date.now()}`
+      const startedAt = new Date(Date.now() - 1000)
+      await db().$executeRawUnsafe(`UPDATE users SET team_id = '${TEAM_B}'::uuid WHERE id = '${AGENT_B}'`)
+      try {
+        const result = await timeoutJob.resolveExpiredReassignments({ organizationId: ORG_ID, jobId })
+        expect(result).toMatchObject({ due: 1, resolved: 0, cancelled: 1, skipped: 0 })
+        expect(result.caseIds).toEqual([])
+        await expectNotTransferred(caseId)
+
+        const pending = await db().pendingReassignment.findFirstOrThrow({ where: { caseId } })
+        expect(pending.status).toBe('declined')
+        expect(pending.resolvedBy).toBeNull()
+        expect(pending.resolvedAt).not.toBeNull()
+        expect(pending.declineReason).toContain('ไม่ได้อยู่ในทีมของเคสนี้')
+
+        const audit = await db().auditLog.findFirstOrThrow({
+          where: { organizationId: ORG_ID, targetType: 'pending_reassignments', targetId: pending.id, actorId: null },
+        })
+        expect(audit.action).toBe('reject')
+        expect(audit.reason).toContain(jobId)
+
+        // แจ้งในคิวของ job (ผู้ขอ + ผู้จัดการทีม + คนเดิม) แล้วส่งท้ายรอบ
+        expect(
+          await db().notificationOutbox.count({ where: { organizationId: ORG_ID, sourceJobRef: jobId, status: 'sent' } }),
+        ).toBeGreaterThanOrEqual(2)
+        const notified = await db().notification.findMany({
+          where: {
+            organizationId: ORG_ID,
+            eventCode: 'assignment.reassignment_timeout_resolved',
+            title: { startsWith: 'คำขอเปลี่ยนผู้รับผิดชอบถูกยกเลิก' },
+            createdAt: { gte: startedAt },
+          },
+          select: { userId: true },
+        })
+        const recipients = new Set(notified.map((row) => row.userId))
+        expect(recipients.has(MANAGER_ID)).toBe(true)
+        expect(recipients.has(AGENT_A)).toBe(true)
+        expect(recipients.has(AGENT_B)).toBe(false)
+
+        const again = await timeoutJob.resolveExpiredReassignments({ organizationId: ORG_ID, jobId })
+        expect(again).toMatchObject({ due: 0, resolved: 0, cancelled: 0 })
+        await expectNotTransferred(caseId)
+      } finally {
+        await db().$executeRawUnsafe(`UPDATE users SET team_id = '${TEAM_A}'::uuid WHERE id = '${AGENT_B}'`)
+      }
+    })
+
+    it('ผู้รับถูกระงับ ⇒ ไม่โอน · ปิดคำขอพร้อมเหตุผลว่าถูกระงับ', async () => {
+      const caseId = await seedWaitingRequest()
+      await expireLatestRequest(caseId)
+      await db().$executeRawUnsafe(`UPDATE users SET status = 'suspended' WHERE id = '${AGENT_B}'`)
+      try {
+        const result = await timeoutJob.resolveExpiredReassignments({ organizationId: ORG_ID })
+        expect(result).toMatchObject({ resolved: 0, cancelled: 1 })
+        await expectNotTransferred(caseId)
+        const pending = await db().pendingReassignment.findFirstOrThrow({ where: { caseId } })
+        expect(pending.status).toBe('declined')
+        expect(pending.declineReason).toContain('ถูกระงับ')
+      } finally {
+        await db().$executeRawUnsafe(`UPDATE users SET status = 'active' WHERE id = '${AGENT_B}'`)
+      }
+    })
+
+    it('คนเดิมกดยินยอมแต่ผู้รับถูกย้ายทีมแล้ว ⇒ ASSIGNMENT_TEAM_MISMATCH · ไม่มีอะไรเปลี่ยน คำขอยังรออยู่', async () => {
+      const caseId = await seedWaitingRequest()
+      await db().$executeRawUnsafe(`UPDATE users SET team_id = '${TEAM_B}'::uuid WHERE id = '${AGENT_B}'`)
+      try {
+        await expectCode(
+          () => queries.respondReassignment(agentA, caseId, { decision: 'consent' }, { actor: agentA, meta }),
+          'ASSIGNMENT_TEAM_MISMATCH',
+        )
+        await expectNotTransferred(caseId)
+        const pending = await db().pendingReassignment.findFirstOrThrow({ where: { caseId } })
+        expect(pending.status).toBe('waiting_consent')
+      } finally {
+        await db().$executeRawUnsafe(`UPDATE users SET team_id = '${TEAM_A}'::uuid WHERE id = '${AGENT_B}'`)
+      }
+    })
+  })
 })
 
 suite('Phase 2.6 — ยามสิทธิ์ + ข้อมูลประกอบการตัดสินใจ (`40` §6.2 · §6.4 · §7.5)', () => {
