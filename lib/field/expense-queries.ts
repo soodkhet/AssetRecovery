@@ -7,6 +7,7 @@ import type { RequestMeta } from '@/lib/auth/request-meta'
 import type { SessionUser } from '@/lib/auth/types'
 import { buildRejectExpenseUpdate, parseApprovalHistory } from '@/lib/compensation/approval'
 import { assertCanRejectExpense } from '@/lib/compensation/approval-queries'
+import { inPlanLineage, planLineageKey } from '@/lib/compensation/lineage'
 import { resolvePlanVersionAt } from '@/lib/compensation/plan'
 import { kmHundredthsToDecimalString } from '@/lib/field/distance'
 import {
@@ -126,7 +127,7 @@ export interface PlanSnapshot extends CompensationSnapshotValues {
 
 /**
  * แผนค่าตอบแทนที่มีผล ณ วันปิดงาน (`92` §7.1) — **ห้ามอ่านเวอร์ชันปัจจุบันมาคำนวณย้อนหลัง**
- * แผนชุดเดียวกัน = แถวที่ `name` เดียวกันหลายเวอร์ชัน (`11` §14) จึง resolve จากทั้งตระกูล
+ * แผนชุดเดียวกัน = หลายเวอร์ชันในสาย `lineage_id` เดียวกัน (`11` §14 · mytester7 FX2 — เดิมใช้ชื่อ) จึง resolve จากทั้งสาย
  */
 export async function resolvePlanSnapshot(
   client: ExpenseTxClient,
@@ -143,12 +144,12 @@ async function resolvePlanVersionRow(
 ) {
   const current = await client.compensationPlan.findFirst({
     where: { id: params.planId, organizationId: params.organizationId },
-    select: { id: true, name: true },
+    select: { id: true, lineageId: true },
   })
   if (current === null) return null
 
   const versions = await client.compensationPlan.findMany({
-    where: { organizationId: params.organizationId, name: current.name, deletedAt: null },
+    where: { organizationId: params.organizationId, ...inPlanLineage(planLineageKey(current)), deletedAt: null },
     select: {
       id: true,
       name: true,
