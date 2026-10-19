@@ -37,6 +37,7 @@ import {
   planVatRateAutoClose,
   validateVatRateChange,
   validateVatRateCreate,
+  vatDateFromInput,
   vatRateViolationMessage,
   type VatRatePeriod,
 } from '@/lib/settings/vat'
@@ -123,16 +124,16 @@ export function VatRatesTab() {
    * ช่วงล่าสุดต้องไม่มีวันสิ้นสุดเสมอ จึงไม่ต้อง (และปิดแยกก่อนไม่ได้)
    */
   const autoClose = useMemo(() => {
-    const from = fromInputDate(form.effectiveFrom)
+    const from = vatDateFromInput(form.effectiveFrom)
     if (editing !== null || from === null) return null
     return planVatRateAutoClose({ effectiveFrom: from }, items.map(toPeriod))
   }, [form.effectiveFrom, items, editing])
 
   /** ช่วงที่ทับกับค่าที่กำลังกรอก — เตือนสดขณะพิมพ์ ไม่บล็อกปุ่ม (API เป็นตัวตัดสิน) */
   const overlapping = useMemo(() => {
-    const from = fromInputDate(form.effectiveFrom)
+    const from = vatDateFromInput(form.effectiveFrom)
     if (from === null) return []
-    const to = fromInputDate(form.effectiveTo)
+    const to = vatDateFromInput(form.effectiveTo)
     return findOverlappingPeriods(
       { effectiveFrom: from, effectiveTo: to },
       items.map(toPeriod),
@@ -145,13 +146,13 @@ export function VatRatesTab() {
    * ไม่บล็อกปุ่ม: API เป็นตัวตัดสินด้วยกติกาเดียวกัน (`validateVatRateChange`)
    */
   const changeViolation = useMemo(() => {
-    const from = fromInputDate(form.effectiveFrom)
+    const from = vatDateFromInput(form.effectiveFrom)
     if (from === null || overlapping.length > 0) return null
     const ratePct = form.ratePct.trim() === '' ? Number.NaN : Number(form.ratePct)
     const candidate = {
       ratePct: Number.isFinite(ratePct) ? ratePct : (editing?.ratePct ?? 0),
       effectiveFrom: from,
-      effectiveTo: fromInputDate(form.effectiveTo),
+      effectiveTo: vatDateFromInput(form.effectiveTo),
     }
     const existing = items.map(toPeriod)
     const now = new Date()

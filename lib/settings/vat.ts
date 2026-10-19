@@ -27,6 +27,17 @@ export function toDayNumber(date: Date): number {
 }
 
 /**
+ * ค่า `<input type="date">` (`YYYY-MM-DD` ค.ศ.) → เที่ยงคืน UTC แบบคอลัมน์ `DATE` — รูปเดียวกับที่ API แปลงด้วย
+ * `dateOnlySchema` · ฟอร์มต้องใช้ตัวนี้ก่อนส่งเข้า pure module (เทียบด้วย `toDayNumber()`) — ถ้าใช้เที่ยงคืนเวลาไทย
+ * (17:00Z ของวันก่อน) คำเตือนบนจอจะเพี้ยนไป 1 วัน (mytester7 SV7-V2-01) · ค่าว่าง/ผิดรูป/วันไม่มีจริง ⇒ `null`
+ */
+export function vatDateFromInput(value: string | null | undefined): Date | null {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null
+  const date = new Date(`${value}T00:00:00.000Z`)
+  return Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value ? null : date
+}
+
+/**
  * จำนวนวันของ **วันตามปฏิทินกรุงเทพ** — ใช้กับ "วันที่ของรายการ" ที่อาจเป็น instant (`TIMESTAMPTZ`)
  *
  * ⚠️ จุดพลาดที่ทำให้ VAT ผิดวัน: `revenue_date` ที่เป็น instant ตอน 20:00Z คือวันถัดไปตามเวลาไทย

@@ -13,6 +13,7 @@ import {
   validateVatRateChange,
   validateVatRateCreate,
   vatRateViolationMessage,
+  vatDateFromInput,
   type VatRatePeriod,
 } from '@/lib/settings/vat'
 
@@ -429,5 +430,33 @@ describe('เพิ่มอัตราใหม่ = ปิดช่วงเ�
         now: NOW,
       }),
     ).toEqual({ code: 'VAT_RATE_GAP', gap: { from: d('2027-01-01'), to: null } })
+  })
+})
+
+describe('vatDateFromInput — ค่าจากฟอร์มต้องเป็นเที่ยงคืน UTC แบบคอลัมน์ DATE (mytester7 SV7-V2-01)', () => {
+  const live7 = period('7', 7, '2025-10-01', '2026-10-31')
+  const live10 = period('10', 10, '2026-11-01', null)
+
+  it('แปลงเป็นเที่ยงคืน UTC · ค่าว่าง/ผิดรูป/วันไม่มีจริง ⇒ null', () => {
+    expect(vatDateFromInput('2026-10-31')?.toISOString()).toBe('2026-10-31T00:00:00.000Z')
+    expect(vatDateFromInput('')).toBeNull()
+    expect(vatDateFromInput(null)).toBeNull()
+    expect(vatDateFromInput('31/10/2569')).toBeNull()
+    expect(vatDateFromInput('2026-02-30')).toBeNull()
+  })
+
+  it('เปิดแก้ช่วงเดิมโดยไม่เปลี่ยนวัน ⇒ ไม่ทับ ไม่มีช่องว่าง (เดิมเพี้ยน 1 วันจึงเตือนผิด)', () => {
+    const now = new Date('2026-10-19T06:00:00Z')
+    const candidate7 = { ratePct: 7, effectiveFrom: vatDateFromInput('2025-10-01') as Date, effectiveTo: vatDateFromInput('2026-10-31') }
+    expect(findOverlappingPeriods(candidate7, [live7, live10], '7')).toEqual([])
+    expect(validateVatRateChange({ candidate: candidate7, current: live7, existing: [live7, live10], revenueSpan: null, now })).toBeNull()
+    const candidate10 = { ratePct: 10, effectiveFrom: vatDateFromInput('2026-11-01') as Date, effectiveTo: null }
+    expect(findOverlappingPeriods(candidate10, [live7, live10], '10')).toEqual([])
+  })
+
+  it('เพิ่มอัตราเริ่ม 01/01/2570 ⇒ ปิดช่วงเดิมถึง 31/12/2569 (ไม่ใช่ 30/12)', () => {
+    const plan = planVatRateAutoClose({ effectiveFrom: vatDateFromInput('2027-01-01') as Date }, [live7, live10])
+    expect(plan?.period.id).toBe('10')
+    expect(plan === null ? null : toDayNumber(plan.closedTo)).toBe(toDayNumber(d('2026-12-31')))
   })
 })
