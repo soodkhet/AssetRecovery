@@ -13,6 +13,7 @@ import {
 import type { ServiceFeeTemplateListQuery } from '@/lib/service-fee/schemas'
 import type { ServiceFeeTemplateDto, ServiceFeeTemplateListDto } from '@/lib/service-fee/types'
 import { prisma } from '@/lib/prisma'
+import { inLineage, lineageKeyOfRow, notInLineage } from '@/lib/versioning/lineage'
 
 /**
  * ชั้นข้อมูลของโมดูลเทมเพลตค่าบริการ (ไฟล์ 12) — **แยกจาก pure logic** (`lib/service-fee/template.ts`)
@@ -125,17 +126,7 @@ async function lineageKeyOf(organizationId: string, templateId: string): Promise
     select: { id: true, lineageId: true },
   })
   if (!row) throw new ServiceFeeError('TEMPLATE_NOT_FOUND', { detail: `template=${templateId}` })
-  return row.lineageId ?? row.id
-}
-
-/** เงื่อนไข "ทุกเวอร์ชันในสายเดียวกัน" — ตัวแรก (id = key) + ตัวถัดไป (lineage_id = key) */
-function inLineage(lineageKey: string): Prisma.ServiceFeeTemplateWhereInput {
-  return { OR: [{ id: lineageKey }, { lineageId: lineageKey }] }
-}
-
-/** เงื่อนไข "ไม่อยู่ในสายนี้" — null-safe (เวอร์ชันแรกของสายอื่นมี `lineage_id` = NULL · ห้ามใช้ `NOT: inLineage(key)`) */
-function notInLineage(lineageKey: string): Prisma.ServiceFeeTemplateWhereInput {
-  return { NOT: { id: lineageKey }, OR: [{ lineageId: null }, { lineageId: { not: lineageKey } }] }
+  return lineageKeyOfRow(row)
 }
 
 /** ประวัติทุกเวอร์ชันของเทมเพลตเดียวกัน — เรียงใหม่→เก่า (แต่ละเวอร์ชันแสดงชื่อของตัวเอง) */
