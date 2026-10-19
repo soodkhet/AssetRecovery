@@ -2,6 +2,7 @@ import { PrismaPg } from '@prisma/adapter-pg'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { SessionUser } from '@/lib/auth/types'
 import { PrismaClient } from '@/lib/generated/prisma/client'
+import { lockVatRateHistory } from '@/lib/settings/queries/vat-rate-lock'
 
 /**
  * เทสต์ระดับ DB ของ Phase 3.6 — DoD ตาม `19` §16 **ครบทั้ง 8 เคส**:
@@ -631,6 +632,57 @@ suite('Phase 3.6 — Revenue trigger (`19` §16 ครบ 8 เคส)', () => {
     const row = await db().revenue.findFirstOrThrow({ where: { caseId } })
     expect(row.revenueDate.toISOString().slice(0, 10)).toBe('2026-10-01')
     expect(row.vatRatePctUsed.toNumber()).toBe(10)
+  })
+
+  /**
+   * mytester7 FX1 (TOCTOU) — มีคนกำลังเพิ่มอัตราใหม่ (ระบบปิดช่วงเดิมอัตโนมัติ) ค้างทรานแซกชันอยู่ตอนยืนยันล็อต
+   * ⇒ step 4 ต้องรอจนการแก้ช่วงเสร็จ แล้ว snapshot อัตราของช่วงหลังแก้ (ไม่ใช่ 10% ของช่วงที่ถูกปิดไปแล้ว)
+   */
+  it('FX1 — แก้ช่วง VAT ค้างทรานแซกชัน ⇒ สร้างรายได้รอจนเสร็จแล้วได้อัตราใหม่ที่ถูก', async () => {
+    const caseId = await seedCase({ closedAt: '2027-01-14T03:00:00Z' })
+    await seedExpense(caseId, 'approved')
+    await seedAssetInLot(caseId, 'confirmed', COMPANY_A, '2027-01-15T03:00:00Z')
+    const open = await db().vatRateHistory.findFirstOrThrow({ where: { organizationId: ORG_ID, effectiveTo: null } })
+
+    let signalLocked: () => void = () => {}
+    const editorLocked = new Promise<void>((resolve) => {
+      signalLocked = resolve
+    })
+    let editorDoneAt = 0
+    const editor = appPrisma.$transaction(
+      async (tx) => {
+        await lockVatRateHistory(tx, ORG_ID, 'exclusive')
+        await tx.$executeRawUnsafe(`UPDATE vat_rate_history SET effective_to = '2027-01-09' WHERE id = '${open.id}'`)
+        await tx.$executeRawUnsafe(`
+          INSERT INTO vat_rate_history (organization_id, rate_pct, effective_from, effective_to, created_by)
+          VALUES ('${ORG_ID}', 12.00, '2027-01-10', NULL, '${FINANCE_ID}')
+        `)
+        signalLocked()
+        await new Promise((resolve) => setTimeout(resolve, 400))
+        editorDoneAt = Date.now()
+      },
+      { timeout: 15_000 },
+    )
+    try {
+      await editorLocked
+      const result = await appPrisma.$transaction(
+        (tx) => service.tryCreateRevenue(tx, { organizationId: ORG_ID, caseIds: [caseId], actorId: FINANCE_ID }),
+        { timeout: 15_000 },
+      )
+      const createdAt = Date.now()
+      await editor
+      expect(result.revenueIdsCreated).toHaveLength(1)
+      expect(createdAt).toBeGreaterThanOrEqual(editorDoneAt)
+      const row = await db().revenue.findFirstOrThrow({ where: { caseId } })
+      expect(row.revenueDate.toISOString().slice(0, 10)).toBe('2027-01-15')
+      expect(row.vatRatePctUsed.toNumber()).toBe(12)
+    } finally {
+      await editor.catch(() => undefined)
+      await db().$executeRawUnsafe(
+        `DELETE FROM vat_rate_history WHERE organization_id = '${ORG_ID}' AND effective_from = '2027-01-10'`,
+      )
+      await db().$executeRawUnsafe(`UPDATE vat_rate_history SET effective_to = NULL WHERE id = '${open.id}'`)
+    }
   })
 
   describe('O72(2) BUG-SF2 — ประเมินรายได้ต่อรอบติดตาม (U125)', () => {

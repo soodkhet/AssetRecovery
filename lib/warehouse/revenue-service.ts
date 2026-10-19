@@ -8,6 +8,7 @@ import {
 } from '@/lib/finance/revenue-trigger-rules'
 import { buildRevenueRow } from '@/lib/revenue/revenue-builder'
 import { toBangkokDateOnly } from '@/lib/revenue/revenue'
+import { lockVatRateHistory } from '@/lib/settings/queries/vat-rate-lock'
 import type { WarehouseTxClient } from '@/lib/warehouse/asset-hook'
 
 /**
@@ -350,6 +351,10 @@ export async function tryCreateRevenue(
 
   // อ่านอัตรา VAT ทั้งประวัติครั้งเดียวต่อการเรียก แล้วให้ `buildRevenueRow()` เลือกช่วงตาม
   // `revenue_date` ของแต่ละเคสเอง (เคสในล็อตเดียวกันปิดคนละวันได้ → คนละอัตราได้)
+  // mytester7 FX1 (TOCTOU) — ถือล็อกช่วง VAT แบบ shared ก่อนอ่าน: คนที่กำลังเพิ่มอัตราใหม่ (ปิดช่วงเดิมอัตโนมัติ)
+  // ถือ exclusive ⇒ รอจนเสร็จแล้วอ่านช่วงหลังแก้ ไม่ snapshot อัตราของช่วงที่ถูกปิดไปแล้ว · ลำดับล็อก: แถวเคส
+  // (FOR UPDATE ข้างบน) → ล็อก VAT — ฝั่งแก้ช่วงไม่แตะแถวเคส/ล็อต/expense จึงไม่เกิดวงล็อก
+  await lockVatRateHistory(tx, input.organizationId, 'shared')
   const vatPeriods = await tx.vatRateHistory.findMany({
     where: { organizationId: input.organizationId },
     select: { id: true, ratePct: true, effectiveFrom: true, effectiveTo: true },

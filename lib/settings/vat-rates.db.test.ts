@@ -2,6 +2,7 @@ import { PrismaPg } from '@prisma/adapter-pg'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import type { SessionUser } from '@/lib/auth/types'
 import { PrismaClient } from '@/lib/generated/prisma/client'
+import { lockVatRateHistory } from '@/lib/settings/queries/vat-rate-lock'
 
 /**
  * มติ D7-01 (mytester7 S7-AG2-02/03/04) — กติกาแก้ช่วงอัตรา VAT ที่ service (ตัวบังคับจริง ไม่ใช่แค่หน้าจอ)
@@ -36,6 +37,8 @@ const NOW = new Date('2026-10-19T03:00:00Z')
 
 let client: PrismaClient | null = null
 let vat: typeof import('@/lib/settings/queries/vat-rates')
+/** client ตัวเดียวกับที่ service ใช้ — ใช้เปิดทรานแซกชันจำลองการแก้ช่วง/สร้างรายได้ที่ค้างอยู่ (mytester7 FX1) */
+let appPrisma: typeof import('@/lib/prisma').prisma
 
 function db(): PrismaClient {
   if (!url) throw new Error('ไม่มี TEST_DATABASE_URL')
@@ -82,10 +85,14 @@ async function cleanup(): Promise<void> {
 
 let seq = 0
 
-async function seedRevenue(revenueDate: string): Promise<void> {
+interface RawRunner {
+  $executeRawUnsafe: (query: string) => Promise<number>
+}
+
+async function seedRevenue(revenueDate: string, runner: RawRunner = db()): Promise<void> {
   seq += 1
   const caseRef = `VATD701-${seq}-${Date.now()}`
-  await db().$executeRawUnsafe(`
+  await runner.$executeRawUnsafe(`
     WITH new_case AS (
       INSERT INTO cases (
         organization_id, case_ref, case_ref_normalized, company_id, source, status, created_by,
@@ -115,6 +122,7 @@ suite('ช่วงอัตรา VAT ที่ถูกใช้แล้ว �
   beforeAll(async () => {
     process.env.DATABASE_URL = url
     vat = await import('@/lib/settings/queries/vat-rates')
+    appPrisma = (await import('@/lib/prisma')).prisma
     await db().$executeRawUnsafe(`
       INSERT INTO organizations (id, name, tax_id, address)
       VALUES ('${ORG_ID}', 'VatD701', '9999999970100', 'ที่อยู่ทดสอบ D7-01') ON CONFLICT (id) DO NOTHING
@@ -266,5 +274,87 @@ suite('ช่วงอัตรา VAT ที่ถูกใช้แล้ว �
       .catch((caught: unknown) => caught)
     expect(codeOf(error)).toBe('VAT_RATE_OVERLAP')
     expect((error as { userMessage?: string }).userMessage).toContain('7% (01/10/2568–31/10/2569)')
+  })
+
+  /**
+   * mytester7 FX1 (TOCTOU) — ทางที่ snapshot อัตราลงเอกสารถือล็อกช่วง VAT แบบ shared คีย์เดียวกับฝั่งแก้ (exclusive)
+   * จำลองฝั่งแก้ค้างทรานแซกชัน (ปิด 7% ถึง 31/10 + เพิ่ม 10% ตั้งแต่ 01/11) แล้ว resolve อัตรา ณ 05/11/2569
+   * ระหว่างนั้น ⇒ ต้องรอจนฝั่งแก้ commit แล้วได้ 10% (ไม่ล็อก = อ่านเห็น 7% เปิดปลายเดิม)
+   */
+  it('FX1: แก้ช่วงค้างทรานแซกชัน ⇒ resolve อัตราใต้ล็อกรอจนเสร็จแล้วได้อัตราใหม่', async () => {
+    const current = await seedOpenSevenPercent()
+    let signalLocked: () => void = () => {}
+    const editorLocked = new Promise<void>((resolve) => {
+      signalLocked = resolve
+    })
+    let editorDoneAt = 0
+    const editor = appPrisma.$transaction(
+      async (tx) => {
+        await lockVatRateHistory(tx, ORG_ID, 'exclusive')
+        await tx.vatRateHistory.update({ where: { id: current.id }, data: { effectiveTo: day('2026-10-31') } })
+        await tx.$executeRawUnsafe(`
+          INSERT INTO vat_rate_history (organization_id, rate_pct, effective_from, effective_to, created_by)
+          VALUES ('${ORG_ID}', 10.00, '2026-11-01', NULL, '${USER_ID}')
+        `)
+        signalLocked()
+        await new Promise((resolve) => setTimeout(resolve, 400))
+        editorDoneAt = Date.now()
+      },
+      { timeout: 15_000 },
+    )
+    await editorLocked
+    const resolved = await appPrisma.$transaction((tx) => vat.resolveVatRateLocked(tx, ORG_ID, day('2026-11-05')), {
+      timeout: 15_000,
+    })
+    const resolvedAt = Date.now()
+    await editor
+    expect(resolvedAt).toBeGreaterThanOrEqual(editorDoneAt)
+    expect(resolved.ratePct).toBe(10)
+  })
+
+  it('FX1: สร้างรายได้ (ถือล็อก shared) ค้างอยู่ ⇒ เพิ่มอัตราใหม่รอจนเสร็จแล้วเห็นรายได้นั้น (VAT_RATE_IN_USE)', async () => {
+    await seedOpenSevenPercent()
+    let signalLocked: () => void = () => {}
+    const revenueLocked = new Promise<void>((resolve) => {
+      signalLocked = resolve
+    })
+    const revenueTx = appPrisma.$transaction(
+      async (tx) => {
+        await lockVatRateHistory(tx, ORG_ID, 'shared')
+        await seedRevenue('2026-11-05', tx)
+        signalLocked()
+        await new Promise((resolve) => setTimeout(resolve, 400))
+      },
+      { timeout: 15_000 },
+    )
+    await revenueLocked
+    const error = await vat
+      .createVatRate(ctx, { ratePct: 10, effectiveFrom: day('2026-11-01'), effectiveTo: null, note: null }, NOW)
+      .catch((caught: unknown) => caught)
+    await revenueTx
+    expect(codeOf(error)).toBe('VAT_RATE_IN_USE')
+    expect(await db().vatRateHistory.count({ where: { organizationId: ORG_ID } })).toBe(1)
+  })
+
+  it('FX1: ล็อก shared สองทรานแซกชันพร้อมกันไม่รอกัน', async () => {
+    await seedOpenSevenPercent()
+    let signalLocked: () => void = () => {}
+    const firstLocked = new Promise<void>((resolve) => {
+      signalLocked = resolve
+    })
+    const first = appPrisma.$transaction(
+      async (tx) => {
+        await lockVatRateHistory(tx, ORG_ID, 'shared')
+        signalLocked()
+        await new Promise((resolve) => setTimeout(resolve, 600))
+      },
+      { timeout: 15_000 },
+    )
+    await firstLocked
+    const startedAt = Date.now()
+    const resolved = await appPrisma.$transaction((tx) => vat.resolveVatRateLocked(tx, ORG_ID, day('2026-10-19')))
+    expect(Date.now() - startedAt).toBeLessThan(500)
+    expect(resolved.ratePct).toBe(7)
+    await first
   })
 })
