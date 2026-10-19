@@ -1080,6 +1080,37 @@ suite('มติ PO U95 — รับเงิน ⇒ ใบเสร็จร�
     }
   })
 
+  it('mytester7 FX review L4 — ช่วง VAT ที่มีใบเสร็จฯ อ้าง (ไม่มีรายได้ในช่วง) ⇒ เปลี่ยนอัตราไม่ได้ VAT_RATE_IN_USE', async () => {
+    const vat = await import('@/lib/settings/queries/vat-rates')
+    await setNumbering({ seq: 960 })
+    const batch = await seedBilling({ status: 'sent' })
+    const receiptId = await seedReceipt(batch.id, { amountSatang: 1_320_000, receivedDate: new Date(Date.UTC(2027, 6, 5)) })
+    const now = new Date(Date.UTC(2027, 6, 6, 3))
+    await sales.issueTaxInvoice(ctx, { cashReceiptId: receiptId }, now)
+    // รายได้ของรอบอยู่ในช่วง 7% (วันนี้) — ช่วง 10% มีแต่ใบเสร็จฯ อ้าง
+    const tenPercent = await db().vatRateHistory.findFirstOrThrow({
+      where: { organizationId: ORG_ID, effectiveFrom: new Date('2027-07-01T00:00:00Z') },
+    })
+    try {
+      const current = await vat.getVatRate(ORG_ID, tenPercent.id)
+      await expectCode(
+        () =>
+          vat.updateVatRate(
+            { ...ctx, reason: 'ทดสอบเปลี่ยนอัตราช่วงที่มีใบกำกับอ้าง' },
+            current,
+            { ratePct: 11, effectiveFrom: tenPercent.effectiveFrom, effectiveTo: null, note: null },
+            now,
+          ),
+        'VAT_RATE_IN_USE',
+      )
+      const after = await db().vatRateHistory.findUniqueOrThrow({ where: { id: tenPercent.id } })
+      expect(after.ratePct.toString()).toBe('10')
+    } finally {
+      await db().$executeRawUnsafe(`UPDATE vat_rate_history SET rate_pct = 10.00 WHERE id = '${tenPercent.id}'`)
+      await setNumbering({ seq: 0 })
+    }
+  })
+
   it('U96 #3 — บริษัทโหมด no_vat ⇒ ออกไม่ได้ TAX_INVOICE_NO_VAT_COMPANY (ไม่กินเลขที่)', async () => {
     await setNumbering({ seq: 60 })
     const batch = await seedBilling({ status: 'sent' })

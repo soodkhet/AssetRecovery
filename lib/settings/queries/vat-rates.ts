@@ -170,26 +170,48 @@ function assertNoOverlap(
 }
 
 /**
- * วันที่รายได้แรกสุด/ล่าสุดที่ `revenue_date` ตกในช่วงเดิม (ไม่นับที่ลบแล้ว) — `null` = ช่วงนี้ยังไม่มีรายได้อ้าง
- * นับทุกสถานะ (รวมยกเลิก/วางบิลแล้ว) เพราะ snapshot `vat_rate_pct_used` ของทุกแถวอ้างช่วงนี้อยู่
+ * วันที่เอกสารแรกสุด/ล่าสุดที่อ้างช่วงเดิม — `null` = ช่วงนี้ยังไม่มีเอกสารอ้าง (มติ D7-01)
+ * - รายได้: `revenue_date` ตกในช่วง (ไม่นับที่ลบแล้ว) · นับทุกสถานะ (รวมยกเลิก/วางบิลแล้ว) เพราะ snapshot
+ *   `vat_rate_pct_used` ของทุกแถวอ้างช่วงนี้อยู่
+ * - ใบเสร็จรับเงิน/ใบกำกับภาษี (mytester7 FX review L4): ใบที่ยังไม่ยกเลิกและ snapshot อัตราไว้ — วันที่ = วันรับเงิน
+ *   (`cash_receipts.received_date` — วันที่ที่ใช้ resolve อัตราตอนออกใบ) · ใบกำกับภาษีแบบเดิม/ใบเพิ่ม-ลดหนี้ใช้อัตรา
+ *   ใน snapshot ของรายได้/ใบเดิม (ไม่ resolve จากช่วง) จึงครอบด้วยรายได้แล้ว
  */
-async function revenueSpanOf(
+async function documentSpanOf(
   organizationId: string,
   period: VatRatePeriod,
   db: SettingsTxClient = prisma,
 ): Promise<VatRevenueSpan | null> {
-  const result = await db.revenue.aggregate({
-    where: {
-      organizationId,
-      deletedAt: null,
-      revenueDate: { gte: period.effectiveFrom, ...(period.effectiveTo === null ? {} : { lte: period.effectiveTo }) },
-    },
-    _min: { revenueDate: true },
-    _max: { revenueDate: true },
-  })
-  const first = result._min.revenueDate
-  const last = result._max.revenueDate
-  return first === null || last === null ? null : { first, last }
+  const range = { gte: period.effectiveFrom, ...(period.effectiveTo === null ? {} : { lte: period.effectiveTo }) }
+  const [revenues, receipts] = await Promise.all([
+    db.revenue.aggregate({
+      where: { organizationId, deletedAt: null, revenueDate: range },
+      _min: { revenueDate: true },
+      _max: { revenueDate: true },
+    }),
+    db.cashReceipt.aggregate({
+      where: {
+        organizationId,
+        receivedDate: range,
+        taxInvoices: { some: { status: 'active', vatRatePctUsed: { not: null } } },
+      },
+      _min: { receivedDate: true },
+      _max: { receivedDate: true },
+    }),
+  ])
+  return mergeSpans([
+    { first: revenues._min.revenueDate, last: revenues._max.revenueDate },
+    { first: receipts._min.receivedDate, last: receipts._max.receivedDate },
+  ])
+}
+
+function mergeSpans(spans: readonly { first: Date | null; last: Date | null }[]): VatRevenueSpan | null {
+  const present = spans.filter((span): span is VatRevenueSpan => span.first !== null && span.last !== null)
+  if (present.length === 0) return null
+  return {
+    first: new Date(Math.min(...present.map((span) => span.first.getTime()))),
+    last: new Date(Math.max(...present.map((span) => span.last.getTime()))),
+  }
 }
 
 function throwIfViolation(violation: VatRateChangeViolation | null): void {
@@ -215,7 +237,7 @@ export async function createVatRate(
     // (ช่วงล่าสุดต้องเปิดปลายเสมอ จึงปิดแยกก่อนไม่ได้ — mytester7 review)
     const autoClose = planVatRateAutoClose(values, periods)
     assertNoOverlap(values, existing, autoClose?.period.id)
-    const revenueSpan = autoClose === null ? null : await revenueSpanOf(organizationId, autoClose.period, tx)
+    const revenueSpan = autoClose === null ? null : await documentSpanOf(organizationId, autoClose.period, tx)
     throwIfViolation(validateVatRateCreate({ candidate: values, existing: periods, autoClose, revenueSpan, now }))
 
     if (autoClose !== null) {
@@ -304,7 +326,7 @@ export async function updateVatRate(
         candidate: values,
         current: currentPeriod,
         existing: existing.map(toPeriod),
-        revenueSpan: await revenueSpanOf(organizationId, currentPeriod, tx),
+        revenueSpan: await documentSpanOf(organizationId, currentPeriod, tx),
         now,
       }),
     )
