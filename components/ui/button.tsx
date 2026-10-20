@@ -4,6 +4,8 @@ import { cn } from '@/components/ui/cn'
 /**
  * ปุ่มมาตรฐาน — คลาสตาม `04` §8.1 (Component Class Reference) + mockup `reference/*.html`
  * ⚠️ คำบนปุ่มต้องตรงกับ action จริง (`04` §10) · ปุ่ม destructive ต้องผ่าน `<ConfirmModal>` เสมอ
+ * คำบนปุ่มอยู่บรรทัดเดียวเสมอ (`whitespace-nowrap` — มติผู้ใช้ 20/10/2569: เดิม "ปิดใช้งาน" ตกสามบรรทัดในตารางแคบ)
+ * จุดที่ตั้งใจให้ตัดบรรทัด (ปุ่มหลายบรรทัด) ให้ส่ง `whitespace-normal` มาใน className
  */
 
 export type ButtonVariant = 'primary' | 'success' | 'info' | 'secondary' | 'danger' | 'ghost'
@@ -36,7 +38,7 @@ const SIZE_CLASS: Readonly<Record<ButtonSize, string>> = {
  */
 export function buttonClass(variant: ButtonVariant = 'primary', size: ButtonSize = 'sm', className?: string): string {
   return cn(
-    'focus-ring inline-flex items-center justify-center gap-2 rounded-lg font-semibold transition-colors',
+    'focus-ring inline-flex items-center justify-center gap-2 rounded-lg font-semibold whitespace-nowrap transition-colors',
     TOUCH_TARGET_CLASS,
     VARIANT_CLASS[variant],
     SIZE_CLASS[size],
@@ -71,7 +73,7 @@ export function Button({
       // `<Modal>` อ่านค่านี้เพื่อกันปิดระหว่างบันทึก (`modal-close-guard.ts`)
       aria-busy={loading || undefined}
       className={cn(
-        'focus-ring inline-flex items-center justify-center gap-2 rounded-lg font-semibold transition-colors',
+        'focus-ring inline-flex items-center justify-center gap-2 rounded-lg font-semibold whitespace-nowrap transition-colors',
         'disabled:cursor-not-allowed disabled:opacity-50',
         TOUCH_TARGET_CLASS,
         VARIANT_CLASS[variant],

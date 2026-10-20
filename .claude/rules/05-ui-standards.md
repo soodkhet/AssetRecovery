@@ -3,6 +3,7 @@
 - Mockup ใน `reference/` = **source of truth ด้าน UI** (โครงหน้า/Tailwind pattern) — แต่ business logic ยึด spec `.md` เสมอ · ออกแบบนอก pattern mockup ไม่ได้ถ้าไม่แก้ mockup คู่กัน
 - Font: `'Sarabun', sans-serif` ทั้งไทยและอังกฤษ (400–800 · มติผู้ใช้ 19–20/10/2569 แทน Inter + Noto Sans Thai — PDF ยังฝัง Noto Sans Thai ของตัวเอง) · `font-mono` มี Sarabun ท้ายชุดให้ภาษาไทยที่ปนอยู่ · เลขอ้างอิง/รหัส (case ref, tax id, เลขบัญชี) ใช้ `font-mono`
 - สิ่งที่กดได้ (ปุ่ม/แถบ/ลิงก์/select/checkbox/แถว `interactive`) = เมาส์รูปมือ · กดไม่ได้ = `not-allowed` — ตั้งกลางใน `app/globals.css` (`@layer base`) ไม่ต้องใส่ `cursor-pointer` เองทีละจุด · element ที่กดได้แต่ไม่ใช่ปุ่ม ต้องใส่ `role` หรือ `cursor-pointer` (มติผู้ใช้ 20/10/2569)
+- คำบนปุ่มอยู่บรรทัดเดียวเสมอ — `<Button>`/`buttonClass()` ตั้ง `whitespace-nowrap` แล้ว · ปุ่มที่เขียนเองต้องใส่ `whitespace-nowrap` · ตั้งใจให้ตัดบรรทัดเท่านั้นจึงส่ง `whitespace-normal` (มติผู้ใช้ 20/10/2569)
 - Theme slate/emerald · **statusBadge 10 กลุ่มสีตายตัว** (`04` §8.1) — ใช้ mapper กลาง ห้ามใช้สีสุ่มนอกระบบ
 - Component classes มาตรฐาน (`04` §8.1): Card `bg-white rounded-xl border border-slate-200 shadow-sm p-6` · Table header `bg-slate-50 text-xs text-slate-600` · ปุ่ม Primary `bg-slate-900 text-white … rounded-lg text-xs font-semibold` — ใช้ shared components จาก UI Kit เท่านั้น
 - โครงหน้า: Page → Header → Tabs/Filters → Table/KPI → Modal → Toast · **ทุกหน้าต้องมี loading / empty / error state**
