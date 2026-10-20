@@ -16,6 +16,7 @@
 | v2 | 03/07/2569 | **แก้ไข Conflict**: ข้อ 8 เดิมระบุมาตรฐานวันที่เป็น "ค.ศ. เสมอ ห้ามใช้ พ.ศ." ซึ่ง**ขัดแย้งโดยตรง**กับ `03-non-functional-requirements.md` §6.5 และ README ที่กำหนดว่า UI ต้องใช้ **พ.ศ. เท่านั้น** — ยืนยันกับ Product Owner แล้วว่า **พ.ศ. คือมาตรฐานที่ถูกต้อง** จึงแก้ข้อ 8 ให้ตรงกัน (ดู §17 Decisions) — Reformat header ตามมาตรฐานเอกสารชุดใหม่ด้วยในคราวเดียวกัน |
 | v3 | 03/07/2569 | เพิ่ม **§8.1 Design Token Reference** — สกัด font, status badge color map, component class จริงจาก mockup HTML (`finance.html` เป็นหลัก ตรวจสอบข้าม `accounting.html`/`warehouse.html`/`settings.html` แล้ว) พบและบันทึกความไม่สอดคล้องเล็กน้อยเรื่อง body background color (ดู Open Items ข้อ 18) |
 | v3.1 | 19/10/2569 | **มติผู้ใช้ 19/10/2569** — §8.1 ฟอนต์ภาษาไทยของหน้าจอเปลี่ยนจาก `Noto Sans Thai` เป็น **`Sarabun`** (400–700 · มีหัว อ่านง่าย · ฝังกับระบบผ่าน next/font) · อังกฤษ/ตัวเลขยังเป็น Inter · `font-mono` เดิม · **PDF ไม่เปลี่ยน** (ฝัง Noto Sans Thai ของตัวเอง — `28` §7) · mockup `reference/` 17 ไฟล์แก้คู่กัน |
+| v3.2 | 20/10/2569 | **มติผู้ใช้ 20/10/2569 (แบบ ข)** — §8.1 ภาษาอังกฤษ/ตัวเลขของหน้าจอใช้ **Sarabun** ด้วย (เลิกใช้ Inter) · เลขอ้างอิง/ยอดเงินคง `font-mono` · ชุด `font-mono` เติม Sarabun ท้ายสุดให้อักษรไทยที่ปนในช่องเลขอ้างอิง (เดิมตกไปฟอนต์ของเครื่อง) · PDF ไม่เปลี่ยน · mockup แก้คู่กัน |
 
 ขอบเขตเอกสารนี้: มาตรฐาน UI/UX ที่ต้องใช้ทุกหน้าจอให้ตรงกับ HTML Mockup — สี ปุ่ม ตาราง Modal Badge และ Interaction
 
@@ -92,12 +93,12 @@
 
 | รายการ | ค่าจริง |
 |---|---|
-| Font หลัก (ภาษาอังกฤษ/ตัวเลข) | `Inter` (weight 400/500/600/700, บางหน้า 800) |
+| Font หลัก (ภาษาอังกฤษ/ตัวเลข) | `Sarabun` (weight 400/500/600/700, บางหน้า 800) — มติผู้ใช้ 20/10/2569 แทน `Inter` |
 | Font ภาษาไทย | `Sarabun` (weight 400/500/600/700) — มติผู้ใช้ 19/10/2569 แทน `Noto Sans Thai` · เอกสาร PDF ยังใช้ Noto Sans Thai ที่ฝังในไฟล์ (`28` §7) |
 | Fallback | `sans-serif` |
-| Font สำหรับเลขอ้างอิง/รหัส (case ref, tax id, เลขบัญชี) | `font-mono` (ใช้ class Tailwind ปกติ ไม่ใช่ font แยก) |
-| Google Fonts import | `https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sarabun:wght@400;500;600;700&display=swap` |
-| CSS ที่ body | `font-family: 'Inter', 'Sarabun', sans-serif;` |
+| Font สำหรับเลขอ้างอิง/รหัส (case ref, tax id, เลขบัญชี) | `font-mono` (ใช้ class Tailwind ปกติ ไม่ใช่ font แยก) · ชุดฟอนต์มี `Sarabun` ท้ายสุดให้อักษรไทยที่ปนอยู่ (เช่น "— ไม่ผูกเคส") — v3.2 |
+| Google Fonts import | `https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700;800&display=swap` |
+| CSS ที่ body | `font-family: 'Sarabun', sans-serif;` |
 
 > ⚠️ พบว่า `background-color` ที่ body ไม่ตรงกันทุกไฟล์: `finance.html`/`warehouse.html` ใช้ `#f8fafc` (slate-50) แต่ `accounting.html`/`settings.html` ใช้ `#f1f5f9` (slate-100) — เป็นความไม่สอดคล้องเล็กน้อยที่ยังไม่แก้ (ดู Open Items ข้อ 18)
 
@@ -199,7 +200,7 @@
 - **🔧 แก้ไข Conflict ระหว่างเอกสาร (03/07/2569)**: ข้อ 8 เดิมของไฟล์นี้ระบุ "ค.ศ. เสมอ ห้ามใช้ พ.ศ." ซึ่งขัดกับ `03-non-functional-requirements.md` §6.5 ที่ระบุ "พ.ศ. เท่านั้น ห้ามแสดง ค.ศ." — **Product Owner ยืนยันแล้วว่า พ.ศ. คือมาตรฐานที่ถูกต้อง** ทุกไฟล์ในชุดเอกสารต้องใช้ พ.ศ. เป็นมาตรฐานเดียวกันทั้งหมด ไม่มีข้อยกเว้น
 - **Component/Badge/Modal ต้องยึด HTML Mockup เป็น reference หลัก** — ห้ามออกแบบ UI ใหม่นอกเหนือจาก pattern ที่เห็นใน mockup โดยไม่ปรับ mockup คู่กัน (สอดคล้องกับหลักการใน `01-architecture.md`)
 - **Datetime แสดงผลต้องมาพร้อม action ที่หน้าจอหลักเสมอ** ไม่ใช่ซ่อนไว้แค่ใน audit log — ผู้ใช้ต้องเห็นความคืบหน้าได้ทันทีจาก list/table (ข้อ 8)
-- **Font มาตรฐานทั้งระบบ**: Inter (อังกฤษ/ตัวเลข) + Sarabun (ไทย), fallback sans-serif — ใช้ `font-mono` เฉพาะเลขอ้างอิง/รหัส/เลขบัญชี (ข้อ 8.1)
+- **Font มาตรฐานทั้งระบบ**: Sarabun (ไทยและอังกฤษ), fallback sans-serif — ใช้ `font-mono` เฉพาะเลขอ้างอิง/รหัส/เลขบัญชี (ข้อ 8.1)
 - **Status Badge Color Map มีมาตรฐานตายตัว 10 กลุ่มความหมาย** (เขียว/น้ำเงิน/ฟ้าอมเขียว/เหลือง/ม่วง/เทา/แดง/ส้ม/เทาเข้ม/ฟ้าอ่อน) ตามที่ implement จริงในโค้ด — ต้องยึดตารางในข้อ 8.1 เป็นหลัก ไม่ใช่คำอธิบายกว้างๆ เดิม
 - **Permission check ต้องสอดคล้องกับ `01-architecture.md` §6.1** — UI hide/disable ไม่ใช่ security จริง (ข้อ 11, 12)
 

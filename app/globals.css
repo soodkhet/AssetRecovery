@@ -1,11 +1,11 @@
 @import 'tailwindcss';
 
-/* Design System — `04` §8.1 (theme slate/emerald · font Inter + Sarabun)
+/* Design System — `04` §8.1 (theme slate/emerald · font Sarabun)
    UI Kit อยู่ที่ `components/ui/*` (Phase 1.5) — คลาสเฉพาะทางที่ Tailwind ไม่มีให้เท่านั้นที่มาอยู่ไฟล์นี้ */
 @theme {
-  /* ตัวแปร --font-inter / --font-sarabun มาจาก `next/font` ใน `app/layout.tsx` */
-  --font-sans: var(--font-inter), var(--font-sarabun), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: ui-monospace, 'SFMono-Regular', 'Menlo', monospace;
+  /* ตัวแปร --font-sarabun มาจาก `next/font` ใน `app/layout.tsx` · font-mono มี Sarabun ท้ายชุด ⇒ ภาษาไทยในช่องเลขอ้างอิงไม่ตกไปฟอนต์ของเครื่อง */
+  --font-sans: var(--font-sarabun), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, 'SFMono-Regular', 'Menlo', var(--font-sarabun), monospace;
 }
 
 html,

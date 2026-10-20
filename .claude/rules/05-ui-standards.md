@@ -1,7 +1,7 @@
 # Rule 05 — UI Standards (`04` §8.1, `06`)
 
 - Mockup ใน `reference/` = **source of truth ด้าน UI** (โครงหน้า/Tailwind pattern) — แต่ business logic ยึด spec `.md` เสมอ · ออกแบบนอก pattern mockup ไม่ได้ถ้าไม่แก้ mockup คู่กัน
-- Font: `'Inter', 'Sarabun', sans-serif` (400–700 · มติผู้ใช้ 19/10/2569 แทน Noto Sans Thai — PDF ยังฝัง Noto Sans Thai ของตัวเอง) · เลขอ้างอิง/รหัส (case ref, tax id, เลขบัญชี) ใช้ `font-mono`
+- Font: `'Sarabun', sans-serif` ทั้งไทยและอังกฤษ (400–800 · มติผู้ใช้ 19–20/10/2569 แทน Inter + Noto Sans Thai — PDF ยังฝัง Noto Sans Thai ของตัวเอง) · `font-mono` มี Sarabun ท้ายชุดให้ภาษาไทยที่ปนอยู่ · เลขอ้างอิง/รหัส (case ref, tax id, เลขบัญชี) ใช้ `font-mono`
 - Theme slate/emerald · **statusBadge 10 กลุ่มสีตายตัว** (`04` §8.1) — ใช้ mapper กลาง ห้ามใช้สีสุ่มนอกระบบ
 - Component classes มาตรฐาน (`04` §8.1): Card `bg-white rounded-xl border border-slate-200 shadow-sm p-6` · Table header `bg-slate-50 text-xs text-slate-600` · ปุ่ม Primary `bg-slate-900 text-white … rounded-lg text-xs font-semibold` — ใช้ shared components จาก UI Kit เท่านั้น
 - โครงหน้า: Page → Header → Tabs/Filters → Table/KPI → Modal → Toast · **ทุกหน้าต้องมี loading / empty / error state**

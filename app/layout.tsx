@@ -1,17 +1,17 @@
 import type { Metadata, Viewport } from 'next'
-import { Inter, Sarabun } from 'next/font/google'
+import { Sarabun } from 'next/font/google'
 import { APP_NAME } from '@/lib/constants'
 import './globals.css'
 
 /**
- * Font มาตรฐานทั้งระบบ — Inter (อังกฤษ/ตัวเลข) + Sarabun (ไทย — มติผู้ใช้ 19/10/2569 แทน Noto Sans Thai) fallback `sans-serif` (`04` §8.1)
- * Sarabun ไม่ใช่ variable font ⇒ ต้องระบุ weight ที่ใช้ (400–700 ตาม UI Kit)
+ * Font มาตรฐานทั้งระบบ — Sarabun ทั้งไทยและอังกฤษ (มติผู้ใช้ 19–20/10/2569 แทน Inter + Noto Sans Thai) fallback `sans-serif` (`04` §8.1)
+ * เลขอ้างอิง/ยอดเงินยังใช้ `font-mono` (ไทยในช่องนั้น fallback เป็น Sarabun — `globals.css`)
+ * Sarabun ไม่ใช่ variable font ⇒ ต้องระบุ weight ที่ใช้ (400–700 ตาม UI Kit + 800 ของ `font-extrabold`)
  * โหลดผ่าน `next/font` (self-host ตอน build) แทน `<link>` ไป Google Fonts — ไม่มี request ออกนอกตอน runtime
  */
-const inter = Inter({ subsets: ['latin'], variable: '--font-inter', display: 'swap' })
 const sarabun = Sarabun({
-  subsets: ['thai'],
-  weight: ['400', '500', '600', '700'],
+  subsets: ['thai', 'latin'],
+  weight: ['400', '500', '600', '700', '800'],
   variable: '--font-sarabun',
   display: 'swap',
 })
@@ -43,7 +43,7 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="th" className={`${inter.variable} ${sarabun.variable}`}>
+    <html lang="th" className={sarabun.variable}>
       <body className="min-h-screen bg-slate-50 text-slate-900 antialiased">{children}</body>
     </html>
   )
