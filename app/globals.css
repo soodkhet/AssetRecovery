@@ -14,6 +14,36 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* มติผู้ใช้ 20/10/2569 — สิ่งที่กดได้ต้องเป็นเมาส์รูปมือ (Tailwind v4 preflight เลิกตั้ง cursor: pointer ให้ปุ่มแล้ว)
+ * อยู่ใน @layer base ⇒ คลาส utility ของแต่ละจุด (เช่น cursor-not-allowed / cursor-zoom-in) ยังชนะเสมอ
+ * กดไม่ได้ (disabled / aria-disabled) = not-allowed */
+@layer base {
+  button,
+  [role='button'],
+  [role='tab'],
+  [role='menuitem'],
+  [role='option'],
+  [role='switch'],
+  summary,
+  select,
+  label:has(> input[type='checkbox'], > input[type='radio']),
+  input[type='checkbox'],
+  input[type='radio'],
+  input[type='file'],
+  input[type='submit'],
+  input[type='button'],
+  input[type='reset'] {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  select:disabled,
+  input:disabled,
+  [aria-disabled='true'] {
+    cursor: not-allowed;
+  }
+}
+
 /* focus ring มาตรฐาน + animation ที่ mockup ใช้ (login.html)
  * มติ PO 04/10/2569: คลิกเมาส์ = ไม่มีกรอบ (เห็นแค่สถานะ active) · คีย์บอร์ด (Tab) = กรอบครบ
  * → ใช้ :focus-visible เท่านั้น (ช่องกรอกข้อความ browser ถือเป็น focus-visible เสมอ จึงยังเห็นกรอบตอนคลิก)
