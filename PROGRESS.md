@@ -1,19 +1,19 @@
 # PROGRESS.md — AssetRecovery (Single Source of Truth ของสถานะงาน)
 
-**อัปเดตล่าสุด:** 2026-10-07 — **Final Test รอบสุดท้ายเสร็จ** (`ff22ebd` · `uat/report/FINAL-SUMMARY.md`) — งานถัดไป = ผู้ใช้ push staging + ทดสอบบน staging (BUG-185 แก้แล้ว U171) · ก่อนหน้า: 2026-10-06 — ปิด Phase 6.6 แดชบอร์ดหลัก (`1a98a87`) — งาน build ครบทุก Phase · งานถัดไป = **Final Test รอบสุดท้าย** · ก่อนหน้า: 2026-08-16 — ปิด Phase 8.3 (Final Test ทั้งระบบ 6 ด่าน: การเงิน / บัญชี / ปฏิบัติการ / Security / UI / ความทนทาน) — แก้บั๊กจริง 8 จุด รวม **A1 ลูกค้าหักภาษีก่อนโอน** (auto-match ไม่ติด + AR ค้าง 3% ตลอดกาล), ใบกำกับภาษี/ใบ 50 ทวิ **ออกซ้ำได้** เมื่อยิงพร้อมกัน, อนุมัติเงินทดรองใบที่สอง 500, สรุปรายได้พนักงานขยับย้อนหลัง, badge KPI โกหกเมื่อค่าเป็น N/A — **migration ใหม่ 2 ตัว** ต้อง `db:deploy` ก่อนรันต่อ · **มติ PO 2026-08-16 ปลดล็อก 6.6 + Phase 7 แล้ว** — งานถัดไป 6.6 → 7.1–7.3 → Final Test รอบสุดท้าย (Fable 5) · หนี้ที่ต้องมีมติ 4 ข้อ (ดู archive)
+**อัปเดตล่าสุด:** 2026-11-09 — **ปรับสถานะให้ตรงจริงหลังรอบ mytester 5–7** — `origin/staging` @ `7f2b309f` (20/10/2569 · ไม่มี commit ค้าง push · migration staging ถึง `20261019130000`) · BUG-184/185 ปิดแล้ว · งานถัดไป = mytester รอบ 7 ส่วนที่ 2 + PO ทบทวนมติที่ตัดสินแทน + PR `staging`→`main` · ก่อนหน้า: 2026-10-07 — **Final Test รอบสุดท้ายเสร็จ** (`ff22ebd` · `uat/report/FINAL-SUMMARY.md`) — งานถัดไป = ผู้ใช้ push staging + ทดสอบบน staging (BUG-185 แก้แล้ว U171) · ก่อนหน้า: 2026-10-06 — ปิด Phase 6.6 แดชบอร์ดหลัก (`1a98a87`) — งาน build ครบทุก Phase · งานถัดไป = **Final Test รอบสุดท้าย** · ก่อนหน้า: 2026-08-16 — ปิด Phase 8.3 (Final Test ทั้งระบบ 6 ด่าน: การเงิน / บัญชี / ปฏิบัติการ / Security / UI / ความทนทาน) — แก้บั๊กจริง 8 จุด รวม **A1 ลูกค้าหักภาษีก่อนโอน** (auto-match ไม่ติด + AR ค้าง 3% ตลอดกาล), ใบกำกับภาษี/ใบ 50 ทวิ **ออกซ้ำได้** เมื่อยิงพร้อมกัน, อนุมัติเงินทดรองใบที่สอง 500, สรุปรายได้พนักงานขยับย้อนหลัง, badge KPI โกหกเมื่อค่าเป็น N/A — **migration ใหม่ 2 ตัว** ต้อง `db:deploy` ก่อนรันต่อ · **มติ PO 2026-08-16 ปลดล็อก 6.6 + Phase 7 แล้ว** — งานถัดไป 6.6 → 7.1–7.3 → Final Test รอบสุดท้าย (Fable 5) · หนี้ที่ต้องมีมติ 4 ข้อ (ดู archive)
 
 > วิธีใช้: ดู `WORKFLOW.md` (วงจรต่อ session) + `CLAUDE.md` (กติกา) · รายละเอียดเต็มของทุก task อยู่ `docs/01_PLAN.md` — อ่านเฉพาะ § ของ task ที่ทำ · จบ task แล้วมาร์ค ✅ + commit hash + ย้ายรายละเอียดไป `docs/PROGRESS_ARCHIVE.md` + เลื่อน "งานถัดไป"
 
 ---
 
-## 🎯 งานถัดไป — **8.5** ผู้ใช้ push staging + ทดสอบบน staging (BUG-185 แก้แล้ว U171)
+## 🎯 งานถัดไป — **8.5** ทดสอบบน staging ต่อ (mytester รอบ 7 ส่วนที่ 2) → PO ทบทวนมติ → PR `staging`→`main`
 
-> **Final Test รอบสุดท้าย ✅ เสร็จ 07/10/2569** — `staging` @ `ff22ebd` · ด่าน 1–7 + 7b ผ่าน · verify 394 ไฟล์ / 5,672 tests · seed verify 207/207 · สรุป: **`uat/report/FINAL-SUMMARY.md`** · รายละเอียด → `docs/PROGRESS_ARCHIVE.md` § Phase 8 final
+> **Final Test รอบสุดท้าย ✅ เสร็จ 07/10/2569** (`ff22ebd` · `uat/report/FINAL-SUMMARY.md`) · หลังจากนั้นทดสอบบน staging ด้วย `/mytester` รอบ 1–7 (11–20/10/2569 · รายงาน `.claude/preship/mytester-*` · log `uat/STATE.md`) + เปลี่ยนฟอนต์ Sarabun / เมาส์รูปมือ / คำบนปุ่มบรรทัดเดียว (มติผู้ใช้ 19–20/10/2569)
+> **สถานะ ณ 09/11/2569**: `origin/staging` @ `7f2b309f` = local (ไม่มี commit ค้าง push) · ผู้ใช้ `db:deploy` staging แล้วถึง migration `20261019130000_payout_item_snapshot_no_delete` · test เต็มล่าสุด 7,476 ✅ · `origin/main` ยังอยู่ที่ `5ed412a9` (13/08/2569)
 
-1. ผู้ใช้ทำตาม `uat/report/FINAL-SUMMARY.md` §8: ลบ `RAPIDAPI_*` (.env.local/.env.example/Vercel) → `pnpm typecheck && pnpm test` → `git push origin staging` → `PRISMA_ENV_FILE=.env.staging pnpm db:deploy` (migration ใหม่ 19 ตัว ตั้งแต่ `20261008010000`) → Model Phone กด "อัปเดตตอนนี้" บน staging → (ตัวเลือก) seed → ทดสอบมือถือจริง → PR `staging`→`main`
-2. **BUG-185** (ใบลดหนี้หลังบิลชำระครบ → จ่ายเกิน) `[[NEEDS_DECISION]]` — แนะนำ ก: บล็อกใบลดหนี้ที่เกินยอดค้างตามเอกสาร + คืนเงินให้สำนักงานบัญชีจัดการนอกระบบ
-3. **BUG-184** (พอร์ทัลรายละเอียดเคสไม่แสดงรุ่น/ความจุ/สี) + รายการแก้อื่นของ O77 — สั่งแก้แล้ว รอ merge
-4. ทบทวนมติที่ตัดสินแทนตอนผู้ใช้หลับ O75–O77 · ก่อน go-live: ลบบัญชี Auth/ไฟล์ Storage ตัวอย่าง · นักบัญชีจริงยืนยันค่าตั้ง 21 รายการ · ปิด public signup production · CLAUDE.md อัปเดต DEC ถึง DEC-017
+1. **mytester รอบ 7 ส่วนที่ 2** (วางไว้ตั้งแต่ 01/11/2569 — ยังไม่ได้ทำ) — ของที่เตรียมค้างไว้บน staging ดู `.claude/preship/mytester-20261018-r7/summary.md` ("ของที่ค้างไว้") เช่น expense `a0f74728` ที่พัก in2 รออนุมัติ (ข้ามงวด) · expense `24bcc5c5` ค่าน้ำมัน PLS-3 · BL-2569-009 `622b6f69` ร่าง · FX3 snapshot ผู้รับที่ข้ามไว้ 2 ข้อ · หนี้นอกขอบเขตรอบ 7 (VAT lock ของ revenue · swapAssignment ตรวจทีม) ปิดแล้วใน FX1 `db531f57`/`e9096730` · ข้อมูลเสียที่รู้แล้ว: ชื่อ KTP v1 (ผู้ใช้ 19/10 ไม่แก้)
+2. **PO ทบทวนมติที่ Claude ตัดสินแทน** — D7-01…D7-09 (`.claude/preship/mytester-20261018-r7/DECISIONS.md`) · M1–M10 + คำถามค้าง Q1–Q5 (`uat/PO-DECISIONS-2569-10-11.md` — Q4 ช่อง "อ้างอิงเคส" ของเงินทดรองต้อง migration) · O75–O77
+3. **ก่อน go-live** (งานของคน): ยืนยันลบ `RAPIDAPI_*` จาก `.env.local`/`.env.example`/Vercel แล้ว (DEC-017) · ทดสอบมือถือจริง · ลบบัญชี Auth/ไฟล์ Storage ตัวอย่าง (`uat/STATE.md` ท้ายไฟล์) · นักบัญชีจริงยืนยันค่าตั้ง 21 รายการ · ปิด public signup production · เปิด PR `staging`→`main`
 
 ### หนี้ที่ Final Test (8.3) ตรวจเจอแต่ไม่ได้แก้ — ✅ ปิดครบ 4 ข้อ
 
@@ -129,7 +129,7 @@
 | 8.2 | Consistency Sweep + Hardening | ✅ | 2026-08-16 · `0ae328c`+`91de430`+`32b71ff`+`0d743f9`+`b69a6b2`+`9bd34bc`+`c98f9a7`+`05cd29f` · กวาด 5 แกน (เงิน/วันที่ · RBAC · audit · idempotency · index) — ปิดช่องโอนซ้ำของไฟล์โอน, Export pack ล็อกรอบตัวเองถาวร, เงินเข้าถูกนับซ้ำตอนนำเข้า statement พร้อมกัน + ยาม scope 5 โมดูล + trigger immutable ครบ `02` §13 → archive |
 | 8.3 | Final Test ทั้งระบบ (ด่าน orchestrator) | ✅ | 2026-08-16 · `db0c416`+`9a4e3a7`+`e852f36`+`0e8f872`+`94d66ef`+`adea507`+`bcf2086` · รัน 6 ด่านครบ — แก้บั๊กจริง 8 จุด (A1 ลูกค้าหักภาษีก่อนโอนทั้งเส้น · ใบกำกับภาษี/ใบ 50 ทวิ ออกซ้ำเมื่อยิงพร้อมกัน · อนุมัติเงินทดรองใบที่สอง 500 · สรุปรายได้ขยับย้อนหลัง · badge KPI โกหกเมื่อ N/A · ยามของ job/export/อนุมัติจาก session ก่อน) + migration 2 ตัว · หนี้ที่ต้องมีมติ 4 ข้อ → archive |
 | 8.4 | Final Test รอบสุดท้าย (มติ U119 · ด่าน 1–7 + 7b เบราว์เซอร์จริง) | ✅ | 2026-10-07 · `ff22ebd` · 108 commit จาก `0109def` · มติ U119–U170 + O71–O77 · บั๊กแก้ BUG-178–183 + ด่าน 1–6 · BUG-184 แก้แล้ว (fixer IA) / ค้าง BUG-185 (needs-decision) · `uat/report/FINAL-SUMMARY.md` → archive |
-| 8.5 | ผู้ใช้ push staging + migrate + ทดสอบบน staging + ตัดสิน BUG-185 | ⏸️ | รอผู้ใช้ (งานของคน — orchestrator ห้ามหยิบ) · ดู `uat/report/FINAL-SUMMARY.md` ส่วน "สิ่งที่ผู้ใช้ต้องทำ" |
+| 8.5 | ผู้ใช้ push staging + migrate + ทดสอบบน staging (mytester) + PR `staging`→`main` | ⏸️ | รอผู้ใช้ (งานของคน — orchestrator ห้ามหยิบ) · push + migrate ✅ ถึง `7f2b309f` (20/10/2569) · BUG-185 ✅ `d7ad32ff` (U171) · mytester รอบ 1–7 ส่วนที่ 1 ✅ · ค้าง: รอบ 7 ส่วนที่ 2 · PO ทบทวนมติ · PR เข้า main — ดู "งานถัดไป" |
 
 ---
 
