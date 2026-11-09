@@ -1,0 +1,68 @@
+import { openAs, BASE, settle, log, txt, shot, step, toasts, track, sleep, errText, q, fieldsOf } from './_a.mjs'
+const s = await openAs('superadmin'); const p = s.page; const res = track(p)
+const tab = async n => { await p.locator('main').getByRole('button', { name: n, exact: true }).first().click(); await settle(p, 900) }
+const save = async (d, name) => { const r = p.waitForResponse(r => r.url().includes('/api/') && r.request().method() !== 'GET', { timeout: 20000 }); await d.getByRole('button', { name, exact: true }).click(); const rr = await r; let b=''; try{b=(await rr.text()).slice(0,300)}catch{}; return { st: rr.status(), b, t: await toasts(p, 1200) } }
+try {
+  await p.goto(`${BASE}/settings/finance`); await settle(p, 1200)
+  // ---- bank file format
+  await tab('ไฟล์โอนธนาคาร')
+  const r = { st: 201 }
+  const testBtn = p.locator('main').getByRole('button', { name: /ทดสอบ/ }).first()
+  log('main after', await txt(p.locator('main table'), 600))
+  let rt = null
+  if (process.env.SKIPTEST !== '1' && await testBtn.isVisible().catch(() => false)) {
+    const w = p.waitForResponse(r => r.url().includes('/api/') && r.request().method() !== 'GET', { timeout: 20000 })
+    await testBtn.click(); await sleep(600)
+    const dd = p.getByRole('dialog').last()
+    await dd.locator('textarea').fill('ทดสอบรูปแบบไฟล์โอน SCB ก่อนใช้งาน'); await dd.getByRole('button', { name: 'เริ่มทดสอบ' }).click()
+    rt = await w.catch(e => null); await settle(p, 800)
+    const dd2 = p.getByRole('dialog').last()
+    log('test result', rt?.status(), await txt(dd2.isVisible() ? dd2 : p.locator('main'), 800))
+  }
+  await shot(p, 'A2-bankfile')
+  const bf = q("select id,bank_code,file_type,encoding,test_status,purpose from bank_file_formats")
+  log('bf', bf)
+  step({ step: 'A2.bankfile', action: 'เพิ่มรูปแบบไฟล์โอน SCB (014) CSV UTF-8 ไม่มีหัวคอลัมน์ 5 คอลัมน์ → ทดสอบ', expected: '201 + ทดสอบผ่าน', actual: `${r.st} · ทดสอบ ${rt?.status() ?? 'ไม่พบปุ่ม'} · DB ${JSON.stringify(bf)}`, status: r.st === 201 && rt?.status() === 200 ? 'pass' : 'fail', evidence: ['A2-bankfile.png'] })
+  await p.keyboard.press('Escape'); await sleep(400)
+  // ---- bank accounts
+  await tab('บัญชีธนาคารบริษัท')
+  await p.locator('main').getByRole('button', { name: '+ เพิ่มบัญชี' }).click(); await settle(p, 600)
+  let d = p.getByRole('dialog').last()
+  await d.locator('#bank-account-number').fill('abc-12'); const v1 = await d.locator('#bank-account-number').inputValue()
+  await d.locator('#bank-account-reason').fill('เพิ่มบัญชีหลัก')
+  const n0 = res.length
+  await d.getByRole('button', { name: 'เพิ่มบัญชี', exact: true }).click(); await sleep(900)
+  const e1 = await errText(d); const f1 = await p.evaluate(() => document.activeElement?.id || document.activeElement?.tagName)
+  const foot1 = await d.locator('p[role=alert]').allInnerTexts()
+  await shot(p, 'A2-bank-validation')
+  await d.locator('#bank-account-bank').selectOption({ label: 'ธนาคารกสิกรไทย' })
+  await d.locator('#bank-account-number').fill('12345')
+  await d.getByRole('button', { name: 'เพิ่มบัญชี', exact: true }).click(); await sleep(900)
+  const e2 = await errText(d)
+  step({ step: 'A2.bank.validation', action: "เพิ่มบัญชีธนาคาร ไม่เลือกธนาคาร + เลข 'abc-12' แล้ว '12345'", expected: 'ข้อความไทย ไม่ยิง API', actual: `พิมพ์ abc-12 ได้ '${v1}' · ${e1.join(' / ')} · footer=${JSON.stringify(foot1)} focus=${f1} · 12345 → ${e2.join(' / ')} · API ${res.length - n0}`, status: res.length === n0 && e1.length ? 'pass' : 'fail', evidence: ['A2-bank-validation.png'] })
+  await d.locator('#bank-account-name').fill('บริษัท ตามทันทรัพย์ (MT6) จำกัด')
+  await d.locator('#bank-account-number').fill('123-4-56789-0')
+  await d.locator('#bank-account-type').selectOption({ label: 'กระแสรายวัน' })
+  await d.locator('#bank-account-usage').selectOption({ label: 'รับและจ่าย (Both)' })
+  await d.getByLabel('ตั้งเป็นบัญชีหลักขององค์กร').check()
+  await d.locator('#bank-account-reason').fill('เพิ่มบัญชีหลักรับและจ่าย KBank รอบ MT6')
+  const r1 = await save(d, 'เพิ่มบัญชี'); log('kbank', r1); await settle(p, 800)
+  await p.locator('main').getByRole('button', { name: '+ เพิ่มบัญชี' }).click(); await settle(p, 600)
+  d = p.getByRole('dialog').last()
+  log('dialog reopened fields', (await fieldsOf(d)).join(' | ').slice(0, 400))
+  await d.locator('#bank-account-bank').selectOption({ label: 'ธนาคารไทยพาณิชย์' })
+  await d.locator('#bank-account-name').fill('บริษัท ตามทันทรัพย์ (MT6) จำกัด')
+  await d.locator('#bank-account-number').fill('987-6-54321-0')
+  await d.locator('#bank-account-type').selectOption({ label: 'ออมทรัพย์' })
+  await d.locator('#bank-account-usage').selectOption({ label: 'จ่ายเงิน (Pay)' })
+  const pf = await d.locator('#bank-account-payment-file option').allInnerTexts(); log('payfile opts', pf)
+  await d.locator('#bank-account-payment-file').selectOption({ index: 1 })
+  await d.locator('#bank-account-reason').fill('เพิ่มบัญชีจ่ายเงิน SCB ผูกไฟล์โอน รอบ MT6')
+  const r2 = await save(d, 'เพิ่มบัญชี'); log('scb', r2); await settle(p, 800)
+  await shot(p, 'A2-bank-created')
+  const tbl = await txt(p.locator('main table'), 800)
+  const ba = q("select * from bank_accounts")
+  log('ba', ba)
+  step({ step: 'A2.bank.create', action: 'เพิ่ม KBank 123-4-56789-0 กระแสรายวัน รับและจ่าย บัญชีหลัก + SCB 987-6-54321-0 ออมทรัพย์ จ่ายเงิน ผูกไฟล์โอน SCB', expected: '201 ทั้งสอง + ตารางปิดบังเลข', actual: `${r1.st}/${r2.st} · ตาราง ${tbl} · DB ${JSON.stringify(ba)}`, status: r1.st === 201 && r2.st === 201 ? 'pass' : 'fail', evidence: ['A2-bank-created.png'] })
+  log('5xx', s.serverErrors, 'console', s.consoleErrors, 'res', res)
+} finally { await s.browser.close() }
