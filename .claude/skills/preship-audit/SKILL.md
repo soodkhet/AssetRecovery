@@ -97,7 +97,7 @@ Error handling: API/DB failure · timeout · invalid response · network failure
 ### สภาพแวดล้อม
 - dev server http://localhost:3000 (Next.js 16) · ฐาน `assetrecovery_dev` (ข้อมูล seed Final · snapshot ที่ orchestrator สร้างตอนเตรียม — ฐานนี้ทดสอบได้ ข้อมูลเปลี่ยนได้ แต่จดสิ่งที่สร้างไว้)
 - SQL อ่านอย่างเดียว: `psql -d assetrecovery_dev -c "SELECT ..."` (SELECT เท่านั้น)
-- Playwright: `import { openAs, shot } from '/Users/beer/AssetRecovery/uat/bin/lib.mjs'` → `const { browser, page } = await openAs('uat.admin')` (รันด้วย `node <script>.mjs` จาก cwd `/Users/beer/AssetRecovery`) · ตั้ง viewport ด้วย `page.setViewportSize`
+- Playwright: `import { openAs, shot } from '/Users/beer/Claude/AssetRecovery/uat/bin/lib.mjs'` → `const { browser, page } = await openAs('uat.admin')` (รันด้วย `node <script>.mjs` จาก cwd `/Users/beer/Claude/AssetRecovery`) · ตั้ง viewport ด้วย `page.setViewportSize`
 - persona (username → role): uat.admin ธุรการ · uat.approver เจ้าหน้าที่อนุมัติเคส · uat.finance การเงิน · uat.account บัญชี · uat.exec บริหาร · uat.mgr.in / uat.mgr.out ผู้จัดการทีม · uat.sup.in / uat.sup.out หัวหน้าทีม · uat.agent.in1 / in2 / out1 / out2 พนักงานภาคสนาม · uat.co1.mgr / uat.co1.sup / uat.co2.admin ผู้ใช้บริษัทไฟแนนซ์ (Portal) · uat.temp1 (ระงับ) uat.temp2 (ลบ) · Superadmin: ดูใน personas.json ว่ามีหรือไม่
 - spec/มาตรฐาน: `CLAUDE.md` · `.claude/rules/*` · `docs/` (ใช้ `docs/00_MAP.md` หาช่วงบรรทัด ห้ามอ่านไฟล์ใหญ่ทั้งไฟล์) · mockup `reference/*.html` · มติ `uat/PO-DECISIONS-*.md` · บั๊กที่รู้แล้ว `uat/BUGS.md` (อย่ารายงานซ้ำบั๊กที่ status fixed เว้นแต่ยืนยันว่ายังเป็นอยู่)
 

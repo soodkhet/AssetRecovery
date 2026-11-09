@@ -1,7 +1,7 @@
 // AG3 — statement ธนาคาร (KBank xlsx) เงินเข้าจากลูกค้า 18/10/2569 : R7_SP=<SP> node uat/bin/r7/ag3-mkstmt.mjs
 import { createRequire } from 'node:module'
 const require = createRequire(import.meta.url)
-const X = require('/Users/beer/AssetRecovery/node_modules/xlsx')
+const X = require('/Users/beer/Claude/AssetRecovery/node_modules/xlsx')
 const F = `${process.env.R7_SP}/AG3/files/`
 const H = ['วันที่', 'รายละเอียด', 'เลขที่อ้างอิง', 'เงินเข้า', 'เงินออก']
 const w = X.utils.book_new()

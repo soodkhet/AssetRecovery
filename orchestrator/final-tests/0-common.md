@@ -6,7 +6,7 @@
 - ข้อมูลทดสอบมาตรฐาน: สคริปต์ seed scenario (`scripts/seed-final/` — ตารางความครอบคลุม + golden อยู่ที่ `uat/report/FINAL-coverage.md`) — ใช้ golden นี้เป็นค่าคาดหวังของตัวเลขเงิน **ห้ามคำนวณคาดหวังใหม่เองจากโค้ด** (ต้องมาจากสูตร `docs/22`)
 
 ## การเตรียม (ด่าน 1–6 = agent ใน worktree)
-1. `git merge staging` · `cp /Users/beer/AssetRecovery/.env.local .env.local` (ห้ามพิมพ์/commit) · `pnpm install --frozen-lockfile && pnpm db:generate`
+1. `git merge staging` · `cp /Users/beer/Claude/AssetRecovery/.env.local .env.local` (ห้ามพิมพ์/commit) · `pnpm install --frozen-lockfile && pnpm db:generate`
 2. ฐานทดสอบของด่าน N = `assetrecovery_test{N+1}` (ด่าน 1 → test2 … ด่าน 6 → test7) · export `TEST_DATABASE_URL` ชี้ฐานนั้น → `PRISMA_USE_TEST_DB=1 pnpm db:deploy:test` · **ห้ามแตะ `assetrecovery_dev` / `assetrecovery_test`**
 3. ทดสอบด้วย **integration test จริง** (`*.db.test.ts`) ไม่ใช่อ่านโค้ดอย่างเดียว · test ใหม่ที่พิสูจน์บั๊กต้องอยู่ใน repo
 4. ห้าม `git push` · ห้ามแตะ Supabase dashboard/Vercel · ห้ามอัปโหลดไฟล์ขึ้น Storage จริงใน test (mock) · ห้ามพิมพ์รหัสผ่าน `uat/personas.json`
