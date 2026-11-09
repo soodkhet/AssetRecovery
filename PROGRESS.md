@@ -12,7 +12,7 @@
 > **สถานะ ณ 09/11/2569**: `origin/staging` @ `7f2b309f` = local (ไม่มี commit ค้าง push) · ผู้ใช้ `db:deploy` staging แล้วถึง migration `20261019130000_payout_item_snapshot_no_delete` · test เต็มล่าสุด 7,476 ✅ · `origin/main` ยังอยู่ที่ `5ed412a9` (13/08/2569)
 
 1. **mytester รอบ 7 ส่วนที่ 2** (วางไว้ตั้งแต่ 01/11/2569 — ยังไม่ได้ทำ) — ของที่เตรียมค้างไว้บน staging ดู `.claude/preship/mytester-20261018-r7/summary.md` ("ของที่ค้างไว้") เช่น expense `a0f74728` ที่พัก in2 รออนุมัติ (ข้ามงวด) · expense `24bcc5c5` ค่าน้ำมัน PLS-3 · BL-2569-009 `622b6f69` ร่าง · FX3 snapshot ผู้รับที่ข้ามไว้ 2 ข้อ · หนี้นอกขอบเขตรอบ 7 (VAT lock ของ revenue · swapAssignment ตรวจทีม) ปิดแล้วใน FX1 `db531f57`/`e9096730` · ข้อมูลเสียที่รู้แล้ว: ชื่อ KTP v1 (ผู้ใช้ 19/10 ไม่แก้)
-2. **PO ทบทวนมติที่ Claude ตัดสินแทน** — D7-01…D7-09 (`.claude/preship/mytester-20261018-r7/DECISIONS.md`) · M1–M10 + คำถามค้าง Q1–Q5 (`uat/PO-DECISIONS-2569-10-11.md` — Q4 ช่อง "อ้างอิงเคส" ของเงินทดรองต้อง migration) · O75–O77
+2. ~~**PO ทบทวนมติที่ Claude ตัดสินแทน**~~ → ✅ **ผู้ใช้ยืนยันทั้งหมด 09/11/2569** (ไม่มีข้อแก้กลับ) — กลุ่มเงิน/ภาษี 8 ข้อ (G3-01 · LR3-03 · D7-01/06 · D7-07 · M4 · Q1 · Q7/Q7-R · D7-05) + กลุ่มการทำงาน/สิทธิ์ทั้งชุด (M1–M10 · Q2–Q9 · D7-02/03/04/08/09 · P1–P11 · O44) · บันทึก `uat/PO-DECISIONS-2569-10-11.md` ท้ายไฟล์
 3. **ก่อน go-live** (งานของคน): ยืนยันลบ `RAPIDAPI_*` จาก `.env.local`/`.env.example`/Vercel แล้ว (DEC-017) · ทดสอบมือถือจริง · ลบบัญชี Auth/ไฟล์ Storage ตัวอย่าง (`uat/STATE.md` ท้ายไฟล์) · นักบัญชีจริงยืนยันค่าตั้ง 21 รายการ · ปิด public signup production · เปิด PR `staging`→`main`
 
 ### หนี้ที่ Final Test (8.3) ตรวจเจอแต่ไม่ได้แก้ — ✅ ปิดครบ 4 ข้อ
